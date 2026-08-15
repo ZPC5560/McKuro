@@ -3,63 +3,108 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:donet.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="700"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="donet.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
     <ScrollViewer>
-        <StackPanel Margin="28" Spacing="20" MaxWidth="680" HorizontalAlignment="Left">
-            <TextBlock Text="设置" FontSize="26" FontWeight="Bold" />
+        <StackPanel Margin="25" Spacing="12" MaxWidth="760" HorizontalAlignment="Left">
+            <TextBlock Text="⚙️ 设置" FontSize="24" FontWeight="Bold" Margin="0,0,0,8" />
 
             <!-- 游戏目录 -->
-            <StackPanel Spacing="8">
-                <TextBlock Text="游戏安装目录" FontSize="14" FontWeight="SemiBold" />
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                    <TextBox Grid.Column="0" Text="{Binding GameRootDir}"
-                             PlaceholderText="例如: D:\Kuro\Wuthering Waves" />
-                    <Button Grid.Column="1" Content="浏览…" Command="{Binding BrowseGameDirCommand}" />
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="📁" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="游戏安装目录" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="用于更新/安装/抽卡日志解析,目录应包含 Wuthering Waves.exe" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Grid Grid.Column="2" ColumnDefinitions="*,Auto" ColumnSpacing="8" MinWidth="320">
+                        <TextBox Grid.Column="0" Text="{Binding GameRootDir}"
+                                 PlaceholderText="例如: D:\Kuro\Wuthering Waves"
+                                 VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Content="浏览…" Command="{Binding BrowseGameDirCommand}" />
+                    </Grid>
                 </Grid>
-                <TextBlock Text="用于更新/安装/抽卡日志解析。目录应包含 Wuthering Waves.exe。" FontSize="12"
-                           Foreground="{DynamicResource SemiColorText3}" />
-            </StackPanel>
+            </Border>
 
             <!-- 服务器渠道 -->
-            <StackPanel Spacing="8">
-                <TextBlock Text="服务器渠道" FontSize="14" FontWeight="SemiBold" />
-                <ComboBox ItemsSource="{Binding ServerTypes}"
-                          SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}"
-                          Width="200" />
-                <TextBlock Text="自动检测失败时可手动指定(官服 / B站 / WeGame / 国际服)。" FontSize="12"
-                           Foreground="{DynamicResource SemiColorText3}" />
-            </StackPanel>
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🖥️" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="服务器渠道" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="自动检测失败时可手动指定(官服 / B站 / WeGame / 国际服)" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                              ItemsSource="{Binding ServerTypes}"
+                              SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}" />
+                </Grid>
+            </Border>
 
-            <!-- 库街区 -->
-            <StackPanel Spacing="8">
-                <TextBlock Text="库街区 Token" FontSize="14" FontWeight="SemiBold" />
-                <TextBox Text="{Binding KujiequToken}" PlaceholderText="登录库街区网页版后从请求头获取 token" />
-            </StackPanel>
+            <!-- 库街区 Token -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🔑" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="库街区 Token" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="登录库街区(kurobbs.com)网页版,按 F12 在网络请求头中复制 token 字段" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <TextBox Grid.Column="2" Width="320" VerticalAlignment="Center"
+                             Text="{Binding KujiequToken}"
+                             PlaceholderText="token" />
+                </Grid>
+            </Border>
 
-            <StackPanel Spacing="8">
-                <TextBlock Text="角色 ID (playerId)" FontSize="14" FontWeight="SemiBold" />
-                <TextBox Text="{Binding RoleId}" PlaceholderText="游戏内账号的角色 ID" />
-                <TextBlock Text="用于拉取当前账号的角色养成数据。Token 获取:登录库街区(kurobbs.com)网页,按 F12 在网络请求头中复制 token 字段。" FontSize="12"
-                           Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
-            </StackPanel>
+            <!-- 角色 ID -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🎮" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="角色 ID (playerId)" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="游戏内账号的角色 ID,用于拉取角色养成数据" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <TextBox Grid.Column="2" Width="320" VerticalAlignment="Center"
+                             Text="{Binding RoleId}"
+                             PlaceholderText="playerId" />
+                </Grid>
+            </Border>
 
-            <!-- 下载 -->
-            <StackPanel Spacing="8">
-                <TextBlock Text="并发下载数" FontSize="14" FontWeight="SemiBold" />
-                <NumericUpDown Value="{Binding DownloadConcurrency, Mode=TwoWay}"
-                               Minimum="1" Maximum="32"
-                               Width="160" />
-            </StackPanel>
+            <!-- 下载并发 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="⚡" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="并发下载数" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="同时下载的文件数(1~32)" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <NumericUpDown Grid.Column="2" Width="200" VerticalAlignment="Center"
+                                   Value="{Binding DownloadConcurrency, Mode=TwoWay}"
+                                   Minimum="1" Maximum="32" />
+                </Grid>
+            </Border>
 
             <!-- 保存 -->
-            <StackPanel Spacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
                 <Button Content="保存设置" Classes="primary"
-                        Command="{Binding SaveCommand}"
-                        HorizontalAlignment="Left" />
-                <TextBlock Text="{Binding StatusText}" FontSize="12"
-                           Foreground="{DynamicResource SemiColorPrimary}" />
+                        Command="{Binding SaveCommand}" />
+                <TextBlock Text="{Binding StatusText}" FontSize="13"
+                           Foreground="{DynamicResource SemiColorPrimary}"
+                           VerticalAlignment="Center" />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

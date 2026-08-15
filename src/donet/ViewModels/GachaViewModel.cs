@@ -1,12 +1,10 @@
 using System.Collections.ObjectModel;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using donet.Core.Models.Gacha;
 using donet.Core.Services.Gacha;
 using donet.Services;
-using LiveChartsCore;
-using LiveChartsCore.Defaults;
-using LiveChartsCore.SkiaSharpView;
 
 namespace donet.ViewModels;
 
@@ -64,18 +62,32 @@ public sealed partial class GachaViewModel : ViewModelBase
 
     public ObservableCollection<GachaRecord> AllRecords { get; } = [];
 
-    // ---- 图表 ----
-    public ObservableCollection<ISeries> GuaranteeChart { get; } = [];
+    // ---- 自绘图表(AOT 安全,不用 LiveCharts) ----
+    public ObservableCollection<PieSliceViewModel> GuaranteeSlices { get; } = [];
 
-    public ObservableCollection<ISeries> StarRatioChart { get; } = [];
+    public ObservableCollection<PieSliceViewModel> StarRatioSlices { get; } = [];
 
-    public ObservableCollection<ISeries> PoolChart { get; } = [];
+    public ObservableCollection<PieSliceViewModel> PoolSlices { get; } = [];
 
-    public ObservableCollection<ISeries> TimeLineChart { get; } = [];
+    /// <summary>每日抽数折线图 Path 数据(面积图)。</summary>
+    [ObservableProperty]
+    private string _timeLinePathData = "";
 
     public ObservableCollection<string> TimeLineLabels { get; } = [];
 
     private GachaAnalysisResult? _analysis;
+
+    private static readonly Color[] Palette =
+    [
+        Color.Parse("#1677FF"), // 蓝
+        Color.Parse("#52C41A"), // 绿
+        Color.Parse("#F53F3F"), // 红
+        Color.Parse("#FAAD14"), // 橙
+        Color.Parse("#722ED1"), // 紫
+        Color.Parse("#13C2C2"), // 青
+        Color.Parse("#EB2F96"), // 粉
+        Color.Parse("#8C8C8C"), // 灰
+    ];
 
     public GachaViewModel()
     {
@@ -172,60 +184,53 @@ public sealed partial class GachaViewModel : ViewModelBase
 
     private void BuildCharts(GachaAnalysisResult analysis)
     {
-        // 保底状态(小保底中/歪):默认第一个有小保底机制的池
+        // 保底状态(小保底中/歪)
         var pityPool = analysis.Pools.FirstOrDefault(p => p.HasPityMechanism && p.OffBannerRate.HasValue)
             ?? analysis.Pools.FirstOrDefault(p => p.HasPityMechanism);
-        GuaranteeChart.Clear();
+        GuaranteeSlices.Clear();
         if (pityPool is not null)
         {
             var rate = pityPool.OffBannerRate ?? 0;
-            GuaranteeChart.Add(new PieSeries<double>
+            foreach (var s in PieSliceViewModel.BuildPie(
+                [("中", Math.Round((1 - rate) * 100, 1)), ("歪", Math.Round(rate * 100, 1))],
+                [Color.Parse("#52C41A"), Color.Parse("#F53F3F")]))
             {
-                Name = "中",
-                Values = [Math.Round((1 - rate) * 100, 1)],
-                Fill = new LiveChartsCore.SkiaSharpView.Painting.SolidColorPaint(new SkiaSharp.SKColor(82, 196, 26)),
-            });
-            GuaranteeChart.Add(new PieSeries<double>
-            {
-                Name = "歪",
-                Values = [Math.Round(rate * 100, 1)],
-                Fill = new LiveChartsCore.SkiaSharpView.Painting.SolidColorPaint(new SkiaSharp.SKColor(245, 63, 63)),
-            });
-            GuaranteeHeader = pityPool.HasPityMechanism
-                ? $"保底状态: {pityPool.DisplayName} · 歪率 {rate * 100:0.#}%"
-                : "保底状态: -";
+                GuaranteeSlices.Add(s);
+            }
+
+            GuaranteeHeader = $"保底状态: {pityPool.DisplayName} · 歪率 {rate * 100:0.#}%";
+        }
+        else
+        {
+            GuaranteeHeader = "保底状态: -";
         }
 
         // 出货占比(4星/5星)
-        var fourStar = analysis.TotalPulls - analysis.TotalFiveStars;
-        StarRatioChart.Clear();
-        StarRatioChart.Add(new PieSeries<double> { Name = "4星", Values = [fourStar] });
-        StarRatioChart.Add(new PieSeries<double> { Name = "5星", Values = [analysis.TotalFiveStars] });
+        var fourStar = Math.Max(0, analysis.TotalPulls - analysis.TotalFiveStars);
+        StarRatioSlices.Clear();
+        foreach (var s in PieSliceViewModel.BuildPie(
+            [("4星", fourStar), ("5星", analysis.TotalFiveStars)],
+            [Color.Parse("#1677FF"), Color.Parse("#FAAD14")]))
+        {
+            StarRatioSlices.Add(s);
+        }
 
         // 各卡池抽数分布
-        PoolChart.Clear();
-        foreach (var pool in analysis.Pools.Where(p => p.TotalPulls > 0))
+        PoolSlices.Clear();
+        var poolsWithPulls = analysis.Pools.Where(p => p.TotalPulls > 0)
+            .Select(p => (p.DisplayName, (double)p.TotalPulls)).ToList();
+        foreach (var s in PieSliceViewModel.BuildPie(poolsWithPulls, Palette))
         {
-            PoolChart.Add(new PieSeries<double> { Name = pool.DisplayName, Values = [pool.TotalPulls] });
+            PoolSlices.Add(s);
         }
 
         // 每日抽数折线图
-        TimeLineChart.Clear();
+        var counts = analysis.DailyPulls.Select(d => (double)d.Count).ToList();
+        TimeLinePathData = counts.Count > 0 ? PieSliceViewModel.BuildAreaPath(counts) : "";
         TimeLineLabels.Clear();
-        var points = new List<DateTimePoint>();
         foreach (var daily in analysis.DailyPulls)
         {
-            points.Add(new DateTimePoint(daily.Date.ToDateTime(TimeOnly.MinValue), daily.Count));
             TimeLineLabels.Add(daily.Date.ToString("MM-dd"));
-        }
-        if (points.Count > 0)
-        {
-            TimeLineChart.Add(new LineSeries<DateTimePoint>
-            {
-                Name = "每日抽数",
-                Values = points,
-                GeometrySize = 6,
-            });
         }
     }
 
@@ -242,7 +247,7 @@ public sealed partial class GachaViewModel : ViewModelBase
         }
 
         var pool = SelectedPool;
-        // 五星列表:从旧到新展示(最新的在最下,补一条"已垫 X 发")
+        // 五星列表:从旧到新展示(最新的在最下)
         foreach (var entry in pool.FiveStarEntries.Reverse())
         {
             FiveStarEntries.Add(entry);
@@ -257,6 +262,94 @@ public sealed partial class GachaViewModel : ViewModelBase
         {
             AllRecords.Add(record);
         }
+    }
+}
+
+/// <summary>自绘饼图扇形(ViewBox 0-100 坐标系,圆心 50,50)。</summary>
+public sealed class PieSliceViewModel
+{
+    public required string Data { get; init; }
+    public required SolidColorBrush Brush { get; init; }
+    public required string Name { get; init; }
+    public required double Value { get; init; }
+
+    /// <summary>生成从 startAngle 到 endAngle(度,顺时针,12 点钟为 0)的扇形 Path。</summary>
+    public static string BuildSector(double startAngle, double endAngle)
+    {
+        const double cx = 50, cy = 50, r = 46;
+        var a1 = (startAngle - 90) * Math.PI / 180;
+        var a2 = (endAngle - 90) * Math.PI / 180;
+        double x1 = cx + r * Math.Cos(a1);
+        double y1 = cy + r * Math.Sin(a1);
+        double x2 = cx + r * Math.Cos(a2);
+        double y2 = cy + r * Math.Sin(a2);
+        var large = endAngle - startAngle > 180 ? 1 : 0;
+        return $"M {cx:0.###},{cy:0.###} L {x1:0.###},{y1:0.###} A {r:0.###},{r:0.###} 0 {large} 1 {x2:0.###},{y2:0.###} Z";
+    }
+
+    /// <summary>按值数组生成各片扇形路径(角度占比),返回 (Name, Data, Brush) 列表。</summary>
+    public static List<PieSliceViewModel> BuildPie(
+        IReadOnlyList<(string Name, double Value)> items,
+        IReadOnlyList<Color> colors)
+    {
+        var total = items.Sum(i => Math.Max(0, i.Value));
+        var result = new List<PieSliceViewModel>();
+        if (total <= 0)
+        {
+            return result;
+        }
+
+        double angle = 0;
+        for (var i = 0; i < items.Count; i++)
+        {
+            var value = Math.Max(0, items[i].Value);
+            if (value <= 0)
+            {
+                continue;
+            }
+
+            var sweep = value / total * 360;
+            var data = BuildSector(angle, angle + sweep);
+            var color = colors[i % colors.Count];
+            result.Add(new PieSliceViewModel
+            {
+                Name = items[i].Name,
+                Value = value,
+                Brush = new SolidColorBrush(color),
+                Data = data,
+            });
+            angle += sweep;
+        }
+
+        return result;
+    }
+
+    /// <summary>生成折线/面积图 Path(0-100 x 0-40 坐标)。</summary>
+    public static string BuildAreaPath(IReadOnlyList<double> values, double width = 100, double height = 40)
+    {
+        if (values.Count == 0)
+        {
+            return "";
+        }
+
+        var max = values.Max();
+        if (max <= 0)
+        {
+            max = 1;
+        }
+
+        var step = width / (values.Count - 1);
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < values.Count; i++)
+        {
+            double x = i * step;
+            double y = height - (values[i] / max) * (height * 0.85) - height * 0.05;
+            sb.Append(i == 0 ? "M " : " L ").Append(x.ToString("0.###")).Append(',').Append(y.ToString("0.###"));
+        }
+
+        sb.Append(" L ").Append(width.ToString("0.###")).Append(',').Append(height.ToString("0.###"));
+        sb.Append(" L 0,").Append(height.ToString("0.###")).Append(" Z");
+        return sb.ToString();
     }
 }
 

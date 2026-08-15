@@ -11,33 +11,35 @@
         <vm:BoolToBrushConverter x:Key="BoolToBrush" />
     </UserControl.Resources>
 
-    <Grid RowDefinitions="Auto,Auto,*" Margin="28">
+    <Grid RowDefinitions="Auto,Auto,*">
         <!-- 标题 -->
-        <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,16">
-            <TextBlock Text="角色养成" FontSize="26" FontWeight="Bold" />
-            <StackPanel Orientation="Horizontal" Spacing="12">
-                <TextBlock Text="{Binding StatusText}"
-                           FontSize="13"
-                           Foreground="{DynamicResource SemiColorText2}" />
-                <TextBlock Text="{Binding SourceText}"
-                           FontSize="13"
-                           Foreground="{DynamicResource SemiColorPrimary}" />
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="20,16,20,8">
+            <StackPanel Spacing="2">
+                <TextBlock Text="👤 角色数据" FontSize="24" FontWeight="Bold" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="{Binding StatusText}"
+                               FontSize="12"
+                               Foreground="{DynamicResource SemiColorText2}" />
+                    <TextBlock Text="{Binding SourceText}"
+                               FontSize="12"
+                               Foreground="{DynamicResource SemiColorPrimary}" />
+                </StackPanel>
             </StackPanel>
-        </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Button Content="从库街区同步" Classes="primary"
+                        Command="{Binding LoadFromKujiequCommand}"
+                        IsEnabled="{Binding !IsBusy}" />
+                <Button Content="读取本地数据" Command="{Binding LoadFromLocalCommand}" />
+            </StackPanel>
+        </Grid>
 
-        <!-- 操作 -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,16">
-            <Button Content="从库街区同步" Classes="primary"
-                    Command="{Binding LoadFromKujiequCommand}"
-                    IsEnabled="{Binding !IsBusy}" />
-            <Button Content="读取本地数据" Command="{Binding LoadFromLocalCommand}" />
-            <TextBlock VerticalAlignment="Center" FontSize="12"
-                       Foreground="{DynamicResource SemiColorText3}"
-                       Text="库街区同步需要 Token 与角色 ID(见设置页)" />
-        </StackPanel>
+        <!-- 提示 -->
+        <TextBlock Grid.Row="1" Margin="20,0,20,10" FontSize="12"
+                   Foreground="{DynamicResource SemiColorText3}"
+                   Text="库街区同步需要 Token 与角色 ID(见设置页)" />
 
         <!-- 内容:角色列表 + 详情 -->
-        <Grid Grid.Row="2" ColumnDefinitions="300,*" ColumnSpacing="16"
+        <Grid Grid.Row="2" ColumnDefinitions="300,*" ColumnSpacing="16" Margin="20,0,20,16"
               IsVisible="{Binding HasRoles}">
             <!-- 角色列表 -->
             <ListBox Grid.Column="0"
