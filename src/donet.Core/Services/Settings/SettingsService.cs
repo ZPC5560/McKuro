@@ -24,6 +24,9 @@ public sealed class AppSettings
 
     /// <summary>主题(light/dark)。</summary>
     public string Theme { get; set; } = "Default";
+
+    /// <summary>背景封面视频(默认开启;无 LibVLC native 库时自动回退首帧图)。</summary>
+    public bool BackgroundVideoEnabled { get; set; } = true;
 }
 
 /// <summary>设置持久化服务(JSON 文件)。</summary>

@@ -27,6 +27,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private int _downloadConcurrency;
 
+    [ObservableProperty]
+    private bool _backgroundVideoEnabled;
+
     public ObservableCollection<string> ServerTypes { get; } =
     [
         "自动检测", "官服", "B站", "WeGame", "国际服",
@@ -42,6 +45,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _kujiequToken = s.KujiequToken;
         _roleId = s.RoleId;
         _downloadConcurrency = s.DownloadConcurrency;
+        _backgroundVideoEnabled = s.BackgroundVideoEnabled;
         _selectedServerIndex = s.ServerType switch
         {
             GameServerType.Official => 1,
@@ -97,6 +101,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             _ => GameServerType.Unknown,
         };
         s.DownloadConcurrency = Math.Clamp(DownloadConcurrency, 1, 32);
+        s.BackgroundVideoEnabled = BackgroundVideoEnabled;
         AppServices.Settings.Save();
 
         // 重新应用并发数与路径(无需重启)

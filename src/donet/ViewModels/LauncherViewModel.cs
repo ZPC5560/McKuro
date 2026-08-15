@@ -82,6 +82,10 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [ObservableProperty]
     private string _versionLogoUrl = "";
 
+    /// <summary>背景视频开关(用户设置)。</summary>
+    [ObservableProperty]
+    private bool _videoEnabled = true;
+
     /// <summary>服务器渠道列表(与设置页一致)。</summary>
     public IReadOnlyList<string> Servers { get; } =
     [
@@ -104,6 +108,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             _ => 0,
         };
         RefreshState();
+        VideoEnabled = AppServices.Settings.Current.BackgroundVideoEnabled;
         _ = LoadLauncherInfoAsync();
     }
 

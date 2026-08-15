@@ -98,6 +98,22 @@
                 </Grid>
             </Border>
 
+            <!-- 背景视频封面 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🎬" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="背景视频封面" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="游戏页播放官方宣传视频;未安装 VLC 时自动回退为静态封面图" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{Binding BackgroundVideoEnabled, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+
             <!-- 保存 -->
             <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
                 <Button Content="保存设置" Classes="primary"
