@@ -48,16 +48,51 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [ObservableProperty]
     private long _updateBytes;
 
+    [ObservableProperty]
+    private string _currentFileText = "";
+
+    [ObservableProperty]
+    private string _speedText = "";
+
+    [ObservableProperty]
+    private string _bytesText = "";
+
+    /// <summary>服务器渠道列表(与设置页一致)。</summary>
+    public IReadOnlyList<string> Servers { get; } =
+    [
+        "自动检测", "官服", "B站", "WeGame", "国际服",
+    ];
+
+    [ObservableProperty]
+    private int _selectedServerIndex;
+
     private UpdateCheckResult? _lastCheck;
 
     public LauncherViewModel()
     {
+        SelectedServerIndex = AppServices.Settings.Current.ServerType switch
+        {
+            GameServerType.Official => 1,
+            GameServerType.Bilibili => 2,
+            GameServerType.WeGame => 3,
+            GameServerType.Global => 4,
+            _ => 0,
+        };
         RefreshState();
     }
 
+    private GameServerType SelectedServerType => SelectedServerIndex switch
+    {
+        1 => GameServerType.Official,
+        2 => GameServerType.Bilibili,
+        3 => GameServerType.WeGame,
+        4 => GameServerType.Global,
+        _ => GameServerType.Unknown,
+    };
+
     private GameServerType ServerType =>
-        AppServices.Settings.Current.ServerType != GameServerType.Unknown
-            ? AppServices.Settings.Current.ServerType
+        SelectedServerType != GameServerType.Unknown
+            ? SelectedServerType
             : AppServices.Paths.DetectServerType();
 
     private void RefreshState()
@@ -146,6 +181,9 @@ public sealed partial class LauncherViewModel : ViewModelBase
         {
             ProgressPercent = p.Percent * 100;
             ProgressText = $"{p.FileIndex}/{p.FileTotal} 文件 · {FormatSize(p.BytesDownloaded)}/{FormatSize(p.BytesTotal)} · {FormatSpeed(p.SpeedBps)}";
+            CurrentFileText = p.CurrentFile;
+            SpeedText = FormatSpeed(p.SpeedBps);
+            BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
         });
 
         try
@@ -188,6 +226,9 @@ public sealed partial class LauncherViewModel : ViewModelBase
         {
             ProgressPercent = p.Percent * 100;
             ProgressText = $"{p.FileIndex}/{p.FileTotal} 文件 · {FormatSize(p.BytesDownloaded)}/{FormatSize(p.BytesTotal)}";
+            CurrentFileText = p.CurrentFile;
+            SpeedText = FormatSpeed(p.SpeedBps);
+            BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
         });
 
         try

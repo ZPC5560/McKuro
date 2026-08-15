@@ -9,9 +9,13 @@
         x:DataType="vm:MainWindowViewModel"
         Width="1100" Height="720"
         MinWidth="960" MinHeight="640"
-        Title="donet · 鸣潮启动器">
+        Title="donet · 鸣潮启动器"
+        Background="{DynamicResource SemiColorBg0}">
 
     <Window.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:HomeViewModel}">
+            <views:HomeView />
+        </DataTemplate>
         <DataTemplate DataType="{x:Type vm:LauncherViewModel}">
             <views:LauncherView />
         </DataTemplate>
@@ -21,33 +25,54 @@
         <DataTemplate DataType="{x:Type vm:RolesViewModel}">
             <views:RolesView />
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ToolkitViewModel}">
+            <views:ToolkitView />
+        </DataTemplate>
         <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
             <views:SettingsView />
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid ColumnDefinitions="220,*">
-        <!-- 左侧导航 -->
-        <Border Grid.Column="0" Background="{DynamicResource SemiColorBg3}">
+    <Grid ColumnDefinitions="60,*">
+        <!-- 左侧 60px 图标导航 (Haiyu NavigationView 风格) -->
+        <Border Grid.Column="0" Background="{DynamicResource SemiColorBg2}">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top"
-                           Text="donet"
-                           FontSize="22"
-                           FontWeight="Bold"
-                           Margin="20,24,20,20"
-                           Foreground="{DynamicResource SemiColorPrimary}" />
+                           Text="🌊"
+                           FontSize="24"
+                           HorizontalAlignment="Center"
+                           Margin="0,16,0,12" />
                 <ListBox ItemsSource="{Binding NavigationItems}"
                          SelectedItem="{Binding SelectedNavigationItem, Mode=TwoWay}"
                          BorderThickness="0"
                          Background="Transparent"
-                         Margin="8,0">
+                         Padding="0"
+                         Margin="0">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:NavigationItem">
-                            <TextBlock Text="{Binding Title}"
-                                       FontSize="15"
-                                       Padding="12,10" />
+                            <StackPanel Width="60" Spacing="2">
+                                <TextBlock Text="{Binding Icon}"
+                                           FontSize="20"
+                                           HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding Title}"
+                                           FontSize="10"
+                                           HorizontalAlignment="Center"
+                                           Foreground="{DynamicResource SemiColorText2}" />
+                            </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
+                    <ListBox.Styles>
+                        <Style Selector="ListBoxItem">
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                            <Setter Property="Background" Value="Transparent" />
+                        </Style>
+                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                            <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
+                            <Setter Property="CornerRadius" Value="8" />
+                        </Style>
+                    </ListBox.Styles>
                 </ListBox>
             </DockPanel>
         </Border>

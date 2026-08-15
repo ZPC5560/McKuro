@@ -3,95 +3,197 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:donet.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="700"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="donet.Views.LauncherView"
              x:DataType="vm:LauncherViewModel">
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="28">
-        <!-- 标题 -->
-        <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,16">
-            <TextBlock Text="鸣潮启动器" FontSize="26" FontWeight="Bold" />
-            <TextBlock Text="{Binding StatusText}"
-                       FontSize="13"
-                       Foreground="{DynamicResource SemiColorText2}" />
+    <Grid RowDefinitions="*,Auto" Margin="-1,0,0,0">
+
+        <!-- 顶部进度条 -->
+        <ProgressBar IsIndeterminate="{Binding IsBusy}"
+                     IsVisible="{Binding IsBusy}"
+                     HorizontalAlignment="Stretch"
+                     VerticalAlignment="Top"
+                     Height="3"
+                     Background="Transparent" />
+
+        <!-- 服务器选择 (左上) -->
+        <ComboBox Grid.Row="0"
+                  Margin="10,10,0,0"
+                  Padding="10,5"
+                  CornerRadius="15"
+                  HorizontalAlignment="Left"
+                  VerticalAlignment="Top"
+                  ItemsSource="{Binding Servers}"
+                  SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}" />
+
+        <!-- 状态文本 (右上) -->
+        <StackPanel Grid.Row="0"
+                    Margin="0,12,15,0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Spacing="2">
+            <TextBlock Text="{Binding StatusText}" FontSize="13"
+                       Foreground="{DynamicResource SemiColorText2}"
+                       HorizontalAlignment="Right" />
+            <TextBlock Text="{Binding PredownloadStateText}" FontSize="12"
+                       Foreground="{DynamicResource SemiColorPrimary}"
+                       HorizontalAlignment="Right" />
         </StackPanel>
 
-        <!-- 游戏状态卡片 -->
-        <Border Grid.Row="1"
-                CornerRadius="12"
-                Background="{DynamicResource SemiColorBg2}"
-                Padding="20"
-                Margin="0,0,0,16">
-            <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto">
-                <StackPanel Grid.Column="0" Spacing="6">
-                    <TextBlock Text="安装状态" FontSize="12" Foreground="{DynamicResource SemiColorText2}" />
-                    <TextBlock Text="{Binding InstallStateText}" FontSize="16" FontWeight="SemiBold" />
+        <!-- 版本 Logo (右上角大图,仅装饰) -->
+        <TextBlock Grid.Row="0"
+                   Margin="0,60,20,0"
+                   HorizontalAlignment="Right"
+                   VerticalAlignment="Top"
+                   FontSize="64"
+                   Opacity="0.12"
+                   Text="🌊" />
+
+        <!-- 左下:游戏状态卡片 -->
+        <Border Grid.Row="0"
+                Width="350"
+                Margin="10"
+                Padding="16"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Bottom"
+                CornerRadius="10"
+                Background="{DynamicResource SemiColorBg2}">
+            <StackPanel Spacing="8">
+                <TextBlock Text="游戏状态" FontSize="15" FontWeight="SemiBold" />
+                <Grid ColumnDefinitions="*,*">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="安装状态" FontSize="12" Foreground="{DynamicResource SemiColorText2}" />
+                        <TextBlock Text="{Binding InstallStateText}" FontSize="14" FontWeight="SemiBold" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <TextBlock Text="服务端版本" FontSize="12" Foreground="{DynamicResource SemiColorText2}" />
+                        <TextBlock Text="{Binding ServerVersionText}" FontSize="14" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="检查更新" Command="{Binding CheckUpdateCommand}"
+                            IsEnabled="{Binding !IsBusy}" />
+                    <Button Content="打开目录" Command="{Binding OpenGameFolderCommand}" />
                 </StackPanel>
-                <StackPanel Grid.Column="1" Spacing="6">
-                    <TextBlock Text="服务端版本" FontSize="12" Foreground="{DynamicResource SemiColorText2}" />
-                    <TextBlock Text="{Binding ServerVersionText}" FontSize="16" FontWeight="SemiBold" />
-                </StackPanel>
-                <StackPanel Grid.Column="2" Spacing="6">
-                    <TextBlock Text="预下载" FontSize="12" Foreground="{DynamicResource SemiColorText2}" />
-                    <TextBlock Text="{Binding PredownloadStateText}" FontSize="13" TextWrapping="Wrap" />
-                </StackPanel>
-            </Grid>
+            </StackPanel>
         </Border>
 
-        <!-- 操作按钮 -->
-        <StackPanel Grid.Row="2" Spacing="12">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="12">
-                <Button Grid.Column="0"
-                        Content="启动游戏"
-                        Classes="primary large"
-                        Command="{Binding LaunchCommand}"
-                        IsEnabled="{Binding IsInstalled}" />
-                <Button Grid.Column="2"
-                        Content="检查更新"
-                        Command="{Binding CheckUpdateCommand}"
-                        IsEnabled="{Binding !IsBusy}" />
-                <Button Grid.Column="3"
-                        Content="预下载"
-                        Command="{Binding PreDownloadCommand}"
-                        IsEnabled="{Binding HasUpdate}" />
-                <Button Grid.Column="4"
-                        Content="安装更新"
-                        Classes="primary"
-                        Command="{Binding InstallCommand}"
-                        IsEnabled="{Binding !IsBusy}"
-                        IsVisible="{Binding HasUpdate}" />
-                <Button Grid.Column="4"
-                        Content="下载安装"
-                        Classes="primary"
-                        Command="{Binding InstallCommand}"
-                        IsEnabled="{Binding !IsBusy}"
-                        IsVisible="{Binding !HasUpdate}" />
-            </Grid>
+        <!-- 右下:下载进度面板 + 预下载环 + 启动按钮 -->
+        <Grid Grid.Row="0"
+              Margin="0,0,15,15"
+              HorizontalAlignment="Right"
+              VerticalAlignment="Bottom">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="auto" />
+                <RowDefinition Height="auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="auto" />
+                <ColumnDefinition Width="auto" />
+            </Grid.ColumnDefinitions>
 
-            <!-- 进度区 -->
-            <Border CornerRadius="12"
+            <!-- 下载进度面板 -->
+            <Border Grid.Row="0" Grid.ColumnSpan="2"
+                    Width="340"
+                    CornerRadius="10"
                     Background="{DynamicResource SemiColorBg2}"
                     Padding="16"
                     IsVisible="{Binding IsDownloading}">
                 <StackPanel Spacing="10">
-                    <ProgressBar Value="{Binding ProgressPercent}"
-                                 Minimum="0"
-                                 Maximum="100"
-                                 Height="8" />
-                    <TextBlock Text="{Binding ProgressText}"
-                               FontSize="12"
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="下载进度" FontSize="14" FontWeight="SemiBold" />
+                        <TextBlock Grid.Column="1" Text="{Binding SpeedText}" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorPrimary}" />
+                    </Grid>
+                    <ProgressBar Value="{Binding ProgressPercent}" Minimum="0" Maximum="100" Height="12"
+                                 CornerRadius="6" />
+                    <TextBlock Text="{Binding ProgressText}" FontSize="12"
+                               Foreground="{DynamicResource SemiColorText2}" />
+                    <TextBlock Text="{Binding CurrentFileText}" FontSize="11"
+                               Foreground="{DynamicResource SemiColorText3}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding BytesText}" FontSize="12"
                                Foreground="{DynamicResource SemiColorText2}" />
                 </StackPanel>
             </Border>
 
-            <TextBlock Text="提示: 预下载不会影响当前已安装的游戏文件,下载完成后点击「安装更新」即可应用。"
-                       FontSize="12"
-                       Foreground="{DynamicResource SemiColorText3}"
-                       TextWrapping="Wrap" />
-        </StackPanel>
+            <!-- 预下载环 -->
+            <Grid Grid.Row="1" Grid.Column="0"
+                  Width="110" Height="110"
+                  Margin="0,12,0,0"
+                  HorizontalAlignment="Center">
+                <Border Width="96" Height="96" CornerRadius="48"
+                        BorderThickness="8"
+                        BorderBrush="{DynamicResource SemiColorBg3}">
+                    <Border Width="96" Height="96" CornerRadius="48"
+                            BorderThickness="8"
+                            BorderBrush="{DynamicResource SemiColorPrimary}">
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="0">
+                            <TextBlock Text="{Binding ProgressPercent, StringFormat={}{0:0}%}"
+                                       FontSize="18" FontWeight="Bold"
+                                       HorizontalAlignment="Center" />
+                            <TextBlock Text="预下载" FontSize="10"
+                                       Foreground="{DynamicResource SemiColorText2}"
+                                       HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </Border>
+                <Button Content="预下载"
+                        Classes="primary"
+                        Command="{Binding PreDownloadCommand}"
+                        IsEnabled="{Binding HasUpdate}"
+                        VerticalAlignment="Bottom"
+                        HorizontalAlignment="Center"
+                        Margin="0,0,0,-14" />
+            </Grid>
 
-        <!-- 底部 -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="12" Margin="0,16,0,0">
-            <Button Content="打开游戏目录" Command="{Binding OpenGameFolderCommand}" />
-        </StackPanel>
+            <!-- 启动/安装大按钮 -->
+            <Border Grid.Row="1" Grid.Column="1"
+                    Margin="16,12,0,0"
+                    CornerRadius="10">
+                <Grid>
+                    <Button Height="64"
+                            Padding="20,0"
+                            Classes="primary"
+                            FontSize="17"
+                            Command="{Binding InstallCommand}"
+                            IsEnabled="{Binding !IsBusy}"
+                            IsVisible="{Binding !IsInstalled}">
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <TextBlock Text="⬇" FontSize="22" />
+                            <StackPanel Spacing="0" VerticalAlignment="Center">
+                                <TextBlock Text="下载安装" FontSize="16" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding ServerVersionText}" FontSize="10" Opacity="0.8" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Button>
+                    <Button Height="64"
+                            Padding="20,0"
+                            Classes="primary"
+                            FontSize="17"
+                            Command="{Binding LaunchCommand}"
+                            IsEnabled="{Binding IsInstalled}">
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <TextBlock Text="▶" FontSize="22" />
+                            <StackPanel Spacing="0" VerticalAlignment="Center">
+                                <TextBlock Text="启动游戏" FontSize="16" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding ServerVersionText}" FontSize="10" Opacity="0.8" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- 安装更新按钮 (有更新时) -->
+            <Button Grid.Row="1" Grid.Column="1"
+                    Height="44"
+                    Margin="16,4,0,0"
+                    CornerRadius="8"
+                    Content="安装更新"
+                    Command="{Binding InstallCommand}"
+                    IsEnabled="{Binding !IsBusy}"
+                    IsVisible="{Binding HasUpdate}"
+                    HorizontalAlignment="Left" />
+        </Grid>
     </Grid>
 </UserControl>

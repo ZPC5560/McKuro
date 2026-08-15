@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:donet.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="donet.Views.ToolkitView"
+             x:DataType="vm:ToolkitViewModel">
+    <ScrollViewer>
+        <StackPanel Margin="25" Spacing="10" MaxWidth="720" HorizontalAlignment="Left">
+            <TextBlock Text="🧰 工具箱" FontSize="22" FontWeight="Bold" Margin="0,0,0,10" />
+
+            <!-- 抽卡分析 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8"
+                            Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🎴" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="抽卡分析" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="从游戏日志同步抽卡记录,分析保底/歪率/评分" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Content="打开" Classes="primary"
+                            VerticalAlignment="Center"
+                            Command="{Binding OpenGachaAnalysisCommand}" />
+                </Grid>
+            </Border>
+
+            <!-- 角色数据 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8"
+                            Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="👤" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="角色养成数据" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="库街区同步或本地解析,查看角色/武器/技能/共鸣链" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Content="打开" Classes="primary"
+                            VerticalAlignment="Center"
+                            Command="{Binding OpenRolesCommand}" />
+                </Grid>
+            </Border>
+
+            <!-- 游戏页 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8"
+                            Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🌊" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="游戏启动器" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="检查更新、预下载、安装更新、启动游戏" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Content="打开" Classes="primary"
+                            VerticalAlignment="Center"
+                            Command="{Binding OpenGamePageCommand}" />
+                </Grid>
+            </Border>
+
+            <!-- 打开游戏目录 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8"
+                            Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="📁" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="打开游戏目录" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="在文件管理器中打开已安装的游戏目录" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Content="打开" VerticalAlignment="Center"
+                            Command="{Binding OpenGameFolderCommand}" />
+                </Grid>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

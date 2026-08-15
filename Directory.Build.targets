@@ -1,0 +1,10 @@
+<Project>
+
+  <!--
+    覆盖 Avalonia.BuildServices 的 AvaloniaStats 遥测任务:
+    在受限环境(沙箱/只读日志目录)中遥测写日志会抛 UnauthorizedAccessException 导致构建失败。
+    Directory.Build.targets 在 NuGet 包导入之后求值,同名 Target 后者覆盖前者。
+  -->
+  <Target Name="AvaloniaStats" />
+
+</Project>

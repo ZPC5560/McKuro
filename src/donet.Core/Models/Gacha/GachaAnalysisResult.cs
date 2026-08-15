@@ -41,8 +41,18 @@ public sealed class PoolStats
     /// <summary>小保底歪率(0~1,无法判定时为 null)。</summary>
     public double? OffBannerRate { get; init; }
 
+    /// <summary>是否有小保底机制(角色活动/角色联动池)。</summary>
+    public bool HasPityMechanism => PoolType is CardPoolType.RoleActivity or CardPoolType.CharacterCollaboration;
+
     /// <summary>五星期望值(鸣潮硬保底 80,软保底机制按官方概率近似)。</summary>
     public const double ExpectedFiveStarPity = 80.0;
+}
+
+/// <summary>每日抽数(用于时间线图)。</summary>
+public sealed class DailyPull
+{
+    public required DateOnly Date { get; init; }
+    public required int Count { get; init; }
 }
 
 /// <summary>抽卡分析的整体结果。</summary>
@@ -63,6 +73,27 @@ public sealed class GachaAnalysisResult
 
     /// <summary>综合评分(参考 Haiyu 的 Score 算法,0~100,越高越欧)。</summary>
     public double Score { get; init; }
+
+    /// <summary>称号(大非酋/非酋/平民/小欧皇/至尊无敌欧皇)。</summary>
+    public string Designation { get; init; } = "平民";
+
+    /// <summary>双金次数(10 抽内两个五星)。</summary>
+    public int DoubleCount { get; init; }
+
+    /// <summary>歪的次数(可判定 UP 的池子)。</summary>
+    public int CrookedTotal { get; init; }
+
+    /// <summary>平均出金抽数(整体)。</summary>
+    public double AvgPulls { get; init; }
+
+    /// <summary>实际出金率(%)。五星数/总抽数*100。</summary>
+    public double ActualFiveStarRate { get; init; }
+
+    /// <summary>抽卡跨度天数(首尾记录间隔)。</summary>
+    public int Days { get; init; }
+
+    /// <summary>每日抽数(旧→新,用于时间线图)。</summary>
+    public IReadOnlyList<DailyPull> DailyPulls { get; init; } = [];
 
     public DateTime AnalysisTime { get; init; } = DateTime.Now;
 }
