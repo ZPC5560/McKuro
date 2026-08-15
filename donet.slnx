@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/donet/donet.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/donet.Tests/donet.Tests.csproj" />
+  </Folder>
+</Solution>

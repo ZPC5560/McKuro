@@ -1,0 +1,22 @@
+# .NET build artifacts
+bin/
+obj/
+*.user
+*.suo
+
+# Rider / Visual Studio
+.idea/
+.vs/
+
+# macOS
+.DS_Store
+
+# NuGet
+*.nupkg
+packages/
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+coverage*.xml
