@@ -85,7 +85,8 @@ public sealed class GameManifestLoader
                 }
             }
 
-            var basePath = updateData.ResourcesBasePath;
+            var cdnUrl = updateData.CdnList?.FirstOrDefault()?.Url?.TrimEnd('/') ?? "";
+            var basePath = (updateData.ResourcesBasePath ?? "").TrimStart('/');
             var manifest = new GameManifest
             {
                 Version = updateData.Version ?? "",
@@ -103,7 +104,8 @@ public sealed class GameManifestLoader
                     Path = NormalizePath(file.Dest),
                     Size = file.Size ?? 0,
                     Md5 = file.Md5 ?? "",
-                    Url = !string.IsNullOrEmpty(basePath) ? basePath + file.Dest : null,
+                    // 下载地址 = CDN + resourcesBasePath + dest
+                    Url = !string.IsNullOrEmpty(cdnUrl) ? $"{cdnUrl}/{basePath}{file.Dest}" : null,
                 });
             }
 

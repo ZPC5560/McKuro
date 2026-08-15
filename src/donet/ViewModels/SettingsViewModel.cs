@@ -99,7 +99,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.DownloadConcurrency = Math.Clamp(DownloadConcurrency, 1, 32);
         AppServices.Settings.Save();
 
-        // 重新应用并发数与路径
+        // 重新应用并发数与路径(无需重启)
+        AppServices.Downloader.SetConcurrency(s.DownloadConcurrency);
         AppServices.Paths = new GamePathResolver(() => AppServices.Settings.Current.GameRootDir);
         StatusText = "设置已保存";
     }

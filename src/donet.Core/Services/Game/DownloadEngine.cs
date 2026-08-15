@@ -22,13 +22,16 @@ public sealed class DownloadProgress
 public sealed class DownloadEngine
 {
     private readonly HttpClient _http;
-    private readonly int _maxConcurrency;
+    private volatile int _maxConcurrency;
 
     public DownloadEngine(HttpClient http, int maxConcurrency = 8)
     {
         _http = http;
         _maxConcurrency = Math.Max(1, maxConcurrency);
     }
+
+    /// <summary>更新并发数(下次下载批次生效)。</summary>
+    public void SetConcurrency(int maxConcurrency) => _maxConcurrency = Math.Max(1, maxConcurrency);
 
     /// <summary>
     /// 下载文件列表。

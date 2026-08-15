@@ -131,13 +131,10 @@ public sealed class GameUpdater
             Directory.Delete(staging, recursive: true);
         }
 
-        var baseUrl = diff.ToDownload.FirstOrDefault(f => !string.IsNullOrEmpty(f.Url))?.Url is null
-            ? BuildBaseUrl(indexUrl)
-            : "";
-
+        // 文件均带完整 CDN 下载地址(entry.Url),baseUrl 留空即可
         var (success, failures) = await _downloader.DownloadManyAsync(
             diff.ToDownload,
-            baseUrl,
+            baseUrl: "",
             staging,
             progress,
             ct).ConfigureAwait(false);
@@ -271,14 +268,6 @@ public sealed class GameUpdater
             return staging;
         }
         return null;
-    }
-
-    private static string BuildBaseUrl(string indexUrl)
-    {
-        // index.json 同目录下通常为资源清单所在目录
-        var uri = new Uri(indexUrl);
-        var baseUri = new Uri(uri, ".");
-        return baseUri.ToString();
     }
 
     private string? ReadInstalledVersion(string gameRoot)
