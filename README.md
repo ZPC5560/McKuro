@@ -12,8 +12,8 @@
 | 模块 | 说明 |
 | --- | --- |
 | 🚀 启动器 | 检查更新、**预下载**(不影响已安装文件)、安装更新、启动游戏、打开游戏目录 |
-| 🎴 抽卡分析 | 解析 `Client.log` 解密 URL → 从官方接口拉取抽卡记录;按卡池统计保底/当前垫抽/小保底歪率/欧气评分;标注是否 UP;本地 SQLite 去重存储 |
-| 👤 角色养成 | 通过**库街区** API 直接拉取当前账号角色数据(等级/武器/技能/共鸣链),原生 UI 展示;也支持解析游戏本地缓存 |
+| 🎴 抽卡分析 | 解析 `Client.log` 解密 URL → 从官方接口拉取抽卡记录;按卡池统计保底/当前垫抽/小保底歪率/欧气评分/称号/双金/歪数/平均出货/出货率/天数;标注是否 UP;本地 SQLite 去重存储;Haiyu 风格五星列表 + 统计条 + 饼图/折线图 |
+| 👤 角色数据 | 通过**库街区** API 直接拉取当前账号角色数据(等级/武器/技能/共鸣链),原生 UI 展示;也支持解析游戏本地缓存 |
 | ⚙️ 设置 | 游戏目录、服务器渠道(官服/B站/WeGame/国际服)、库街区 Token、下载并发数 |
 
 ## 环境要求
@@ -27,7 +27,7 @@
 donet/
 ├── donet.sln                  # 解决方案
 ├── src/donet/                 # Avalonia 桌面应用 (Semi 主题)
-│   ├── Views/                 # 启动器 / 抽卡分析 / 角色养成 / 设置 四页
+│   ├── Views/                 # 主页 / 鸣潮 / 抽卡分析 / 角色数据 / 工具箱 / 设置 六页 (Haiyu Shell 风格)
 │   ├── ViewModels/            # MVVM (CommunityToolkit.Mvvm)
 │   └── Services/              # 手动 DI (AppServices)
 ├── src/donet.Core/            # 与 UI 无关的核心库 (AOT 兼容,源生成 JSON)
@@ -35,7 +35,7 @@ donet/
 │   ├── Services/Game/         # 清单加载 / 断点下载 / 差分安装 / 更新
 │   ├── Services/Roles/        # 库街区 API / 本地数据读取 / 缓存
 │   └── Infrastructure/        # SQLite (Microsoft.Data.Sqlite)
-└── tests/donet.Tests/         # xUnit 单元测试 (20 个)
+└── tests/donet.Tests/         # xUnit 单元测试 (24 个)
 ```
 
 ## 常用命令
