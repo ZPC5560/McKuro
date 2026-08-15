@@ -13,6 +13,9 @@ public sealed class FiveStarEntry
 
     /// <summary>该五星在整个卡池中的序号(1 起)。</summary>
     public int Index { get; init; }
+
+    /// <summary>角色/武器图标 URL(未收录时为空串)。</summary>
+    public string IconUrl => IconCatalog.GetIconUrl(Record);
 }
 
 /// <summary>单个卡池的统计结果。</summary>

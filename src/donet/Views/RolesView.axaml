@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:roles="using:donet.Core.Models.Roles"
              xmlns:vm="using:donet.ViewModels"
+             xmlns:controls="using:donet.Controls"
              mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="700"
              x:Class="donet.Views.RolesView"
              x:DataType="vm:RolesViewModel">
@@ -49,16 +50,25 @@
                      BorderThickness="0">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="roles:RoleDetail">
-                        <Border CornerRadius="10" Padding="12,10" Margin="0,0,0,8"
+                        <Border CornerRadius="10" Padding="10" Margin="0,0,0,8"
                                 Background="{DynamicResource SemiColorBg2}">
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding RoleName}" FontSize="15" FontWeight="SemiBold" />
-                                <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
-                                    <Run Text="Lv." /><Run Text="{Binding Role.Level}" />
-                                    <Run Text=" · " /><Run Text="{Binding AttributeName}" />
-                                    <Run Text=" · 链" /><Run Text="{Binding ChainCount}" />
-                                </TextBlock>
-                            </StackPanel>
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Border Width="40" Height="40" CornerRadius="8"
+                                        Background="{DynamicResource SemiColorBg3}"
+                                        ClipToBounds="True">
+                                    <controls:AsyncImage ImageUrl="{Binding Role.RoleIconUrl}"
+                                                         Width="40" Height="40"
+                                                         Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="{Binding RoleName}" FontSize="15" FontWeight="SemiBold" />
+                                    <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
+                                        <Run Text="Lv." /><Run Text="{Binding Role.Level}" />
+                                        <Run Text=" · " /><Run Text="{Binding AttributeName}" />
+                                        <Run Text=" · 链" /><Run Text="{Binding ChainCount}" />
+                                    </TextBlock>
+                                </StackPanel>
+                            </Grid>
                         </Border>
                     </DataTemplate>
                 </ListBox.ItemTemplate>

@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using donet.Core.Models.Game;
@@ -6,7 +7,7 @@ using donet.Services;
 
 namespace donet.ViewModels;
 
-/// <summary>启动器页:游戏状态、检查更新、预下载、安装、启动。</summary>
+/// <summary>启动器页:游戏状态、检查更新、预下载、安装、启动、封面轮播。</summary>
 public sealed partial class LauncherViewModel : ViewModelBase
 {
     [ObservableProperty]
@@ -57,6 +58,18 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [ObservableProperty]
     private string _bytesText = "";
 
+    /// <summary>封面轮播图(官方启动器信息)。</summary>
+    public ObservableCollection<SlideshowItem> Slideshows { get; } = [];
+
+    /// <summary>公告列表。</summary>
+    public ObservableCollection<AnnouncementItem> Notices { get; } = [];
+
+    /// <summary>活动列表。</summary>
+    public ObservableCollection<AnnouncementItem> Activities { get; } = [];
+
+    /// <summary>新闻列表。</summary>
+    public ObservableCollection<AnnouncementItem> News { get; } = [];
+
     /// <summary>服务器渠道列表(与设置页一致)。</summary>
     public IReadOnlyList<string> Servers { get; } =
     [
@@ -79,6 +92,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             _ => 0,
         };
         RefreshState();
+        _ = LoadLauncherInfoAsync();
     }
 
     private GameServerType SelectedServerType => SelectedServerIndex switch
@@ -94,6 +108,66 @@ public sealed partial class LauncherViewModel : ViewModelBase
         SelectedServerType != GameServerType.Unknown
             ? SelectedServerType
             : AppServices.Paths.DetectServerType();
+
+    /// <summary>拉取官方封面轮播图与公告(失败静默,不影响其余功能)。</summary>
+    private async Task LoadLauncherInfoAsync()
+    {
+        try
+        {
+            var info = await AppServices.LauncherInfo.GetLauncherInfoAsync(ServerType);
+            if (info is null)
+            {
+                return;
+            }
+
+            Slideshows.Clear();
+            if (info.Slideshow is not null)
+            {
+                foreach (var slide in info.Slideshow)
+                {
+                    if (!string.IsNullOrWhiteSpace(slide.Url))
+                    {
+                        Slideshows.Add(slide);
+                    }
+                }
+            }
+
+            Notices.Clear();
+            Activities.Clear();
+            News.Clear();
+            var guidance = info.Guidance;
+            if (guidance is not null)
+            {
+                if (guidance.Notice?.Contents is { } notices)
+                {
+                    foreach (var n in notices)
+                    {
+                        Notices.Add(n);
+                    }
+                }
+
+                if (guidance.Activity?.Contents is { } acts)
+                {
+                    foreach (var a in acts)
+                    {
+                        Activities.Add(a);
+                    }
+                }
+
+                if (guidance.News?.Contents is { } news)
+                {
+                    foreach (var n in news)
+                    {
+                        News.Add(n);
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // 静默失败
+        }
+    }
 
     private void RefreshState()
     {

@@ -1,6 +1,7 @@
 using donet.Core.Infrastructure;
 using donet.Core.Services.Gacha;
 using donet.Core.Services.Game;
+using donet.Core.Services.Launcher;
 using donet.Core.Services.Roles;
 using donet.Core.Services.Settings;
 
@@ -30,6 +31,7 @@ public static class AppServices
     public static KujiequApiClient KujiequApi { get; private set; } = null!;
     public static LocalRoleDataReader LocalRoles { get; private set; } = null!;
     public static RoleDataService Roles { get; private set; } = null!;
+    public static LauncherInfoService LauncherInfo { get; private set; } = null!;
 
     public static void Initialize(string? overrideDataDir = null)
     {
@@ -65,6 +67,7 @@ public static class AppServices
         KujiequApi = new KujiequApiClient(Http);
         LocalRoles = new LocalRoleDataReader(Paths);
         Roles = new RoleDataService(KujiequApi, LocalRoles, Database);
+        LauncherInfo = new LauncherInfoService();
 
         _initialized = true;
     }
