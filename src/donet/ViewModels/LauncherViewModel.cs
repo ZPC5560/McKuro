@@ -1,0 +1,275 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using donet.Core.Models.Game;
+using donet.Core.Services.Game;
+using donet.Services;
+
+namespace donet.ViewModels;
+
+/// <summary>启动器页:游戏状态、检查更新、预下载、安装、启动。</summary>
+public sealed partial class LauncherViewModel : ViewModelBase
+{
+    [ObservableProperty]
+    private string _statusText = "就绪";
+
+    [ObservableProperty]
+    private string _gameVersionText = "未检测";
+
+    [ObservableProperty]
+    private string _serverVersionText = "-";
+
+    [ObservableProperty]
+    private string _installStateText = "未安装";
+
+    [ObservableProperty]
+    private string _predownloadStateText = "";
+
+    [ObservableProperty]
+    private bool _isInstalled;
+
+    [ObservableProperty]
+    private bool _hasUpdate;
+
+    [ObservableProperty]
+    private bool _hasPredownload;
+
+    [ObservableProperty]
+    private bool _isBusy;
+
+    [ObservableProperty]
+    private bool _isDownloading;
+
+    [ObservableProperty]
+    private double _progressPercent;
+
+    [ObservableProperty]
+    private string _progressText = "";
+
+    [ObservableProperty]
+    private long _updateBytes;
+
+    private UpdateCheckResult? _lastCheck;
+
+    public LauncherViewModel()
+    {
+        RefreshState();
+    }
+
+    private GameServerType ServerType =>
+        AppServices.Settings.Current.ServerType != GameServerType.Unknown
+            ? AppServices.Settings.Current.ServerType
+            : AppServices.Paths.DetectServerType();
+
+    private void RefreshState()
+    {
+        var paths = AppServices.Paths;
+        IsInstalled = paths.IsGameInstalled;
+        GameVersionText = IsInstalled ? "已安装" : "未安装";
+        InstallStateText = IsInstalled ? "游戏已就绪" : "尚未安装游戏";
+
+        if (!IsInstalled)
+        {
+            HasUpdate = false;
+            HasPredownload = false;
+            ServerVersionText = "-";
+            PredownloadStateText = "";
+        }
+    }
+
+    [RelayCommand]
+    private async Task CheckUpdateAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        StatusText = "正在检查更新…";
+        try
+        {
+            var result = await AppServices.GameUpdater.CheckUpdateAsync(ServerType);
+            _lastCheck = result;
+            if (!result.Success)
+            {
+                StatusText = result.Message ?? "检查失败";
+                return;
+            }
+
+            ServerVersionText = result.ServerVersion ?? "-";
+            HasUpdate = result.HasUpdate;
+            HasPredownload = result.HasPredownload;
+            PredownloadStateText = result.HasPredownload
+                ? $"可预下载:版本 {result.PredownloadVersion}"
+                : "";
+
+            if (result.NotInstalled)
+            {
+                InstallStateText = "未安装游戏,点击「下载安装」安装";
+            }
+            else if (result.HasUpdate)
+            {
+                InstallStateText = $"发现新版本 {result.ServerVersion}" +
+                    (result.TotalBytes > 0 ? $" (需下载 {FormatSize(result.TotalBytes)})" : "");
+            }
+            else
+            {
+                InstallStateText = $"游戏已是最新版本 {result.ServerVersion}";
+            }
+
+            StatusText = result.HasUpdate ? "有可用更新" : "游戏已是最新";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"检查更新失败: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task PreDownloadAsync()
+    {
+        if (IsBusy || IsDownloading)
+        {
+            return;
+        }
+
+        IsDownloading = true;
+        ProgressPercent = 0;
+        ProgressText = "正在预下载…";
+        StatusText = "预下载中(不会影响当前游戏文件)";
+
+        var progress = new Progress<DownloadProgress>(p =>
+        {
+            ProgressPercent = p.Percent * 100;
+            ProgressText = $"{p.FileIndex}/{p.FileTotal} 文件 · {FormatSize(p.BytesDownloaded)}/{FormatSize(p.BytesTotal)} · {FormatSpeed(p.SpeedBps)}";
+        });
+
+        try
+        {
+            var (success, _, message) = await AppServices.GameUpdater.PreDownloadAsync(ServerType, progress);
+            if (success)
+            {
+                PredownloadStateText = "预下载完成,可点击「安装更新」";
+                StatusText = "预下载完成";
+            }
+            else
+            {
+                StatusText = message ?? "预下载失败";
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"预下载失败: {ex.Message}";
+        }
+        finally
+        {
+            IsDownloading = false;
+            ProgressText = "";
+        }
+    }
+
+    [RelayCommand]
+    private async Task InstallAsync()
+    {
+        if (IsBusy || IsDownloading)
+        {
+            return;
+        }
+
+        IsDownloading = true;
+        ProgressPercent = 0;
+        StatusText = "正在安装/更新…";
+
+        var progress = new Progress<DownloadProgress>(p =>
+        {
+            ProgressPercent = p.Percent * 100;
+            ProgressText = $"{p.FileIndex}/{p.FileTotal} 文件 · {FormatSize(p.BytesDownloaded)}/{FormatSize(p.BytesTotal)}";
+        });
+
+        try
+        {
+            var (success, message) = await AppServices.GameUpdater.InstallAsync(ServerType, progress);
+            StatusText = success ? (message ?? "安装完成") : (message ?? "安装失败");
+            if (success)
+            {
+                RefreshState();
+                await CheckUpdateAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"安装失败: {ex.Message}";
+        }
+        finally
+        {
+            IsDownloading = false;
+            ProgressText = "";
+        }
+    }
+
+    [RelayCommand]
+    private void Launch()
+    {
+        var ok = AppServices.GameUpdater.LaunchGame(out var error);
+        StatusText = ok ? "游戏已启动" : $"启动失败: {error}";
+    }
+
+    [RelayCommand]
+    private void OpenGameFolder()
+    {
+        var root = AppServices.Paths.GameRootDir;
+        if (!string.IsNullOrEmpty(root) && Directory.Exists(root))
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = root,
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"打开目录失败: {ex.Message}";
+            }
+        }
+        else
+        {
+            StatusText = "未设置游戏目录";
+        }
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        double size = bytes;
+        int unit = 0;
+        while (size >= 1024 && unit < units.Length - 1)
+        {
+            size /= 1024;
+            unit++;
+        }
+        return $"{size:0.##} {units[unit]}";
+    }
+
+    private static string FormatSpeed(double bps)
+    {
+        if (bps <= 0)
+        {
+            return "--";
+        }
+        string[] units = ["B/s", "KB/s", "MB/s", "GB/s"];
+        double v = bps;
+        int unit = 0;
+        while (v >= 1024 && unit < units.Length - 1)
+        {
+            v /= 1024;
+            unit++;
+        }
+        return $"{v:0.#} {units[unit]}";
+    }
+}

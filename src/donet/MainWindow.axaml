@@ -1,0 +1,60 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:donet.ViewModels"
+        xmlns:views="using:donet.Views"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="720"
+        x:Class="donet.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Width="1100" Height="720"
+        MinWidth="960" MinHeight="640"
+        Title="donet · 鸣潮启动器">
+
+    <Window.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:LauncherViewModel}">
+            <views:LauncherView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:GachaViewModel}">
+            <views:GachaView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:RolesViewModel}">
+            <views:RolesView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+            <views:SettingsView />
+        </DataTemplate>
+    </Window.DataTemplates>
+
+    <Grid ColumnDefinitions="220,*">
+        <!-- 左侧导航 -->
+        <Border Grid.Column="0" Background="{DynamicResource SemiColorBg3}">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top"
+                           Text="donet"
+                           FontSize="22"
+                           FontWeight="Bold"
+                           Margin="20,24,20,20"
+                           Foreground="{DynamicResource SemiColorPrimary}" />
+                <ListBox ItemsSource="{Binding NavigationItems}"
+                         SelectedItem="{Binding SelectedNavigationItem, Mode=TwoWay}"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         Margin="8,0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:NavigationItem">
+                            <TextBlock Text="{Binding Title}"
+                                       FontSize="15"
+                                       Padding="12,10" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- 内容区 -->
+        <Border Grid.Column="1">
+            <ContentControl Content="{Binding CurrentPage}" />
+        </Border>
+    </Grid>
+</Window>

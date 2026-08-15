@@ -1,0 +1,66 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:donet.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="700"
+             x:Class="donet.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+    <ScrollViewer>
+        <StackPanel Margin="28" Spacing="20" MaxWidth="680" HorizontalAlignment="Left">
+            <TextBlock Text="设置" FontSize="26" FontWeight="Bold" />
+
+            <!-- 游戏目录 -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="游戏安装目录" FontSize="14" FontWeight="SemiBold" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <TextBox Grid.Column="0" Text="{Binding GameRootDir}"
+                             PlaceholderText="例如: D:\Kuro\Wuthering Waves" />
+                    <Button Grid.Column="1" Content="浏览…" Command="{Binding BrowseGameDirCommand}" />
+                </Grid>
+                <TextBlock Text="用于更新/安装/抽卡日志解析。目录应包含 Wuthering Waves.exe。" FontSize="12"
+                           Foreground="{DynamicResource SemiColorText3}" />
+            </StackPanel>
+
+            <!-- 服务器渠道 -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="服务器渠道" FontSize="14" FontWeight="SemiBold" />
+                <ComboBox ItemsSource="{Binding ServerTypes}"
+                          SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}"
+                          Width="200" />
+                <TextBlock Text="自动检测失败时可手动指定(官服 / B站 / WeGame / 国际服)。" FontSize="12"
+                           Foreground="{DynamicResource SemiColorText3}" />
+            </StackPanel>
+
+            <!-- 库街区 -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="库街区 Token" FontSize="14" FontWeight="SemiBold" />
+                <TextBox Text="{Binding KujiequToken}" PlaceholderText="登录库街区网页版后从请求头获取 token" />
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="角色 ID (playerId)" FontSize="14" FontWeight="SemiBold" />
+                <TextBox Text="{Binding RoleId}" PlaceholderText="游戏内账号的角色 ID" />
+                <TextBlock Text="用于拉取当前账号的角色养成数据。Token 获取:登录库街区(kurobbs.com)网页,按 F12 在网络请求头中复制 token 字段。" FontSize="12"
+                           Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- 下载 -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="并发下载数" FontSize="14" FontWeight="SemiBold" />
+                <NumericUpDown Value="{Binding DownloadConcurrency, Mode=TwoWay}"
+                               Minimum="1" Maximum="32"
+                               Width="160" />
+            </StackPanel>
+
+            <!-- 保存 -->
+            <StackPanel Spacing="8">
+                <Button Content="保存设置" Classes="primary"
+                        Command="{Binding SaveCommand}"
+                        HorizontalAlignment="Left" />
+                <TextBlock Text="{Binding StatusText}" FontSize="12"
+                           Foreground="{DynamicResource SemiColorPrimary}" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

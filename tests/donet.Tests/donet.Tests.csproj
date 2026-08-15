@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\donet\donet.csproj" />
+    <ProjectReference Include="..\..\src\donet.Core\donet.Core.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,144 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:gacha="using:donet.Core.Models.Gacha"
+             xmlns:vm="using:donet.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="700"
+             x:Class="donet.Views.GachaView"
+             x:DataType="vm:GachaViewModel">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="28">
+        <!-- 标题 -->
+        <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,16">
+            <TextBlock Text="抽卡分析" FontSize="26" FontWeight="Bold" />
+            <TextBlock Text="{Binding StatusText}"
+                       FontSize="13"
+                       Foreground="{DynamicResource SemiColorText2}" />
+        </StackPanel>
+
+        <!-- 总览卡片 -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*,*" ColumnSpacing="12" Margin="0,0,0,16">
+            <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="16">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="总抽数" FontSize="12" Foreground="{DynamicResource SemiColorText2}" />
+                    <TextBlock Text="{Binding TotalPulls}" FontSize="22" FontWeight="Bold" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="1" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="16">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="五星总数" FontSize="12" Foreground="{DynamicResource SemiColorText2}" />
+                    <TextBlock Text="{Binding TotalFiveStars}" FontSize="22" FontWeight="Bold" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="2" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="16">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="欧气评分" FontSize="12" Foreground="{DynamicResource SemiColorText2}" />
+                    <TextBlock Text="{Binding Score}" FontSize="22" FontWeight="Bold"
+                               Foreground="{DynamicResource SemiColorPrimary}" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="3" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="16">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="玩家 ID" FontSize="12" Foreground="{DynamicResource SemiColorText2}" />
+                    <TextBlock Text="{Binding PlayerIdText}" FontSize="16" FontWeight="SemiBold" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="4" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="16">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="操作" FontSize="12" Foreground="{DynamicResource SemiColorText2}" />
+                    <Button Content="从日志同步" Classes="primary"
+                            Command="{Binding RefreshCommand}"
+                            IsEnabled="{Binding !IsBusy}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- 卡池列表 + 详情 -->
+        <Grid Grid.Row="2" ColumnDefinitions="240,*" ColumnSpacing="16">
+            <!-- 卡池列表 -->
+            <ListBox ItemsSource="{Binding Pools}"
+                     SelectedItem="{Binding SelectedPool, Mode=TwoWay}"
+                     Background="Transparent"
+                     BorderThickness="0">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="gacha:PoolStats">
+                        <Border Padding="4,6">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="{Binding DisplayName}" FontSize="14" FontWeight="SemiBold" />
+                                <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
+                                    <Run Text="{Binding TotalPulls}" /> 抽 · <Run Text="{Binding FiveStarCount}" /> 金 · 垫 <Run Text="{Binding CurrentPity}" />
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- 详情 -->
+            <Grid RowDefinitions="Auto,*">
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="16" Margin="0,0,0,12">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="平均出货:" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                        <TextBlock FontSize="13" FontWeight="SemiBold">
+                            <Run Text="{Binding SelectedPool.AveragePity, StringFormat={}{0:0.#}}" /> 抽
+                        </TextBlock>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="小保底歪率:" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                        <TextBlock FontSize="13" FontWeight="SemiBold">
+                            <Run Text="{Binding SelectedPool.OffBannerRate, StringFormat={}{0:P0}}" />
+                        </TextBlock>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="当前垫:" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                        <TextBlock Text="{Binding SelectedPool.CurrentPity}" FontSize="13" FontWeight="SemiBold" />
+                    </StackPanel>
+                </StackPanel>
+
+                <TabControl Grid.Row="1" Classes="card">
+                    <TabItem Header="五星出货">
+                        <DataGrid ItemsSource="{Binding FiveStarEntries}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  GridLinesVisibility="Horizontal">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="50" x:DataType="gacha:FiveStarEntry" />
+                                <DataGridTextColumn Header="名称" Binding="{Binding Record.Name}" Width="2*" x:DataType="gacha:FiveStarEntry" />
+                                <DataGridTextColumn Header="类型" Binding="{Binding Record.ResourceType}" Width="*" x:DataType="gacha:FiveStarEntry" />
+                                <DataGridTextColumn Header="垫抽数" Binding="{Binding Pity}" Width="*" x:DataType="gacha:FiveStarEntry" />
+                                <DataGridTextColumn Header="时间" Binding="{Binding Record.Time}" Width="1.5*" x:DataType="gacha:FiveStarEntry" />
+                                <DataGridTemplateColumn Header="是否UP" Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock>
+                                                <TextBlock.Styles>
+                                                    <Style Selector="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+                                                    </Style>
+                                                </TextBlock.Styles>
+                                                <Run Text="{Binding IsOffBanner, StringFormat={}{0}}" />
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="全部记录">
+                        <DataGrid ItemsSource="{Binding AllRecords}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  GridLinesVisibility="Horizontal">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="2*" x:DataType="gacha:GachaRecord" />
+                                <DataGridTextColumn Header="类型" Binding="{Binding ResourceType}" Width="*" x:DataType="gacha:GachaRecord" />
+                                <DataGridTextColumn Header="星级" Binding="{Binding QualityLevel}" Width="*" x:DataType="gacha:GachaRecord" />
+                                <DataGridTextColumn Header="时间" Binding="{Binding Time}" Width="1.5*" x:DataType="gacha:GachaRecord" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                </TabControl>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>
