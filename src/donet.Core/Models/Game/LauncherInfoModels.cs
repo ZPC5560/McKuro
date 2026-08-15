@@ -55,3 +55,33 @@ public sealed class SlideshowItem
 
     [JsonPropertyName("carouselNotes")] public string CarouselNotes { get; set; } = "";
 }
+
+/// <summary>启动器背景数据(官方 background 接口,含宣传视频/首帧图/版本Logo)。</summary>
+public sealed class LauncherBackgroundData
+{
+    [JsonPropertyName("functionSwitch")] public int FunctionSwitch { get; set; }
+
+    /// <summary>背景文件 URL(视频 mp4 或图片)。</summary>
+    [JsonPropertyName("backgroundFile")] public string BackgroundFile { get; set; } = "";
+
+    /// <summary>背景文件类型(1=图片,2=视频)。</summary>
+    [JsonPropertyName("backgroundFileType")] public int BackgroundFileType { get; set; }
+
+    /// <summary>首帧占位图 URL(视频加载前的静态封面)。</summary>
+    [JsonPropertyName("firstFrameImage")] public string FirstFrameImage { get; set; } = "";
+
+    /// <summary>版本 Logo / 标语图 URL。</summary>
+    [JsonPropertyName("slogan")] public string Slogan { get; set; } = "";
+}
+
+/// <summary>启动器 index.json 的 functionCode 节。</summary>
+public sealed class LauncherFunctionCode
+{
+    [JsonPropertyName("background")] public string Background { get; set; } = "";
+}
+
+/// <summary>启动器 index.json(取 functionCode.background 编码)。</summary>
+public sealed class LauncherIndex
+{
+    [JsonPropertyName("functionCode")] public LauncherFunctionCode? FunctionCode { get; set; }
+}

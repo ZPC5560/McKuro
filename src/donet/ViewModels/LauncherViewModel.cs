@@ -70,6 +70,18 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>新闻列表。</summary>
     public ObservableCollection<AnnouncementItem> News { get; } = [];
 
+    /// <summary>背景首帧图 URL(视频加载前的静态封面,空则无背景)。</summary>
+    [ObservableProperty]
+    private string _backgroundImageUrl = "";
+
+    /// <summary>背景视频 URL(空则无视频,当前静态显示首帧图)。</summary>
+    [ObservableProperty]
+    private string _backgroundVideoUrl = "";
+
+    /// <summary>版本 Logo 图 URL(启动按钮旁,空则不显示)。</summary>
+    [ObservableProperty]
+    private string _versionLogoUrl = "";
+
     /// <summary>服务器渠道列表(与设置页一致)。</summary>
     public IReadOnlyList<string> Servers { get; } =
     [
@@ -109,57 +121,76 @@ public sealed partial class LauncherViewModel : ViewModelBase
             ? SelectedServerType
             : AppServices.Paths.DetectServerType();
 
-    /// <summary>拉取官方封面轮播图与公告(失败静默,不影响其余功能)。</summary>
+    /// <summary>拉取官方封面轮播图、公告与背景封面(失败静默,不影响其余功能)。</summary>
     private async Task LoadLauncherInfoAsync()
     {
         try
         {
-            var info = await AppServices.LauncherInfo.GetLauncherInfoAsync(ServerType);
-            if (info is null)
+            var server = ServerType;
+            var info = await AppServices.LauncherInfo.GetLauncherInfoAsync(server);
+            if (info is not null)
             {
-                return;
-            }
-
-            Slideshows.Clear();
-            if (info.Slideshow is not null)
-            {
-                foreach (var slide in info.Slideshow)
+                Slideshows.Clear();
+                if (info.Slideshow is not null)
                 {
-                    if (!string.IsNullOrWhiteSpace(slide.Url))
+                    foreach (var slide in info.Slideshow)
                     {
-                        Slideshows.Add(slide);
+                        if (!string.IsNullOrWhiteSpace(slide.Url))
+                        {
+                            Slideshows.Add(slide);
+                        }
+                    }
+                }
+
+                Notices.Clear();
+                Activities.Clear();
+                News.Clear();
+                var guidance = info.Guidance;
+                if (guidance is not null)
+                {
+                    if (guidance.Notice?.Contents is { } notices)
+                    {
+                        foreach (var n in notices)
+                        {
+                            Notices.Add(n);
+                        }
+                    }
+
+                    if (guidance.Activity?.Contents is { } acts)
+                    {
+                        foreach (var a in acts)
+                        {
+                            Activities.Add(a);
+                        }
+                    }
+
+                    if (guidance.News?.Contents is { } news)
+                    {
+                        foreach (var n in news)
+                        {
+                            News.Add(n);
+                        }
                     }
                 }
             }
 
-            Notices.Clear();
-            Activities.Clear();
-            News.Clear();
-            var guidance = info.Guidance;
-            if (guidance is not null)
+            // 背景封面(首帧图 + 视频 URL + 版本 Logo)
+            var background = await AppServices.LauncherInfo.GetLauncherBackgroundAsync(server);
+            if (background is not null)
             {
-                if (guidance.Notice?.Contents is { } notices)
+                if (!string.IsNullOrWhiteSpace(background.FirstFrameImage))
                 {
-                    foreach (var n in notices)
-                    {
-                        Notices.Add(n);
-                    }
+                    BackgroundImageUrl = background.FirstFrameImage;
                 }
 
-                if (guidance.Activity?.Contents is { } acts)
+                if (!string.IsNullOrWhiteSpace(background.BackgroundFile))
                 {
-                    foreach (var a in acts)
-                    {
-                        Activities.Add(a);
-                    }
+                    BackgroundVideoUrl = background.BackgroundFile;
                 }
 
-                if (guidance.News?.Contents is { } news)
+                if (!string.IsNullOrWhiteSpace(background.Slogan))
                 {
-                    foreach (var n in news)
-                    {
-                        News.Add(n);
-                    }
+                    VersionLogoUrl = background.Slogan;
                 }
             }
         }

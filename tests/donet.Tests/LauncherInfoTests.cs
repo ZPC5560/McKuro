@@ -71,4 +71,39 @@ public class LauncherInfoTests
         var weapon = new GachaRecord { ResourceId = 21050096, ResourceType = "武器", QualityLevel = 5 };
         Assert.StartsWith("https://mc.appfeng.com/ui/weapon/", IconCatalog.GetIconUrl(weapon));
     }
+
+    [Fact]
+    public void Deserialize_BackgroundData_Succeeds()
+    {
+        const string json = """
+        {
+          "functionSwitch": 1,
+          "backgroundFile": "https://cdn/video.mp4",
+          "backgroundFileType": 2,
+          "firstFrameImage": "https://cdn/frame.webp",
+          "slogan": "https://cdn/logo.png"
+        }
+        """;
+
+        var bg = JsonSerializer.Deserialize(json, LauncherInfoJsonContext.Default.LauncherBackgroundData);
+
+        Assert.NotNull(bg);
+        Assert.Equal("https://cdn/video.mp4", bg!.BackgroundFile);
+        Assert.Equal(2, bg.BackgroundFileType);
+        Assert.Equal("https://cdn/frame.webp", bg.FirstFrameImage);
+        Assert.Equal("https://cdn/logo.png", bg.Slogan);
+    }
+
+    [Fact]
+    public void Deserialize_LauncherIndex_GetsBackgroundCode()
+    {
+        const string json = """
+        { "functionCode": { "background": "PTj45kPbFHV7O3FHrxK8CaRjsTlV6DHX" } }
+        """;
+
+        var index = JsonSerializer.Deserialize(json, LauncherInfoJsonContext.Default.LauncherIndex);
+
+        Assert.NotNull(index);
+        Assert.Equal("PTj45kPbFHV7O3FHrxK8CaRjsTlV6DHX", index!.FunctionCode!.Background);
+    }
 }
