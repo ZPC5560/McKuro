@@ -77,6 +77,7 @@ public static class AppServices
     public static RedemptionCodeService RedeemCodes => Services.GetRequiredService<RedemptionCodeService>();
     public static GeetVerifyService GeetVerify => Services.GetRequiredService<GeetVerifyService>();
     public static AppUpdateService AppUpdate => Services.GetRequiredService<AppUpdateService>();
+    public static IconDiskCacheService IconCache => Services.GetRequiredService<IconDiskCacheService>();
 
     /// <summary>
     /// 稳定的设备 ID(持久化到 device-id.txt,跨启动不变)。
@@ -244,6 +245,9 @@ public static class AppServices
             logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<RedemptionCodeService>()));
         services.AddSingleton<GeetVerifyService>();
         services.AddSingleton<AppUpdateService>();
+
+        // ---- 角色图标磁盘持久化缓存(库街区正常时缓存, mcguide 兜底时按名称复用) ----
+        services.AddSingleton(sp => new IconDiskCacheService(cacheDir: Path.Combine(dataDir, "icon_cache")));
     }
 
     /// <summary>读取或生成稳定的设备 ID(云游戏 SDK 用)。</summary>

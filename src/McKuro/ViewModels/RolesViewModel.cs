@@ -18,6 +18,9 @@ public sealed partial class RolesViewModel : ViewModelBase
     /// <summary>mcguide 详情填充进行中(避免并发重复请求)。</summary>
     private bool _guideDetailFilling;
 
+    /// <summary>最近一次被 mcguide 填充的角色(其图标是 guide-res B 域名,不写入磁盘缓存)。</summary>
+    private RoleDetail? _guideFilledRole;
+
     /// <summary>属性筛选中的"全部"选项。</summary>
     public const string AllAttributeFilter = "全部属性";
 
@@ -118,7 +121,7 @@ public sealed partial class RolesViewModel : ViewModelBase
 
     partial void OnRoleIdTextChanged(string value) => AppServices.Settings.Current.RoleId = value;
 
-    /// <summary>选中角色变化时:拉取官方达成度 + 角色头部背景取色 + 缺失详情用 mcguide 填充。</summary>
+    /// <summary>选中角色变化时:拉取官方达成度 + 角色头部背景取色 + 缺失详情用 mcguide 填充 + 图标磁盘缓存。</summary>
     partial void OnSelectedRoleChanged(RoleDetail? value)
     {
         GuideAchievement = null;
@@ -128,6 +131,30 @@ public sealed partial class RolesViewModel : ViewModelBase
             _ = LoadGuideAchievementAsync();
             _ = LoadRoleHeaderBackgroundAsync();
             _ = FillRoleDetailFromGuideIfEmptyAsync();
+            _ = CacheSelectedRoleIconsAsync();
+        }
+    }
+
+    /// <summary>后台把当前选中角色的图标缓存到磁盘(库街区正常时);mcguide 兜底填充的角色不缓存。</summary>
+    private async Task CacheSelectedRoleIconsAsync()
+    {
+        var role = SelectedRole;
+        if (role is null)
+        {
+            return;
+        }
+        // mcguide 兜底填充的角色图标是 guide-res B 域名,不写入磁盘缓存(避免污染库街区 A 域名缓存)
+        if (ReferenceEquals(role, _guideFilledRole))
+        {
+            return;
+        }
+        try
+        {
+            await AppServices.IconCache.CacheRoleIconsAsync(role);
+        }
+        catch (Exception)
+        {
+            // 缓存失败静默,不影响主流程
         }
     }
 
@@ -283,6 +310,9 @@ public sealed partial class RolesViewModel : ViewModelBase
                 return; // 已切到其他角色,丢弃过期结果
             }
             MergeGuideDetail(role, detail);
+            // mcguide 图标是 B 域名:命中库街区磁盘缓存时按名称替换为本地图标,避免缺失/错位
+            ApplyCachedRoleIcons(role);
+            _guideFilledRole = role;
             SourceText = "数据源: mcguide 攻略站";
             StatusText = $"已用 mcguide 攻略站数据补充角色详情({role.RoleName})";
         }
@@ -330,6 +360,64 @@ public sealed partial class RolesViewModel : ViewModelBase
             target.Chains = source.Chains;
         }
         target.NotifyDetailChanged();
+    }
+
+    /// <summary>
+    /// mcguide 填充后:用磁盘缓存图标(按名称匹配库街区缓存)替换各图标字段,
+    /// 未命中保留原(mcguide B 域名)URL。处理武器/技能/共鸣链/属性/声骸/角色立绘。
+    /// </summary>
+    private static void ApplyCachedRoleIcons(RoleDetail role)
+    {
+        var cache = AppServices.IconCache;
+        if (role.Role is { } r && !string.IsNullOrWhiteSpace(r.RolePicUrl))
+        {
+            r.RolePicUrl = cache.ResolveIcon(IconDiskCacheService.CategoryRole, role.RoleName, r.RolePicUrl);
+        }
+        if (role.WeaponData?.Weapon is { } w)
+        {
+            w.WeaponIcon = cache.ResolveIcon(IconDiskCacheService.CategoryWeapon, role.WeaponData.DisplayName, w.WeaponIcon);
+        }
+        if (role.Skills is not null)
+        {
+            foreach (var s in role.Skills)
+            {
+                if (s.Skill is { } sk && !string.IsNullOrWhiteSpace(sk.IconUrl))
+                {
+                    sk.IconUrl = cache.ResolveIcon(IconDiskCacheService.CategorySkill, sk.SkillName, sk.IconUrl);
+                }
+            }
+        }
+        if (role.Chains is not null)
+        {
+            foreach (var c in role.Chains)
+            {
+                if (!string.IsNullOrWhiteSpace(c.IconUrl))
+                {
+                    c.IconUrl = cache.ResolveIcon(IconDiskCacheService.CategoryChain, c.ChainName, c.IconUrl);
+                }
+            }
+        }
+        if (role.Attributes is not null)
+        {
+            foreach (var a in role.Attributes)
+            {
+                if (!string.IsNullOrWhiteSpace(a.IconUrl))
+                {
+                    a.IconUrl = cache.ResolveIcon(IconDiskCacheService.CategoryAttr, a.AttributeName, a.IconUrl);
+                }
+            }
+        }
+        if (role.PhantomData?.Phantoms is not null)
+        {
+            foreach (var e in role.PhantomData.Phantoms)
+            {
+                if (e.PhantomProp is { } pp && !string.IsNullOrWhiteSpace(pp.IconUrl))
+                {
+                    pp.IconUrl = cache.ResolveIcon(IconDiskCacheService.CategoryEcho, pp.PhantomName, pp.IconUrl);
+                }
+            }
+        }
+        role.NotifyDetailChanged();
     }
 
     [RelayCommand]
