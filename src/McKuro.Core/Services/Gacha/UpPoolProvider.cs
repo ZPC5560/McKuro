@@ -48,7 +48,7 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
                 UpPoolJsonContext.Default.FiveGroupModel,
                 ct).ConfigureAwait(false);
 
-            var result = BuildMap(model, _time.GetLocalNow());
+            var result = BuildMap(model);
             _cache = result;
             _cacheTime = _time.GetUtcNow();
             return result;
@@ -60,7 +60,7 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
         }
     }
 
-    private static IReadOnlyDictionary<CardPoolType, HashSet<int>> BuildMap(FiveGroupModel? model, DateTimeOffset now)
+    private static IReadOnlyDictionary<CardPoolType, HashSet<int>> BuildMap(FiveGroupModel? model)
     {
         var map = new Dictionary<CardPoolType, HashSet<int>>();
         if (model?.Data is null)
@@ -71,18 +71,14 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
         var roleIds = new HashSet<int>();
         var weaponIds = new HashSet<int>();
 
-        // 权威来源:pool_list 中当前生效(按 start_at/end_at)的卡池。
-        // five_maps 只是全量五星目录(含所有历史限定),不能当"当期 UP"用——
-        // 否则旧限定(如卡卡罗)会被误判为 UP,且新角色若尚未进目录会被误判为歪。
+        // 权威来源:pool_list 中所有卡池的 up_five_ids(历史 + 当期)。
+        // 注意:不做"当期生效"过滤——限定角色无论何时抽到都应算 UP,
+        // 只有从未 UP 过的常驻角色才算歪(用当前期过滤会把历史限定全误判为歪)。
+        // five_maps 只是全量五星目录(含常驻),仅作无 pool_list 时的兜底。
         if (model.Data.PoolList is { Count: > 0 } pools)
         {
-            var localNow = now.LocalDateTime;
             foreach (var pool in pools)
             {
-                if (!IsPoolActive(pool, localNow))
-                {
-                    continue;
-                }
                 var ids = ParseIds(pool.UpFiveIds);
                 if (string.Equals(pool.Type, "role", StringComparison.OrdinalIgnoreCase))
                 {
@@ -94,7 +90,7 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
                 }
             }
 
-            // pool_list 存在但没有生效卡池(两期之间)时,用全量目录兜底以避免误判
+            // pool_list 存在但没有任何 UP 时,用全量目录兜底以避免误判
             if (roleIds.Count == 0 && weaponIds.Count == 0)
             {
                 CollectFromFiveMaps(model.Data.FiveGroupConfig?.FiveMaps, roleIds, weaponIds);
@@ -151,20 +147,6 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
                 weaponIds.Add(m.WeaponId);
             }
         }
-    }
-
-    /// <summary>卡池是否在生效期内(兼容 "yyyy-MM-dd HH:mm:ss" 与 ISO 8601)。</summary>
-    private static bool IsPoolActive(PoolItem pool, DateTime now)
-    {
-        if (string.IsNullOrWhiteSpace(pool.StartAt) || string.IsNullOrWhiteSpace(pool.EndAt))
-        {
-            return false;
-        }
-        if (!DateTime.TryParse(pool.StartAt, out var start) || !DateTime.TryParse(pool.EndAt, out var end))
-        {
-            return false;
-        }
-        return now >= start && now <= end;
     }
 
     /// <summary>解析逗号分隔的 UP 五星 ID 字符串。</summary>
