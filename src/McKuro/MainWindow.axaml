@@ -7,8 +7,10 @@
         mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="720"
         x:Class="McKuro.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Width="1100" Height="720"
-        MinWidth="960" MinHeight="640"
+        Width="1150" Height="650"
+        MinWidth="900" MinHeight="509"
+        CanResize="True"
+        WindowStartupLocation="CenterScreen"
         Title="McKuro · 鸣潮启动器"
         Icon="avares://McKuro/Assets/app.ico"
         Background="{DynamicResource SemiColorBg0}">

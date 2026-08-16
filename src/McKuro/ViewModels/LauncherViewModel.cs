@@ -165,6 +165,15 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
     }
 
+    /// <summary>导航到启动页时调用:自动检查更新(移除手动检查按钮后,切换到启动页即检查)。</summary>
+    public void OnNavigatedTo()
+    {
+        if (IsInstalled && !IsBusy)
+        {
+            _ = CheckUpdateAsync();
+        }
+    }
+
     private GameServerType SelectedServerType => SelectedServerIndex switch
     {
         1 => GameServerType.Official,

@@ -30,6 +30,18 @@ public sealed class RoleDailyData
 
     /// <summary>周度游历。</summary>
     [JsonPropertyName("weeklyFrameData")] public RoleDailyDetail? WeeklyFrameData { get; set; }
+
+    /// <summary>战令(第 1 个元素 cur=战令等级,第 2 个 cur/total=进度)。</summary>
+    [JsonPropertyName("battlePassData")] public List<RoleDailyDetail>? BattlePassData { get; set; }
+
+    /// <summary>结晶单质。</summary>
+    [JsonPropertyName("storeEnergyData")] public RoleDailyDetail? StoreEnergyData { get; set; }
+
+    /// <summary>终焉矩阵。</summary>
+    [JsonPropertyName("newTowerData")] public RoleDailyDetail? NewTowerData { get; set; }
+
+    /// <summary>冥歌海墟。</summary>
+    [JsonPropertyName("slashTowerData")] public RoleDailyDetail? SlashTowerData { get; set; }
 }
 
 /// <summary>每日数据单项(cur/total 进度)。</summary>
@@ -46,4 +58,5 @@ public sealed class RoleDailyDetail
 
 [JsonSerializable(typeof(RoleDailyData))]
 [JsonSerializable(typeof(RoleDailyDetail))]
+[JsonSerializable(typeof(List<RoleDailyDetail>))]
 public sealed partial class UserJsonContext : JsonSerializerContext;

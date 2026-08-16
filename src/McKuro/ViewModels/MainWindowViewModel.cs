@@ -103,6 +103,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
         CurrentPage = item.ViewModel;
         SelectedNavigationItem = item;
+        // 导航到启动页时自动检查更新(移除手动检查按钮后)
+        if (item.ViewModel is LauncherViewModel launcher)
+        {
+            launcher.OnNavigatedTo();
+        }
     }
 
     /// <summary>通过字符串 key 导航(供消息接收)。</summary>

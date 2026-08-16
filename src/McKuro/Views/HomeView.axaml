@@ -3,105 +3,173 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:McKuro.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             mc:Ignorable="d" d:DesignWidth="1040" d:DesignHeight="720"
              x:Class="McKuro.Views.HomeView"
              x:DataType="vm:HomeViewModel">
-    <Grid Margin="25">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="auto" />
-            <RowDefinition />
-        </Grid.RowDefinitions>
+    <UserControl.Styles>
+        <!-- 半透明描边按钮(参考 InternalBeyond .splash-action-btn) -->
+        <Style Selector="Button.splashBtn">
+            <Setter Property="Background" Value="#21C8DCF5" />
+            <Setter Property="BorderBrush" Value="#6BC8DCF5" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Foreground" Value="#F0ECF4FF" />
+            <Setter Property="Padding" Value="22,9" />
+            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="FontWeight" Value="Medium" />
+        </Style>
+        <Style Selector="Button.splashBtn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#26C8DCF5" />
+            <Setter Property="BorderBrush" Value="#73DCEBFF" />
+        </Style>
+    </UserControl.Styles>
 
-        <!-- 欢迎横幅 -->
-        <Border Grid.Row="0"
-                CornerRadius="10"
-                Background="{DynamicResource SemiColorPrimary}"
-                Padding="30,32"
-                Margin="0,0,0,20">
-            <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="🌊 McKuro · 鸣潮启动器"
-                               FontSize="28"
-                               FontWeight="Bold"
-                               Foreground="White" />
-                    <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0">
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="安装状态" FontSize="12" Foreground="#AAFFFFFF" />
-                            <TextBlock Text="{Binding InstallStateText}" FontSize="15" FontWeight="SemiBold" Foreground="White" />
-                        </StackPanel>
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="服务器渠道" FontSize="12" Foreground="#AAFFFFFF" />
-                            <TextBlock Text="{Binding ServerTypeText}" FontSize="15" FontWeight="SemiBold" Foreground="White" />
-                        </StackPanel>
-                    </StackPanel>
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding AccountText}" FontSize="14" FontWeight="SemiBold"
-                               Foreground="White" VerticalAlignment="Center" />
-                    <Button Content="刷新数据"
-                            Background="#33FFFFFF"
-                            BorderThickness="0"
-                            Foreground="White"
-                            Command="{Binding RefreshDailyCommand}"
-                            IsEnabled="{Binding !IsBusy}" />
-                </StackPanel>
-            </Grid>
+    <Grid>
+        <!-- ═══ 背景:深蓝黑渐变 + 氛围光晕(参考 InternalBeyond #splash-glow / rgba(4,10,26)) ═══ -->
+        <Panel IsHitTestVisible="False">
+            <Border>
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                        <GradientStop Color="#040A1A" Offset="0" />
+                        <GradientStop Color="#0A1428" Offset="0.45" />
+                        <GradientStop Color="#0E1B36" Offset="0.8" />
+                        <GradientStop Color="#081226" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+            <!-- 右上冷色光晕 -->
+            <Ellipse Width="920" Height="920" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-420,-320,0">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#2A3F6E" Offset="0" />
+                        <GradientStop Color="#1A2A4A" Offset="0.55" />
+                        <GradientStop Color="#00000000" Offset="1" />
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <!-- 左下淡蓝光晕 -->
+            <Ellipse Width="760" Height="760" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="-280,0,0,-340">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#1E3258" Offset="0" />
+                        <GradientStop Color="#101C38" Offset="0.6" />
+                        <GradientStop Color="#00000000" Offset="1" />
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+        </Panel>
+
+        <!-- ═══ 右上角:账号 + 刷新数据(半透明胶囊) ═══ -->
+        <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,22,32,0"
+                CornerRadius="18" Background="#1CFFFFFF" BorderBrush="#38FFFFFF" BorderThickness="1" Padding="18,7">
+            <StackPanel Orientation="Horizontal" Spacing="14">
+                <TextBlock Text="{Binding AccountText}" FontSize="13.5" FontWeight="SemiBold"
+                           Foreground="#F2F6FF" VerticalAlignment="Center" />
+                <Button Content="⟳ 刷新数据" Command="{Binding RefreshDailyCommand}"
+                        IsEnabled="{Binding !IsBusy}" Classes="splashBtn"
+                        Padding="14,6" CornerRadius="14" />
+            </StackPanel>
         </Border>
 
-        <!-- 每日数据(体力/活跃度/周本/电台/周度游历) -->
-        <Grid Grid.Row="1" RowDefinitions="Auto,*" ColumnDefinitions="*,*,*" ColumnSpacing="16" RowSpacing="16">
-            <Border Grid.Column="0" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
-                <StackPanel Spacing="4">
-                    <TextBlock Text="状态" FontSize="12" Foreground="{DynamicResource SemiColorText2}" />
-                    <TextBlock Text="{Binding StatusText}" FontSize="13" Foreground="{DynamicResource SemiColorText2}"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-            <Border Grid.Column="1" Grid.ColumnSpan="2" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <TextBlock Text="⚙️" FontSize="16" />
-                    <TextBlock Text="每日数据来自库街区(需登录账号)" FontSize="13"
-                               Foreground="{DynamicResource SemiColorText2}" />
-                </StackPanel>
-            </Border>
+        <!-- ═══ 主内容 ═══ -->
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <Grid Margin="96,0,40,0" Opacity="{Binding RevealOpacity}">
+                <Grid.Transitions>
+                    <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.9" />
+                    </Transitions>
+                </Grid.Transitions>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="56">
+                    <!-- ─── 左:欢迎标题区(splash-left) ─── -->
+                    <StackPanel Grid.Column="0" MaxWidth="460" VerticalAlignment="Center" Spacing="0">
+                        <!-- 签名行 -->
+                        <TextBlock Text="MCKURO · 鸣潮启动器" FontSize="12" FontWeight="Light"
+                                   LetterSpacing="3" Foreground="#B9CCE8" />
+                        <!-- 发光发丝分隔线 -->
+                        <Border Width="36" Height="1" Margin="0,22,0,26" HorizontalAlignment="Left"
+                                Background="#D6E4FC">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="10" Color="#A8CCF8" Opacity="0.8" />
+                            </Border.Effect>
+                        </Border>
+                        <!-- 大标题(衬线斜体感 + 首字母高亮) -->
+                        <TextBlock FontFamily="Georgia, 'Times New Roman', serif" FontStyle="Italic"
+                                   FontSize="46" FontWeight="Light" LetterSpacing="2" Foreground="#F0F5FF"
+                                   TextWrapping="Wrap">
+                            <Run Text="W" FontWeight="Bold" Foreground="#FFFFFF" /><Run Text="elcome to" />
+                            <Run Text=" " />
+                            <Run Text="M" FontWeight="Bold" Foreground="#FFFFFF" /><Run Text="cKuro" />
+                        </TextBlock>
+                        <!-- 描述文字(宋体感、行高 2、部分白色高亮) -->
+                        <TextBlock Margin="0,30,0,0" FontSize="15.5" LineHeight="2" Foreground="#D5E1F2"
+                                   TextWrapping="Wrap">
+                            <Run Text="潮起潮落，回声常在。" />
+                            <Run Text="管理你的冒险、角色与数据。" Foreground="#FFFFFF" FontWeight="SemiBold" />
+                        </TextBlock>
+                        <!-- 次要描述(细体、浅色) -->
+                        <TextBlock Margin="0,8,0,0" FontSize="13" FontWeight="Light" Foreground="#93A7C8"
+                                   TextWrapping="Wrap" Text="游戏启动 · 抽卡分析 · 角色数据 · 每日数据一览" />
+                        <!-- 安装状态 / 服务器渠道 -->
+                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+                            <TextBlock Text="{Binding InstallStateText}" FontSize="12" Foreground="#93A7C8" />
+                            <TextBlock Text="·" FontSize="12" Foreground="#93A7C8" />
+                            <TextBlock Text="{Binding ServerTypeText}" FontSize="12" Foreground="#93A7C8" />
+                        </StackPanel>
+                        <!-- 半透明描边按钮 -->
+                        <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,34,0,0">
+                            <Button Content="进入游戏" Classes="splashBtn" Command="{Binding GoLauncherCommand}" />
+                            <Button Content="抽卡分析" Classes="splashBtn" Command="{Binding GoGachaCommand}" />
+                            <Button Content="角色数据" Classes="splashBtn" Command="{Binding GoRolesCommand}" />
+                        </StackPanel>
+                        <!-- 跳过/提示小字 -->
+                        <TextBlock Margin="0,18,0,0" FontSize="12" FontWeight="Light" Foreground="#7E91B2"
+                                   Text="{Binding StatusText}" TextWrapping="Wrap" />
+                    </StackPanel>
 
-            <!-- 5 项每日数据卡片 -->
-            <Border Grid.Row="1" Grid.ColumnSpan="3" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="20">
-                <StackPanel Spacing="16">
-                    <TextBlock Text="今日数据" FontSize="16" FontWeight="SemiBold" />
-                    <ItemsControl ItemsSource="{Binding DailyItems}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <UniformGrid Columns="5" ColumnSpacing="16" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:DailyItem">
-                                <Border CornerRadius="12" Background="{DynamicResource SemiColorBg3}" Padding="14">
-                                    <StackPanel Spacing="10">
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Text="{Binding Icon}" FontSize="18" />
-                                            <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" />
-                                        </StackPanel>
-                                        <StackPanel Spacing="6">
-                                            <Grid ColumnDefinitions="*,Auto">
-                                                <TextBlock Text="{Binding ValueText}" FontSize="20" FontWeight="Bold"
-                                                           Foreground="{DynamicResource SemiColorPrimary}" />
-                                                <TextBlock Grid.Column="1" Text="{Binding PercentText}" FontSize="12"
-                                                           Foreground="{DynamicResource SemiColorText2}"
-                                                           VerticalAlignment="Center" />
-                                            </Grid>
-                                            <ProgressBar Minimum="0" Maximum="100"
-                                                         Value="{Binding Percent}"
-                                                         Height="8" CornerRadius="4" />
-                                        </StackPanel>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-        </Grid>
+                    <!-- ─── 右:每日数据(半透明卡片) ─── -->
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="18">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="今日数据" FontSize="17" FontWeight="SemiBold" Foreground="#EAF1FC" />
+                                <TextBlock Text="体力 · 结晶单质 · 活跃度 · 周本 · 深塔 · 海墟 · 千道门扉 · 游历 · 战令"
+                                           FontSize="12" Foreground="#93A7C8" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding DailyItems}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:DailyItem">
+                                        <Border Width="172" Height="118" Margin="0,0,14,14" CornerRadius="12"
+                                                Background="#22FFFFFF" BorderBrush="#2EFFFFFF" BorderThickness="1"
+                                                Padding="16,12">
+                                            <StackPanel Spacing="6">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{Binding Icon}" FontSize="16" />
+                                                    <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                                                               Foreground="#E8EFFB" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock Text="{Binding ValueText}" FontSize="20" FontWeight="Bold"
+                                                               Foreground="#FFFFFF" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding PercentText}" FontSize="11"
+                                                               Foreground="#9FB6D6" VerticalAlignment="Center"
+                                                               IsVisible="{Binding HasTotal}" />
+                                                </Grid>
+                                                <ProgressBar Minimum="0" Maximum="100" Value="{Binding Percent}"
+                                                             Height="5" CornerRadius="2.5"
+                                                             IsVisible="{Binding HasTotal}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+        </ScrollViewer>
     </Grid>
 </UserControl>

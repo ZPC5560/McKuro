@@ -1,26 +1,29 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Core.Models.User;
 using McKuro.Core.Services.Game;
 using McKuro.Services;
 
 namespace McKuro.ViewModels;
 
-/// <summary>首页每日数据项(体力/活跃度/周本/电台/周度游历)。</summary>
+/// <summary>首页每日数据项(体力/结晶单质/活跃度/周本/终焉矩阵/冥歌海墟/千道门扉/周度游历/战令)。</summary>
 public sealed class DailyItem
 {
     public required string Icon { get; init; }
     public required string Name { get; init; }
-    public required string ValueText { get; init; }   // 例如 "120/160"
+    public required string ValueText { get; init; }   // 例如 "120/160" 或仅 "100"
     public required int Cur { get; init; }
     public required int Total { get; init; }
+    /// <summary>是否有总量(有 total 才显示进度条)。</summary>
+    public bool HasTotal => Total > 0;
     /// <summary>进度 0-100。</summary>
     public double Percent => Total > 0 ? Math.Clamp(Cur * 100.0 / Total, 0, 100) : 0;
     public string PercentText => $"{Percent:0}%";
 }
 
-/// <summary>主页:欢迎横幅 + 角色每日数据(体力/活跃度/周本/电台/周度游历)。</summary>
+/// <summary>主页:InternalBeyond 风格欢迎页 + 角色每日数据(全量字段)。</summary>
 public sealed partial class HomeViewModel : ViewModelBase
 {
     [ObservableProperty]
@@ -44,13 +47,24 @@ public sealed partial class HomeViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isBusy;
 
-    /// <summary>每日数据项(体力/活跃度/周本/电台/周度游历)。</summary>
+    /// <summary>欢迎页淡入动画(0→1,配合 Avalonia Transitions)。</summary>
+    [ObservableProperty]
+    private double _revealOpacity;
+
+    /// <summary>每日数据项(体力/结晶单质/活跃度/周本/终焉矩阵/冥歌海墟/千道门扉/周度游历/战令)。</summary>
     public ObservableCollection<DailyItem> DailyItems { get; } = [];
 
     public HomeViewModel()
     {
         RefreshState();
         _ = RefreshDailyAsync();
+        _ = RevealAsync();
+    }
+
+    private async Task RevealAsync()
+    {
+        await Task.Delay(120);
+        RevealOpacity = 1;
     }
 
     private void RefreshState()
@@ -75,6 +89,21 @@ public sealed partial class HomeViewModel : ViewModelBase
 
     [RelayCommand]
     private void Refresh() => RefreshState();
+
+    /// <summary>导航到启动器页。</summary>
+    [RelayCommand]
+    private void GoLauncher() => SendNav(NavigationKeys.Launcher);
+
+    /// <summary>导航到抽卡分析页。</summary>
+    [RelayCommand]
+    private void GoGacha() => SendNav(NavigationKeys.Gacha);
+
+    /// <summary>导航到角色数据页。</summary>
+    [RelayCommand]
+    private void GoRoles() => SendNav(NavigationKeys.Roles);
+
+    private static void SendNav(string key)
+        => WeakReferenceMessenger.Default.Send(new NavigationRequestedMessage(key));
 
     /// <summary>拉取角色每日数据(优先本地游戏缓存 + PC 启动器 SDK,失败回退库街区接口)。</summary>
     [RelayCommand]
@@ -123,18 +152,42 @@ public sealed partial class HomeViewModel : ViewModelBase
         }
     }
 
+    /// <summary>应用全量每日数据(缺字段的项自动跳过)。</summary>
     private void ApplyDailyData(RoleDailyData data, string source)
     {
         DailyItems.Clear();
         AddItem(data.EnergyData, "⚡", "体力");
-        AddItem(data.LivenessData, "🔥", "活跃度");
-        AddItem(data.WeeklyData, "🗡", "周本");
-        AddItem(data.RougeData, "📻", "电台");
-        AddItem(data.WeeklyFrameData, "🗺", "周度游历");
+        AddItem(data.StoreEnergyData, "💎", "结晶单质");
+        AddItem(data.LivenessData, "🔥", "活跃度", curOnly: true);
+        AddItem(data.WeeklyData, "🗡", "周本", curOnly: true);
+        AddItem(data.NewTowerData, "🏯", "终焉矩阵");
+        AddItem(data.SlashTowerData, "🌊", "冥歌海墟");
+        AddItem(data.RougeData, "📻", "千道门扉", curOnly: true);
+        AddItem(data.WeeklyFrameData, "🗺", "周度游历", curOnly: true);
+        AddBattlePass(data.BattlePassData);
         StatusText = $"已更新({source}) · {data.RoleName ?? ""}({data.RoleId ?? ""})";
     }
 
-    private void AddItem(RoleDailyDetail? detail, string icon, string fallbackName)
+    /// <summary>战令:第 1 个元素 cur=等级,第 2 个 cur/total=进度(进度条)。</summary>
+    private void AddBattlePass(List<RoleDailyDetail>? battlePass)
+    {
+        if (battlePass is null || battlePass.Count == 0)
+        {
+            return;
+        }
+        var level = battlePass[0].Cur;
+        var progress = battlePass.Count > 1 ? battlePass[1] : null;
+        DailyItems.Add(new DailyItem
+        {
+            Icon = "🎖",
+            Name = "战令",
+            ValueText = $"LV.{level}",
+            Cur = progress?.Cur ?? 0,
+            Total = progress?.Total ?? 0,
+        });
+    }
+
+    private void AddItem(RoleDailyDetail? detail, string icon, string fallbackName, bool curOnly = false)
     {
         if (detail is null)
         {
@@ -144,9 +197,9 @@ public sealed partial class HomeViewModel : ViewModelBase
         {
             Icon = icon,
             Name = string.IsNullOrWhiteSpace(detail.Name) ? fallbackName : detail.Name!,
-            ValueText = $"{detail.Cur}/{detail.Total}",
+            ValueText = curOnly ? $"{detail.Cur}" : $"{detail.Cur}/{detail.Total}",
             Cur = detail.Cur,
-            Total = detail.Total,
+            Total = curOnly ? 0 : detail.Total,
         });
     }
 }
