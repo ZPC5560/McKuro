@@ -25,7 +25,7 @@ public sealed class GachaAnalysisService
             .ThenBy(r => r.ResourceId)
             .ToList();
 
-        var grouped = sorted.GroupBy(r => (CardPoolType)r.CardPoolType);
+        var grouped = sorted.GroupBy(r => r.PoolType);
 
         var pools = new List<PoolStats>();
         foreach (var group in grouped)
@@ -128,12 +128,26 @@ public sealed class GachaAnalysisService
         int index = 0;
         int fiveStarIndex = 0;
         int currentPity = 0;
+        int fourStar = 0;
+        int threeStar = 0;
+        int upCount = 0;
+        string? firstTime = null;
+        string? lastTime = null;
 
         HashSet<int>? upSet = upIds is not null && upIds.TryGetValue(poolType, out var set) ? set : null;
 
         foreach (var record in records)
         {
             index++;
+            if (string.IsNullOrEmpty(firstTime) || string.CompareOrdinal(record.Time, firstTime) < 0)
+            {
+                firstTime = record.Time;
+            }
+            if (string.IsNullOrEmpty(lastTime) || string.CompareOrdinal(record.Time, lastTime) > 0)
+            {
+                lastTime = record.Time;
+            }
+
             if (record.IsFiveStar)
             {
                 fiveStarIndex++;
@@ -141,6 +155,10 @@ public sealed class GachaAnalysisService
                 if (upSet is not null)
                 {
                     offBanner = !upSet.Contains(record.ResourceId);
+                    if (offBanner == false)
+                    {
+                        upCount++;
+                    }
                 }
 
                 entries.Add(new FiveStarEntry
@@ -157,6 +175,14 @@ public sealed class GachaAnalysisService
             {
                 pityCount++;
                 currentPity++;
+                if (record.QualityLevel == 4)
+                {
+                    fourStar++;
+                }
+                else
+                {
+                    threeStar++;
+                }
             }
         }
 
@@ -168,6 +194,11 @@ public sealed class GachaAnalysisService
             FiveStarEntries = entries,
             CurrentPity = currentPity,
             OffBannerRate = ComputeOffBannerRate(entries),
+            FourStarCount = fourStar,
+            ThreeStarCount = threeStar,
+            UpCount = upCount,
+            StartDate = firstTime is { Length: >= 10 } ? firstTime[..10] : "",
+            EndDate = lastTime is { Length: >= 10 } ? lastTime[..10] : "",
         };
     }
 

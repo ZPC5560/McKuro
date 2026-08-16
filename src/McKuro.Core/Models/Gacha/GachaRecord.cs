@@ -2,12 +2,17 @@ using System.Text.Json.Serialization;
 
 namespace McKuro.Core.Models.Gacha;
 
+using CardPoolTypeEnum = McKuro.Core.Models.Gacha.CardPoolType;
 /// <summary>
 /// 单次抽卡记录(与 gmserver-api 返回字段一致)。
+/// <para>gmserver-api 的 cardPoolType 返回中文卡池名(如"角色精准调谐"),数值字段可能为字符串,
+/// 用 <see cref="PoolType"/> 把卡池名映射到 <see cref="CardPoolType"/> 枚举。</para>
 /// </summary>
 public sealed class GachaRecord
 {
-    [JsonPropertyName("cardPoolType")] public int CardPoolType { get; set; }
+    /// <summary>卡池名(gmserver-api 返回中文,如"角色精准调谐")。</summary>
+    [JsonPropertyName("cardPoolType")]
+    public string CardPoolType { get; set; } = "";
 
     [JsonPropertyName("resourceId")] public int ResourceId { get; set; }
 
@@ -23,6 +28,25 @@ public sealed class GachaRecord
 
     /// <summary>归属玩家 ID(本地存储时写入)。</summary>
     [JsonIgnore] public string PlayerId { get; set; } = "";
+
+    /// <summary>卡池名 → 枚举(分析/存储用)。按名称包含关键词映射。</summary>
+    [JsonIgnore]
+    public CardPoolTypeEnum PoolType
+    {
+        get
+        {
+            var name = CardPoolType ?? "";
+            if (name.Contains("忆旅")) return name.Contains("武器") ? CardPoolTypeEnum.WeaponMemoryJourney : CardPoolTypeEnum.CharacterMemoryJourney;
+            if (name.Contains("联动")) return name.Contains("武器") ? CardPoolTypeEnum.WeaponCollaboration : CardPoolTypeEnum.CharacterCollaboration;
+            if (name.Contains("新手") && name.Contains("感恩")) return CardPoolTypeEnum.GratitudeOrientation;
+            if (name.Contains("新手")) return CardPoolTypeEnum.Beginner;
+            if (name.Contains("常驻")) return name.Contains("武器") ? CardPoolTypeEnum.WeaponsResident : CardPoolTypeEnum.RoleResident;
+            if (name.Contains("新旅")) return name.Contains("武器") ? CardPoolTypeEnum.WeaponNovice : CardPoolTypeEnum.CharacterNovice;
+            if (name.Contains("角色")) return CardPoolTypeEnum.RoleActivity;
+            if (name.Contains("武器")) return CardPoolTypeEnum.WeaponsActivity;
+            return CardPoolTypeEnum.RoleActivity;
+        }
+    }
 
     public bool IsFiveStar => QualityLevel >= 5;
 

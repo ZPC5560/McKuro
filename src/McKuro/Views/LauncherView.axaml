@@ -10,19 +10,29 @@
              x:Class="McKuro.Views.LauncherView"
              x:DataType="vm:LauncherViewModel">
     <Grid RowDefinitions="Auto,*,Auto">
+        <!-- 全屏背景图(官方启动器封面,内容叠加其上) -->
+        <Grid Grid.RowSpan="3">
+            <controls:AsyncImage ImageUrl="{Binding BackgroundImageUrl}"
+                                 Stretch="UniformToFill"
+                                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+            <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.55" />
+        </Grid>
         <!-- 顶部进度条:仅下载/安装/修复时显示(检查更新不显示,避免默认出现) -->
         <ProgressBar IsIndeterminate="{Binding IsDownloading}"
                      IsVisible="{Binding IsDownloading}"
                      Height="3"
                      Background="Transparent" />
 
-        <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="16,10,16,0">
-            <!-- 封面轮播 (Haiyu FlipView 风格) -->
-            <Border Grid.Row="0"
-                    Height="190"
+        <Grid Grid.Row="1" Margin="16,10,16,0">
+            <!-- 左下角轮播图(Haiyu v2 风格,可隐藏) -->
+            <Border HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    Width="340" Height="190"
+                    Margin="0,0,0,8"
                     CornerRadius="12"
                     Background="{DynamicResource SemiColorBg2}"
-                    ClipToBounds="True">
+                    ClipToBounds="True"
+                    IsVisible="{Binding IsSlideShowVisible}">
                 <Grid>
                     <Carousel x:Name="SlideCarousel"
                               ItemsSource="{Binding Slideshows}">
@@ -53,20 +63,27 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <!-- 服务器选择 (覆盖左上) -->
-                    <ComboBox ItemsSource="{Binding Servers}"
-                              SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}"
-                              Margin="12,12,0,0"
-                              Padding="10,4"
-                              CornerRadius="14"
-                              HorizontalAlignment="Left"
-                              VerticalAlignment="Top"
-                              MinWidth="110" />
+                    <!-- 隐藏轮播按钮 -->
+                    <Button Content="✕" Padding="6,2" FontSize="11"
+                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Margin="0,6,6,0"
+                            Background="#66000000" BorderThickness="0" Foreground="White"
+                            Command="{Binding ToggleSlideShowCommand}" />
                 </Grid>
             </Border>
 
+            <!-- 服务器选择 (覆盖左上) -->
+            <ComboBox ItemsSource="{Binding Servers}"
+                      SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}"
+                      Margin="0,0,0,0"
+                      Padding="10,4"
+                      CornerRadius="14"
+                      HorizontalAlignment="Right"
+                      VerticalAlignment="Top"
+                      MinWidth="110" />
+
             <!-- 主内容区 -->
-            <Grid Grid.Row="1" ColumnDefinitions="*" Margin="0,12,0,0">
+            <Grid ColumnDefinitions="*">
                 <!-- 左侧:启动器操作区 -->
                 <Grid RowDefinitions="*,Auto">
                     <!-- 游戏状态卡片 (Haiyu 左下玩家卡片风格) -->

@@ -20,3 +20,9 @@ TestResults/
 *.trx
 *.coverage
 coverage*.xml
+
+# GitHub Actions workflow(当前 token 无 workflow scope,暂不追踪)
+.github/
+
+# 本地开发文档(不上传 GitHub)
+docs/

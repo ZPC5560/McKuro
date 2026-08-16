@@ -16,8 +16,6 @@
                            Foreground="{DynamicResource SemiColorText2}" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <ComboBox Width="120" ItemsSource="{Binding Games}"
-                          SelectedIndex="{Binding SelectedGameIndex, Mode=TwoWay}" />
                 <Button Content="刷新" Command="{Binding LoadCommand}"
                         IsEnabled="{Binding !IsBusy}" />
             </StackPanel>
@@ -68,10 +66,11 @@
                    Foreground="{DynamicResource SemiColorText3}"
                    Text="图鉴数据来自库街区 wiki 接口(点击条目可跳转网页查看详情)" />
 
-        <!-- 内容:公告 / 热点 / 活动 -->
-        <Grid Grid.Row="4" ColumnDefinitions="*,*,*" ColumnSpacing="14" Margin="20,0,20,16">
-            <!-- 公告 -->
-            <Border Grid.Column="0" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="14">
+
+        <!-- 内容:公告 + 图片卡片同一行 -->
+        <Grid Grid.Row="4" ColumnDefinitions="2*,1*" ColumnSpacing="14" Margin="20,0,20,16">
+            <!-- 左:公告 -->
+            <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="14">
                 <StackPanel Spacing="10">
                     <TextBlock Text="📢 公告" FontSize="16" FontWeight="SemiBold" />
                     <ItemsControl ItemsSource="{Binding Announcements}">
@@ -92,52 +91,21 @@
                 </StackPanel>
             </Border>
 
-            <!-- 热点内容 -->
+            <!-- 右:图片卡片(图鉴 Banner 图) -->
             <Border Grid.Column="1" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="14">
                 <StackPanel Spacing="10">
-                    <TextBlock Text="🔥 热点内容" FontSize="16" FontWeight="SemiBold" />
-                    <ItemsControl ItemsSource="{Binding HotContents}">
+                    <TextBlock Text="🖼 图片" FontSize="16" FontWeight="SemiBold" />
+                    <ItemsControl ItemsSource="{Binding Banners}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="8" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:WikiTextItem">
-                                <Border CornerRadius="8" Background="{DynamicResource SemiColorBg3}"
-                                        Padding="10,8" Margin="0,0,0,8">
-                                    <StackPanel Spacing="2">
-                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
-                                                   TextWrapping="Wrap" />
-                                        <TextBlock Text="{Binding Sub}" FontSize="11"
-                                                   Foreground="{DynamicResource SemiColorText2}"
-                                                   TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <!-- 活动 -->
-            <Border Grid.Column="2" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="14">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="🎉 活动" FontSize="16" FontWeight="SemiBold" />
-                    <ItemsControl ItemsSource="{Binding Events}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:WikiTextItem">
-                                <Border CornerRadius="8" Background="{DynamicResource SemiColorBg3}"
-                                        Padding="10,8" Margin="0,0,0,8">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <Border Width="44" Height="44" CornerRadius="6" ClipToBounds="True"
-                                                Background="{DynamicResource SemiColorBg2}">
-                                            <controls:AsyncImage ImageUrl="{Binding ImageUrl}"
-                                                                 Width="44" Height="44" Stretch="UniformToFill" />
-                                        </Border>
-                                        <StackPanel Spacing="2" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
-                                                       TextWrapping="Wrap" MaxLines="2" />
-                                            <TextBlock Text="{Binding Sub}" FontSize="11"
-                                                       Foreground="{DynamicResource SemiColorText2}"
-                                                       TextTrimming="CharacterEllipsis" MaxWidth="140" />
-                                        </StackPanel>
-                                    </StackPanel>
+                            <DataTemplate x:DataType="vm:WikiBannerItem">
+                                <Border CornerRadius="8" Height="90" ClipToBounds="True"
+                                        Background="{DynamicResource SemiColorBg3}">
+                                    <controls:AsyncImage ImageUrl="{Binding Url}" Stretch="UniformToFill" />
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

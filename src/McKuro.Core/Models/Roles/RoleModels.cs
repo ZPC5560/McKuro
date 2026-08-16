@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.IO;
 using System.Text.Json.Serialization;
 
@@ -166,8 +167,21 @@ public sealed class RoleAttribute
 }
 
 /// <summary>角色养成详情(库街区 roleData 列表中的一项)。</summary>
-public sealed class RoleDetail
+public sealed class RoleDetail : INotifyPropertyChanged
 {
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>数据填充(mcguide 攻略站)后通知绑定区刷新武器/技能/属性/声骸/共鸣链等区块。</summary>
+    public void NotifyDetailChanged()
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Role)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(WeaponData)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Skills)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Attributes)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PhantomData)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Chains)));
+    }
+
     [JsonPropertyName("role")] public RoleInfo? Role { get; set; }
     [JsonPropertyName("level")] public int Level { get; set; }
     [JsonPropertyName("chainList")] public List<ChainInfo>? Chains { get; set; }

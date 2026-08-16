@@ -37,6 +37,12 @@ public enum CardPoolType : int
 
     /// <summary>武器联动</summary>
     WeaponCollaboration = 11,
+
+    /// <summary>角色忆旅</summary>
+    CharacterMemoryJourney = 12,
+
+    /// <summary>武器忆旅</summary>
+    WeaponMemoryJourney = 13,
 }
 
 public static class CardPoolTypeValues
@@ -54,6 +60,8 @@ public static class CardPoolTypeValues
         CardPoolType.WeaponNovice,
         CardPoolType.CharacterCollaboration,
         CardPoolType.WeaponCollaboration,
+        CardPoolType.CharacterMemoryJourney,
+        CardPoolType.WeaponMemoryJourney,
     ];
 
     /// <summary>卡池类型中文名。</summary>
@@ -70,6 +78,8 @@ public static class CardPoolTypeValues
         CardPoolType.WeaponNovice => "武器新旅",
         CardPoolType.CharacterCollaboration => "角色联动",
         CardPoolType.WeaponCollaboration => "武器联动",
+        CardPoolType.CharacterMemoryJourney => "角色忆旅",
+        CardPoolType.WeaponMemoryJourney => "武器忆旅",
         _ => type.ToString(),
     };
 }

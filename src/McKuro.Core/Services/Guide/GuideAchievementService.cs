@@ -1,4 +1,5 @@
 using McKuro.Core.Models.Guide;
+using McKuro.Core.Models.Roles;
 using McKuro.Core.Services.CloudGame;
 using McKuro.Core.Services.Settings;
 using Microsoft.Extensions.Logging;
@@ -145,5 +146,155 @@ public sealed class GuideAchievementService
         var list = await _api.GetIntroductionListAsync(_settings.Current.GuideToken, gbId, ct).ConfigureAwait(false);
         var top = list.FirstOrDefault();
         return top is null ? null : await _api.GetIntroductionInfoAsync(_settings.Current.GuideToken, gbId, top.Id, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 用 mcguide 攻略站数据构造角色详情(库街区 getRoleDetail 被风控时的兜底数据源)。
+    /// <para>返回的角色详情已按库街区 <see cref="RoleDetail"/> 结构映射
+    /// (武器/技能/属性/共鸣链/声骸),可直接用于角色详情页展示。</para>
+    /// </summary>
+    public async Task<RoleDetail?> GetRoleDetailFromGuideAsync(string roleName, int cardRoleId, CancellationToken ct = default)
+    {
+        var info = await GetAchievementAsync(roleName, cardRoleId, ct).ConfigureAwait(false);
+        return info is null ? null : MapRoleDetail(info, cardRoleId);
+    }
+
+    /// <summary>把 mcguide <see cref="GuideIntroductionInfo"/> 映射为库街区 <see cref="RoleDetail"/>(纯映射,便于单测)。</summary>
+    public static RoleDetail MapRoleDetail(GuideIntroductionInfo info, int cardRoleId)
+    {
+        var role = info.Role;
+        var roleInfo = new RoleInfo
+        {
+            RoleId = cardRoleId,
+            RoleName = role?.Name ?? "",
+            StarLevel = role?.Star ?? 0,
+        };
+
+        // 1. 武器:优先当前武器,否则取武器列表第一件;mcguide 无等级/突破/精炼,填 0
+        WeaponData? weaponData = null;
+        var weapon = info.Weapon?.Current ?? info.Weapon?.Items?.FirstOrDefault();
+        if (weapon is not null)
+        {
+            weaponData = new WeaponData
+            {
+                Level = 0,
+                Breach = 0,
+                Rank = 0,
+                Weapon = new WeaponInfo
+                {
+                    WeaponName = weapon.Name ?? "",
+                    WeaponStarLevel = weapon.Star,
+                    WeaponIcon = weapon.PictureUrl ?? "",
+                },
+            };
+        }
+
+        // 2. 技能:mcguide 无实际技能等级,填 0;图标用 pictureUrl、名称用 texts.name
+        var skills = (info.RoleSkill?.FixedSkills ?? [])
+            .Select(s => new SkillInfo
+            {
+                SkillLevel = 0,
+                Skill = new SkillBase
+                {
+                    SkillName = s.Name ?? "",
+                    IconUrl = s.PictureUrl ?? "",
+                    Type = s.TypeName ?? "",
+                },
+            })
+            .ToList();
+
+        // 3. 属性:当前/推荐 拼接,如 "67.5%/60.0%"
+        var attributes = (info.RoleAttribute?.Items ?? [])
+            .Select(a => new RoleAttribute
+            {
+                AttributeName = a.Name ?? "",
+                AttributeValue = BuildAmountText(a),
+                AttributeType = a.IsFinished == true ? "已达标" : "未达标",
+                IconUrl = a.PictureUrl ?? "",
+            })
+            .ToList();
+
+        // 4. 共鸣链:resonanceSequence → ChainNum,isAcquired → IsUnlock
+        var chains = (info.RoleResonance?.Items ?? [])
+            .Select(c => new ChainInfo
+            {
+                ChainNum = c.ResonanceSequence,
+                ChainName = c.Name ?? "",
+                IsUnlock = c.IsAcquired == true,
+                Description = c.Description ?? "",
+            })
+            .ToList();
+
+        // 5. 声骸:推荐配装简化为至少 1 件(名称/图标/星级/套装)
+        var phantomData = BuildPhantomData(info.Echo);
+
+        return new RoleDetail
+        {
+            Role = roleInfo,
+            WeaponData = weaponData,
+            Skills = skills,
+            Attributes = attributes,
+            Chains = chains,
+            PhantomData = phantomData,
+        };
+    }
+
+    /// <summary>把 mcguide 声骸推荐配装简化为库街区声骸列表(至少 1 件,含套装名)。</summary>
+    private static PhantomData? BuildPhantomData(GuideEcho? echo)
+    {
+        var echoes = new List<EchoInfo>();
+        var build = echo?.Current;
+        var props = build?.EchoProps;
+        if (props is not null)
+        {
+            var set = build?.EchoSetEffects?.FirstOrDefault();
+            echoes.Add(new EchoInfo
+            {
+                Level = 0,
+                Cost = props.Cost,
+                Quality = props.Star,
+                PhantomProp = new PhantomPropInfo
+                {
+                    PhantomName = props.Name ?? "",
+                    IconUrl = props.PictureUrl ?? "",
+                    Quality = props.Star,
+                    Cost = props.Cost,
+                },
+                FetterDetail = set is null
+                    ? null
+                    : new EchoFetterDetail { Name = set.Name ?? "" },
+            });
+        }
+        // 各件声骸(等级/主词条视角;无图标/星级时保持默认)
+        foreach (var attr in build?.EchoAttributes ?? [])
+        {
+            var name = attr.Attribute?.Name;
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+            echoes.Add(new EchoInfo
+            {
+                Level = attr.CurrentLevel ?? 0,
+                Cost = attr.Cost,
+                PhantomProp = new PhantomPropInfo { PhantomName = name },
+            });
+        }
+        return echoes.Count > 0 ? new PhantomData { Phantoms = echoes } : null;
+    }
+
+    /// <summary>属性值文本:当前/推荐 拼接(如 "67.5%/60.0%"),缺失时只保留有值的一侧。</summary>
+    private static string BuildAmountText(GuideAttributeItem a)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(a.CurrentAmount))
+        {
+            parts.Add(a.CurrentAmount!);
+        }
+        if (!string.IsNullOrWhiteSpace(a.RecommendAmount))
+        {
+            parts.Add(a.RecommendAmount!);
+        }
+        return string.Join("/", parts);
     }
 }

@@ -43,7 +43,7 @@ public sealed class GachaRecordStore
         foreach (var r in records)
         {
             pPlayer.Value = playerId;
-            pPool.Value = r.CardPoolType;
+            pPool.Value = (int)r.PoolType;
             pResource.Value = r.ResourceId;
             pQuality.Value = r.QualityLevel;
             pType.Value = r.ResourceType;
@@ -94,7 +94,7 @@ public sealed class GachaRecordStore
             list.Add(new GachaRecord
             {
                 PlayerId = playerId,
-                CardPoolType = reader.GetInt32(0),
+                CardPoolType = CardPoolTypeValues.GetDisplayName((CardPoolType)reader.GetInt32(0)),
                 ResourceId = reader.GetInt32(1),
                 QualityLevel = reader.GetInt32(2),
                 ResourceType = reader.GetString(3),
@@ -124,7 +124,7 @@ public sealed class GachaRecordStore
             list.Add(new GachaRecord
             {
                 PlayerId = reader.GetString(0),
-                CardPoolType = reader.GetInt32(1),
+                CardPoolType = CardPoolTypeValues.GetDisplayName((CardPoolType)reader.GetInt32(1)),
                 ResourceId = reader.GetInt32(2),
                 QualityLevel = reader.GetInt32(3),
                 ResourceType = reader.GetString(4),

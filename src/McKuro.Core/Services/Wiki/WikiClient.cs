@@ -49,16 +49,36 @@ public sealed class WikiClient
         return element.Deserialize(WikiJsonContext.Default.ListHotContentSide);
     }
 
-    /// <summary>获取活动内容。</summary>
+    /// <summary>获取活动内容(单个 events-side,兼容旧调用)。</summary>
     public async Task<EventContentSide?> GetEventTabDataAsync(WikiType type, CancellationToken ct = default)
     {
+        var list = await GetEventTabDataListAsync(type, ct).ConfigureAwait(false);
+        return list?.FirstOrDefault();
+    }
+
+    /// <summary>获取全部活动内容(所有 events-side:角色/武器卡池等)。</summary>
+    public async Task<List<EventContentSide>?> GetEventTabDataListAsync(WikiType type, CancellationToken ct = default)
+    {
         var model = await GetHomePageAsync(type, ct).ConfigureAwait(false);
-        var side = model?.Data?.ContentJson?.SideModules?
-            .FirstOrDefault(x => x.Type == "events-side");
-        if (side?.Content is not { } element || element.ValueKind != JsonValueKind.Object)
+        var sides = model?.Data?.ContentJson?.SideModules?
+            .Where(x => x.Type == "events-side")
+            .ToList();
+        if (sides is null || sides.Count == 0)
         {
             return null;
         }
-        return element.Deserialize(WikiJsonContext.Default.EventContentSide);
+        var result = new List<EventContentSide>(sides.Count);
+        foreach (var side in sides)
+        {
+            if (side.Content is { } element && element.ValueKind == JsonValueKind.Object)
+            {
+                var parsed = element.Deserialize(WikiJsonContext.Default.EventContentSide);
+                if (parsed is not null)
+                {
+                    result.Add(parsed);
+                }
+            }
+        }
+        return result.Count > 0 ? result : null;
     }
 }

@@ -163,21 +163,25 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
     }
 }
 
-/// <summary>热力强度(0-1) → 背景色(深色主题用亮色,浅色用主题色加深)。</summary>
+/// <summary>热力强度(0-1) → 背景色(GitHub 活跃热力图绿色分层,从浅绿到深绿)。</summary>
 public sealed class IntensityBrushConverter : Avalonia.Data.Converters.IValueConverter
 {
     public static readonly IntensityBrushConverter Instance = new();
+
+    // GitHub contribution graph 4 级绿色(由浅到深)
+    private static readonly string[] GreenLevels = ["#9be9a8", "#40c463", "#30a14e", "#216e39"];
+
     public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
     {
         double intensity = value is double d ? Math.Clamp(d, 0, 1) : 0;
-        // 强度 0 → 近透明;强度 1 → 主题强调色(黄)
-        byte a = (byte)Math.Round(20 + intensity * 200);
         if (intensity <= 0)
         {
-            a = 12;
+            // 无活动:近透明灰(浅色主题可见)
+            return new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromArgb(32, 0, 0, 0));
         }
-        var color = Avalonia.Media.Color.FromArgb(a, 248, 240, 92); // #f8f05c 亮黄
-        return new Avalonia.Media.SolidColorBrush(color);
+        // 按强度分 4 级(0.25 一档),对齐 GitHub:低 1/4 → 最浅绿,高 → 最深绿
+        int level = Math.Min(3, (int)(intensity * 4));
+        return new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(GreenLevels[level]));
     }
     public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
         => throw new NotSupportedException();

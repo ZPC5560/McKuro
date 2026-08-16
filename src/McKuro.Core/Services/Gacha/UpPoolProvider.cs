@@ -63,31 +63,43 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
     private static IReadOnlyDictionary<CardPoolType, HashSet<int>> BuildMap(FiveGroupModel? model)
     {
         var map = new Dictionary<CardPoolType, HashSet<int>>();
-        if (model?.Data?.VersionPools is null)
+        if (model?.Data?.FiveGroupConfig?.FiveMaps is null)
         {
             return map;
         }
 
         var roleIds = new HashSet<int>();
         var weaponIds = new HashSet<int>();
-        foreach (var pool in model.Data.VersionPools)
+        foreach (var m in model.Data.FiveGroupConfig.FiveMaps)
         {
-            if (pool.UpFiveRoleIds is not null)
+            if (m.ItemId > 0)
             {
-                roleIds.UnionWith(pool.UpFiveRoleIds);
+                roleIds.Add(m.ItemId);
             }
-            if (pool.UpFiveWeaponIds is not null)
+            if (m.WeaponId > 0)
             {
-                weaponIds.UnionWith(pool.UpFiveWeaponIds);
+                weaponIds.Add(m.WeaponId);
             }
         }
 
-        map[CardPoolType.RoleActivity] = roleIds;
-        map[CardPoolType.WeaponsActivity] = weaponIds;
         var all = new HashSet<int>(roleIds);
         all.UnionWith(weaponIds);
+
+        // 角色类池:当期 UP 角色+武器都可判定为 UP;武器类池:当期 UP 武器
+        map[CardPoolType.RoleActivity] = roleIds;
+        map[CardPoolType.WeaponsActivity] = weaponIds;
         map[CardPoolType.Beginner] = all;
         map[CardPoolType.BeginnerChoice] = all;
+        map[CardPoolType.GratitudeOrientation] = all;
+        map[CardPoolType.CharacterNovice] = roleIds;
+        map[CardPoolType.WeaponNovice] = weaponIds;
+        map[CardPoolType.CharacterCollaboration] = roleIds;
+        map[CardPoolType.WeaponCollaboration] = weaponIds;
+        map[CardPoolType.CharacterMemoryJourney] = roleIds;
+        map[CardPoolType.WeaponMemoryJourney] = weaponIds;
+        // 常驻池:用当期全部 UP(当期 UP 中出现的常驻角色判定;不在集合=歪)
+        map[CardPoolType.RoleResident] = all;
+        map[CardPoolType.WeaponsResident] = weaponIds;
         return map;
     }
 }

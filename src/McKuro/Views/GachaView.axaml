@@ -9,9 +9,38 @@
              x:Class="McKuro.Views.GachaView"
              x:DataType="vm:GachaViewModel">
 
-    <Grid RowDefinitions="Auto,*">
+    <Grid RowDefinitions="Auto,Auto,*">
+        <!-- 云鸣潮登录(抽卡记录接口通道,优先于本地日志) -->
+        <Border Grid.Row="0" Margin="20,8,20,4" Padding="10,8" CornerRadius="10"
+                Background="{DynamicResource SemiColorBg2}">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                <TextBlock Text="☁️ 云鸣潮" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <!-- 未登录:手机号 + 验证码 + 登录 -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                            IsVisible="{Binding !IsCloudLoggedIn}">
+                    <TextBox Width="120" PlaceholderText="手机号" Text="{Binding CloudMobile}" />
+                    <Button Content="{Binding CloudSmsButtonText}" Command="{Binding SendCloudSmsCommand}"
+                            IsEnabled="{Binding CanSendCloudSms}" />
+                    <TextBox Width="100" PlaceholderText="验证码" Text="{Binding CloudCode}" />
+                    <Button Content="登录" Command="{Binding CloudLoginCommand}" Classes="primary" />
+                    <TextBlock Text="{Binding CloudStatusText}" FontSize="11" VerticalAlignment="Center"
+                               Foreground="{DynamicResource SemiColorText3}" />
+                </StackPanel>
+                <!-- 已登录:账号名 + 退出 -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                            IsVisible="{Binding IsCloudLoggedIn}">
+                    <TextBlock Text="{Binding CloudAccountText}" FontSize="13" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Foreground="{DynamicResource SemiColorPrimary}" />
+                    <TextBlock Text="已登录,同步优先走云鸣潮接口" FontSize="11" VerticalAlignment="Center"
+                               Foreground="{DynamicResource SemiColorText3}" />
+                    <Button Content="退出" Command="{Binding CloudLogoutCommand}" FontSize="11" Padding="8,2" />
+                </StackPanel>
+                <TextBlock Grid.Column="2" Text="优先接口,失败自动回退本地日志" FontSize="11"
+                           Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
         <!-- 标题 + 玩家选择 + 同步按钮 -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="20,16,20,12" ColumnSpacing="10">
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" Margin="20,16,20,12" ColumnSpacing="10">
             <StackPanel Spacing="2">
                 <TextBlock Text="🎴 抽卡分析" FontSize="24" FontWeight="Bold" />
                 <StackPanel Orientation="Horizontal" Spacing="10">
@@ -27,13 +56,16 @@
                       VerticalAlignment="Center"
                       ItemsSource="{Binding PlayerIds}"
                       SelectedItem="{Binding SelectedPlayerId, Mode=TwoWay}" />
-            <Button Grid.Column="2" Content="从日志同步" Classes="primary"
+            <Button Grid.Column="2" Content="同步" Classes="primary"
                     VerticalAlignment="Center"
                     Command="{Binding RefreshCommand}"
                     IsEnabled="{Binding !IsBusy}" />
         </Grid>
 
-        <Grid Grid.Row="1" ColumnDefinitions="300,*">
+        <!-- 视图切换(0=综合分析[默认] 1=统计卡片 2=详细分析 3=表格) -->
+        <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedViewIndex}" Padding="0" Background="Transparent">
+            <TabItem Header="综合分析">
+                <Grid ColumnDefinitions="380,*">
             <!-- 左侧:卡池 + 五星列表 -->
             <Border Grid.Column="0"
                     Margin="0,0,5,10"
@@ -69,11 +101,14 @@
                                             <Border Grid.RowSpan="2"
                                                     Width="36" Height="36"
                                                     CornerRadius="6"
-                                                    Background="{DynamicResource SemiColorBg2}"
+                                                    Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagBgConverter.Instance}}"
                                                     ClipToBounds="True">
-                                                <controls:AsyncImage ImageUrl="{Binding IconUrl}"
-                                                                     Width="36" Height="36"
-                                                                     Stretch="UniformToFill" />
+                                                <Grid>
+                                                    <controls:AsyncImage ImageUrl="{Binding IconUrl}"
+                                                                         Width="36" Height="36"
+                                                                         Stretch="UniformToFill" />
+
+                                                </Grid>
                                             </Border>
                                             <TextBlock Grid.Column="1"
                                                        Margin="8,0,0,0"
@@ -95,11 +130,11 @@
                                                              Height="8"
                                                              CornerRadius="4"
                                                              Value="{Binding Pity}"
-                                                             Foreground="{Binding IsOffBanner, Converter={x:Static vm:PityBarBrushConverter.Instance}}" />
+                                                             Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}" />
                                                 <TextBlock Grid.Column="1"
                                                            Margin="6,0,0,0"
                                                            FontSize="11"
-                                                           Foreground="{DynamicResource SemiColorText2}"
+                                                           Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}"
                                                            Text="{Binding Pity, StringFormat={}{0} 抽}" />
                                             </Grid>
                                         </Grid>
@@ -299,10 +334,21 @@
                                 <TextBlock Text="每日抽数" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6" />
                                 <Grid Grid.Row="1" Height="150" Margin="0,0,0,6">
                                     <Path Data="{Binding TimeLinePathData}"
-                                          Fill="#221677FF"
-                                          Stroke="#1677FF"
-                                          StrokeThickness="2"
-                                          Stretch="Fill" />
+                                          Stretch="Fill">
+                                        <Path.Fill>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Offset="0" Color="#661677FF" />
+                                                <GradientStop Offset="1" Color="#051677FF" />
+                                            </LinearGradientBrush>
+                                        </Path.Fill>
+                                        <Path.Stroke>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Offset="0" Color="#1677FF" />
+                                                <GradientStop Offset="1" Color="#69B1FF" />
+                                            </LinearGradientBrush>
+                                        </Path.Stroke>
+                                        <Path.StrokeThickness>2</Path.StrokeThickness>
+                                    </Path>
                                 </Grid>
                                 <!-- 日期标签 -->
                                 <ItemsControl Grid.Row="2" ItemsSource="{Binding TimeLineLabels}">
@@ -325,6 +371,168 @@
                     </Grid>
                 </ScrollViewer>
             </Grid>
+            </Grid>
+            </TabItem>
+
+            <!-- 视图2:统计卡片(Java CardCommon) -->
+            <TabItem Header="统计卡片">
+                <ScrollViewer>
+                    <ItemsControl ItemsSource="{Binding Pools}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="gacha:PoolStats">
+                                <Border Margin="6" Padding="14" CornerRadius="10" MinWidth="250"
+                                        Background="{DynamicResource SemiColorBg2}">
+                                    <StackPanel Spacing="6">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="14" FontWeight="Bold" />
+                                            <TextBlock Text="{Binding TotalPulls, StringFormat=总抽: {0}}" FontSize="13" Foreground="#64B5F6" Margin="10,0,0,0" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <TextBlock FontSize="11" Foreground="{DynamicResource SemiColorText3}">
+                                            <Run Text="{Binding StartDate}" /><Run Text=" ~ " /><Run Text="{Binding EndDate}" />
+                                        </TextBlock>
+                                        <TextBlock FontSize="12" Foreground="#4CAF50" Text="{Binding CurrentPity, StringFormat=SSR 垫抽: {0} 抽}" />
+                                        <TextBlock FontSize="12" Foreground="#E57373" Text="{Binding AveragePity, StringFormat=SSR 平均: {0:0} 抽}" />
+                                        <TextBlock FontSize="12" Foreground="#FF8000">
+                                            <Run Text="SSR: " /><Run Text="{Binding FiveStarCount}" /><Run Text="  SR: " /><Run Text="{Binding FourStarCount}" /><Run Text="  R: " /><Run Text="{Binding ThreeStarCount}" />
+                                        </TextBlock>
+                                        <TextBlock FontSize="12" Foreground="#FF8000" Text="{Binding UpCount, StringFormat=UP 数: {0}}" IsVisible="{Binding UpCount, Converter={x:Static vm:GreaterThanZeroConverter.Instance}}" />
+                                        <TextBlock FontSize="12" Foreground="#64B5F6" Text="{Binding OffBannerRate, StringFormat=不歪率: {0:P1}}" />
+                                        <Separator Height="1" Margin="0,2" />
+                                        <TextBlock Text="五星列表" FontSize="11" Foreground="{DynamicResource SemiColorText3}" />
+                                        <ItemsControl ItemsSource="{Binding FiveStarEntries}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><StackPanel Spacing="3" /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="gacha:FiveStarEntry">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Text="{Binding Record.Name}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="130" />
+                                                        <TextBlock Text="{Binding Pity, StringFormat={}{0}抽}" FontSize="11" Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}" />
+                                                        <Border CornerRadius="3" Padding="4,1"
+                                                                Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagConverter.Instance}}">
+                                                            <TextBlock Text="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagTextConverter.Instance}}" FontSize="9" Foreground="White" />
+                                                        </Border>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- 视图3:详细分析(Java CardDetail) -->
+            <TabItem Header="详细分析">
+                <Grid ColumnDefinitions="380,*">
+                    <Border Grid.Column="0" Margin="0,0,5,0" Padding="12" CornerRadius="10"
+                            Background="{DynamicResource SemiColorBg2}">
+                        <Grid RowDefinitions="Auto,*">
+                            <ComboBox ItemsSource="{Binding Pools}" SelectedItem="{Binding SelectedPool, Mode=TwoWay}" Margin="0,0,0,8" />
+                            <ScrollViewer Grid.Row="1">
+                                <ItemsControl ItemsSource="{Binding FiveStarEntries}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="gacha:FiveStarEntry">
+                                            <Border Margin="0,4" Padding="10" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                                                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+                                                    <Border Grid.RowSpan="2" Width="44" Height="44" CornerRadius="22" ClipToBounds="True"
+                                                            Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagBgConverter.Instance}}">
+                                                        <Grid>
+                                                            <controls:AsyncImage ImageUrl="{Binding IconUrl}" Width="44" Height="44" Stretch="UniformToFill" />
+
+                                                        </Grid>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" Spacing="2">
+                                                        <TextBlock Text="{Binding Record.Name}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Text="{Binding Record.Time}" FontSize="10" Foreground="{DynamicResource SemiColorText3}" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Spacing="2">
+                                                        <TextBlock Text="{Binding Pity, StringFormat={}{0} 抽}" FontSize="12" FontWeight="Bold"
+                                                                   Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}" HorizontalAlignment="Right" />
+                                                        <Border CornerRadius="3" Padding="5,1" Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagConverter.Instance}}">
+                                                            <TextBlock Text="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagTextConverter.Instance}}" FontSize="9" Foreground="White" />
+                                                        </Border>
+                                                    </StackPanel>
+                                                    <ProgressBar Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Minimum="0" Maximum="80" Height="6" CornerRadius="3"
+                                                                 Margin="8,4,0,0" Value="{Binding Pity}"
+                                                                 Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                    <Border Grid.Column="1" Margin="5,0,0,0" Padding="12" CornerRadius="10" Background="{DynamicResource SemiColorBg2}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="{Binding SelectedPool.DisplayName, StringFormat=卡池: {0}}" FontSize="15" FontWeight="Bold" />
+                            <TextBlock Text="总抽数" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                            <TextBlock Text="{Binding SelectedPool.TotalPulls}" FontSize="20" FontWeight="Bold" />
+                            <Separator Height="1" />
+                            <TextBlock Text="稀有度分布" FontSize="12" FontWeight="SemiBold" />
+                            <TextBlock FontSize="12" Foreground="#FF8000"><Run Text="五星: " /><Run Text="{Binding SelectedPool.FiveStarCount}" /></TextBlock>
+                            <TextBlock FontSize="12" Foreground="#A855F7"><Run Text="四星: " /><Run Text="{Binding SelectedPool.FourStarCount}" /></TextBlock>
+                            <TextBlock FontSize="12" Foreground="#22D3EE"><Run Text="三星: " /><Run Text="{Binding SelectedPool.ThreeStarCount}" /></TextBlock>
+                            <Separator Height="1" />
+                            <TextBlock Text="详细统计" FontSize="12" FontWeight="SemiBold" />
+                            <TextBlock FontSize="12" Foreground="#E57373"><Run Text="五星平均: " /><Run Text="{Binding SelectedPool.AveragePity, StringFormat={}{0:0}}" /><Run Text=" 抽" /></TextBlock>
+                            <TextBlock FontSize="12" Foreground="#FF8000"><Run Text="UP 数: " /><Run Text="{Binding SelectedPool.UpCount}" /></TextBlock>
+                            <TextBlock FontSize="12" Foreground="#64B5F6"><Run Text="不歪率: " /><Run Text="{Binding SelectedPool.OffBannerRate, StringFormat={}{0:P1}}" /></TextBlock>
+                            <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText3}"><Run Text="当前垫: " /><Run Text="{Binding SelectedPool.CurrentPity}" /><Run Text=" 抽" /></TextBlock>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- 视图4:表格(Java CardTableShow) -->
+            <TabItem Header="表格">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <ComboBox Grid.Row="0" ItemsSource="{Binding TablePoolTypes}" SelectedItem="{Binding SelectedTablePool, Mode=TwoWay}" Margin="0,0,0,8" />
+                    <Border Grid.Row="1" CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="10">
+                        <ScrollViewer>
+                            <ItemsControl ItemsSource="{Binding TableRecords}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="gacha:GachaRecord">
+                                        <Border Margin="0,2" Padding="6,4"
+                                                Background="{DynamicResource SemiColorBg3}" CornerRadius="4">
+                                            <Grid ColumnDefinitions="2*,80,80,1*,160">
+                                                <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding QualityLevel, StringFormat={}{0}星}" FontSize="12"
+                                                           Foreground="{Binding QualityLevel, Converter={x:Static vm:QualityColorConverter.Instance}}" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding ResourceType}" FontSize="12" Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="3" Text="{Binding CardPoolType}" FontSize="12" Foreground="{DynamicResource SemiColorText2}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="4" Text="{Binding Time}" FontSize="11" Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                    <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,8,0,0" ColumnSpacing="6">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Content="⏮" Command="{Binding TableFirstCommand}" IsEnabled="{Binding CanTablePrev}" />
+                            <Button Content="◀" Command="{Binding TablePrevCommand}" IsEnabled="{Binding CanTablePrev}" />
+                            <TextBlock Text="{Binding TableCurrentPage, StringFormat={}{0} / }" VerticalAlignment="Center" FontSize="12" />
+                            <TextBlock Text="{Binding TableTotalPages}" VerticalAlignment="Center" FontSize="12" />
+                            <Button Content="▶" Command="{Binding TableNextCommand}" IsEnabled="{Binding CanTableNext}" />
+                            <Button Content="⏭" Command="{Binding TableLastCommand}" IsEnabled="{Binding CanTableNext}" />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" Width="90" VerticalAlignment="Center"
+                                  ItemsSource="{Binding PageSizeOptions}" SelectedItem="{Binding TablePageSize, Mode=TwoWay}" />
+                        <TextBlock Grid.Column="3" Text="{Binding TableTotalCount, StringFormat=共 {0} 条}" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                    </Grid>
+                </Grid>
+            </TabItem>
+        </TabControl>
         </Grid>
-    </Grid>
 </UserControl>

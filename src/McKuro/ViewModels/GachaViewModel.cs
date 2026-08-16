@@ -59,6 +59,42 @@ public sealed partial class GachaViewModel : ViewModelBase
     /// <summary>"全部账号"聚合选项的显示文本。</summary>
     public const string AllPlayersLabel = "全部账号";
 
+    // ---- 云鸣潮登录(抽卡记录接口通道) ----
+    [ObservableProperty]
+    private bool _isCloudLoggedIn;
+
+    [ObservableProperty]
+    private string _cloudAccountText = "未登录";
+
+    [ObservableProperty]
+    private string _cloudMobile = "";
+
+    [ObservableProperty]
+    private string _cloudCode = "";
+
+    [ObservableProperty]
+    private string _cloudStatusText = "";
+
+    [ObservableProperty]
+    private int _cloudSmsCountdown;
+
+    [ObservableProperty]
+    private bool _cloudSmsSending;
+
+    /// <summary>发送验证码按钮文案(倒计时中显示剩余秒数)。</summary>
+    public string CloudSmsButtonText => CloudSmsCountdown > 0 ? $"重新发送 ({CloudSmsCountdown}s)" : "发送验证码";
+
+    /// <summary>发送验证码按钮可用。</summary>
+    public bool CanSendCloudSms => !CloudSmsSending && CloudSmsCountdown <= 0;
+
+    partial void OnCloudSmsCountdownChanged(int value)
+    {
+        OnPropertyChanged(nameof(CloudSmsButtonText));
+        OnPropertyChanged(nameof(CanSendCloudSms));
+    }
+
+    partial void OnCloudSmsSendingChanged(bool value) => OnPropertyChanged(nameof(CanSendCloudSms));
+
     /// <summary>玩家筛选选项(含"全部账号")。</summary>
     public AvaloniaList<string> PlayerIds { get; } = [];
 
@@ -71,6 +107,36 @@ public sealed partial class GachaViewModel : ViewModelBase
     public AvaloniaList<FiveStarEntry> FiveStarEntries { get; } = [];
 
     public AvaloniaList<GachaRecord> AllRecords { get; } = [];
+
+    // ---- 视图切换(0=综合分析[默认] 1=统计卡片 2=详细分析 3=表格) ----
+    [ObservableProperty]
+    private int _selectedViewIndex;
+
+    // ---- 表格视图(分页) ----
+    public AvaloniaList<string> TablePoolTypes { get; } = [];
+
+    [ObservableProperty]
+    private string _selectedTablePool = "";
+
+    [ObservableProperty]
+    private int _tableCurrentPage = 1;
+
+    [ObservableProperty]
+    private int _tablePageSize = 20;
+
+    /// <summary>表格每页条数选项。</summary>
+    public AvaloniaList<int> PageSizeOptions { get; } = [10, 20, 50, 100];
+
+    [ObservableProperty]
+    private int _tableTotalCount;
+
+    [ObservableProperty]
+    private int _tableTotalPages = 1;
+
+    public AvaloniaList<GachaRecord> TableRecords { get; } = [];
+
+    public bool CanTablePrev => TableCurrentPage > 1;
+    public bool CanTableNext => TableCurrentPage < TableTotalPages;
 
     // ---- 自绘图表(AOT 安全,不用 LiveCharts) ----
     public AvaloniaList<PieSliceViewModel> GuaranteeSlices { get; } = [];
@@ -87,6 +153,9 @@ public sealed partial class GachaViewModel : ViewModelBase
 
     private GachaAnalysisResult? _analysis;
 
+    /// <summary>UP/歪判定用(异步预取缓存)。</summary>
+    private System.Collections.Generic.IReadOnlyDictionary<CardPoolType, System.Collections.Generic.HashSet<int>>? _upIds;
+
     private static readonly Color[] Palette =
     [
         Color.Parse("#1677FF"), // 蓝
@@ -101,7 +170,27 @@ public sealed partial class GachaViewModel : ViewModelBase
 
     public GachaViewModel()
     {
+        RefreshCloudState();
         LoadExisting();
+        _ = PreloadUpIdsAsync();
+    }
+
+    /// <summary>异步预取 UP/歪 判定配置(缓存,失败不影响主流程)。</summary>
+    private async Task PreloadUpIdsAsync()
+    {
+        try
+        {
+            _upIds = await AppServices.UpPools.GetUpIdsAsync();
+            // 预取完成后再分析一次,使 UP/歪 判定生效
+            if (_analysis is not null)
+            {
+                AnalyzeCurrentPlayer();
+            }
+        }
+        catch (Exception)
+        {
+            _upIds = null;
+        }
     }
 
     /// <summary>玩家下拉切换时重新分析(空串 = 全部账号聚合)。</summary>
@@ -130,7 +219,7 @@ public sealed partial class GachaViewModel : ViewModelBase
         }
 
         var playerId = selected == AllPlayersLabel ? "" : selected;
-        ApplyAnalysis(AppServices.GachaAnalysis.Analyze(playerId, records));
+        ApplyAnalysis(AppServices.GachaAnalysis.Analyze(playerId, records, _upIds));
         StatusText = $"已加载本地记录 ({display})";
     }
 
@@ -167,13 +256,52 @@ public sealed partial class GachaViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = "正在从游戏日志同步抽卡记录…";
+        StatusText = "正在同步抽卡记录…";
         try
         {
-            var result = await AppServices.GachaSync.SyncFromLocalLogAsync(AppServices.UpPools);
-            if (!result.IsSuccess)
+            // 双通道:优先云鸣潮(库街区)接口;失败或无登录则回退本地日志解密
+            GachaSyncResult? result = null;
+            if (AppServices.CloudGacha.HasSavedLogin)
             {
-                StatusText = result.Message ?? "同步失败";
+                StatusText = "正在通过云鸣潮接口同步…";
+                var cloud = await AppServices.CloudGacha.SyncFromCloudAsync();
+                if (cloud.IsSuccess)
+                {
+                    result = cloud.Sync;
+                    StatusText = "云鸣潮接口同步成功";
+                }
+                else
+                {
+                    // 云鸣潮失败 → 回退本地日志
+                    StatusText = $"{cloud.Message},回退本地日志…";
+                    result = await AppServices.GachaSync.SyncFromLocalLogAsync(AppServices.UpPools);
+                }
+            }
+            else
+            {
+                result = await AppServices.GachaSync.SyncFromLocalLogAsync(AppServices.UpPools);
+            }
+
+            if (result is null || !result.IsSuccess)
+            {
+                // 云鸣潮 + 本地都失败 → 从 sqlite 缓存兜底(校验账号,已有记录则展示)
+                string? cachedTarget = result?.Request?.PlayerId;
+                var cachedRecords = TryLoadCache(cachedTarget, out var cachePlayerId);
+                if (cachedRecords is not null)
+                {
+                    PlayerIdText = cachePlayerId ?? "-";
+                    ApplyAnalysis(AppServices.GachaAnalysis.Analyze(cachePlayerId ?? "", cachedRecords, _upIds));
+                    var cachedIds = AppServices.GachaStore.GetAllPlayerIds();
+                    PlayerIds.Clear();
+                    PlayerIds.Add(AllPlayersLabel);
+                    PlayerIds.AddRange(cachedIds);
+                    SelectedPlayerId = cachePlayerId ?? (cachedIds.Count > 0 ? cachedIds[^1] : "");
+                    StatusText = $"{result?.Message ?? "同步失败"},已显示本地缓存记录";
+                }
+                else
+                {
+                    StatusText = result?.Message ?? "同步失败";
+                }
                 return;
             }
 
@@ -202,6 +330,167 @@ public sealed partial class GachaViewModel : ViewModelBase
         }
     }
 
+    /// <summary>从 sqlite 缓存加载抽卡记录(校验账号与日期:优先匹配目标 playerId,其次最近同步的玩家;过滤无效日期记录)。</summary>
+    private List<GachaRecord>? TryLoadCache(string? targetPlayerId, out string? matchedPlayerId)
+    {
+        matchedPlayerId = null;
+        try
+        {
+            var now = DateTime.Now;
+            // 优先目标账号缓存
+            if (!string.IsNullOrWhiteSpace(targetPlayerId))
+            {
+                var target = FilterValidDates(AppServices.GachaStore.GetRecords(targetPlayerId), now);
+                if (target.Count > 0)
+                {
+                    matchedPlayerId = targetPlayerId;
+                    return target;
+                }
+            }
+            // 回退到最近同步的玩家(校验其缓存存在)
+            var all = AppServices.GachaStore.GetAllPlayerIds();
+            if (all.Count == 0)
+            {
+                return null;
+            }
+            var last = all[^1];
+            var cached = FilterValidDates(AppServices.GachaStore.GetRecords(last), now);
+            if (cached.Count == 0)
+            {
+                return null;
+            }
+            matchedPlayerId = last;
+            return cached;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>过滤无效日期的缓存记录(剔除无法解析/明显未来的时间)。</summary>
+    private static List<GachaRecord> FilterValidDates(List<GachaRecord> records, DateTime now)
+    {
+        if (records.Count == 0)
+        {
+            return records;
+        }
+        var result = new List<GachaRecord>(records.Count);
+        foreach (var r in records)
+        {
+            if (DateTime.TryParse(r.Time, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal, out var dt))
+            {
+                // 未来时间(时钟误差容忍 1 天)视为无效
+                if (dt > now.AddDays(1))
+                {
+                    continue;
+                }
+            }
+            else if (string.IsNullOrWhiteSpace(r.Time))
+            {
+                continue;
+            }
+            result.Add(r);
+        }
+        return result;
+    }
+
+    /// <summary>刷新云鸣潮登录状态。</summary>
+    private void RefreshCloudState()
+    {
+        IsCloudLoggedIn = AppServices.CloudGacha.HasSavedLogin;
+        CloudAccountText = IsCloudLoggedIn
+            ? (string.IsNullOrWhiteSpace(AppServices.CloudGacha.SavedLoginName) ? "已登录" : AppServices.CloudGacha.SavedLoginName)
+            : "未登录";
+    }
+
+    /// <summary>发送云鸣潮登录验证码。</summary>
+    [RelayCommand]
+    private async Task SendCloudSmsAsync()
+    {
+        if (CloudSmsSending || CloudSmsCountdown > 0)
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(CloudMobile))
+        {
+            CloudStatusText = "请先填写手机号";
+            return;
+        }
+        CloudSmsSending = true;
+        CloudStatusText = "正在发送验证码…";
+        try
+        {
+            var (ok, msg) = await AppServices.CloudGacha.SendSmsAsync(CloudMobile.Trim());
+            CloudStatusText = msg ?? (ok ? "验证码已发送" : "发送失败");
+            if (ok)
+            {
+                CloudSmsCountdown = 60;
+                _ = RunCloudSmsCountdownAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            CloudStatusText = $"发送失败: {ex.Message}";
+        }
+        finally
+        {
+            CloudSmsSending = false;
+        }
+    }
+
+    private async Task RunCloudSmsCountdownAsync()
+    {
+        while (CloudSmsCountdown > 0)
+        {
+            await Task.Delay(1000);
+            if (CloudSmsCountdown > 0)
+            {
+                CloudSmsCountdown--;
+            }
+        }
+    }
+
+    /// <summary>云鸣潮手机号登录(登录成功后自动同步)。</summary>
+    [RelayCommand]
+    private async Task CloudLoginAsync()
+    {
+        if (string.IsNullOrWhiteSpace(CloudMobile) || string.IsNullOrWhiteSpace(CloudCode))
+        {
+            CloudStatusText = "请填写手机号与验证码";
+            return;
+        }
+        CloudStatusText = "正在登录…";
+        try
+        {
+            var (ok, msg) = await AppServices.CloudGacha.LoginAsync(CloudMobile.Trim(), CloudCode.Trim());
+            if (ok)
+            {
+                CloudCode = "";
+                RefreshCloudState();
+                CloudStatusText = "登录成功,点击「同步」拉取抽卡记录";
+            }
+            else
+            {
+                CloudStatusText = msg ?? "登录失败";
+            }
+        }
+        catch (Exception ex)
+        {
+            CloudStatusText = $"登录失败: {ex.Message}";
+        }
+    }
+
+    /// <summary>退出云鸣潮登录。</summary>
+    [RelayCommand]
+    private void CloudLogout()
+    {
+        AppServices.CloudGacha.Logout();
+        RefreshCloudState();
+        CloudStatusText = "已退出云鸣潮登录";
+    }
+
     private void ApplyAnalysis(GachaAnalysisResult analysis)
     {
         _analysis = analysis;
@@ -217,7 +506,17 @@ public sealed partial class GachaViewModel : ViewModelBase
         Days = analysis.Days;
 
         Pools.Clear();
-        Pools.AddRange(analysis.Pools.OrderByDescending(p => p.TotalPulls));
+        // 全部 13 个卡池(有记录的 + 无记录的空池),保证下拉框完整
+        var filled = analysis.Pools.ToDictionary(p => p.PoolType);
+        foreach (var type in McKuro.Core.Models.Gacha.CardPoolTypeValues.All)
+        {
+            if (filled.ContainsKey(type))
+            {
+                continue;
+            }
+            filled[type] = new McKuro.Core.Models.Gacha.PoolStats { PoolType = type };
+        }
+        Pools.AddRange(filled.Values.OrderByDescending(p => p.TotalPulls));
 
         SelectedPool = Pools.FirstOrDefault(p => p.FiveStarCount > 0) ?? Pools.FirstOrDefault();
         RefreshDetail();
@@ -288,6 +587,114 @@ public sealed partial class GachaViewModel : ViewModelBase
         var all = AppServices.GachaStore.GetRecords(_analysis.PlayerId, pool.PoolType);
         AllRecords.Clear();
         AllRecords.AddRange(all.AsEnumerable().Reverse());
+
+        RefreshTable();
+    }
+
+    // ==================== 表格视图(参考 Java CardTableShowView) ====================
+
+    /// <summary>刷新表格视图:按选中卡池筛选 + 分页。</summary>
+    private void RefreshTable()
+    {
+        if (_analysis is null)
+        {
+            return;
+        }
+        // 收集所有池名(有记录的)
+        TablePoolTypes.Clear();
+        foreach (var p in Pools)
+        {
+            if (p.TotalPulls > 0)
+            {
+                TablePoolTypes.Add(p.DisplayName);
+            }
+        }
+        if (TablePoolTypes.Count > 0 && !TablePoolTypes.Contains(SelectedTablePool))
+        {
+            SelectedTablePool = TablePoolTypes[0];
+        }
+        ApplyTablePoolFilter();
+    }
+
+    partial void OnSelectedTablePoolChanged(string value) => ApplyTablePoolFilter();
+
+    partial void OnTablePageSizeChanged(int value)
+    {
+        if (value <= 0)
+        {
+            TablePageSize = 20;
+            return;
+        }
+        TableCurrentPage = 1;
+        ApplyTablePoolFilter();
+    }
+
+    private void ApplyTablePoolFilter()
+    {
+        if (_analysis is null || string.IsNullOrEmpty(SelectedTablePool))
+        {
+            TableRecords.Clear();
+            TableTotalCount = 0;
+            TableTotalPages = 1;
+            return;
+        }
+        var poolType = TablePoolTypeOf(SelectedTablePool);
+        List<GachaRecord> all;
+        if (poolType is null)
+        {
+            all = AppServices.GachaStore.GetAllRecords()
+                .Where(r => string.IsNullOrEmpty(_analysis.PlayerId) || r.PlayerId == _analysis.PlayerId)
+                .ToList();
+        }
+        else
+        {
+            all = AppServices.GachaStore.GetRecords(_analysis.PlayerId, poolType.Value);
+        }
+        TableTotalCount = all.Count;
+        TableTotalPages = Math.Max(1, (int)Math.Ceiling(TableTotalCount / (double)TablePageSize));
+        if (TableCurrentPage > TableTotalPages)
+        {
+            TableCurrentPage = TableTotalPages;
+        }
+        TableRecords.Clear();
+        var page = all
+            .OrderBy(r => r.Time)
+            .Skip((TableCurrentPage - 1) * TablePageSize)
+            .Take(TablePageSize)
+            .ToList();
+        TableRecords.AddRange(page);
+        OnPropertyChanged(nameof(CanTablePrev));
+        OnPropertyChanged(nameof(CanTableNext));
+    }
+
+    private CardPoolType? TablePoolTypeOf(string displayName)
+    {
+        foreach (var type in McKuro.Core.Models.Gacha.CardPoolTypeValues.All)
+        {
+            if (McKuro.Core.Models.Gacha.CardPoolTypeValues.GetDisplayName(type) == displayName)
+            {
+                return type;
+            }
+        }
+        return null;
+    }
+
+    [RelayCommand]
+    private void TableFirst() { TableCurrentPage = 1; ApplyTablePoolFilter(); }
+
+    [RelayCommand]
+    private void TablePrev() { if (TableCurrentPage > 1) { TableCurrentPage--; ApplyTablePoolFilter(); } }
+
+    [RelayCommand]
+    private void TableNext() { if (TableCurrentPage < TableTotalPages) { TableCurrentPage++; ApplyTablePoolFilter(); } }
+
+    [RelayCommand]
+    private void TableLast() { TableCurrentPage = TableTotalPages; ApplyTablePoolFilter(); }
+
+    partial void OnTableCurrentPageChanged(int value)
+    {
+        OnPropertyChanged(nameof(CanTablePrev));
+        OnPropertyChanged(nameof(CanTableNext));
     }
 }
 
@@ -413,6 +820,23 @@ public sealed class FiveStarFlagConverter : Avalonia.Data.Converters.IValueConve
         => throw new NotSupportedException();
 }
 
+/// <summary>五星图标占位底色(无图标时区分 UP/歪):UP→浅绿,歪→浅红,null→蓝。</summary>
+public sealed class FiveStarFlagBgConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly FiveStarFlagBgConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value switch
+        {
+            true => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#5A0A0A")),
+            false => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#0A3D1A")),
+            _ => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#123A5A")),
+        };
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>垫抽进度条颜色:歪→红,UP→绿,null→主色。</summary>
 public sealed class PityBarBrushConverter : Avalonia.Data.Converters.IValueConverter
 {
@@ -426,6 +850,56 @@ public sealed class PityBarBrushConverter : Avalonia.Data.Converters.IValueConve
             _ => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#1677FF")),
         };
 
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>按垫抽数量(Pity,0-80)分级着色:越接近保底颜色越红,参考保底进度逻辑。</summary>
+public sealed class PityColorConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly PityColorConverter Instance = new();
+
+    // 抽数分级:0-40 蓝,40-55 青,55-65 橙,65-75 深橙,75-80 红(接近保底)
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    {
+        double pity = value is double d ? d : value is int i ? i : 0;
+        string hex = pity switch
+        {
+            >= 75 => "#F53F3F",  // 红(接近保底)
+            >= 65 => "#FA8C16",  // 深橙
+            >= 55 => "#FAAD14",  // 橙
+            >= 40 => "#13C2C2",  // 青
+            _ => "#1677FF",      // 蓝
+        };
+        return new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(hex));
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+
+/// <summary>星级颜色:5→金,4→紫,其他→灰。</summary>
+public sealed class QualityColorConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly QualityColorConverter Instance = new();
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value switch
+        {
+            int q when q >= 5 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#D4A017")),
+            int q when q == 4 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#A855F7")),
+            _ => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#8C8C8C")),
+        };
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>取字符串首字符(占位图标用)。</summary>
+public sealed class FirstCharConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly FirstCharConverter Instance = new();
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value is string { Length: > 0 } s ? s[..1] : "?";
     public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
         => throw new NotSupportedException();
 }

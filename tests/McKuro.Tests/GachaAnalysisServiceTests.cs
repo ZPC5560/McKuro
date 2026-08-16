@@ -9,7 +9,7 @@ public class GachaAnalysisServiceTests
         new()
         {
             PlayerId = "p1",
-            CardPoolType = pool,
+            CardPoolType = CardPoolTypeValues.GetDisplayName((CardPoolType)pool),
             ResourceId = resourceId,
             QualityLevel = quality,
             ResourceType = quality == 5 ? "角色" : "角色",

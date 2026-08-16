@@ -23,6 +23,8 @@ public sealed class ActivityGanttItem
     public required Avalonia.Media.IBrush BarBrush { get; init; }
     /// <summary>当前进度(0-100):now 在 [Start,End] 区间的位置;未开始=0,已结束=100。</summary>
     public required double ProgressPercent { get; init; }
+    /// <summary>活动图 URL(甘特图左列 logo)。</summary>
+    public string? ImageUrl { get; init; }
 }
 
 /// <summary>换取活动(卡池)条目,带倒计时。</summary>
@@ -34,6 +36,8 @@ public sealed class ActivityPoolItem
     public required string TimeRangeText { get; init; }
     public required DateTime End { get; init; }
     public string? ImageUrl { get; init; }
+    /// <summary>卡池全部内容图(5★/4★ 角色武器,对齐 Haiyu 显示 4 张)。</summary>
+    public List<string> Images { get; init; } = [];
 }
 
 /// <summary>
@@ -64,6 +68,8 @@ public sealed partial class ActivityViewModel : ViewModelBase
     public string GanttEndText => GanttEnd.ToString("MM-dd");
     /// <summary>今天在时间轴的位置(百分比 0-100,用于绘制当前日期竖线)。</summary>
     public double GanttTodayPercent { get; private set; }
+    /// <summary>今天日期标签(如 今天 08-16)。</summary>
+    public string GanttTodayLabel { get; private set; } = "";
 
     public ActivityViewModel()
     {
@@ -96,6 +102,8 @@ public sealed partial class ActivityViewModel : ViewModelBase
             // 今天在时间轴的位置(当前日期竖线)
             GanttTodayPercent = Math.Clamp((now - GanttStart).TotalSeconds / windowSpan * 100, 0, 100);
             OnPropertyChanged(nameof(GanttTodayPercent));
+            GanttTodayLabel = $"今天 {now:MM-dd}";
+            OnPropertyChanged(nameof(GanttTodayLabel));
 
             // 1. 版本活动(hot-content-side)
             var hots = await AppServices.Wiki.GetEventDataAsync(WikiType.Waves);
@@ -117,51 +125,63 @@ public sealed partial class ActivityViewModel : ViewModelBase
                     // 当前进度:now 在 [Start,End] 区间的位置(未开始=0,已结束=100)
                     double progress = now <= start ? 0 : now >= end ? 100
                         : (now - start).TotalSeconds / (end - start).TotalSeconds * 100;
+                    // 甘特条定位:左端=start 位置,右端=end 位置(同一结束时间右端对齐)
+                    var leftPos = Math.Clamp((start - GanttStart).TotalSeconds / windowSpan * 100, 0, 100);
+                    var rightPos = Math.Clamp((end - GanttStart).TotalSeconds / windowSpan * 100, 0, 100);
                     VersionActivities.Add(new ActivityGanttItem
                     {
                         Title = hot.Title ?? "活动",
                         TimeRangeText = $"{start:MM-dd} ~ {end:MM-dd}",
                         Start = start,
                         End = end,
-                        LeftPercent = Math.Clamp((start - GanttStart).TotalSeconds / windowSpan * 100, 0, 100),
-                        WidthPercent = Math.Clamp((end - start).TotalSeconds / windowSpan * 100, 2, 100),
+                        LeftPercent = leftPos,
+                        WidthPercent = Math.Max(0.5, rightPos - leftPos),
                         IsOngoing = end >= now,
                         BarBrush = brush,
                         ProgressPercent = progress,
+                        ImageUrl = hot.ContentUrl,
                     });
                 }
             }
 
-            // 2. 换取活动(events-side:角色/武器卡池)
-            var events = await AppServices.Wiki.GetEventTabDataAsync(WikiType.Waves);
-            if (events?.Tabs is not null)
+            // 2. 换取活动(events-side:角色池 / 武器池,每个 events-side 一个池)
+            var eventsList = await AppServices.Wiki.GetEventTabDataListAsync(WikiType.Waves);
+            if (eventsList is not null)
             {
-                var isRole = true;
-                foreach (var tab in events.Tabs)
+                for (int poolIdx = 0; poolIdx < eventsList.Count; poolIdx++)
                 {
-                    if (tab.CountDown?.DateRange is not { Count: 2 })
+                    var category = poolIdx == 0 ? "角色" : poolIdx == 1 ? "武器" : $"卡池{poolIdx + 1}";
+                    var events = eventsList[poolIdx];
+                    if (events?.Tabs is null)
                     {
                         continue;
                     }
-                    if (!TryParseRange(tab.CountDown.DateRange, out var start, out var end))
+                    foreach (var tab in events.Tabs)
                     {
-                        continue;
+                        if (tab.CountDown?.DateRange is not { Count: 2 })
+                        {
+                            continue;
+                        }
+                        if (!TryParseRange(tab.CountDown.DateRange, out var start, out var end))
+                        {
+                            continue;
+                        }
+                        // 过期自动剔除
+                        if (end < now)
+                        {
+                            continue;
+                        }
+                        PoolActivities.Add(new ActivityPoolItem
+                        {
+                            Name = tab.Name ?? "卡池",
+                            Category = category,
+                            CountdownText = FormatCountdown(end - now),
+                            TimeRangeText = $"{start:MM-dd} {start:HH:mm} ~ {end:MM-dd} {end:HH:mm}",
+                            End = end,
+                            ImageUrl = tab.Images?.FirstOrDefault()?.Image,
+                            Images = tab.Images?.Select(i => i.Image).Where(u => !string.IsNullOrWhiteSpace(u)).Select(u => u!).ToList() ?? [],
+                        });
                     }
-                    // 过期自动剔除
-                    if (end < now)
-                    {
-                        continue;
-                    }
-                    PoolActivities.Add(new ActivityPoolItem
-                    {
-                        Name = tab.Name ?? "卡池",
-                        Category = isRole ? "角色" : "武器",
-                        CountdownText = FormatCountdown(end - now),
-                        TimeRangeText = $"{start:MM-dd} {start:HH:mm} ~ {end:MM-dd} {end:HH:mm}",
-                        End = end,
-                        ImageUrl = tab.Images?.FirstOrDefault()?.Image,
-                    });
-                    isRole = !isRole;
                 }
             }
 
@@ -178,32 +198,39 @@ public sealed partial class ActivityViewModel : ViewModelBase
         }
     }
 
-    /// <summary>下载活动图并提取主色(甘特条颜色);失败回退主题强调色(#f8f05c)。</summary>
+    /// <summary>下载活动图并提取主色(甘特条颜色);失败回退主题强调色(#f8f05c)。
+    /// 注意:Avalonia Brush 必须在 UI 线程创建,否则渲染时跨线程访问崩溃。</summary>
     private async Task<Avalonia.Media.IBrush> LoadActivityColorAsync(string? url)
     {
-        var fallback = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#f8f05c"));
-        if (string.IsNullOrWhiteSpace(url))
-        {
-            return fallback;
-        }
+        var fallbackColor = Avalonia.Media.Color.Parse("#f8f05c");
         try
         {
-            var bytes = await AppServices.Http.GetByteArrayAsync(url).ConfigureAwait(false);
-            if (bytes.Length == 0)
+            if (!string.IsNullOrWhiteSpace(url))
             {
-                return fallback;
+                using var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, url);
+                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
+                var bytes = await AppServices.Http.SendAsync(req).ConfigureAwait(false) is { IsSuccessStatusCode: true } resp
+                    ? await resp.Content.ReadAsByteArrayAsync().ConfigureAwait(false)
+                    : [];
+                if (bytes.Length > 0)
+                {
+                    using var ms = new System.IO.MemoryStream(bytes, writable: false);
+                    var bmp = new Avalonia.Media.Imaging.Bitmap(ms);
+                    var colors = McKuro.Services.ColorThiefHelper.GetDominantColors(bmp, 1);
+                    if (colors.Count > 0)
+                    {
+                        fallbackColor = colors[0];
+                    }
+                }
             }
-            using var ms = new System.IO.MemoryStream(bytes, writable: false);
-            var bmp = new Avalonia.Media.Imaging.Bitmap(ms);
-            var colors = McKuro.Services.ColorThiefHelper.GetDominantColors(bmp, 1);
-            return colors.Count > 0
-                ? new Avalonia.Media.SolidColorBrush(colors[0])
-                : fallback;
         }
         catch (Exception)
         {
-            return fallback;
+            // 下载/解码失败:用回退色
         }
+        // 回到 UI 线程创建 Brush(Avalonia Brush 线程亲和)
+        return await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+            () => (Avalonia.Media.IBrush)new Avalonia.Media.SolidColorBrush(fallbackColor));
     }
 
     private static bool TryParseRange(IReadOnlyList<string> range, out DateTime start, out DateTime end)
@@ -244,7 +271,7 @@ public sealed partial class ActivityViewModel : ViewModelBase
 public sealed class GanttWidthConverter : Avalonia.Data.Converters.IValueConverter
 {
     public static readonly GanttWidthConverter Instance = new();
-    private const double RefWidth = 660;
+    private const double RefWidth = 940;
     public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
     {
         double pct = value is double d ? Math.Clamp(d, 0, 100) : 0;
@@ -258,7 +285,7 @@ public sealed class GanttWidthConverter : Avalonia.Data.Converters.IValueConvert
 public sealed class GanttMarginConverter : Avalonia.Data.Converters.IValueConverter
 {
     public static readonly GanttMarginConverter Instance = new();
-    private const double RefWidth = 660;
+    private const double RefWidth = 940;
     public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
     {
         double pct = value is double d ? Math.Clamp(d, 0, 100) : 0;

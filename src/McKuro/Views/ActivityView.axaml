@@ -28,103 +28,6 @@
 
         <ScrollViewer Grid.Row="1">
             <StackPanel Spacing="16" IsVisible="{Binding HasData}">
-                <!-- ① 版本活动甘特图 -->
-                <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
-                    <StackPanel Spacing="12">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="📅 版本活动 (甘特图)" FontSize="16" FontWeight="SemiBold" />
-                            <TextBlock Text="已过期的自动剔除" FontSize="11"
-                                       Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
-                        </StackPanel>
-
-                        <!-- 甘特图主体(固定 640 参考宽,窄窗口可横向滚动) -->
-                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                            <Grid ColumnDefinitions="150,660" ColumnSpacing="12">
-                                <!-- 左列:活动名 -->
-                                <StackPanel Spacing="10">
-                                    <TextBlock Text="活动" FontSize="10" Foreground="{DynamicResource SemiColorText3}"
-                                               Height="16" />
-                                    <ItemsControl ItemsSource="{Binding VersionActivities}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <StackPanel Spacing="6" />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="vm:ActivityGanttItem">
-                                                <StackPanel Spacing="1" Width="150" Height="30">
-                                                    <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Text="{Binding TimeRangeText}" FontSize="10"
-                                                               Foreground="{DynamicResource SemiColorText3}" />
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </StackPanel>
-
-                                <!-- 右列:时间轴 + 甘特条 -->
-                                <Grid Grid.Column="1">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="16" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <!-- 当前日期竖线(跨整列) -->
-                                    <Border Grid.RowSpan="2" Width="2" Background="#e33737"
-                                            HorizontalAlignment="Left"
-                                            Margin="{Binding GanttTodayPercent, Converter={StaticResource GanttMargin}}"
-                                            IsHitTestVisible="False" />
-                                    <!-- 时间轴刻度 -->
-                                    <Grid Grid.Row="0" ColumnDefinitions="*,*" Margin="0,0,0,4">
-                                        <TextBlock Text="{Binding GanttStartText}" FontSize="10"
-                                                   Foreground="{DynamicResource SemiColorText3}" />
-                                        <TextBlock Grid.Column="1" Text="{Binding GanttEndText}" FontSize="10"
-                                                   Foreground="{DynamicResource SemiColorText3}"
-                                                   HorizontalAlignment="Right" />
-                                    </Grid>
-                                    <!-- 甘特条区(带背景轨) -->
-                                    <ItemsControl Grid.Row="1" ItemsSource="{Binding VersionActivities}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <StackPanel Spacing="6" />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="vm:ActivityGanttItem">
-                                                <Grid Height="30" HorizontalAlignment="Stretch">
-                                                    <!-- 时间轴背景轨 -->
-                                                    <Border Background="{DynamicResource SemiColorBg3}" CornerRadius="4"
-                                                            Opacity="0.5" />
-                                                    <!-- 甘特条:活动主色 + 进度(已进行部分实色) -->
-                                                    <Border CornerRadius="4" Height="22" VerticalAlignment="Center"
-                                                            HorizontalAlignment="Left"
-                                                            Margin="{Binding LeftPercent, Converter={StaticResource GanttMargin}}"
-                                                            Width="{Binding WidthPercent, Converter={StaticResource GanttWidth}}"
-                                                            ClipToBounds="True">
-                                                        <Grid>
-                                                            <!-- 底层:整条(未进行/剩余部分,半透明) -->
-                                                            <Border Background="{Binding BarBrush}" Opacity="0.35" />
-                                                            <!-- 进度层:已进行部分(宽度=ProgressPercent%,实色) -->
-                                                            <Border Background="{Binding BarBrush}"
-                                                                    HorizontalAlignment="Left"
-                                                                    Width="{Binding ProgressPercent, Converter={StaticResource GanttWidth}}" />
-                                                            <!-- 进度百分比文本 -->
-                                                            <TextBlock Text="{Binding ProgressPercent, StringFormat={}{0:0}%}"
-                                                                       FontSize="9" Foreground="White"
-                                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                                       Margin="0,0,4,0" />
-                                                        </Grid>
-                                                    </Border>
-                                                </Grid>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </Grid>
-                            </Grid>
-                        </ScrollViewer>
-                    </StackPanel>
-                </Border>
-
                 <!-- ② 换取活动(卡池)倒计时 -->
                 <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                     <StackPanel Spacing="12">
@@ -172,6 +75,117 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- ① 版本活动甘特图 -->
+                <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="📅 版本活动 (甘特图)" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="已过期的自动剔除" FontSize="11"
+                                       Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <!-- 甘特图主体(固定 940 参考宽,窄窗口可横向滚动) -->
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                            <Grid ColumnDefinitions="230,940" ColumnSpacing="14">
+                                <!-- 左列:活动 logo + 名称 + 时间 -->
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="活动" FontSize="11" Foreground="{DynamicResource SemiColorText3}"
+                                               Height="18" />
+                                    <ItemsControl ItemsSource="{Binding VersionActivities}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Spacing="8" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:ActivityGanttItem">
+                                                <StackPanel Orientation="Horizontal" Spacing="8" Width="230" Height="40">
+                                                    <Border Width="40" Height="40" CornerRadius="6" ClipToBounds="True"
+                                                            Background="{DynamicResource SemiColorBg3}">
+                                                        <controls:AsyncImage ImageUrl="{Binding ImageUrl}"
+                                                                             Width="40" Height="40" Stretch="UniformToFill" />
+                                                    </Border>
+                                                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
+                                                                   TextTrimming="CharacterEllipsis" MaxWidth="170" />
+                                                        <TextBlock Text="{Binding TimeRangeText}" FontSize="11"
+                                                                   Foreground="{DynamicResource SemiColorText3}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+
+                                <!-- 右列:时间轴 + 甘特条 -->
+                                <Grid Grid.Column="1">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="16" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <!-- 当前日期竖线(跨整列) -->
+                                    <Border Grid.RowSpan="2" Width="2" Background="#e33737"
+                                            HorizontalAlignment="Left"
+                                            Margin="{Binding GanttTodayPercent, Converter={StaticResource GanttMargin}}"
+                                            IsHitTestVisible="False" />
+                                    <!-- 时间轴刻度 -->
+                                    <Grid Grid.Row="0" ColumnDefinitions="*,*" Margin="0,0,0,4">
+                                        <TextBlock Text="{Binding GanttStartText}" FontSize="10"
+                                                   Foreground="{DynamicResource SemiColorText3}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding GanttEndText}" FontSize="10"
+                                                   Foreground="{DynamicResource SemiColorText3}"
+                                                   HorizontalAlignment="Right" />
+                                    </Grid>
+                                        <!-- 今天日期标注(红色,在今日竖线位置) -->
+                                        <Border Background="#e33737" CornerRadius="3" Padding="4,1"
+                                                HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                Margin="{Binding GanttTodayPercent, Converter={StaticResource GanttTodayLabelMargin}}">
+                                            <TextBlock Text="{Binding GanttTodayLabel}" FontSize="9" Foreground="White"
+                                                       FontWeight="Bold" />
+                                        </Border>
+                                    <!-- 甘特条区(带背景轨) -->
+                                    <ItemsControl Grid.Row="1" ItemsSource="{Binding VersionActivities}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Spacing="6" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:ActivityGanttItem">
+                                                <Grid Height="40" HorizontalAlignment="Stretch">
+                                                    <!-- 时间轴背景轨 -->
+                                                    <Border Background="{DynamicResource SemiColorBg3}" CornerRadius="6"
+                                                            Opacity="0.5" />
+                                                    <!-- 甘特条:活动主色 + 进度(已进行部分实色) -->
+                                                    <Border CornerRadius="6" Height="30" VerticalAlignment="Center"
+                                                            HorizontalAlignment="Left"
+                                                            Margin="{Binding LeftPercent, Converter={StaticResource GanttMargin}}"
+                                                            Width="{Binding WidthPercent, Converter={StaticResource GanttWidth}}"
+                                                            ClipToBounds="True">
+                                                        <Grid>
+                                                            <!-- 底层:整条(未进行/剩余部分,半透明) -->
+                                                            <Border Background="{Binding BarBrush}" Opacity="0.35" />
+                                                            <!-- 进度层:已进行部分(宽度=ProgressPercent%,实色) -->
+                                                            <Border Background="{Binding BarBrush}"
+                                                                    HorizontalAlignment="Left"
+                                                                    Width="{Binding ProgressPercent, Converter={StaticResource GanttWidth}}" />
+                                                            <!-- 进度百分比文本 -->
+                                                            <TextBlock Text="{Binding ProgressPercent, StringFormat={}{0:0}%}"
+                                                                       FontSize="9" Foreground="White"
+                                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                                       Margin="0,0,4,0" />
+                                                        </Grid>
+                                                    </Border>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Grid>
+                            </Grid>
+                        </ScrollViewer>
                     </StackPanel>
                 </Border>
             </StackPanel>

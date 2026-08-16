@@ -171,6 +171,8 @@ public sealed class GuideEchoBuild
 
 public sealed class GuideEchoProps
 {
+    [JsonPropertyName("gbId")] public string? GbId { get; set; }
+    [JsonPropertyName("pictureUrl")] public string? PictureUrl { get; set; }
     [JsonPropertyName("star")] public int Star { get; set; }
     [JsonPropertyName("cost")] public int Cost { get; set; }
     [JsonPropertyName("texts")] public List<GuideTextItem>? Texts { get; set; }
@@ -206,6 +208,8 @@ public sealed class GuideEchoPropRef
 public sealed class GuideRoleSkill
 {
     [JsonPropertyName("addPointTarget")] public List<GuideSkillTarget>? AddPointTarget { get; set; }
+    /// <summary>固定技能列表(含图标 pictureUrl,用于角色详情页技能展示)。</summary>
+    [JsonPropertyName("fixedSkills")] public List<GuideFixedSkill>? FixedSkills { get; set; }
     [JsonPropertyName("isFinished")] public bool? IsFinished { get; set; }
 }
 
@@ -250,6 +254,18 @@ public sealed class GuideSkillType
 {
     [JsonPropertyName("gbId")] public string? GbId { get; set; }
     [JsonPropertyName("texts")] public List<GuideTextItem>? Texts { get; set; }
+}
+
+/// <summary>固定技能(roleSkill.fixedSkills):角色详情页展示用,含图标。</summary>
+public sealed class GuideFixedSkill
+{
+    [JsonPropertyName("gbId")] public string? GbId { get; set; }
+    [JsonPropertyName("pictureUrl")] public string? PictureUrl { get; set; }
+    [JsonPropertyName("skillType")] public GuideSkillType? SkillType { get; set; }
+    [JsonPropertyName("texts")] public List<GuideTextItem>? Texts { get; set; }
+
+    public string? Name => Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.Name;
+    public string? TypeName => SkillType?.Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.Name;
 }
 
 /// <summary>共鸣链(roleResonance)。</summary>
@@ -326,4 +342,6 @@ public sealed class GuideTeammateItem
 [JsonSerializable(typeof(GuideRoleRef))]
 [JsonSerializable(typeof(GuideRoleInfo))]
 [JsonSerializable(typeof(GuideTextItem))]
+[JsonSerializable(typeof(GuideFixedSkill))]
+[JsonSerializable(typeof(List<GuideFixedSkill>))]
 public sealed partial class GuideJsonContext : JsonSerializerContext;

@@ -76,7 +76,7 @@ public sealed partial class HomeViewModel : ViewModelBase
     [RelayCommand]
     private void Refresh() => RefreshState();
 
-    /// <summary>拉取角色每日数据(需登录)。</summary>
+    /// <summary>拉取角色每日数据(优先本地游戏缓存 + PC 启动器 SDK,失败回退库街区接口)。</summary>
     [RelayCommand]
     private async Task RefreshDailyAsync()
     {
@@ -85,29 +85,33 @@ public sealed partial class HomeViewModel : ViewModelBase
             return;
         }
         RefreshState();
-        if (!IsLoggedIn)
-        {
-            DailyItems.Clear();
-            StatusText = "登录库街区账号后显示每日数据";
-            return;
-        }
         IsBusy = true;
         StatusText = "正在拉取每日数据…";
         try
         {
+            // ① 优先本地游戏缓存 + PC 启动器 SDK(不依赖库街区登录)
+            var local = await AppServices.LocalDaily.GetDailyDataAsync();
+            if (local is not null)
+            {
+                ApplyDailyData(local, "本地启动器");
+                return;
+            }
+
+            // ② 回退库街区接口(需登录)
+            if (!IsLoggedIn)
+            {
+                DailyItems.Clear();
+                StatusText = "本地无游戏缓存,请登录库街区账号显示每日数据";
+                return;
+            }
             var data = await AppServices.DailyData.GetDailyDataAsync();
-            DailyItems.Clear();
             if (data is null)
             {
+                DailyItems.Clear();
                 StatusText = "拉取每日数据失败(未登录或接口异常)";
                 return;
             }
-            AddItem(data.EnergyData, "⚡", "体力");
-            AddItem(data.LivenessData, "🔥", "活跃度");
-            AddItem(data.WeeklyData, "🗡", "周本");
-            AddItem(data.RougeData, "📻", "电台");
-            AddItem(data.WeeklyFrameData, "🗺", "周度游历");
-            StatusText = $"已更新 · {data.RoleName ?? ""}({data.RoleId ?? ""})";
+            ApplyDailyData(data, "库街区");
         }
         catch (Exception ex)
         {
@@ -117,6 +121,17 @@ public sealed partial class HomeViewModel : ViewModelBase
         {
             IsBusy = false;
         }
+    }
+
+    private void ApplyDailyData(RoleDailyData data, string source)
+    {
+        DailyItems.Clear();
+        AddItem(data.EnergyData, "⚡", "体力");
+        AddItem(data.LivenessData, "🔥", "活跃度");
+        AddItem(data.WeeklyData, "🗡", "周本");
+        AddItem(data.RougeData, "📻", "电台");
+        AddItem(data.WeeklyFrameData, "🗺", "周度游历");
+        StatusText = $"已更新({source}) · {data.RoleName ?? ""}({data.RoleId ?? ""})";
     }
 
     private void AddItem(RoleDailyDetail? detail, string icon, string fallbackName)

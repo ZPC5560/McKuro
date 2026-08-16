@@ -79,6 +79,14 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>封面轮播图(官方启动器信息)。</summary>
     public ObservableCollection<SlideshowItem> Slideshows { get; } = [];
 
+    /// <summary>轮播图是否显示(可隐藏,参考 Haiyu 左下角卡片)。</summary>
+    [ObservableProperty]
+    private bool _isSlideShowVisible = true;
+
+    /// <summary>切换轮播图显示/隐藏。</summary>
+    [RelayCommand]
+    private void ToggleSlideShow() => IsSlideShowVisible = !IsSlideShowVisible;
+
     /// <summary>公告列表。</summary>
     public ObservableCollection<AnnouncementItem> Notices { get; } = [];
 

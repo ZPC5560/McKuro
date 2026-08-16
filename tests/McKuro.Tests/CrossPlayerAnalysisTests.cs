@@ -33,7 +33,7 @@ public class CrossPlayerAnalysisTests : IDisposable
         => new()
         {
             PlayerId = playerId,
-            CardPoolType = (int)CardPoolType.RoleActivity,
+            CardPoolType = CardPoolTypeValues.GetDisplayName(CardPoolType.RoleActivity),
             ResourceId = resourceId,
             QualityLevel = fiveStar ? 5 : 4,
             ResourceType = "角色",

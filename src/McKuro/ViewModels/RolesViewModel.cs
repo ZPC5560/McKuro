@@ -15,6 +15,9 @@ public sealed partial class RolesViewModel : ViewModelBase
 {
     private readonly IMessenger _messenger;
 
+    /// <summary>mcguide 详情填充进行中(避免并发重复请求)。</summary>
+    private bool _guideDetailFilling;
+
     /// <summary>属性筛选中的"全部"选项。</summary>
     public const string AllAttributeFilter = "全部属性";
 
@@ -115,7 +118,7 @@ public sealed partial class RolesViewModel : ViewModelBase
 
     partial void OnRoleIdTextChanged(string value) => AppServices.Settings.Current.RoleId = value;
 
-    /// <summary>选中角色变化时:拉取官方达成度 + 角色头部背景取色。</summary>
+    /// <summary>选中角色变化时:拉取官方达成度 + 角色头部背景取色 + 缺失详情用 mcguide 填充。</summary>
     partial void OnSelectedRoleChanged(RoleDetail? value)
     {
         GuideAchievement = null;
@@ -124,6 +127,7 @@ public sealed partial class RolesViewModel : ViewModelBase
         {
             _ = LoadGuideAchievementAsync();
             _ = LoadRoleHeaderBackgroundAsync();
+            _ = FillRoleDetailFromGuideIfEmptyAsync();
         }
     }
 
@@ -240,6 +244,92 @@ public sealed partial class RolesViewModel : ViewModelBase
         {
             GuideLoading = false;
         }
+    }
+
+    /// <summary>
+    /// 当选中角色详情缺失(库街区 getRoleDetail 被极验风控 → 武器/技能/属性为空)
+    /// 且已登录 mcguide 攻略站时,用 mcguide 数据填充 SelectedRole。
+    /// </summary>
+    private async Task FillRoleDetailFromGuideIfEmptyAsync()
+    {
+        var role = SelectedRole;
+        if (role is null || _guideDetailFilling)
+        {
+            return;
+        }
+        // 详情已完整(getRoleDetail 未被风控)则跳过
+        if (role.WeaponData is not null
+            && role.Skills is { Count: > 0 }
+            && role.Attributes is { Count: > 0 })
+        {
+            return;
+        }
+        if (!AppServices.Guide.HasToken)
+        {
+            return;
+        }
+        var cardRoleId = role.Role?.RoleId ?? 0;
+        if (cardRoleId <= 0)
+        {
+            return;
+        }
+
+        _guideDetailFilling = true;
+        try
+        {
+            var detail = await AppServices.Guide.GetRoleDetailFromGuideAsync(role.RoleName, cardRoleId);
+            if (detail is null || role != SelectedRole)
+            {
+                return; // 已切到其他角色,丢弃过期结果
+            }
+            MergeGuideDetail(role, detail);
+            SourceText = "数据源: mcguide 攻略站";
+            StatusText = $"已用 mcguide 攻略站数据补充角色详情({role.RoleName})";
+        }
+        catch (Exception)
+        {
+            // 填充失败不影响主流程
+        }
+        finally
+        {
+            _guideDetailFilling = false;
+        }
+    }
+
+    /// <summary>把 mcguide 映射的角色详情合并进现有 SelectedRole(仅补缺失区块,保留库街区已有基础信息)。</summary>
+    private static void MergeGuideDetail(RoleDetail target, RoleDetail source)
+    {
+        if (target.Role is not null && source.Role is not null)
+        {
+            if (string.IsNullOrWhiteSpace(target.Role.RoleName))
+            {
+                target.Role.RoleName = source.Role.RoleName;
+            }
+            if (target.Role.StarLevel <= 0)
+            {
+                target.Role.StarLevel = source.Role.StarLevel;
+            }
+            if (string.IsNullOrWhiteSpace(target.Role.RoleIconUrl))
+            {
+                target.Role.RoleIconUrl = source.Role.RoleIconUrl;
+            }
+        }
+        target.Role ??= source.Role;
+        target.WeaponData ??= source.WeaponData;
+        if (target.Skills is not { Count: > 0 })
+        {
+            target.Skills = source.Skills;
+        }
+        if (target.Attributes is not { Count: > 0 })
+        {
+            target.Attributes = source.Attributes;
+        }
+        target.PhantomData ??= source.PhantomData;
+        if (target.Chains is not { Count: > 0 })
+        {
+            target.Chains = source.Chains;
+        }
+        target.NotifyDetailChanged();
     }
 
     [RelayCommand]

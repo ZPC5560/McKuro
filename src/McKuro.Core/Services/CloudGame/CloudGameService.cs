@@ -83,7 +83,7 @@ public sealed class CloudGameService
     public async Task<CloudApiResponse<CloudGameLoginData>?> LoginAsync(string phone, string code, CancellationToken ct = default)
     {
         var query = GetClientData();
-        query.Add("deviceNum", _deviceId);
+        query["deviceNum"] = _deviceId;
         query.Add("phone", phone);
         query.Add("code", code);
         var json = await PostFormAsync(_sdkClient, "sdkcom/v2/login/phoneCode.lg", query, ct).ConfigureAwait(false);
@@ -100,7 +100,7 @@ public sealed class CloudGameService
         CloudGameLoginData data, CancellationToken ct = default)
     {
         var querys = GetClientData();
-        querys.Add("deviceNum", data.LoginDid ?? _deviceId);
+        querys["deviceNum"] = data.LoginDid ?? _deviceId;
         querys.Add("phone", data.Phone ?? "");
         querys.Add("token", data.PhoneToken ?? "");
         var json = await PostFormAsync(_sdkClient, "sdkcom/v2/login/phoneToken.lg", querys, ct).ConfigureAwait(false);
@@ -112,7 +112,7 @@ public sealed class CloudGameService
         CloudGameLoginData data, string refreshPhoneToken, CancellationToken ct = default)
     {
         var query = GetClientData();
-        query.Add("deviceNum", data.LoginDid ?? _deviceId);
+        query["deviceNum"] = data.LoginDid ?? _deviceId;
         query.Add("code", refreshPhoneToken);
         query.Add("grant_type", "authorization_code");
         var json = await PostFormAsync(_sdkClient, "sdkcom/v2/auth/getToken.lg", query, ct).ConfigureAwait(false);
@@ -156,7 +156,7 @@ public sealed class CloudGameService
         }
         session.PhoneToken = phoneToken.Data;
 
-        var access = await GetAccessTokenAsync(login.Data, phoneToken.Data.PhoneToken ?? "", ct).ConfigureAwait(false);
+        var access = await GetAccessTokenAsync(login.Data, phoneToken.Data.Code ?? "", ct).ConfigureAwait(false);
         if (access is not { Code: 0, Data: not null })
         {
             return null;
@@ -164,6 +164,38 @@ public sealed class CloudGameService
         session.AccessData = access.Data;
 
         var endLogin = await GetTokenAsync(login.Data, access.Data.AccessToken ?? "", ct).ConfigureAwait(false);
+        if (endLogin is not { Code: 0, Data: not null })
+        {
+            return null;
+        }
+        session.EndLoginData = endLogin.Data;
+        return session;
+    }
+
+    /// <summary>用已保存的登录数据静默续会话(免重新输入验证码,用于抽卡记录拉取)。</summary>
+    public async Task<CloudGameLoginSession?> BuildSessionAsync(CloudGameLoginData data, CancellationToken ct = default)
+    {
+        if (data is null)
+        {
+            return null;
+        }
+        var session = new CloudGameLoginSession { OrginData = data };
+
+        var phoneToken = await RefreshPhoneTokenAsync(data, ct).ConfigureAwait(false);
+        if (phoneToken is not { Code: 0, Data: not null })
+        {
+            return null;
+        }
+        session.PhoneToken = phoneToken.Data;
+
+        var access = await GetAccessTokenAsync(data, phoneToken.Data.Code ?? "", ct).ConfigureAwait(false);
+        if (access is not { Code: 0, Data: not null })
+        {
+            return null;
+        }
+        session.AccessData = access.Data;
+
+        var endLogin = await GetTokenAsync(data, access.Data.AccessToken ?? "", ct).ConfigureAwait(false);
         if (endLogin is not { Code: 0, Data: not null })
         {
             return null;

@@ -34,7 +34,7 @@ public class GachaRecordStoreTests : IDisposable
         new()
         {
             PlayerId = "p1",
-            CardPoolType = pool,
+            CardPoolType = CardPoolTypeValues.GetDisplayName((CardPoolType)pool),
             ResourceId = 100,
             QualityLevel = quality,
             ResourceType = "角色",

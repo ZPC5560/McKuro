@@ -44,6 +44,26 @@ public sealed class PoolStats
     /// <summary>小保底歪率(0~1,无法判定时为 null)。</summary>
     public double? OffBannerRate { get; init; }
 
+    /// <summary>四星数量。</summary>
+    public int FourStarCount { get; init; }
+
+    /// <summary>三星数量。</summary>
+    public int ThreeStarCount { get; init; }
+
+    /// <summary>UP 五星数量(可判定时;无法判定为 0)。</summary>
+    public int UpCount { get; init; }
+
+    /// <summary>UP 率(UP 五星占全部五星比例,0~1)。</summary>
+    public double? UpRate => FiveStarCount > 0 && FiveStarEntries.Any(e => e.IsOffBanner.HasValue)
+        ? (double)UpCount / FiveStarCount
+        : null;
+
+    /// <summary>记录起始日期(YYYY-MM-dd)。</summary>
+    public string StartDate { get; init; } = "";
+
+    /// <summary>记录结束日期(YYYY-MM-dd)。</summary>
+    public string EndDate { get; init; } = "";
+
     /// <summary>是否有小保底机制(角色活动/角色联动池)。</summary>
     public bool HasPityMechanism => PoolType is CardPoolType.RoleActivity or CardPoolType.CharacterCollaboration;
 
