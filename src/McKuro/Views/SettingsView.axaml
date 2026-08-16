@@ -1,0 +1,316 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:McKuro.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="McKuro.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+    <ScrollViewer>
+        <StackPanel Margin="25" Spacing="12" MaxWidth="760" HorizontalAlignment="Left">
+            <TextBlock Text="⚙️ 设置" FontSize="24" FontWeight="Bold" Margin="0,0,0,8" />
+
+            <!-- 游戏目录 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="📁" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="游戏安装目录" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="用于更新/安装/抽卡日志解析,目录应包含 Wuthering Waves.exe" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Grid Grid.Column="2" ColumnDefinitions="*,Auto" ColumnSpacing="8" MinWidth="320">
+                        <TextBox Grid.Column="0" Text="{Binding GameRootDir}"
+                                 PlaceholderText="例如: D:\Kuro\Wuthering Waves"
+                                 VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Content="浏览…" Command="{Binding BrowseGameDirCommand}" />
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- 服务器渠道 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🖥️" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="服务器渠道" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="自动检测失败时可手动指定(官服 / B站 / WeGame / 国际服)" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                              ItemsSource="{Binding ServerTypes}"
+                              SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+
+            <!-- 游戏修复:跳过校验文件(对齐 Haiyu SkipVerifyFiles) -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <StackPanel Spacing="10">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                            <TextBlock Text="🔧" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                            <TextBlock Text="游戏修复 · 跳过校验文件" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="修复游戏时跳过这些文件(如日志/配置,避免被还原);相对游戏目录的路径,正斜杠分隔" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                      OffContent="保留跳过文件" OnContent="删除跳过文件"
+                                      IsChecked="{Binding AutoSkipVerifyDelete, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBox Grid.Column="0" Text="{Binding SkipVerifyInput}"
+                                 PlaceholderText="例如: Client/Saved/Logs/Client.log" />
+                        <Button Grid.Column="1" Content="添加" Command="{Binding AddSkipVerifyFileCommand}" />
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding SkipVerifyFiles}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,2">
+                                    <Border Grid.Column="0" Padding="10,5" CornerRadius="6"
+                                            Background="{DynamicResource SemiColorBg3}">
+                                        <TextBlock Text="{Binding}" FontSize="12" FontFamily="Consolas,monospace"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </Border>
+                                    <Button Grid.Column="1" Content="✕" Padding="8,4" FontSize="11"
+                                            Command="{Binding $parent[ItemsControl].DataContext.RemoveSkipVerifyFileCommand}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="未配置跳过文件" FontSize="12" Foreground="{DynamicResource SemiColorText3}"
+                               IsVisible="{Binding !SkipVerifyFiles.Count}" />
+                </StackPanel>
+            </Border>
+
+            <!-- 下载并发 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="⚡" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="并发下载数" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="同时下载的文件数(1~32)" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <NumericUpDown Grid.Column="2" Width="200" VerticalAlignment="Center"
+                                   Value="{Binding DownloadConcurrency, Mode=TwoWay}"
+                                   Minimum="1" Maximum="32" />
+                </Grid>
+            </Border>
+
+            <!-- 下载限速(对齐 Haiyu LimitSpeed) -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🐢" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="下载速度限制 (MB/s)" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="0 = 不限速(对齐 Haiyu 的下载限速设置)" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <NumericUpDown Grid.Column="2" Width="200" VerticalAlignment="Center"
+                                   Value="{Binding LimitSpeedMbps, Mode=TwoWay}"
+                                   Minimum="0" Maximum="1024" />
+                </Grid>
+            </Border>
+
+            <!-- 游戏启动参数(对齐 Haiyu StartGameOption) -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                      RowSpacing="10">
+                    <Border Grid.Row="0" Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🚀" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="游戏启动参数" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="对齐 Haiyu:命令行追加 -dx11 -slno 及自定义参数" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <TextBlock Text="DX11 启动" FontSize="13" VerticalAlignment="Center" />
+                        <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
+                                      IsChecked="{Binding UseDx11, Mode=TwoWay}" />
+                    </Grid>
+                    <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <TextBlock Text="禁用 DLSS" FontSize="13" VerticalAlignment="Center" />
+                        <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
+                                      IsChecked="{Binding DisableDlss, Mode=TwoWay}" />
+                    </Grid>
+                    <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <TextBlock Text="自定义参数" FontSize="13" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding StartGameArguments, Mode=TwoWay}"
+                                 PlaceholderText="如 -notexturestreaming" />
+                    </Grid>
+                    <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <TextBlock Text="启动文件" FontSize="13" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding StartGameExeName, Mode=TwoWay}"
+                                 PlaceholderText="留空自动:Wuthering Waves.exe → Client-Win64-Shipping.exe" />
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- 启动后最小化 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🗕" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="启动游戏后最小化主窗口" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="启动游戏后自动最小化到任务栏(对齐 Haiyu 启动后可关闭主界面)" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{Binding MinimizeOnLaunch, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+
+            <!-- 背景视频封面 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🎬" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="背景视频封面" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="游戏页播放官方宣传视频;未安装 VLC 时自动回退为静态封面图" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{Binding BackgroundVideoEnabled, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+
+            <!-- 快捷键截图 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+                    <Border Grid.Row="0" Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="📸" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="快捷键截图" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="全局热键截取整个屏幕并保存 PNG(仅 Windows)" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Row="0" Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{Binding CaptureEnabled, Mode=TwoWay}" />
+
+                    <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="热键:" FontSize="13" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                        <ComboBox Width="90" ItemsSource="{Binding ModifierKeys}"
+                                  SelectedIndex="{Binding CaptureModifierIndex, Mode=TwoWay}" />
+                        <TextBlock Text="+" FontSize="14" VerticalAlignment="Center" />
+                        <ComboBox Width="90" ItemsSource="{Binding CaptureKeys}"
+                                  SelectedIndex="{Binding CaptureKeyIndex, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <Grid Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBox Grid.Column="0" Text="{Binding CaptureDir}"
+                                 PlaceholderText="截图保存目录(留空 = 系统图片目录/McKuro)" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Content="浏览…" Command="{Binding BrowseCaptureDirCommand}" />
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- 主题(对齐 Haiyu 设置主题) -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🎨" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="主题" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="跟随系统 / 浅色 / 深色(保存后即时生效)" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                              ItemsSource="{Binding Themes}"
+                              SelectedIndex="{Binding ThemeIndex, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+
+            <!-- 应用自更新(对齐 Haiyu UpdateAppViewModel) -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <StackPanel Spacing="12">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                            <TextBlock Text="🔄" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                            <TextBlock FontSize="15" FontWeight="SemiBold">
+                                <Run Text="应用自更新" /><Run Text="  " /><Run Text="{Binding CurrentAppVersionText}" FontSize="12" Foreground="{DynamicResource SemiColorText3}" />
+                            </TextBlock>
+                            <TextBlock Text="GitHub 仓库 (owner/repo),留空禁用;Release 需含 exe 安装包" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText2}" />
+                        </StackPanel>
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <TextBlock Text="仓库" FontSize="13" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding AppUpdateRepo, Mode=TwoWay}"
+                                 PlaceholderText="如 leck995/WutheringWavesTool" />
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="检查更新" Command="{Binding CheckAppUpdateCommand}"
+                                IsEnabled="{Binding !AppUpdateChecking}" />
+                        <Button Content="下载并安装" Classes="primary" Command="{Binding DownloadAppUpdateCommand}"
+                                IsVisible="{Binding AppUpdateAvailable}"
+                                IsEnabled="{Binding !AppUpdateDownloading}" />
+                        <Button Content="跳过此版本" Command="{Binding SkipAppUpdateCommand}"
+                                IsVisible="{Binding AppUpdateAvailable}" />
+                        <ProgressBar Width="160" Height="6" VerticalAlignment="Center"
+                                     Value="{Binding AppUpdateProgress}" Minimum="0" Maximum="100"
+                                     IsVisible="{Binding AppUpdateDownloading}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding AppUpdateVersionText}" FontSize="13" FontWeight="SemiBold"
+                               Foreground="{DynamicResource SemiColorPrimary}" />
+                    <TextBlock Text="{Binding AppUpdateStatusText}" FontSize="12"
+                               Foreground="{DynamicResource SemiColorText2}" />
+                </StackPanel>
+            </Border>
+
+            <!-- 界面语言 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🌐" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="界面语言" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="重启后生效" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                              ItemsSource="{Binding Languages}"
+                              SelectedIndex="{Binding LanguageIndex, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+
+            <!-- 保存 -->
+            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
+                <Button Content="保存设置" Classes="primary"
+                        Command="{Binding SaveCommand}" />
+                <Button Content="打开日志目录"
+                        Command="{Binding OpenLogDirCommand}"
+                        ToolTip.Tip="{Binding LogDirText}" />
+                <TextBlock Text="{Binding StatusText}" FontSize="13"
+                           Foreground="{DynamicResource SemiColorPrimary}"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="{Binding CaptureStatusText}" FontSize="13"
+                           Foreground="{DynamicResource SemiColorText2}"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

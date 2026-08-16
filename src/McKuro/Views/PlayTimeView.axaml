@@ -1,0 +1,166 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:McKuro.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="McKuro.Views.PlayTimeView"
+             x:DataType="vm:PlayTimeViewModel">
+    <UserControl.Resources>
+        <vm:IntensityBrushConverter x:Key="IntensityBrush" />
+        <vm:IntToGridRowConverter x:Key="RowConv" />
+        <vm:IntToGridColConverter x:Key="ColConv" />
+        <vm:PercentToHeightConverter x:Key="PctOfHeight" />
+    </UserControl.Resources>
+    <ScrollViewer>
+        <StackPanel Margin="20,16,20,16" Spacing="16">
+            <!-- 标题 + 分析按钮 -->
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="🕒 游玩统计" FontSize="24" FontWeight="Bold" />
+                    <TextBlock Text="{Binding StatusText}" FontSize="12"
+                               Foreground="{DynamicResource SemiColorText2}" />
+                </StackPanel>
+                <Button Grid.Column="1" Content="解析日志" Classes="primary" VerticalAlignment="Center"
+                        Command="{Binding AnalyzeCommand}" IsEnabled="{Binding !IsBusy}" />
+            </Grid>
+
+            <!-- 统计卡 -->
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="16">
+                <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="总游玩时长" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                        <TextBlock Text="{Binding TotalHoursText}" FontSize="26" FontWeight="Bold"
+                                   Foreground="{DynamicResource SemiColorPrimary}" />
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="1" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="今日游玩" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                        <TextBlock Text="{Binding TodayHoursText}" FontSize="26" FontWeight="Bold"
+                                   Foreground="{DynamicResource SemiColorPrimary}" />
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="2" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="记录天数" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                        <TextBlock Text="{Binding RecordDaysText}" FontSize="26" FontWeight="Bold"
+                                   Foreground="{DynamicResource SemiColorPrimary}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 最近 7 天每日时长柱状 -->
+            <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="最近 7 天每日游玩时长" FontSize="15" FontWeight="SemiBold" />
+                    <ItemsControl ItemsSource="{Binding Last7Days}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="7" ColumnSpacing="12" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PlayDayItem">
+                                <StackPanel Spacing="6" HorizontalAlignment="Center">
+                                    <Border Height="120" Width="34" CornerRadius="6"
+                                            Background="{DynamicResource SemiColorBg3}"
+                                            VerticalAlignment="Bottom">
+                                        <Border Height="{Binding BarHeight, Converter={StaticResource PctOfHeight}}"
+                                                Width="34" CornerRadius="6"
+                                                Background="{DynamicResource SemiColorPrimary}"
+                                                VerticalAlignment="Bottom" />
+                                    </Border>
+                                    <TextBlock Text="{Binding HoursText}" FontSize="12" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" />
+                                    <TextBlock Text="{Binding Label}" FontSize="11"
+                                               Foreground="{DynamicResource SemiColorText2}"
+                                               HorizontalAlignment="Center" />
+                                    <!-- 每天玩的时间范围(几点到几点) -->
+                                    <TextBlock Text="{Binding TimeRangeText}" FontSize="10"
+                                               Foreground="{DynamicResource SemiColorText3}"
+                                               HorizontalAlignment="Center" />
+                                    <!-- 每次独立时段(睡眠检测式合并) -->
+                                    <TextBlock Text="{Binding SessionsText}" FontSize="10"
+                                               Foreground="{DynamicResource SemiColorText2}"
+                                               HorizontalAlignment="Center" TextWrapping="Wrap"
+                                               MaxWidth="110" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- 一周时段热力图(7 行 × 24 小时) -->
+            <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="一周游玩时间区间(7×24 小时热力)" FontSize="15" FontWeight="SemiBold" />
+                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                        <!-- 行标签(周一~周日) -->
+                        <StackPanel Grid.Row="0" Grid.Column="0" Spacing="3" Margin="0,0,8,0">
+                            <ItemsControl ItemsSource="{Binding Last7Days}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Spacing="3" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:PlayDayItem">
+                                        <TextBlock Text="{Binding Label}" FontSize="10" Height="16"
+                                                   Foreground="{DynamicResource SemiColorText2}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                        <!-- 热力格(24 列,每行一天;UniformGrid 行优先填充) -->
+                        <Border Grid.Row="0" Grid.Column="1">
+                            <ItemsControl ItemsSource="{Binding HourlyCells}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Rows="7" Columns="24" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:PlayHourCell">
+                                        <Border Width="16" Height="16" CornerRadius="2" Margin="1"
+                                                Background="{Binding Intensity, Converter={StaticResource IntensityBrush}}">
+                                            <ToolTip.Tip>
+                                                <TextBlock Text="{Binding Tip}" FontSize="11" />
+                                            </ToolTip.Tip>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+                        <!-- 小时刻度(0-23) -->
+                        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="1,4,0,0">
+                            <TextBlock Text="0" FontSize="9" Width="18" Foreground="{DynamicResource SemiColorText3}" />
+                            <TextBlock Text="6" FontSize="9" Width="18" Foreground="{DynamicResource SemiColorText3}" />
+                            <TextBlock Text="12" FontSize="9" Width="18" Foreground="{DynamicResource SemiColorText3}" />
+                            <TextBlock Text="18" FontSize="9" Width="18" Foreground="{DynamicResource SemiColorText3}" />
+                            <TextBlock Text="23" FontSize="9" Width="18" Foreground="{DynamicResource SemiColorText3}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 每周游玩时间范围报告(参考睡眠检测) -->
+            <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                <StackPanel Spacing="10">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="📋 每周游玩时间范围报告" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="每次开始玩到结束独立统计,相邻会话(≤60min)合并为同一时段" FontSize="11"
+                                   Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding WeeklyReportText}" FontSize="13"
+                               Foreground="{DynamicResource SemiColorText2}"
+                               TextWrapping="Wrap" LineHeight="22" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/McKuro.Core/McKuro.Core.csproj" />
+    <Project Path="src/McKuro/McKuro.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/McKuro.Tests/McKuro.Tests.csproj" />
+  </Folder>
+</Solution>

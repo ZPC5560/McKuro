@@ -1,0 +1,111 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:McKuro.ViewModels"
+        xmlns:views="using:McKuro.Views"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="720"
+        x:Class="McKuro.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Width="1100" Height="720"
+        MinWidth="960" MinHeight="640"
+        Title="McKuro · 鸣潮启动器"
+        Icon="avares://McKuro/Assets/app.ico"
+        Background="{DynamicResource SemiColorBg0}">
+
+    <Window.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:HomeViewModel}">
+            <views:HomeView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:LauncherViewModel}">
+            <views:LauncherView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:GachaViewModel}">
+            <views:GachaView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:RolesViewModel}">
+            <views:RolesView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SignViewModel}">
+            <views:SignView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ActivityViewModel}">
+            <views:ActivityView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:WikiViewModel}">
+            <views:WikiView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:RedemptionCodeViewModel}">
+            <views:RedemptionCodeView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:PlayTimeViewModel}">
+            <views:PlayTimeView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:TowerViewModel}">
+            <views:TowerView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:AccountViewModel}">
+            <views:AccountView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+            <views:SettingsView />
+        </DataTemplate>
+    </Window.DataTemplates>
+
+    <Grid ColumnDefinitions="60,*">
+        <!-- 左侧 60px 图标导航 (参照 Java 项目:顶部圆形应用 Logo + 导航项图标) -->
+        <Border Grid.Column="0" Background="{DynamicResource SemiColorBg2}">
+            <DockPanel>
+                <!-- 顶部应用 Logo:守岸人,圆形裁剪 (参照 WutheringWavesTool MainView 的 icon + Circle clip) -->
+                <Border DockPanel.Dock="Top"
+                        Width="42" Height="42"
+                        CornerRadius="21"
+                        ClipToBounds="True"
+                        BorderThickness="2"
+                        BorderBrush="{DynamicResource SemiColorPrimary}"
+                        HorizontalAlignment="Center"
+                        Margin="0,14,0,12">
+                    <Image Source="avares://McKuro/Assets/shorekeeper_icon.png"
+                           Stretch="UniformToFill" />
+                </Border>
+                <ListBox ItemsSource="{Binding NavigationItems}"
+                         SelectedItem="{Binding SelectedNavigationItem, Mode=TwoWay}"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         Padding="0"
+                         Margin="0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:NavigationItem">
+                            <StackPanel Width="60" Spacing="2">
+                                <TextBlock Text="{Binding Icon}"
+                                           FontSize="20"
+                                           HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding Title}"
+                                           FontSize="10"
+                                           HorizontalAlignment="Center"
+                                           Foreground="{DynamicResource SemiColorText2}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    <ListBox.Styles>
+                        <Style Selector="ListBoxItem">
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                            <Setter Property="Background" Value="Transparent" />
+                        </Style>
+                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                            <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
+                            <Setter Property="CornerRadius" Value="8" />
+                        </Style>
+                    </ListBox.Styles>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- 内容区 -->
+        <Border Grid.Column="1">
+            <ContentControl Content="{Binding CurrentPage}" />
+        </Border>
+    </Grid>
+</Window>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GeeTest 验证</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; font-family: "Microsoft YaHei", sans-serif; background: #f8fafc; }
+    #status {
+      padding: 8px 12px; font-size: 13px; color: #334;
+      background: #fff; border-bottom: 1px solid #dde3ea;
+      word-break: break-all;
+    }
+    #status.ok { color: #067647; }
+    #status.err { color: #b42318; }
+    /* 对齐 Haiyu geet.html:popup 模式按钮铺满容器 */
+    .box {
+      height: 350px;
+      width: 500px;
+      margin: 40px auto 0;
+      text-align: center;
+    }
+    #captcha {
+      display: inline-block;
+      height: 60px;
+      width: 350px;
+    }
+  </style>
+</head>
+<body>
+<div id="status">正在加载极验…</div>
+<div class="box">
+  <div id="captcha"></div>
+</div>
+<script>
+  // 页面级错误捕获:任何 JS 错误都显示到状态栏,便于排查
+  window.onerror = function (msg, src, line, col, err) {
+    var el = document.getElementById("status");
+    el.textContent = "页面脚本错误: " + msg + " @" + (src || "") + ":" + line;
+    el.className = "err";
+    return false;
+  };
+
+  // 回调地址由启动器本地服务在返回页面时直接注入(__MCKURO_CB__ 占位符)
+  var CALLBACK = "__MCKURO_CB__";
+  if (!CALLBACK || CALLBACK.indexOf("__MCKURO_CB__") === 0) {
+    var m = location.search.match(/[?&]cb=([^&]+)/);
+    if (m) { CALLBACK = decodeURIComponent(m[1]); }
+    else if (location.protocol === "http:") { CALLBACK = location.origin + "/cb"; }
+    else { CALLBACK = ""; }
+  }
+
+  function setStatus(text, cls) {
+    var el = document.getElementById("status");
+    el.textContent = text;
+    el.className = cls || "";
+  }
+
+  // 依次尝试脚本加载,第一个成功即回调(true);全部失败回调(false)
+  function loadScripts(srcs, done) {
+    var i = 0;
+    function next() {
+      if (i >= srcs.length) { done(false); return; }
+      var s = document.createElement("script");
+      s.src = srcs[i++];
+      s.onload = function () { done(true); };
+      s.onerror = next;
+      document.head.appendChild(s);
+    }
+    next();
+  }
+
+  // 弹出滑块:兼容不同极验版本的方法名(新版 v1.9.x 用 showCaptcha/showBox,旧版用 show)
+  function tryShowCaptcha(captcha) {
+    var methods = ["showCaptcha", "showBox", "boxShow", "show"];
+    for (var i = 0; i < methods.length; i++) {
+      try {
+        if (typeof captcha[methods[i]] === "function") {
+          captcha[methods[i]]();
+          return true;
+        }
+      } catch (e) { /* 尝试下一个 */ }
+    }
+    return false;
+  }
+
+  // 脚本加载:CDN 优先(历史验证可用),本地文件兜底
+  loadScripts([
+    "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js",
+    "Js/jquery.min.js"
+  ], function (jqOk) {
+    if (!jqOk) { setStatus("jquery 加载失败(CDN 与本地均不可用)", "err"); return; }
+    setStatus("jquery 已加载,正在加载极验脚本…");
+    loadScripts([
+      "https://static.geetest.com/v4/gt4.js",
+      "https://static.geevisit.com/v4/gt4.js",
+      "Js/gt4.js"
+    ], function (gtOk) {
+      if (!gtOk || typeof window.initGeetest4 === "undefined") {
+        setStatus("极验脚本加载失败(CDN 与本地均不可用)", "err");
+        return;
+      }
+      setStatus("极验脚本已加载,正在初始化…");
+
+      // 对齐 Haiyu geet.html:captchaId + product:popup + https:true
+      // 注意:不能配置 nativeButton —— 2026 新版极验(gcaptcha4.js v1.9.7)已移除
+      // show() 方法,而 nativeButton 点击处理内部仍调用 this.show() 会报
+      // "captcha.show is not a function";改用 tryShowCaptcha 自动弹窗。
+      // onError 显式配置:load 接口失败时能显示原因
+      window.initGeetest4({
+        captchaId: "3f7e2d848ce0cb7e7d019d621e556ce2",
+        product: "popup",
+        https: true,
+        language: "zho",
+        onError: function (err) {
+          setStatus("极验初始化失败: " + JSON.stringify(err), "err");
+        }
+      }, function (captcha) {
+        captcha.appendTo("#captcha");
+        var readyTimer = setTimeout(function () {
+          setStatus("极验资源加载超时(约15s未就绪,请检查网络后刷新)", "err");
+        }, 15000);
+        captcha.onReady(function () {
+          clearTimeout(readyTimer);
+          if (CALLBACK) {
+            setStatus("极验已就绪,请完成滑块验证", "ok");
+          } else {
+            setStatus("回调地址缺失! 页面: " + location.href, "err");
+          }
+          // 自动弹出滑块(兼容新旧版方法名);失败则提示刷新
+          if (!tryShowCaptcha(captcha)) {
+            setStatus("极验已就绪但自动弹出失败,请刷新页面重试", "err");
+          }
+        }).onSuccess(function () {
+          // 对齐 Haiyu:原样回传 getValidate()(lot_number/captcha_output/pass_token/gen_time)
+          var result = captcha.getValidate();
+          if (!result) {
+            setStatus("未拿到校验结果,请重试", "err");
+            return;
+          }
+          setStatus("验证通过,正在回传…", "ok");
+          if (CALLBACK) {
+            location.href = CALLBACK + "?data=" + encodeURIComponent(JSON.stringify(result));
+          } else {
+            setStatus("缺少回调地址,无法完成(请从启动器发起验证)[页面: " + location.href + "]", "err");
+          }
+        }).onError(function () {
+          setStatus("极验验证出错,请重试", "err");
+        });
+      });
+    });
+  });
+</script>
+</body>
+</html>

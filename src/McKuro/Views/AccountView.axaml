@@ -1,0 +1,124 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:McKuro.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="McKuro.Views.AccountView"
+             x:DataType="vm:AccountViewModel">
+    <ScrollViewer>
+        <StackPanel Margin="25" Spacing="12" MaxWidth="760" HorizontalAlignment="Left">
+            <TextBlock Text="👤 账号" FontSize="24" FontWeight="Bold" Margin="0,0,0,8" />
+
+            <!-- 库街区 Token -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🔑" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="库街区 Token" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="登录库街区(kurobbs.com)网页版,按 F12 在网络请求头中复制 token 字段" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <TextBox Grid.Column="2" Width="320" VerticalAlignment="Center"
+                             Text="{Binding KujiequToken}"
+                             PlaceholderText="token" />
+                </Grid>
+            </Border>
+
+            <!-- 角色 ID -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="🎮" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="角色 ID (playerId)" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="游戏内账号的角色 ID,用于拉取角色养成数据" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <TextBox Grid.Column="2" Width="320" VerticalAlignment="Center"
+                             Text="{Binding RoleId}"
+                             PlaceholderText="playerId" />
+                </Grid>
+            </Border>
+
+            <!-- 库街区账号 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16" RowDefinitions="Auto,Auto">
+                    <Border Grid.Row="0" Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <TextBlock Text="👤" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <TextBlock Text="库街区账号" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="在「签到」页登录;此处可切换 / 移除已保存账号" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <ComboBox Width="260"
+                                  ItemsSource="{Binding AccountOptions}"
+                                  SelectedIndex="{Binding SelectedAccountIndex, Mode=TwoWay}" />
+                        <Button Content="移除" Command="{Binding RemoveAccountCommand}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 官方养成评级(mcguide 登录) -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <StackPanel Spacing="12">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                            <TextBlock Text="🎯" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                            <TextBlock Text="官方养成评级" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="登录 mcguide 攻略站后,角色页显示官方养成达成度(grade/属性/声骸/技能/共鸣链/武器)" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorPrimary}"
+                                   Text="{Binding GuideStatusText}" />
+                    </Grid>
+
+                    <!-- 未登录:登录表单 -->
+                    <StackPanel Spacing="8" IsVisible="{Binding !GuideLoggedIn}">
+                        <TextBlock Text="未登录时角色页将隐藏「官方养成评级」区;登录后自动显示。" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
+                        <Grid ColumnDefinitions="2*,3*,Auto" ColumnSpacing="8">
+                            <TextBox PlaceholderText="手机号"
+                                     Text="{Binding GuideMobile, Mode=TwoWay}" />
+                            <TextBox Grid.Column="1" PlaceholderText="验证码"
+                                     Text="{Binding GuideCode, Mode=TwoWay}" />
+                            <Button Grid.Column="2" Content="{Binding GuideSmsButtonText}"
+                                    Command="{Binding SendGuideSmsCommand}"
+                                    IsEnabled="{Binding CanSendGuideSms}" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="登录" Classes="primary"
+                                    Command="{Binding GuideLoginCommand}" />
+                            <TextBlock Text="{Binding GuideSmsText}" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText2}"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 已登录:提示去角色页查看 -->
+                    <StackPanel Spacing="4" IsVisible="{Binding GuideLoggedIn}">
+                        <TextBlock Text="已登录。前往「角色数据」页即可查看官方养成评级。" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- 保存 -->
+            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
+                <Button Content="保存设置" Classes="primary"
+                        Command="{Binding SaveCommand}" />
+                <TextBlock Text="{Binding StatusText}" FontSize="13"
+                           Foreground="{DynamicResource SemiColorPrimary}"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

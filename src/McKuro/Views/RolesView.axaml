@@ -1,0 +1,487 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:roles="using:McKuro.Core.Models.Roles"
+             xmlns:guide="using:McKuro.Core.Models.Guide"
+             xmlns:vm="using:McKuro.ViewModels"
+             xmlns:controls="using:McKuro.Controls"
+             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="700"
+             x:Class="McKuro.Views.RolesView"
+             x:DataType="vm:RolesViewModel">
+    <UserControl.Resources>
+        <vm:BoolToBrushConverter x:Key="BoolToBrush" />
+        <vm:BoolToOpacityConverter x:Key="BoolToOpacity" />
+        <vm:WeaponStarBrushConverter x:Key="WeaponStarBrush" />
+        <vm:GreaterThanZeroConverter x:Key="GreaterThanZero" />
+        <vm:StarThumbBrushConverter x:Key="StarThumbBrush" />
+        <vm:PropLevelBrushConverter x:Key="PropLevelBrush" />
+        <vm:PropTextBrushConverter x:Key="PropTextBrush" />
+        <vm:PhantomQualityBrushConverter x:Key="PhantomQualityBrush" />
+        <vm:BoolToOkBrushConverter x:Key="BoolToOkBrush" />
+        <vm:NullableBoolToTextConverter x:Key="NullableBoolToText" />
+        <vm:ThemeAdaptiveEmphasisBrushConverter x:Key="EmphasisBrush" />
+        <vm:EchoRatingLevelBrushConverter x:Key="EchoRatingLevelBrush" />
+        <vm:StringNotEmptyConverter x:Key="StringNotEmpty" />
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="Auto,Auto,*">
+        <!-- 标题 -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="20,12,20,6">
+            <StackPanel Spacing="2">
+                <TextBlock Text="👤 角色数据" FontSize="24" FontWeight="Bold" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="{Binding StatusText}"
+                               FontSize="12"
+                               Foreground="{DynamicResource SemiColorText2}" />
+                    <TextBlock Text="{Binding SourceText}"
+                               FontSize="12"
+                               Foreground="{DynamicResource SemiColorPrimary}" />
+                </StackPanel>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Button Content="读取本地缓存" Command="{Binding LoadFromLocalCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- 筛选栏:属性 + 排序 -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" Margin="20,0,20,6" ColumnSpacing="8">
+            <ComboBox Width="140"
+                      ItemsSource="{Binding AttributeFilters}"
+                      SelectedItem="{Binding SelectedAttributeFilter, Mode=TwoWay}" />
+            <ComboBox Grid.Column="1" Width="110"
+                      ItemsSource="{Binding SortOptions}"
+                      SelectedItem="{Binding SelectedSort, Mode=TwoWay}" />
+            <TextBlock Grid.Column="3" VerticalAlignment="Center" FontSize="12"
+                       Foreground="{DynamicResource SemiColorText3}"
+                       Text="进入页面自动同步;未登录/异常时可点「读取本地缓存」" />
+        </Grid>
+
+        <!-- 内容:角色列表 + 详情 -->
+        <Grid Grid.Row="2" ColumnDefinitions="300,*" ColumnSpacing="16" Margin="20,0,8,16"
+              IsVisible="{Binding HasRoles}">
+            <!-- 角色网格 (WutheringWavesTool RoleCell 风格,支持属性筛选+排序) -->
+            <ListBox Grid.Column="0"
+                     ItemsSource="{Binding FilteredRoles}"
+                     SelectedItem="{Binding SelectedRole, Mode=TwoWay}"
+                     Background="Transparent" BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="roles:RoleDetail">
+                        <Border CornerRadius="10" Padding="8" Margin="0,0,8,8" Width="96"
+                                Background="{DynamicResource SemiColorBg2}">
+                            <StackPanel Spacing="4">
+                                <!-- 图标 + 左上属性 + 右上链数(参照 WutheringWavesTool RoleCell) -->
+                                <Grid>
+                                    <Border Width="80" Height="80" CornerRadius="8"
+                                            Background="{DynamicResource SemiColorBg3}"
+                                            ClipToBounds="True"
+                                            HorizontalAlignment="Center">
+                                        <controls:AsyncImage ImageUrl="{Binding Role.RoleIconUrl}"
+                                                             Width="80" Height="80"
+                                                             Stretch="UniformToFill" />
+                                    </Border>
+                                    <!-- 左上:属性图标(本地 Assets/attr/{id}.png,参照 WutheringWavesTool attrIV) -->
+                                    <Border Background="{DynamicResource SemiColorBg1}" CornerRadius="4"
+                                            Padding="2" Margin="1"
+                                            HorizontalAlignment="Left" VerticalAlignment="Top" Opacity="0.92">
+                                        <controls:AsyncImage ImageUrl="{Binding AttributeIconPath}"
+                                                             Width="18" Height="18" Stretch="Uniform" />
+                                    </Border>
+                                    <!-- 右上:数字+链(仅在确有链信息时显示) -->
+                                    <Border Background="{DynamicResource SemiColorBg1}" CornerRadius="4"
+                                            Padding="4,1" Margin="1"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top" Opacity="0.9"
+                                            IsVisible="{Binding ChainCount, Converter={StaticResource GreaterThanZero}}">
+                                        <TextBlock FontSize="9" Foreground="{Binding Converter={StaticResource EmphasisBrush}}" FontWeight="SemiBold">
+                                            <Run Text="{Binding UnlockedChainCount}" /><Run Text="链" />
+                                        </TextBlock>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Text="{Binding RoleName}" FontSize="12" FontWeight="SemiBold"
+                                           HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                           MaxWidth="88" />
+                                <TextBlock Text="{Binding LevelText}" FontSize="11" HorizontalAlignment="Center"
+                                           Foreground="{DynamicResource SemiColorText2}" />
+                                <!-- 底部星级色条(参照 WutheringWavesTool thumb) -->
+                                <Border Height="3" CornerRadius="2"
+                                        Background="{Binding StarLevel, Converter={StaticResource StarThumbBrush}}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+                <ListBox.Styles>
+                    <Style Selector="ListBoxItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0" />
+                        <Setter Property="Background" Value="Transparent" />
+                    </Style>
+                    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                        <Setter Property="Background" Value="{DynamicResource SemiColorBg3}" />
+                        <Setter Property="CornerRadius" Value="10" />
+                    </Style>
+                </ListBox.Styles>
+            </ListBox>
+
+            <!-- 角色详情 (布局参照 WutheringWavesTool OwnRoleDetailView) -->
+            <ScrollViewer Grid.Column="1">
+                <Border CornerRadius="12"
+                        Background="{DynamicResource SemiColorBg2}"
+                        Padding="20,12,16,16">
+                    <StackPanel Spacing="14">
+                                                                        <!-- ① 角色大图卡片:仅角色图 + 基本信息,背景右下放射渐变 -->
+                        <Border CornerRadius="12" Height="430" ClipToBounds="True"
+                                Background="{Binding RoleHeaderBackground}">
+                            <Grid>
+                                <!-- 角色大图:右下角完整显示 -->
+                                <controls:AsyncImage ImageUrl="{Binding SelectedRole.Role.RolePicUrl}"
+                                                     Stretch="Uniform"
+                                                     VerticalAlignment="Bottom"
+                                                     HorizontalAlignment="Right"
+                                                     MaxHeight="410" Margin="0,0,-24,0" />
+                                <!-- 半透明遮罩:保证文字可读 -->
+                                <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.30" />
+
+                                <!-- 顶部:角色名 + 星级 + 属性图标 + 等级 -->
+                                <StackPanel VerticalAlignment="Top" Margin="16" Spacing="6">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="{Binding SelectedRole.RoleName}" FontSize="26"
+                                                   FontWeight="Bold" Foreground="{DynamicResource SemiColorText2}">
+                                            <TextBlock.Effect>
+                                                <DropShadowEffect BlurRadius="4" OffsetY="1" Opacity="0.6"
+                                                                  Color="#000000" />
+                                            </TextBlock.Effect>
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding SelectedRole.StarLevel, StringFormat={}{0}★}"
+                                                   FontSize="16" Foreground="{Binding Converter={StaticResource EmphasisBrush}}"
+                                                   VerticalAlignment="Bottom" FontWeight="SemiBold" />
+                                        <Border Background="{DynamicResource SemiColorBg1}" CornerRadius="4"
+                                                Padding="3" Opacity="0.9" VerticalAlignment="Center"
+                                                IsVisible="{Binding SelectedRole.Role.AttributeId, Converter={StaticResource GreaterThanZero}}">
+                                            <controls:AsyncImage ImageUrl="{Binding SelectedRole.AttributeIconPath}"
+                                                                 Width="20" Height="20" Stretch="Uniform" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
+                                        <Run Text="Lv." /><Run Text="{Binding SelectedRole.Role.Level}" />
+                                        <Run Text=" · 突破 " /><Run Text="{Binding SelectedRole.Role.Breach}" />
+                                        <Run Text=" · " /><Run Text="{Binding SelectedRole.AttributeName}" />
+                                        <Run Text=" · 共鸣链 " /><Run Text="{Binding SelectedRole.UnlockedChainCount}" />
+                                        <Run Text="/" /><Run Text="{Binding SelectedRole.ChainCount}" />
+                                    </TextBlock>
+                                </StackPanel>
+
+                                <!-- 左中部:武器 + 技能(参照 WutheringWavesTool 中部 HBox) -->
+                                <StackPanel VerticalAlignment="Center" Margin="16,0,0,0"
+                                            HorizontalAlignment="Left" Spacing="14">
+                                    <!-- 武器 -->
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <Border Width="56" Height="56" CornerRadius="8" ClipToBounds="True"
+                                                Background="{Binding SelectedRole.WeaponData.StarLevel, Converter={StaticResource WeaponStarBrush}}">
+                                            <controls:AsyncImage ImageUrl="{Binding SelectedRole.WeaponData.Weapon.WeaponIcon}"
+                                                                 Width="56" Height="56" Stretch="UniformToFill" />
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="{Binding SelectedRole.WeaponData.DisplayName}" FontSize="15"
+                                                       FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="140" />
+                                            <TextBlock FontSize="12"
+                                                       Foreground="{DynamicResource SemiColorText2}">
+                                                <Run Text="Lv." /><Run Text="{Binding SelectedRole.WeaponData.Level}" />
+                                                <Run Text=" · 突破" /><Run Text="{Binding SelectedRole.WeaponData.Breach}" />
+                                                <Run Text=" · 精炼" /><Run Text="{Binding SelectedRole.WeaponData.Rank}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <!-- 技能等级横排 -->
+                                    <ItemsControl ItemsSource="{Binding SelectedRole.Skills}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" Spacing="10" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="roles:SkillInfo">
+                                                <StackPanel Spacing="3" Width="52">
+                                                    <Border Width="44" Height="44" CornerRadius="8" ClipToBounds="True"
+                                                            Background="{DynamicResource SemiColorBg1}" Opacity="0.85">
+                                                        <controls:AsyncImage ImageUrl="{Binding Skill.IconUrl}" Width="44"
+                                                                             Height="44" Stretch="UniformToFill" />
+                                                    </Border>
+                                                    <TextBlock Text="{Binding SkillLevel, StringFormat=Lv.{0}}"
+                                                               FontSize="11" HorizontalAlignment="Center"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource SemiColorText2}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+
+                        <Border CornerRadius="12" Padding="14"
+                                Background="{DynamicResource SemiColorBg3}"
+                                IsVisible="{Binding SelectedRole.HasAttributes}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="属性" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource SemiColorText2}" />
+                                <ItemsControl ItemsSource="{Binding SelectedRole.Attributes}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="roles:RoleAttribute">
+                                            <!-- 每个属性项:图标 + 名称 + 值(参照 WutheringWavesTool RoleItem) -->
+                                            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}"
+                                                    Padding="8,4" Margin="0,0,8,8" MinWidth="170">
+                                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                                    <controls:AsyncImage Grid.Column="0" ImageUrl="{Binding IconUrl}"
+                                                                         IsVisible="{Binding IconUrl, Converter={StaticResource StringNotEmpty}}"
+                                                                         Width="26" Height="26" Stretch="Uniform" />
+                                                    <TextBlock Grid.Column="1" FontSize="14" FontWeight="Bold"
+                                                               VerticalAlignment="Center"
+                                                               Text="{Binding AttributeName}" />
+                                                    <TextBlock Grid.Column="2" FontSize="14" FontWeight="Bold"
+                                                               VerticalAlignment="Center"
+                                                               Text="{Binding AttributeValue}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ④ 共鸣链进度条 卡片 -->
+                        <Border CornerRadius="12" Padding="14"
+                                Background="{DynamicResource SemiColorBg3}">
+                            <StackPanel Spacing="10">
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Text="🔗 共鸣链" FontSize="14" FontWeight="SemiBold" />
+                                    <TextBlock FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource SemiColorPrimary}">
+                                        <Run Text="{Binding SelectedRole.UnlockedChainCount}" />
+                                        <Run Text="/" />
+                                        <Run Text="{Binding SelectedRole.ChainCount}" />
+                                    </TextBlock>
+                                    <!-- 6 链全解锁:显示称号 -->
+                                    <TextBlock Text="{Binding SelectedRole.FullChainTitle}"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{Binding Converter={StaticResource EmphasisBrush}}"
+                                               IsVisible="{Binding SelectedRole.IsFullChain}"
+                                               TextTrimming="CharacterEllipsis" MaxWidth="220" />
+                                </StackPanel>
+
+                                <!-- 分段进度条:每段对应一条链,已解锁点亮 -->
+                                <ItemsControl ItemsSource="{Binding SelectedRole.Chains}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Columns="{Binding SelectedRole.ChainCount}" ColumnSpacing="8" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="roles:ChainInfo">
+                                            <StackPanel Spacing="4">
+                                                <Border Height="8" CornerRadius="4"
+                                                        Background="{Binding IsUnlock, Converter={StaticResource BoolToBrush}}" />
+                                                <TextBlock Text="{Binding ChainName}" FontSize="10"
+                                                           HorizontalAlignment="Center"
+                                                           Foreground="{DynamicResource SemiColorText3}"
+                                                           TextTrimming="CharacterEllipsis" MaxWidth="90" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+<!-- ③ mcguide 官方养成达成度(仅登录后显示;登录入口在设置页) -->
+                        <Border CornerRadius="12" Padding="14"
+                                Background="{DynamicResource SemiColorBg3}"
+                                IsVisible="{Binding GuideLoggedIn}">
+                            <StackPanel Spacing="10">
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Text="🎯 mcguide 官方达成度" FontSize="14" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding GuideStatusText}" FontSize="12"
+                                               Foreground="{DynamicResource SemiColorText2}"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <!-- 已登录且拉到数据:达成度展示 -->
+                                <StackPanel Spacing="10" IsVisible="{Binding HasGuideAchievement}">
+                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                        <!-- grade 大徽章 -->
+                                        <Border CornerRadius="10" Padding="14,8" Background="#1a1a1a">
+                                            <TextBlock Text="{Binding GuideAchievement.Grade}" FontSize="28"
+                                                       FontWeight="Bold" Foreground="#f8f05c"
+                                                       VerticalAlignment="Center" />
+                                        </Border>
+                                        <!-- 概览:属性/共鸣链/声骸达标 -->
+                                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
+                                                <Run Text="属性达标 " />
+                                                <Run Text="{Binding GuideAchievement.RoleAttribute.FinishedCount}" />
+                                                <Run Text="/" />
+                                                <Run Text="{Binding GuideAchievement.RoleAttribute.TotalCount}" />
+                                            </TextBlock>
+                                            <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
+                                                <Run Text="共鸣链 " />
+                                                <Run Text="{Binding GuideAchievement.RoleResonance.AcquiredCount}" />
+                                                <Run Text="/" />
+                                                <Run Text="{Binding GuideAchievement.RoleResonance.TotalCount}" />
+                                            </TextBlock>
+                                            <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
+                                                <Run Text="声骸 " />
+                                                <Run Text="{Binding GuideAchievement.Echo.IsFinished, Converter={StaticResource NullableBoolToText}}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- 属性达标明细 -->
+                                    <ItemsControl ItemsSource="{Binding GuideAchievement.RoleAttribute.Items}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="guide:GuideAttributeItem">
+                                                <Border CornerRadius="6" Background="{DynamicResource SemiColorBg1}"
+                                                        Padding="8,4" Margin="0,0,8,8">
+                                                    <StackPanel Spacing="2">
+                                                        <TextBlock FontSize="12" FontWeight="SemiBold">
+                                                            <Run Text="{Binding Name}" />
+                                                            <Run Text="{Binding IsFinished, StringFormat=' {0}'}"
+                                                                 Foreground="{Binding IsFinished, Converter={StaticResource BoolToOkBrush}}" />
+                                                        </TextBlock>
+                                                        <TextBlock FontSize="11"
+                                                                   Foreground="{DynamicResource SemiColorText2}">
+                                                            <Run Text="推荐 " /><Run Text="{Binding RecommendAmount}" />
+                                                            <Run Text=" · 当前 " /><Run Text="{Binding CurrentAmount}" />
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ④ 声骸 (WutheringWavesTool Phantom 风格) -->
+                        <StackPanel Spacing="6" IsVisible="{Binding SelectedRole.HasPhantoms}">
+                            <TextBlock Text="声骸" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource SemiColorText2}" />
+                            <ItemsControl ItemsSource="{Binding SelectedRole.PhantomData.Phantoms}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="roles:EchoInfo">
+                                        <Border CornerRadius="8" Background="{DynamicResource SemiColorBg3}"
+                                                Padding="10" Margin="0,0,8,8" Width="270">
+                                            <StackPanel Spacing="8">
+                                                <!-- 头部:品质底色图标 + 名字/套装/等级(参照 WutheringWavesTool main-prop icon) -->
+                                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                                    <Border Width="56" Height="56" CornerRadius="6"
+                                                            ClipToBounds="True"
+                                                            Background="{Binding Quality, Converter={StaticResource PhantomQualityBrush}}">
+                                                        <controls:AsyncImage ImageUrl="{Binding IconUrl}"
+                                                                             Width="56" Height="56"
+                                                                             Stretch="UniformToFill" />
+                                                    </Border>
+                                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding PhantomName}" FontSize="14"
+                                                                   FontWeight="SemiBold"
+                                                                   TextTrimming="CharacterEllipsis" MaxWidth="160" />
+                                                        <!-- 词条评级徽章(参照 WutheringWavesTool PhantomItem top:ACE红/SSS黄/S紫/N灰) -->
+                                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                                            <TextBlock FontSize="12" FontWeight="Bold"
+                                                                       Foreground="{Binding PhantomStatus, Converter={StaticResource EchoRatingLevelBrush}}">
+                                                                <Run Text="词条:" /><Run Text="{Binding PhantomRatingText}" />
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <controls:AsyncImage ImageUrl="{Binding FetterDetail.IconUrl}"
+                                                                                 Width="16" Height="16" Stretch="Uniform" />
+                                                            <TextBlock Text="{Binding FetterName}" FontSize="12"
+                                                                       Foreground="{DynamicResource SemiColorText2}" />
+                                                        </StackPanel>
+                                                        <TextBlock FontSize="12"
+                                                                   Foreground="{DynamicResource SemiColorText2}">
+                                                            <Run Text="Lv." /><Run Text="{Binding Level}" />
+                                                            <Run Text=" · 品质" /><Run Text="{Binding Quality}" />
+                                                            <Run Text=" · " /><Run Text="{Binding Cost}" />
+                                                            <Run Text="费" />
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <!-- 主词条(参照 WutheringWavesTool main-prop1/2,字体 15+ bold) -->
+                                                <ItemsControl ItemsSource="{Binding MainProps}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="roles:EchoProp">
+                                                            <Grid>
+                                                                <TextBlock Grid.Column="0" FontSize="15"
+                                                                           FontWeight="SemiBold"
+                                                                           Text="{Binding AttributeName}" />
+                                                                <TextBlock Grid.Column="1" FontSize="15"
+                                                                           FontWeight="Bold"
+                                                                           Foreground="{DynamicResource SemiColorPrimary}"
+                                                                           Text="{Binding AttributeValue}" />
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
+                                                <!-- 副词条(参照 WutheringWavesTool sub-prop1/2:有效词条色条+文字高亮,字体 14 bold) -->
+                                                <ItemsControl ItemsSource="{Binding SubProps}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="roles:EchoProp">
+                                                            <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+                                                                <Border Grid.Column="0" Width="6" Height="16" CornerRadius="3"
+                                                                        VerticalAlignment="Center"
+                                                                        Background="{Binding EffectiveLevel, Converter={StaticResource PropLevelBrush}}" />
+                                                                <TextBlock Grid.Column="1" FontSize="14"
+                                                                           FontWeight="Bold"
+                                                                           Foreground="{Binding EffectiveLevel, Converter={StaticResource PropTextBrush}}"
+                                                                           Text="{Binding AttributeName}" />
+                                                                <TextBlock Grid.Column="3" FontSize="14"
+                                                                           FontWeight="Bold"
+                                                                           Foreground="{Binding EffectiveLevel, Converter={StaticResource PropTextBrush}}"
+                                                                           Text="{Binding AttributeValue}" />
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- 空状态 -->
+        <StackPanel Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
+                    IsVisible="{Binding !HasRoles}">
+            <TextBlock Text="暂无角色数据" FontSize="18" Foreground="{DynamicResource SemiColorText2}"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="点击「从库街区同步」拉取当前账号角色,或「读取本地数据」解析游戏本地缓存。"
+                       FontSize="13" Foreground="{DynamicResource SemiColorText3}"
+                       HorizontalAlignment="Center" />
+        </StackPanel>
+    </Grid>
+</UserControl>

@@ -1,0 +1,187 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:McKuro.ViewModels"
+             xmlns:controls="using:McKuro.Controls"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="McKuro.Views.ActivityView"
+             x:DataType="vm:ActivityViewModel">
+    <UserControl.Resources>
+        <vm:GanttWidthConverter x:Key="GanttWidth" />
+        <vm:GanttMarginConverter x:Key="GanttMargin" />
+        <vm:OngoingOpacityConverter x:Key="OngoingOpacity" />
+    </UserControl.Resources>
+    <Grid RowDefinitions="Auto,*" Margin="20,16,20,16">
+        <!-- 标题 -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+            <StackPanel Spacing="2">
+                <TextBlock Text="🎡 活动" FontSize="24" FontWeight="Bold" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="{Binding StatusText}" FontSize="12"
+                               Foreground="{DynamicResource SemiColorText2}" />
+                </StackPanel>
+            </StackPanel>
+            <Button Grid.Column="1" Content="刷新" Classes="primary" VerticalAlignment="Center"
+                    Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsBusy}" />
+        </Grid>
+
+        <ScrollViewer Grid.Row="1">
+            <StackPanel Spacing="16" IsVisible="{Binding HasData}">
+                <!-- ① 版本活动甘特图 -->
+                <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="📅 版本活动 (甘特图)" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="已过期的自动剔除" FontSize="11"
+                                       Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <!-- 甘特图主体(固定 640 参考宽,窄窗口可横向滚动) -->
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                            <Grid ColumnDefinitions="150,660" ColumnSpacing="12">
+                                <!-- 左列:活动名 -->
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="活动" FontSize="10" Foreground="{DynamicResource SemiColorText3}"
+                                               Height="16" />
+                                    <ItemsControl ItemsSource="{Binding VersionActivities}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Spacing="6" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:ActivityGanttItem">
+                                                <StackPanel Spacing="1" Width="150" Height="30">
+                                                    <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding TimeRangeText}" FontSize="10"
+                                                               Foreground="{DynamicResource SemiColorText3}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+
+                                <!-- 右列:时间轴 + 甘特条 -->
+                                <Grid Grid.Column="1">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="16" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <!-- 当前日期竖线(跨整列) -->
+                                    <Border Grid.RowSpan="2" Width="2" Background="#e33737"
+                                            HorizontalAlignment="Left"
+                                            Margin="{Binding GanttTodayPercent, Converter={StaticResource GanttMargin}}"
+                                            IsHitTestVisible="False" />
+                                    <!-- 时间轴刻度 -->
+                                    <Grid Grid.Row="0" ColumnDefinitions="*,*" Margin="0,0,0,4">
+                                        <TextBlock Text="{Binding GanttStartText}" FontSize="10"
+                                                   Foreground="{DynamicResource SemiColorText3}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding GanttEndText}" FontSize="10"
+                                                   Foreground="{DynamicResource SemiColorText3}"
+                                                   HorizontalAlignment="Right" />
+                                    </Grid>
+                                    <!-- 甘特条区(带背景轨) -->
+                                    <ItemsControl Grid.Row="1" ItemsSource="{Binding VersionActivities}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Spacing="6" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:ActivityGanttItem">
+                                                <Grid Height="30" HorizontalAlignment="Stretch">
+                                                    <!-- 时间轴背景轨 -->
+                                                    <Border Background="{DynamicResource SemiColorBg3}" CornerRadius="4"
+                                                            Opacity="0.5" />
+                                                    <!-- 甘特条:活动主色 + 进度(已进行部分实色) -->
+                                                    <Border CornerRadius="4" Height="22" VerticalAlignment="Center"
+                                                            HorizontalAlignment="Left"
+                                                            Margin="{Binding LeftPercent, Converter={StaticResource GanttMargin}}"
+                                                            Width="{Binding WidthPercent, Converter={StaticResource GanttWidth}}"
+                                                            ClipToBounds="True">
+                                                        <Grid>
+                                                            <!-- 底层:整条(未进行/剩余部分,半透明) -->
+                                                            <Border Background="{Binding BarBrush}" Opacity="0.35" />
+                                                            <!-- 进度层:已进行部分(宽度=ProgressPercent%,实色) -->
+                                                            <Border Background="{Binding BarBrush}"
+                                                                    HorizontalAlignment="Left"
+                                                                    Width="{Binding ProgressPercent, Converter={StaticResource GanttWidth}}" />
+                                                            <!-- 进度百分比文本 -->
+                                                            <TextBlock Text="{Binding ProgressPercent, StringFormat={}{0:0}%}"
+                                                                       FontSize="9" Foreground="White"
+                                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                                       Margin="0,0,4,0" />
+                                                        </Grid>
+                                                    </Border>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Grid>
+                            </Grid>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
+                <!-- ② 换取活动(卡池)倒计时 -->
+                <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="🎴 换取活动 (卡池)" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="带倒计时,独立于版本活动" FontSize="11"
+                                       Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ItemsControl ItemsSource="{Binding PoolActivities}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ActivityPoolItem">
+                                    <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}"
+                                            Padding="12" Margin="0,0,10,10" MinWidth="240">
+                                        <StackPanel Spacing="8">
+                                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                                <Border Width="44" Height="44" CornerRadius="6" ClipToBounds="True"
+                                                        Background="{DynamicResource SemiColorBg2}">
+                                                    <controls:AsyncImage ImageUrl="{Binding ImageUrl}"
+                                                                         Width="44" Height="44" Stretch="UniformToFill" />
+                                                </Border>
+                                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis" MaxWidth="180" />
+                                                    <Border CornerRadius="4" Padding="5,1"
+                                                            Background="{DynamicResource SemiColorPrimary}"
+                                                            HorizontalAlignment="Left">
+                                                        <TextBlock Text="{Binding Category}" FontSize="10"
+                                                                   Foreground="White" />
+                                                    </Border>
+                                                </StackPanel>
+                                            </StackPanel>
+                                            <StackPanel Spacing="2">
+                                                <TextBlock Text="{Binding CountdownText}" FontSize="13" FontWeight="Bold"
+                                                           Foreground="{DynamicResource SemiColorPrimary}" />
+                                                <TextBlock Text="{Binding TimeRangeText}" FontSize="11"
+                                                           Foreground="{DynamicResource SemiColorText3}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- 空状态 -->
+        <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
+                    IsVisible="{Binding !HasData}">
+            <TextBlock Text="正在加载活动数据…" FontSize="16"
+                       Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
+        </StackPanel>
+    </Grid>
+</UserControl>

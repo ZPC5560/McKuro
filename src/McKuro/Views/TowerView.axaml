@@ -1,0 +1,147 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:McKuro.ViewModels"
+             xmlns:controls="using:McKuro.Controls"
+             xmlns:tower="using:McKuro.Core.Models.Tower"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="McKuro.Views.TowerView"
+             x:DataType="vm:TowerViewModel">
+    <Grid RowDefinitions="Auto,*" Margin="20,16,20,16">
+        <!-- 标题 -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+            <StackPanel Spacing="2">
+                <TextBlock Text="🗼 深塔 / 海墟" FontSize="24" FontWeight="Bold" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="{Binding StatusText}" FontSize="12"
+                               Foreground="{DynamicResource SemiColorText2}" />
+                </StackPanel>
+            </StackPanel>
+            <Button Grid.Column="1" Content="刷新数据" Classes="primary" VerticalAlignment="Center"
+                    Command="{Binding LoadCommand}" IsEnabled="{Binding !IsBusy}" />
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="16"
+              IsVisible="{Binding HasData}">
+            <!-- 深塔 -->
+            <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="16">
+                <Grid RowDefinitions="Auto,*">
+                    <TextBlock Grid.Row="0" Text="🏯 深塔(终焉矩阵)" FontSize="15" FontWeight="SemiBold"
+                               Margin="0,0,0,10" />
+                    <ScrollViewer Grid.Row="1">
+                        <ItemsControl ItemsSource="{Binding TowerModes}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="10" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:TowerModeItem">
+                                    <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}"
+                                            Padding="12,10">
+                                        <StackPanel Spacing="8">
+                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                                                <TextBlock Text="{Binding ModeName}" FontSize="15" FontWeight="SemiBold" />
+                                                <TextBlock Grid.Column="1" FontSize="13" Foreground="{DynamicResource SemiColorText2}">
+                                                    <Run Text="分数 " /><Run Text="{Binding ScoreText}" FontWeight="Bold" />
+                                                </TextBlock>
+                                                <Border Grid.Column="2" CornerRadius="5" Padding="7,2"
+                                                        Background="{Binding RankColor}">
+                                                    <TextBlock Text="{Binding RankText}" FontSize="12" FontWeight="Bold"
+                                                               Foreground="Black" />
+                                                </Border>
+                                            </Grid>
+                                            <!-- 配队角色 -->
+                                            <ItemsControl ItemsSource="{Binding Roles}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" Spacing="6" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="tower:NewTowerRole">
+                                                        <Border Width="34" Height="34" CornerRadius="6"
+                                                                ClipToBounds="True"
+                                                                Background="{DynamicResource SemiColorBg2}">
+                                                            <controls:AsyncImage ImageUrl="{Binding IconUrl}"
+                                                                                 Width="34" Height="34"
+                                                                                 Stretch="UniformToFill" />
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- 海墟 -->
+            <Border Grid.Column="1" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="16">
+                <Grid RowDefinitions="Auto,*">
+                    <TextBlock Grid.Row="0" Text="🌊 海墟(再生海域)" FontSize="15" FontWeight="SemiBold"
+                               Margin="0,0,0,10" />
+                    <ScrollViewer Grid.Row="1">
+                        <ItemsControl ItemsSource="{Binding SlashChallenges}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="10" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:SlashChallengeItem">
+                                    <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}"
+                                            Padding="12,10">
+                                        <StackPanel Spacing="8">
+                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                                                <TextBlock Text="{Binding ChallengeName}" FontSize="15" FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="1" FontSize="13" Foreground="{DynamicResource SemiColorText2}">
+                                                    <Run Text="分数 " /><Run Text="{Binding ScoreText}" FontWeight="Bold" />
+                                                </TextBlock>
+                                                <Border Grid.Column="2" CornerRadius="5" Padding="7,2"
+                                                        Background="{Binding RankColor}">
+                                                    <TextBlock Text="{Binding RankText}" FontSize="12" FontWeight="Bold"
+                                                               Foreground="Black" />
+                                                </Border>
+                                            </Grid>
+                                            <ItemsControl ItemsSource="{Binding Roles}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" Spacing="6" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="tower:NewTowerRole">
+                                                        <Border Width="34" Height="34" CornerRadius="6"
+                                                                ClipToBounds="True"
+                                                                Background="{DynamicResource SemiColorBg2}">
+                                                            <controls:AsyncImage ImageUrl="{Binding IconUrl}"
+                                                                                 Width="34" Height="34"
+                                                                                 Stretch="UniformToFill" />
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- 空/未登录状态 -->
+        <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
+                    IsVisible="{Binding !HasData}">
+            <TextBlock Text="点击「刷新数据」加载深塔与海墟(需登录库街区)" FontSize="15"
+                       Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
+        </StackPanel>
+    </Grid>
+</UserControl>

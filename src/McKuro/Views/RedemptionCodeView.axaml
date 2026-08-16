@@ -1,0 +1,142 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:McKuro.ViewModels"
+             xmlns:redeem="using:McKuro.Core.Models.Redeem"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="McKuro.Views.RedemptionCodeView"
+             x:DataType="vm:RedemptionCodeViewModel">
+    <UserControl.Resources>
+        <vm:ValidOpacityConverter x:Key="ValidOpacity" />
+        <vm:ValidBrushConverter x:Key="ValidBrush" />
+        <vm:ValidTextConverter x:Key="ValidText" />
+        <vm:StringNotEmptyConverter x:Key="StringNotEmpty" />
+    </UserControl.Resources>
+    <Grid RowDefinitions="Auto,*" Margin="20,16,20,16">
+        <!-- 标题 -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+            <StackPanel Spacing="2">
+                <TextBlock Text="🎁 兑换码" FontSize="24" FontWeight="Bold" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="{Binding StatusText}" FontSize="12"
+                               Foreground="{DynamicResource SemiColorText2}" />
+                </StackPanel>
+            </StackPanel>
+            <Button Grid.Column="1" Content="刷新" VerticalAlignment="Center"
+                    Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsLoading}" />
+        </Grid>
+
+        <!-- 兑换码列表:国服 + 国际服 -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="16"
+              IsVisible="{Binding HasData}">
+            <!-- 国服 -->
+            <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="16">
+                <Grid RowDefinitions="Auto,*">
+                    <TextBlock Grid.Row="0" Text="🇨🇳 国服" FontSize="15" FontWeight="SemiBold"
+                               Margin="0,0,0,8" />
+                    <ListBox Grid.Row="1" ItemsSource="{Binding MainlandCodes}"
+                             SelectedItem="{Binding SelectedMainland, Mode=TwoWay}"
+                             Background="Transparent" BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="redeem:RedemptionCodeItem">
+                                <Border CornerRadius="8" Background="{DynamicResource SemiColorBg3}"
+                                        Padding="10,8" Margin="0,0,0,8"
+                                        Opacity="{Binding Valid, Converter={StaticResource ValidOpacity}}">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                        <StackPanel Spacing="3">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Key}" FontSize="14" FontWeight="Bold"
+                                                           FontFamily="Consolas" />
+                                                <Border CornerRadius="4" Padding="5,1"
+                                                        Background="{Binding Valid, Converter={StaticResource ValidBrush}}">
+                                                    <TextBlock Text="{Binding Valid, Converter={StaticResource ValidText}}"
+                                                               FontSize="10" Foreground="White" />
+                                                </Border>
+                                            </StackPanel>
+                                            <!-- 说明(如 3.6前瞻),有值才显示 -->
+                                            <TextBlock Text="{Binding Description}" FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource SemiColorPrimary}"
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="360"
+                                                       IsVisible="{Binding Description, Converter={StaticResource StringNotEmpty}}" />
+                                            <TextBlock Text="{Binding Reward}" FontSize="12"
+                                                       Foreground="{DynamicResource SemiColorText2}"
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="360" />
+                                            <TextBlock FontSize="11" Foreground="{DynamicResource SemiColorText3}">
+                                                <Run Text="{Binding StartTime}" />
+                                                <Run Text=" ~ " />
+                                                <Run Text="{Binding EndTime}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                            <Button Content="复制" Padding="12,3" FontSize="12"
+                                                    Command="{Binding $parent[ItemsControl].((vm:RedemptionCodeViewModel)DataContext).CopyMainlandCommand}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <!-- 国际服 -->
+            <Border Grid.Column="1" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="16">
+                <Grid RowDefinitions="Auto,*">
+                    <TextBlock Grid.Row="0" Text="🌍 国际服" FontSize="15" FontWeight="SemiBold"
+                               Margin="0,0,0,8" />
+                    <ListBox Grid.Row="1" ItemsSource="{Binding GlobalCodes}"
+                             SelectedItem="{Binding SelectedGlobal, Mode=TwoWay}"
+                             Background="Transparent" BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="redeem:RedemptionCodeItem">
+                                <Border CornerRadius="8" Background="{DynamicResource SemiColorBg3}"
+                                        Padding="10,8" Margin="0,0,0,8"
+                                        Opacity="{Binding Valid, Converter={StaticResource ValidOpacity}}">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                        <StackPanel Spacing="3">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Key}" FontSize="14" FontWeight="Bold"
+                                                           FontFamily="Consolas" />
+                                                <Border CornerRadius="4" Padding="5,1"
+                                                        Background="{Binding Valid, Converter={StaticResource ValidBrush}}">
+                                                    <TextBlock Text="{Binding Valid, Converter={StaticResource ValidText}}"
+                                                               FontSize="10" Foreground="White" />
+                                                </Border>
+                                            </StackPanel>
+                                            <!-- 说明(如 3.6前瞻),有值才显示 -->
+                                            <TextBlock Text="{Binding Description}" FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource SemiColorPrimary}"
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="360"
+                                                       IsVisible="{Binding Description, Converter={StaticResource StringNotEmpty}}" />
+                                            <TextBlock Text="{Binding Reward}" FontSize="12"
+                                                       Foreground="{DynamicResource SemiColorText2}"
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="360" />
+                                            <TextBlock FontSize="11" Foreground="{DynamicResource SemiColorText3}">
+                                                <Run Text="{Binding StartTime}" />
+                                                <Run Text=" ~ " />
+                                                <Run Text="{Binding EndTime}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="复制" Padding="12,3" FontSize="12"
+                                                VerticalAlignment="Center"
+                                                Command="{Binding $parent[ItemsControl].((vm:RedemptionCodeViewModel)DataContext).CopyGlobalCommand}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- 空/加载状态 -->
+        <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
+                    IsVisible="{Binding !HasData}">
+            <TextBlock Text="正在拉取兑换码…" FontSize="16"
+                       Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
+        </StackPanel>
+    </Grid>
+</UserControl>

@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- 应用图标(守岸人,多尺寸 ICO) -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <!-- Windows 平台定义(截图服务等平台相关代码使用) -->
+    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(DefineConstants);WINDOWS</DefineConstants>
+
+    <!-- Native AOT 发布 (win-x64 需在 Windows 上发布;osx-arm64 可本地验证) -->
+    <PublishAot>true</PublishAot>
+    <StripSymbols>true</StripSymbols>
+    <!-- 注意:不要启用 InvariantGlobalization —— Semi 主题需要 zh-CN 文化支持 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3">
+      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Semi.Avalonia" Version="12.1.0.1" />
+    <!-- 背景视频封面(可选):LibVLC native 库来自系统 VLC(macOS)或 VideoLAN.LibVLC.Windows(Windows);缺失时自动回退首帧图 -->
+    <PackageReference Include="LibVLCSharp.Avalonia" Version="3.10.1" />
+    <!-- DI 容器 + 日志(AOT 兼容) -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+  </ItemGroup>
+
+  <!-- 快捷键截图:仅 Windows 使用(System.Drawing.Common 自 .NET 9 起仅支持 Windows) -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\McKuro.Core\McKuro.Core.csproj" />
+  </ItemGroup>
+
+  <!-- 多语言资源:内嵌 JSON,由 LanguageService 加载 -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\lang\*.json" />
+  </ItemGroup>
+
+  <!-- avares 资源:窗口图标 + 导航栏 Logo(Window.Icon 通过 avares:// 解析;ApplicationIcon 只管 exe 图标,两者独立) -->
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\app.ico" />
+    <AvaloniaResource Include="Assets\shorekeeper_icon.png" />
+  </ItemGroup>
+
+  <!-- 极验滑块页 + 本地脚本 + 属性图标:发布到输出目录 -->
+  <ItemGroup>
+    <None Include="Assets\geetest.html" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\Js\*.js" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\attr\*.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
