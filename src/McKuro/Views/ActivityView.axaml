@@ -65,6 +65,27 @@
                                                     </Border>
                                                 </StackPanel>
                                             </StackPanel>
+                                            <!-- 4★ 角色/武器换取信息(首张 5★ 大图之后的内容小图,对齐 Haiyu 显示 4 张) -->
+                                            <StackPanel Spacing="4" IsVisible="{Binding HasFourStar}">
+                                                <TextBlock Text="4★ 角色/武器" FontSize="10"
+                                                           Foreground="{DynamicResource SemiColorText3}" />
+                                                <ItemsControl ItemsSource="{Binding FourStarImages}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <StackPanel Orientation="Horizontal" Spacing="6" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="x:String">
+                                                            <Border Width="40" Height="40" CornerRadius="6" ClipToBounds="True"
+                                                                    Background="{DynamicResource SemiColorBg2}">
+                                                                <controls:AsyncImage ImageUrl="{Binding}"
+                                                                                     Width="40" Height="40" Stretch="UniformToFill" />
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="{Binding CountdownText}" FontSize="13" FontWeight="Bold"
                                                            Foreground="{DynamicResource SemiColorPrimary}" />

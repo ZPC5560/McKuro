@@ -259,6 +259,9 @@ public sealed partial class GachaViewModel : ViewModelBase
         StatusText = "正在同步抽卡记录…";
         try
         {
+            // 先刷新 UP/歪 判定配置:避免整段会话沿用构造时的旧缓存(如新卡池开启后旧数据把当期 UP 误判为歪)
+            _upIds = await AppServices.UpPools.GetUpIdsAsync();
+
             // 双通道:优先云鸣潮(库街区)接口;失败或无登录则回退本地日志解密
             GachaSyncResult? result = null;
             if (AppServices.CloudGacha.HasSavedLogin)

@@ -38,6 +38,10 @@ public sealed class ActivityPoolItem
     public string? ImageUrl { get; init; }
     /// <summary>卡池全部内容图(5★/4★ 角色武器,对齐 Haiyu 显示 4 张)。</summary>
     public List<string> Images { get; init; } = [];
+    /// <summary>卡池 4★ 内容图(首张 5★ 大图之后的内容,如 4★ 角色/武器小图)。</summary>
+    public List<string> FourStarImages => Images.Skip(1).ToList();
+    /// <summary>是否有 4★ 内容(首图之后还有图)。</summary>
+    public bool HasFourStar => Images.Count > 1;
 }
 
 /// <summary>

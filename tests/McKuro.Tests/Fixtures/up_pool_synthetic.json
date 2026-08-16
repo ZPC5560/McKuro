@@ -1,0 +1,42 @@
+{
+  "code": 0,
+  "data": {
+    "five_group_config": {
+      "five_maps": [
+        { "name": "穗穗", "item_id": 1110, "weapon_id": 21050096 },
+        { "name": "爱弥斯", "item_id": 1210, "weapon_id": 21020076 },
+        { "name": "卡卡罗", "item_id": 1301, "weapon_id": 21010015 },
+        { "name": "忌炎", "item_id": 1404, "weapon_id": 21010016 }
+      ]
+    },
+    "pool_list": [
+      {
+        "start_at": "2026-01-01 10:00:00",
+        "end_at": "2026-12-31 11:59:00",
+        "pool_id": "p-role-a",
+        "up_five_names": "穗穗,爱弥斯",
+        "up_five_ids": "1110,1210",
+        "up_four_ids": "1103,1204,1504",
+        "type": "role"
+      },
+      {
+        "start_at": "2026-01-01 10:00:00",
+        "end_at": "2026-12-31 11:59:00",
+        "pool_id": "p-weapon-a",
+        "up_five_names": "栖霞饮露,永远的启明星",
+        "up_five_ids": "21050096,21020076",
+        "up_four_ids": "21050024,21020084",
+        "type": "weapon"
+      },
+      {
+        "start_at": "2025-01-01 10:00:00",
+        "end_at": "2025-12-31 11:59:00",
+        "pool_id": "p-role-old",
+        "up_five_names": "卡卡罗",
+        "up_five_ids": "1301",
+        "up_four_ids": "1102,1202",
+        "type": "role"
+      }
+    ]
+  }
+}

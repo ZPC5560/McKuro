@@ -120,12 +120,12 @@
                                     <TextBlock Text="操作" FontSize="13" FontWeight="SemiBold" Foreground="White" />
                                     <StackPanel Orientation="Horizontal" Spacing="10">
                                         <Button Content="📂 打开目录" Command="{Binding OpenGameFolderCommand}"
-                                                Background="#1CFFFFFF" BorderBrush="#38FFFFFF" BorderThickness="1"
-                                                CornerRadius="18" Padding="18,7" Foreground="#F2F6FF" />
+                                                Background="#55FFFFFF" BorderBrush="#6BFFFFFF" BorderThickness="1"
+                                                CornerRadius="18" Padding="18,7" Foreground="White" />
                                         <Button Content="🔧 修复游戏" Command="{Binding RepairGameCommand}"
                                                 IsEnabled="{Binding IsInstalled}"
-                                                Background="#1CFFFFFF" BorderBrush="#38FFFFFF" BorderThickness="1"
-                                                CornerRadius="18" Padding="18,7" Foreground="#F2F6FF" />
+                                                Background="#55FFFFFF" BorderBrush="#6BFFFFFF" BorderThickness="1"
+                                                CornerRadius="18" Padding="18,7" Foreground="White" />
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -203,7 +203,7 @@
                         </StackPanel>
 
                         <!-- 启动/安装大按钮 (窄 20%,右下角,文字居中) -->
-                        <StackPanel Grid.Column="1" Width="220" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="10">
+                        <StackPanel Grid.Column="2" Width="220" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="10">
                             <Button Height="56"
                                     Padding="0"
                                     FontSize="15"

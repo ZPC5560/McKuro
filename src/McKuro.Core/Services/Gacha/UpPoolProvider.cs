@@ -48,7 +48,7 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
                 UpPoolJsonContext.Default.FiveGroupModel,
                 ct).ConfigureAwait(false);
 
-            var result = BuildMap(model);
+            var result = BuildMap(model, _time.GetLocalNow());
             _cache = result;
             _cacheTime = _time.GetUtcNow();
             return result;
@@ -60,26 +60,49 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
         }
     }
 
-    private static IReadOnlyDictionary<CardPoolType, HashSet<int>> BuildMap(FiveGroupModel? model)
+    private static IReadOnlyDictionary<CardPoolType, HashSet<int>> BuildMap(FiveGroupModel? model, DateTimeOffset now)
     {
         var map = new Dictionary<CardPoolType, HashSet<int>>();
-        if (model?.Data?.FiveGroupConfig?.FiveMaps is null)
+        if (model?.Data is null)
         {
             return map;
         }
 
         var roleIds = new HashSet<int>();
         var weaponIds = new HashSet<int>();
-        foreach (var m in model.Data.FiveGroupConfig.FiveMaps)
+
+        // 权威来源:pool_list 中当前生效(按 start_at/end_at)的卡池。
+        // five_maps 只是全量五星目录(含所有历史限定),不能当"当期 UP"用——
+        // 否则旧限定(如卡卡罗)会被误判为 UP,且新角色若尚未进目录会被误判为歪。
+        if (model.Data.PoolList is { Count: > 0 } pools)
         {
-            if (m.ItemId > 0)
+            var localNow = now.LocalDateTime;
+            foreach (var pool in pools)
             {
-                roleIds.Add(m.ItemId);
+                if (!IsPoolActive(pool, localNow))
+                {
+                    continue;
+                }
+                var ids = ParseIds(pool.UpFiveIds);
+                if (string.Equals(pool.Type, "role", StringComparison.OrdinalIgnoreCase))
+                {
+                    roleIds.UnionWith(ids);
+                }
+                else if (string.Equals(pool.Type, "weapon", StringComparison.OrdinalIgnoreCase))
+                {
+                    weaponIds.UnionWith(ids);
+                }
             }
-            if (m.WeaponId > 0)
+
+            // pool_list 存在但没有生效卡池(两期之间)时,用全量目录兜底以避免误判
+            if (roleIds.Count == 0 && weaponIds.Count == 0)
             {
-                weaponIds.Add(m.WeaponId);
+                CollectFromFiveMaps(model.Data.FiveGroupConfig?.FiveMaps, roleIds, weaponIds);
             }
+        }
+        else
+        {
+            CollectFromFiveMaps(model.Data.FiveGroupConfig?.FiveMaps, roleIds, weaponIds);
         }
 
         var all = new HashSet<int>(roleIds);
@@ -101,5 +124,64 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
         map[CardPoolType.RoleResident] = all;
         map[CardPoolType.WeaponsResident] = weaponIds;
         return map;
+    }
+
+    /// <summary>从全量五星目录(five_maps)收集角色/武器 ID(兜底用)。</summary>
+    private static void CollectFromFiveMaps(
+        IReadOnlyList<FiveMap>? fiveMaps,
+        HashSet<int> roleIds,
+        HashSet<int> weaponIds)
+    {
+        if (fiveMaps is null)
+        {
+            return;
+        }
+        foreach (var m in fiveMaps)
+        {
+            if (m is null)
+            {
+                continue;
+            }
+            if (m.ItemId > 0)
+            {
+                roleIds.Add(m.ItemId);
+            }
+            if (m.WeaponId > 0)
+            {
+                weaponIds.Add(m.WeaponId);
+            }
+        }
+    }
+
+    /// <summary>卡池是否在生效期内(兼容 "yyyy-MM-dd HH:mm:ss" 与 ISO 8601)。</summary>
+    private static bool IsPoolActive(PoolItem pool, DateTime now)
+    {
+        if (string.IsNullOrWhiteSpace(pool.StartAt) || string.IsNullOrWhiteSpace(pool.EndAt))
+        {
+            return false;
+        }
+        if (!DateTime.TryParse(pool.StartAt, out var start) || !DateTime.TryParse(pool.EndAt, out var end))
+        {
+            return false;
+        }
+        return now >= start && now <= end;
+    }
+
+    /// <summary>解析逗号分隔的 UP 五星 ID 字符串。</summary>
+    private static HashSet<int> ParseIds(string? raw)
+    {
+        var result = new HashSet<int>();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return result;
+        }
+        foreach (var part in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (int.TryParse(part, out var id) && id > 0)
+            {
+                result.Add(id);
+            }
+        }
+        return result;
     }
 }

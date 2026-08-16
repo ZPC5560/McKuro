@@ -24,4 +24,8 @@
     <ProjectReference Include="..\..\src\McKuro.Core\McKuro.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Fixtures\up_pool_synthetic.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
