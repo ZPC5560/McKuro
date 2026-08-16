@@ -10,6 +10,8 @@
         Width="1150" Height="650"
         MinWidth="900" MinHeight="509"
         CanResize="True"
+        WindowDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
         WindowStartupLocation="CenterScreen"
         Title="McKuro · 鸣潮启动器"
         Icon="avares://McKuro/Assets/app.ico"
@@ -54,7 +56,34 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid ColumnDefinitions="60,*">
+    <Grid RowDefinitions="Auto,*">
+        <!-- 自定义标题栏(无边框模式:拖动 + 最小化/关闭) -->
+        <Border Grid.Row="0" Height="34" Background="{DynamicResource SemiColorBg1}"
+                BorderBrush="{DynamicResource SemiColorBg3}" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="*,Auto" Margin="8,0,8,0">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                            Background="Transparent"
+                            PointerPressed="TitleBar_OnPointerPressed">
+                    <TextBlock Text="🌊" FontSize="14" VerticalAlignment="Center" />
+                    <TextBlock Text="McKuro · 鸣潮启动器" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{DynamicResource SemiColorText1}" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                    <Button Content="—" Width="34" Height="26" Padding="0" FontSize="14"
+                            Background="Transparent" BorderThickness="0"
+                            Click="MinimizeButton_Click" />
+                    <Button Content="❐" Width="34" Height="26" Padding="0" FontSize="12"
+                            Background="Transparent" BorderThickness="0"
+                            Click="MaximizeButton_Click" />
+                    <Button Content="✕" Width="34" Height="26" Padding="0" FontSize="14"
+                            Background="Transparent" BorderThickness="0"
+                            Click="CloseButton_Click" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 内容区:左导航 + 页面 -->
+        <Grid Grid.Row="1" ColumnDefinitions="60,*">
         <!-- 左侧 60px 图标导航 (参照 Java 项目:顶部圆形应用 Logo + 导航项图标) -->
         <Border Grid.Column="0" Background="{DynamicResource SemiColorBg2}">
             <DockPanel>
@@ -109,5 +138,6 @@
         <Border Grid.Column="1">
             <ContentControl Content="{Binding CurrentPage}" />
         </Border>
+        </Grid>
     </Grid>
 </Window>

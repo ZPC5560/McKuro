@@ -182,6 +182,13 @@ public sealed class LocalGameDailyDataService
                 Total = b.MaxEnergy,
                 Value = $"{b.Energy}/{b.MaxEnergy}",
             },
+            StoreEnergyData = b is null || b.StoreEnergy is null ? null : new RoleDailyDetail
+            {
+                Name = "结晶单质",
+                Cur = (int)b.StoreEnergy.Value,
+                Total = b.MaxStoreEnergy ?? 0,
+                Value = $"{b.StoreEnergy}/{b.MaxStoreEnergy}",
+            },
             LivenessData = b is null ? null : new RoleDailyDetail
             {
                 Name = "活跃度",
@@ -189,6 +196,18 @@ public sealed class LocalGameDailyDataService
                 Total = b.LivenessMaxCount,
                 Value = $"{b.Liveness}/{b.LivenessMaxCount}",
             },
+            WeeklyData = b is null ? null : new RoleDailyDetail
+            {
+                Name = "周本",
+                Cur = b.WeeklyInstCount,
+                Total = 3,
+                Value = $"{b.WeeklyInstCount}/3",
+            },
+            BattlePassData = role?.BattlePass is null ? null :
+            [
+                new RoleDailyDetail { Name = "战令等级", Cur = role.BattlePass.Level, Total = 0, Value = $"LV.{role.BattlePass.Level}" },
+                new RoleDailyDetail { Name = "战令进度", Cur = role.BattlePass.Exp, Total = role.BattlePass.ExpLimit, Value = $"{role.BattlePass.Exp}/{role.BattlePass.ExpLimit}" },
+            ],
         };
     }
 }
@@ -227,7 +246,16 @@ public sealed class PcRoleInfoResponse
 public sealed class PcRoleItem
 {
     [JsonPropertyName("Base")] public PcRoleBase? Base { get; set; }
+    [JsonPropertyName("BattlePass")] public PcBattlePass? BattlePass { get; set; }
     [JsonIgnore] public string? ServerName { get; set; }
+}
+
+public sealed class PcBattlePass
+{
+    [JsonPropertyName("Exp")] public int Exp { get; set; }
+    [JsonPropertyName("ExpLimit")] public int ExpLimit { get; set; }
+    [JsonPropertyName("Level")] public int Level { get; set; }
+    [JsonPropertyName("IsUnlock")] public bool IsUnlock { get; set; }
 }
 
 public sealed class PcRoleBase
@@ -252,4 +280,5 @@ public sealed class PcRoleBase
 [JsonSerializable(typeof(PcRoleInfoResponse))]
 [JsonSerializable(typeof(PcRoleItem))]
 [JsonSerializable(typeof(PcRoleBase))]
+[JsonSerializable(typeof(PcBattlePass))]
 public sealed partial class LocalDailyJsonContext : JsonSerializerContext;

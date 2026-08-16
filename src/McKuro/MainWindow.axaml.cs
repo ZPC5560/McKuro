@@ -21,6 +21,35 @@ public partial class MainWindow : Window
         SizeChanged += OnWindowSizeChanged;
     }
 
+    /// <summary>标题栏拖动窗口(双击最大化/还原)。</summary>
+    private void TitleBar_OnPointerPressed(object? sender, Avalonia.Input.PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            if (e.ClickCount >= 2)
+            {
+                ToggleMaximize();
+                return;
+            }
+            BeginMoveDrag(e);
+        }
+    }
+
+    /// <summary>最小化窗口。</summary>
+    private void MinimizeButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => WindowState = WindowState.Minimized;
+
+    /// <summary>最大化/还原窗口。</summary>
+    private void MaximizeButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => ToggleMaximize();
+
+    private void ToggleMaximize()
+        => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    /// <summary>关闭窗口。</summary>
+    private void CloseButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => Close();
+
     private void OnWindowSizeChanged(object? sender, SizeChangedEventArgs e)
     {
         if (_resizing)

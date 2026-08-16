@@ -25,15 +25,24 @@
                      Background="Transparent" />
 
         <Grid Grid.Row="1" Margin="16,10,16,0">
-            <!-- 左下角轮播图(Haiyu v2 风格,可隐藏) -->
-            <Border HorizontalAlignment="Left"
-                    VerticalAlignment="Bottom"
-                    Width="340" Height="190"
-                    Margin="0,0,0,8"
-                    CornerRadius="12"
-                    Background="{DynamicResource SemiColorBg2}"
-                    ClipToBounds="True"
-                    IsVisible="{Binding IsSlideShowVisible}">
+            <!-- 左下角控制区:渠道检测(服务器下拉) + 轮播图 -->
+            <StackPanel HorizontalAlignment="Left"
+                        VerticalAlignment="Bottom"
+                        Margin="0,0,0,8"
+                        Spacing="8">
+                <!-- 渠道检测:服务器下拉 -->
+                <ComboBox ItemsSource="{Binding Servers}"
+                          SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}"
+                          Padding="10,4"
+                          CornerRadius="14"
+                          MinWidth="110"
+                          HorizontalAlignment="Right" />
+                <!-- 左下角轮播图(Haiyu v2 风格,可隐藏) -->
+                <Border Width="340" Height="190"
+                        CornerRadius="12"
+                        Background="{DynamicResource SemiColorBg2}"
+                        ClipToBounds="True"
+                        IsVisible="{Binding IsSlideShowVisible}">
                 <Grid>
                     <Carousel x:Name="SlideCarousel"
                               ItemsSource="{Binding Slideshows}">
@@ -71,25 +80,17 @@
                             Background="#66000000" BorderThickness="0" Foreground="White"
                             Command="{Binding ToggleSlideShowCommand}" />
                 </Grid>
-            </Border>
-
-            <!-- 服务器选择 (覆盖左上) -->
-            <ComboBox ItemsSource="{Binding Servers}"
-                      SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}"
-                      Margin="0,0,0,0"
-                      Padding="10,4"
-                      CornerRadius="14"
-                      HorizontalAlignment="Right"
-                      VerticalAlignment="Top"
-                      MinWidth="110" />
+                </Border>
+            </StackPanel>
 
             <!-- 主内容区 -->
             <Grid ColumnDefinitions="*">
                 <!-- 左侧:启动器操作区 -->
                 <Grid RowDefinitions="*,Auto">
+                    <!-- 主内容卡片(垂直排列:标题/版本/操作/下载) -->
+                    <StackPanel Grid.Row="0" Spacing="10">
                     <!-- 启动器标题 毛玻璃卡片 -->
-                    <Border Grid.Row="0"
-                            CornerRadius="12"
+                    <Border CornerRadius="12"
                             ClipToBounds="True"
                             VerticalAlignment="Top">
                         <Grid>
@@ -110,16 +111,13 @@
                                                        Foreground="White" />
                                         </StackPanel>
                                     </Grid>
-                                    <TextBlock Text="{Binding GraphicsComponentsText}" FontSize="11"
-                                               Foreground="White"
-                                               IsVisible="{Binding GraphicsComponentsText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                                </StackPanel>
+                                                                    </StackPanel>
                             </Border>
                         </Grid>
                     </Border>
 
                     <!-- 游戏版本 + 操作 毛玻璃卡片 -->
-                    <Border Grid.Row="0"
+                    <Border
                             CornerRadius="12"
                             Padding="16"
                             Margin="0,10,0,0"
@@ -147,11 +145,26 @@
                                                        Foreground="{DynamicResource SemiColorPrimary}" />
                                         </StackPanel>
                                     </Grid>
-
-                                    <!-- 操作按钮(打开目录/修复游戏) -->
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Border>
+                    <!-- 操作 毛玻璃卡片(打开目录/修复游戏,悬浮背景) -->
+                    <Border
+                            CornerRadius="12"
+                            Padding="16"
+                            Margin="0,10,0,0"
+                            ClipToBounds="True">
+                        <Grid>
+                            <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.6" CornerRadius="12" />
+                            <Border Background="{DynamicResource SemiColorBg2}"
+                                    Opacity="0.45"
+                                    Padding="16">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="操作" FontSize="13" FontWeight="SemiBold" Foreground="White" />
                                     <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <Button Content="打开目录" Command="{Binding OpenGameFolderCommand}" />
-                                        <Button Content="修复游戏" Command="{Binding RepairGameCommand}"
+                                        <Button Content="📂 打开目录" Command="{Binding OpenGameFolderCommand}" />
+                                        <Button Content="🔧 修复游戏" Command="{Binding RepairGameCommand}"
                                                 IsEnabled="{Binding IsInstalled}" />
                                     </StackPanel>
                                 </StackPanel>
@@ -160,7 +173,7 @@
                     </Border>
 
                     <!-- 下载进度面板 -->
-                    <Border Grid.Row="0"
+                    <Border
                             CornerRadius="12"
                             Background="{DynamicResource SemiColorBg2}"
                             Padding="16"
@@ -187,6 +200,7 @@
                                        TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Border>
+                    </StackPanel>
 
                     <!-- 底部:预下载环 + 启动大按钮 -->
                     <Grid Grid.Row="1" ColumnDefinitions="120,*" ColumnSpacing="18" Margin="0,12,0,20">

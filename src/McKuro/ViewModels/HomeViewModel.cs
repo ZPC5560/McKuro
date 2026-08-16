@@ -12,6 +12,8 @@ namespace McKuro.ViewModels;
 public sealed class DailyItem
 {
     public required string Icon { get; init; }
+    /// <summary>官方图标 URL(库街区 getData 每项 img;非空时优先显示)。</summary>
+    public string? ImageUrl { get; init; }
     public required string Name { get; init; }
     public required string ValueText { get; init; }   // 例如 "120/160" 或仅 "100"
     public required int Cur { get; init; }
@@ -196,6 +198,7 @@ public sealed partial class HomeViewModel : ViewModelBase
         DailyItems.Add(new DailyItem
         {
             Icon = icon,
+            ImageUrl = string.IsNullOrWhiteSpace(detail.Img) ? null : detail.Img,
             Name = string.IsNullOrWhiteSpace(detail.Name) ? fallbackName : detail.Name!,
             ValueText = curOnly ? $"{detail.Cur}" : $"{detail.Cur}/{detail.Total}",
             Cur = detail.Cur,
