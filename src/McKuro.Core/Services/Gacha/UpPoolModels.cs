@@ -28,6 +28,9 @@ public sealed class FiveMap
     [JsonPropertyName("name")] public string? Name { get; set; }
     [JsonPropertyName("item_id")] public int ItemId { get; set; }
     [JsonPropertyName("weapon_id")] public int WeaponId { get; set; }
+
+    /// <summary>卡池类型:null/空 = 限定角色;0 = 常驻角色(如卡卡罗/凌阳)。用于区分 UP/歪。</summary>
+    [JsonPropertyName("pool_type")] public int? PoolType { get; set; }
 }
 
 /// <summary>单个卡池条目(pool_list 项):用于按生效时间段确定当期 UP 五星。</summary>

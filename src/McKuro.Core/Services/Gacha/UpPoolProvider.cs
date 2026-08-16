@@ -71,10 +71,32 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
         var roleIds = new HashSet<int>();
         var weaponIds = new HashSet<int>();
 
-        // 权威来源:pool_list 中所有卡池的 up_five_ids(历史 + 当期)。
-        // 注意:不做"当期生效"过滤——限定角色无论何时抽到都应算 UP,
-        // 只有从未 UP 过的常驻角色才算歪(用当前期过滤会把历史限定全误判为歪)。
-        // five_maps 只是全量五星目录(含常驻),仅作无 pool_list 时的兜底。
+        // 权威来源:five_maps 的 pool_type 区分限定/常驻——
+        //   pool_type 为空/非0 = 限定角色(无论何时抽到都算 UP)
+        //   pool_type == 0    = 常驻角色(如卡卡罗/凌阳,抽到算歪)
+        // pool_list 只含近期卡池,覆盖不了历史限定,不能作为唯一来源。
+        var fiveMaps = model.Data.FiveGroupConfig?.FiveMaps;
+        if (fiveMaps is { Count: > 0 })
+        {
+            foreach (var m in fiveMaps)
+            {
+                if (m is null)
+                {
+                    continue;
+                }
+                // 限定角色(pool_type 空/非0)才进 UP 集合;常驻(pool_type=0)排除
+                if (m.PoolType != 0 && m.ItemId > 0)
+                {
+                    roleIds.Add(m.ItemId);
+                }
+                if (m.PoolType != 0 && m.WeaponId > 0)
+                {
+                    weaponIds.Add(m.WeaponId);
+                }
+            }
+        }
+
+        // 补充:pool_list 的 up_five_ids(兜底近期池,与 five_maps 并集)
         if (model.Data.PoolList is { Count: > 0 } pools)
         {
             foreach (var pool in pools)
@@ -89,14 +111,10 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
                     weaponIds.UnionWith(ids);
                 }
             }
-
-            // pool_list 存在但没有任何 UP 时,用全量目录兜底以避免误判
-            if (roleIds.Count == 0 && weaponIds.Count == 0)
-            {
-                CollectFromFiveMaps(model.Data.FiveGroupConfig?.FiveMaps, roleIds, weaponIds);
-            }
         }
-        else
+
+        // 兜底:既无 five_maps 也无 pool_list 时用全量目录(避免空集导致全判歪)
+        if (roleIds.Count == 0 && weaponIds.Count == 0)
         {
             CollectFromFiveMaps(model.Data.FiveGroupConfig?.FiveMaps, roleIds, weaponIds);
         }

@@ -62,14 +62,18 @@ public sealed class UpPoolProviderTests
     }
 
     [Fact]
-    public async Task CurrentUpSet_Includes_OldLimited()
+    public async Task CurrentUpSet_Excludes_Resident_And_Includes_Limited()
     {
         var upIds = await CreateProvider().GetUpIdsAsync();
 
         Assert.True(upIds.TryGetValue(CardPoolType.RoleActivity, out var roleSet), "RoleActivity 应有 UP 集合");
-        // 卡卡罗(1301)是历史池(p-role-old)的限定 UP,即使过期也应算 UP(限定=UP,常驻=歪)
-        Assert.True(roleSet!.Contains(1301),
-            $"UP 集合应包含历史限定卡卡罗(1301),实际={string.Join(",", roleSet.OrderBy(x => x))}");
+        // 限定角色(穗穗/爱弥斯/忌炎,pool_type 空)都应算 UP
+        Assert.True(roleSet!.Contains(1110), "限定穗穗(1110)应在 UP 集合");
+        Assert.True(roleSet.Contains(1210), "限定爱弥斯(1210)应在 UP 集合");
+        Assert.True(roleSet.Contains(1404), "限定忌炎(1404)应在 UP 集合");
+        // 常驻角色(卡卡罗,pool_type=0)应排除(判歪)
+        Assert.False(roleSet.Contains(1301),
+            $"常驻卡卡罗(1301)不应在 UP 集合,实际={string.Join(",", roleSet.OrderBy(x => x))}");
     }
 
     [Fact]
@@ -110,14 +114,14 @@ public sealed class UpPoolProviderTests
     {
         var upIds = await CreateProvider().GetUpIdsAsync();
 
-        // 角色活动池抽到忌炎(1404,在 five_maps 目录但从未进任何 pool_list UP)→ 应为歪(常驻)
+        // 角色活动池抽到卡卡罗(1301,常驻 pool_type=0,不在 UP 集合)→ 应为歪
         var record = new GachaRecord
         {
             CardPoolType = "角色活动",
-            ResourceId = 1404,
+            ResourceId = 1301,
             QualityLevel = 5,
             ResourceType = "角色",
-            Name = "忌炎",
+            Name = "卡卡罗",
             Time = "2026-06-10 12:00:00",
         };
         var result = new GachaAnalysisService().Analyze("player1", [record], upIds);
@@ -125,7 +129,7 @@ public sealed class UpPoolProviderTests
         var rolePool = result[CardPoolType.RoleActivity];
         Assert.NotNull(rolePool);
         var entry = Assert.Single(rolePool!.FiveStarEntries);
-        Assert.True(entry.IsOffBanner, "忌炎(从未 UP 的常驻)应被判定为歪(off-banner)");
+        Assert.True(entry.IsOffBanner, "卡卡罗(常驻)应被判定为歪(off-banner)");
     }
 
     [Fact]

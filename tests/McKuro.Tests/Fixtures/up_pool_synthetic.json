@@ -5,7 +5,7 @@
       "five_maps": [
         { "name": "穗穗", "item_id": 1110, "weapon_id": 21050096 },
         { "name": "爱弥斯", "item_id": 1210, "weapon_id": 21020076 },
-        { "name": "卡卡罗", "item_id": 1301, "weapon_id": 21010015 },
+        { "name": "卡卡罗", "item_id": 1301, "weapon_id": 21010015, "pool_type": 0 },
         { "name": "忌炎", "item_id": 1404, "weapon_id": 21010016 }
       ]
     },
@@ -27,15 +27,6 @@
         "up_five_ids": "21050096,21020076",
         "up_four_ids": "21050024,21020084",
         "type": "weapon"
-      },
-      {
-        "start_at": "2025-01-01 10:00:00",
-        "end_at": "2025-12-31 11:59:00",
-        "pool_id": "p-role-old",
-        "up_five_names": "卡卡罗",
-        "up_five_ids": "1301",
-        "up_four_ids": "1102,1202",
-        "type": "role"
       }
     ]
   }
