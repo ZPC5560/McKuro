@@ -61,6 +61,8 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
     public PlayTimeViewModel()
     {
         RefreshFromDb();
+        // 进入页面自动解析日志(页面不再提供"解析日志"按钮)
+        _ = AnalyzeAsync();
     }
 
     /// <summary>重新解析游戏日志并刷新统计。</summary>

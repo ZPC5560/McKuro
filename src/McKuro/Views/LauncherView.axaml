@@ -25,24 +25,15 @@
                      Background="Transparent" />
 
         <Grid Grid.Row="1" Margin="16,10,16,0">
-            <!-- 左下角控制区:渠道检测(服务器下拉) + 轮播图 -->
-            <StackPanel HorizontalAlignment="Left"
-                        VerticalAlignment="Bottom"
-                        Margin="0,0,0,8"
-                        Spacing="8">
-                <!-- 渠道检测:服务器下拉 -->
-                <ComboBox ItemsSource="{Binding Servers}"
-                          SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}"
-                          Padding="10,4"
-                          CornerRadius="14"
-                          MinWidth="110"
-                          HorizontalAlignment="Right" />
-                <!-- 左下角轮播图(Haiyu v2 风格,可隐藏) -->
-                <Border Width="340" Height="190"
-                        CornerRadius="12"
-                        Background="{DynamicResource SemiColorBg2}"
-                        ClipToBounds="True"
-                        IsVisible="{Binding IsSlideShowVisible}">
+            <!-- 左下角轮播图(Haiyu v2 风格,可隐藏) -->
+            <Border HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    Width="340" Height="190"
+                    Margin="0,0,0,8"
+                    CornerRadius="12"
+                    Background="{DynamicResource SemiColorBg2}"
+                    ClipToBounds="True"
+                    IsVisible="{Binding IsSlideShowVisible}">
                 <Grid>
                     <Carousel x:Name="SlideCarousel"
                               ItemsSource="{Binding Slideshows}">
@@ -81,7 +72,6 @@
                             Command="{Binding ToggleSlideShowCommand}" />
                 </Grid>
                 </Border>
-            </StackPanel>
 
             <!-- 主内容区 -->
             <Grid ColumnDefinitions="*">
@@ -115,40 +105,6 @@
                             </Border>
                         </Grid>
                     </Border>
-
-                    <!-- 游戏版本 + 操作 毛玻璃卡片 -->
-                    <Border
-                            CornerRadius="12"
-                            Padding="16"
-                            Margin="0,10,0,0"
-                            ClipToBounds="True">
-                        <Grid>
-                            <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.6" CornerRadius="12" />
-                            <Border Background="{DynamicResource SemiColorBg2}"
-                                    Opacity="0.45"
-                                    Padding="16">
-                                <StackPanel Spacing="12">
-                                    <!-- 游戏版本(服务端/本地/状态) -->
-                                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
-                                        <StackPanel Spacing="2">
-                                            <TextBlock Text="服务端版本" FontSize="11" Foreground="White" />
-                                            <TextBlock Text="{Binding ServerVersionText}" FontSize="14" FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource SemiColorPrimary}" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" Spacing="2">
-                                            <TextBlock Text="本地版本" FontSize="11" Foreground="White" />
-                                            <TextBlock Text="{Binding GameVersionText}" FontSize="14" FontWeight="SemiBold" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="2" Spacing="2">
-                                            <TextBlock Text="状态" FontSize="11" Foreground="White" />
-                                            <TextBlock Text="{Binding StatusText}" FontSize="13"
-                                                       Foreground="{DynamicResource SemiColorPrimary}" />
-                                        </StackPanel>
-                                    </Grid>
-                                </StackPanel>
-                            </Border>
-                        </Grid>
-                    </Border>
                     <!-- 操作 毛玻璃卡片(打开目录/修复游戏,悬浮背景) -->
                     <Border
                             CornerRadius="12"
@@ -163,9 +119,13 @@
                                 <StackPanel Spacing="10">
                                     <TextBlock Text="操作" FontSize="13" FontWeight="SemiBold" Foreground="White" />
                                     <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <Button Content="📂 打开目录" Command="{Binding OpenGameFolderCommand}" />
+                                        <Button Content="📂 打开目录" Command="{Binding OpenGameFolderCommand}"
+                                                Background="#1CFFFFFF" BorderBrush="#38FFFFFF" BorderThickness="1"
+                                                CornerRadius="18" Padding="18,7" Foreground="#F2F6FF" />
                                         <Button Content="🔧 修复游戏" Command="{Binding RepairGameCommand}"
-                                                IsEnabled="{Binding IsInstalled}" />
+                                                IsEnabled="{Binding IsInstalled}"
+                                                Background="#1CFFFFFF" BorderBrush="#38FFFFFF" BorderThickness="1"
+                                                CornerRadius="18" Padding="18,7" Foreground="#F2F6FF" />
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -202,8 +162,19 @@
                     </Border>
                     </StackPanel>
 
-                    <!-- 底部:预下载环 + 启动大按钮 -->
-                    <Grid Grid.Row="1" ColumnDefinitions="120,*" ColumnSpacing="18" Margin="0,12,0,20">
+                    <!-- 底部:预下载环 + 渠道 + 启动大按钮(同一行) -->
+                    <Grid Grid.Row="1" ColumnDefinitions="120,Auto,*" ColumnSpacing="18" Margin="0,12,0,20">
+                        <!-- 渠道检测:服务器下拉(胶囊样式,与按键同一行) -->
+                        <ComboBox Grid.Column="1"
+                                  ItemsSource="{Binding Servers}"
+                                  SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}"
+                                  Background="#1CFFFFFF"
+                                  BorderBrush="#38FFFFFF"
+                                  BorderThickness="1"
+                                  CornerRadius="18"
+                                  Padding="16,10"
+                                  MinWidth="140"
+                                  VerticalAlignment="Center" />
                         <!-- 预下载环(仅存在预下载时显示,避免默认显示 0%) -->
                         <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="8"
                                     IsVisible="{Binding HasPredownload}">
@@ -235,8 +206,12 @@
                         <StackPanel Grid.Column="1" Width="220" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="10">
                             <Button Height="56"
                                     Padding="0"
-                                    Classes="primary"
                                     FontSize="15"
+                                    Background="#1CFFFFFF"
+                                    BorderBrush="#38FFFFFF"
+                                    BorderThickness="1"
+                                    CornerRadius="18"
+                                    Foreground="#F2F6FF"
                                     Command="{Binding InstallCommand}"
                                     IsEnabled="{Binding !IsBusy}"
                                     IsVisible="{Binding !IsInstalled}"
@@ -260,7 +235,7 @@
                                     Background="#52C41A"
                                     Foreground="White"
                                     BorderThickness="0"
-                                    CornerRadius="8"
+                                    CornerRadius="18"
                                     Command="{Binding LaunchCommand}"
                                     IsEnabled="{Binding IsInstalled}"
                                     HorizontalAlignment="Stretch">

@@ -295,6 +295,22 @@ public sealed class GanttMarginConverter : Avalonia.Data.Converters.IValueConver
         => throw new NotSupportedException();
 }
 
+/// <summary>今天日期标签左偏移:百分比(0-100) → Margin.Left(参考宽 940,防止右侧溢出)。</summary>
+public sealed class GanttTodayLabelMarginConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly GanttTodayLabelMarginConverter Instance = new();
+    private const double RefWidth = 940;
+    private const double LabelWidth = 70;   // 估计"今天 MM-dd"芯片宽度,用于右侧防溢出
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    {
+        double pct = value is double d ? Math.Clamp(d, 0, 100) : 0;
+        var left = Math.Clamp(pct * RefWidth / 100.0, 0, RefWidth - LabelWidth);
+        return new Avalonia.Thickness(left, 0, 0, 0);
+    }
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>活动是否进行中 → 不透明度(进行中=1,未开始=0.6)。</summary>
 public sealed class OngoingOpacityConverter : Avalonia.Data.Converters.IValueConverter
 {

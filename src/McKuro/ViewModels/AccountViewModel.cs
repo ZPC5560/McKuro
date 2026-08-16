@@ -2,19 +2,17 @@ using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Services;
 
 namespace McKuro.ViewModels;
 
 /// <summary>
-/// 账号页:库街区 Token / 角色 ID / 库街区账号切换与移除 / mcguide 官方评级登录。
+/// 账号页:角色 ID / 库街区账号多账号切换与移除 / mcguide 官方评级登录。
 /// 由设置页的账号相关区块迁移而来。
 /// </summary>
 public sealed partial class AccountViewModel : ViewModelBase
 {
-    [ObservableProperty]
-    private string _kujiequToken;
-
     [ObservableProperty]
     private string _roleId;
 
@@ -72,7 +70,6 @@ public sealed partial class AccountViewModel : ViewModelBase
     public AccountViewModel()
     {
         var s = AppServices.Settings.Current;
-        _kujiequToken = s.KujiequToken;
         _roleId = s.RoleId;
         RefreshAccounts();
         _guideStatusText = AppServices.Guide.HasToken
@@ -95,14 +92,25 @@ public sealed partial class AccountViewModel : ViewModelBase
 
     partial void OnSelectedAccountIndexChanged(int value)
     {
-        if (value < 0 || value >= AppServices.KuroAccounts.GetAccounts().Count)
+        var accounts = AppServices.KuroAccounts.GetAccounts();
+        if (value < 0 || value >= accounts.Count)
         {
             return;
         }
-        var accounts = AppServices.KuroAccounts.GetAccounts();
-        AppServices.KuroAccounts.Current = accounts[value];
+        var account = accounts[value];
+        AppServices.KuroAccounts.Current = account;
+        // 同步 token 到设置:角色数据页自动加载依赖 KujiequToken
+        AppServices.Settings.Current.KujiequToken = account.Token;
+        AppServices.Settings.Save();
         RefreshAccounts();
+        // 通知角色数据页按新账号刷新
+        WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(account.UserId));
     }
+
+    /// <summary>跳转「签到」页登录新库街区账号。</summary>
+    [RelayCommand]
+    private void GoAddAccount()
+        => WeakReferenceMessenger.Default.Send(new NavigationRequestedMessage(NavigationKeys.Sign));
 
     [RelayCommand]
     private void RemoveAccount()
@@ -182,12 +190,11 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
     }
 
-    /// <summary>保存库街区 Token / 角色 ID 到设置。</summary>
+    /// <summary>保存角色 ID 到设置。</summary>
     [RelayCommand]
     private void Save()
     {
         var s = AppServices.Settings.Current;
-        s.KujiequToken = KujiequToken;
         s.RoleId = RoleId;
         AppServices.Settings.Save();
         StatusText = "设置已保存";

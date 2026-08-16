@@ -57,25 +57,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public ObservableCollection<string> SkipVerifyFiles { get; } = [];
 
-    // 快捷键截图
-    [ObservableProperty]
-    private bool _captureEnabled;
-
-    [ObservableProperty]
-    private int _captureModifierIndex;
-
-    [ObservableProperty]
-    private int _captureKeyIndex;
-
-    [ObservableProperty]
-    private string _captureDir = "";
-
-    [ObservableProperty]
-    private string _captureStatusText = "";
-
-    public ObservableCollection<string> ModifierKeys { get; } = ["Win", "Ctrl", "Alt", "Shift"];
-    public ObservableCollection<string> CaptureKeys { get; } = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"];
-
     // 界面语言
     [ObservableProperty]
     private int _languageIndex;
@@ -142,6 +123,35 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public ObservableCollection<string> Themes { get; } = ["跟随系统", "浅色", "深色"];
 
+    /// <summary>主题选择即时生效(对齐 Haiyu OnSelectThemeChanged):切换即应用并持久化,无需点保存。</summary>
+    partial void OnThemeIndexChanged(int value)
+    {
+        var theme = ThemeIndex switch
+        {
+            1 => "Light",
+            2 => "Dark",
+            _ => "Default",
+        };
+        var s = AppServices.Settings.Current;
+        s.Theme = theme;
+        AppServices.Settings.Save();
+        ApplyThemeVariant(theme);
+    }
+
+    /// <summary>把主题字符串应用到全局 RequestedThemeVariant(Semi 动态资源随之刷新:浅色/深色/跟随系统)。</summary>
+    private static void ApplyThemeVariant(string theme)
+    {
+        if (Avalonia.Application.Current is { } app)
+        {
+            app.RequestedThemeVariant = theme switch
+            {
+                "Light" => Avalonia.Styling.ThemeVariant.Light,
+                "Dark" => Avalonia.Styling.ThemeVariant.Dark,
+                _ => Avalonia.Styling.ThemeVariant.Default,
+            };
+        }
+    }
+
     public ObservableCollection<string> ServerTypes { get; } =
     [
         "自动检测", "官服", "B站", "WeGame", "国际服",
@@ -167,10 +177,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         {
             SkipVerifyFiles.Add(p);
         }
-        _captureEnabled = s.CaptureEnabled;
-        _captureModifierIndex = Math.Max(0, ModifierKeys.IndexOf(s.CaptureModifierKey));
-        _captureKeyIndex = Math.Max(0, CaptureKeys.IndexOf(s.CaptureKey));
-        _captureDir = s.ScreenCapturesDir;
         _languageIndex = Math.Max(0, Languages.IndexOf(LanguageLabel(s.Language)));
         _appUpdateRepo = s.AppUpdateRepo;
         _themeIndex = s.Theme switch
@@ -288,10 +294,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.BackgroundVideoEnabled = BackgroundVideoEnabled;
         s.SkipVerifyFiles = [.. SkipVerifyFiles];
         s.AutoSkipVerifyDelete = AutoSkipVerifyDelete;
-        s.CaptureEnabled = CaptureEnabled;
-        s.CaptureModifierKey = ModifierKeys[Math.Clamp(CaptureModifierIndex, 0, ModifierKeys.Count - 1)];
-        s.CaptureKey = CaptureKeys[Math.Clamp(CaptureKeyIndex, 0, CaptureKeys.Count - 1)];
-        s.ScreenCapturesDir = CaptureDir;
         s.Language = LanguageIndex == 1 ? "en-US" : "zh-Hans";
         s.Theme = ThemeIndex switch
         {
@@ -306,45 +308,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Downloader.SetConcurrency(s.DownloadConcurrency);
         AppServices.Downloader.SetSpeedLimit((long)s.LimitSpeedMbps * 1024 * 1024);
 
-        // 主题即时生效(对齐 Haiyu 设置主题)
-        if (Avalonia.Application.Current is { } app)
-        {
-            app.RequestedThemeVariant = s.Theme switch
-            {
-                "Light" => Avalonia.Styling.ThemeVariant.Light,
-                "Dark" => Avalonia.Styling.ThemeVariant.Dark,
-                _ => Avalonia.Styling.ThemeVariant.Default,
-            };
-        }
+        // 主题即时生效(对齐 Haiyu 设置主题;选择时已即时应用,保存时再确保一致)
+        ApplyThemeVariant(s.Theme);
 
         StatusText = "设置已保存";
-    }
-
-    [RelayCommand]
-    private async Task BrowseCaptureDirAsync()
-    {
-        var lifetime = Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
-        var topLevel = lifetime?.MainWindow;
-        if (topLevel is null)
-        {
-            return;
-        }
-
-        var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
-        {
-            Title = "选择截图保存目录",
-            AllowMultiple = false,
-        });
-        if (folders.Count > 0)
-        {
-            CaptureDir = folders[0].Path.LocalPath;
-        }
-    }
-
-    /// <summary>由主窗口热键回调调用,提示截图已保存。</summary>
-    public void NotifyCaptureSaved(string path)
-    {
-        CaptureStatusText = $"截图已保存: {path}";
     }
 
     // ---------- 应用自更新(对齐 Haiyu UpdateAppViewModel) ----------

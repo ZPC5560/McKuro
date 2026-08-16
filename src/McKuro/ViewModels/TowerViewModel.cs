@@ -44,6 +44,12 @@ public sealed partial class TowerViewModel : ViewModelBase
 
     public ObservableCollection<SlashChallengeItem> SlashChallenges { get; } = [];
 
+    /// <summary>进入页面自动刷新深塔/海墟数据(替代原手动"刷新"按钮)。</summary>
+    public TowerViewModel()
+    {
+        _ = LoadAsync();
+    }
+
     [RelayCommand]
     private async Task LoadAsync()
     {

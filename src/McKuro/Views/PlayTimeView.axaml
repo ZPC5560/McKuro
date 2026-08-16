@@ -14,16 +14,12 @@
     </UserControl.Resources>
     <ScrollViewer>
         <StackPanel Margin="20,16,20,16" Spacing="16">
-            <!-- 标题 + 分析按钮 -->
-            <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Spacing="2">
-                    <TextBlock Text="🕒 游玩统计" FontSize="24" FontWeight="Bold" />
-                    <TextBlock Text="{Binding StatusText}" FontSize="12"
-                               Foreground="{DynamicResource SemiColorText2}" />
-                </StackPanel>
-                <Button Grid.Column="1" Content="解析日志" Classes="primary" VerticalAlignment="Center"
-                        Command="{Binding AnalyzeCommand}" IsEnabled="{Binding !IsBusy}" />
-            </Grid>
+            <!-- 标题 -->
+            <StackPanel Spacing="2">
+                <TextBlock Text="🕒 游玩统计" FontSize="24" FontWeight="Bold" />
+                <TextBlock Text="{Binding StatusText}" FontSize="12"
+                           Foreground="{DynamicResource SemiColorText2}" />
+            </StackPanel>
 
             <!-- 统计卡 -->
             <Grid ColumnDefinitions="*,*,*" ColumnSpacing="16">

@@ -8,8 +8,6 @@
     <!-- 应用图标(守岸人,多尺寸 ICO) -->
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
-    <!-- Windows 平台定义(截图服务等平台相关代码使用) -->
-    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(DefineConstants);WINDOWS</DefineConstants>
 
     <!-- Native AOT 发布 (win-x64 需在 Windows 上发布;osx-arm64 可本地验证) -->
     <PublishAot>true</PublishAot>
@@ -37,11 +35,6 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
-  </ItemGroup>
-
-  <!-- 快捷键截图:仅 Windows 使用(System.Drawing.Common 自 .NET 9 起仅支持 Windows) -->
-  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
-    <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>

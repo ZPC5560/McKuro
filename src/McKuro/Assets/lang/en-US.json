@@ -24,8 +24,6 @@
   "Settings.BackgroundVideoDesc": "Play official trailer on the game page; falls back to a static cover without VLC",
   "Settings.Account": "Kurobbs Account",
   "Settings.AccountDesc": "Log in on the Sign-in page; switch / remove saved accounts here",
-  "Settings.Capture": "Hotkey Screenshot",
-  "Settings.CaptureDesc": "Global hotkey captures the whole screen as PNG (Windows only)",
   "Settings.Language": "Language",
   "Settings.LanguageDesc": "Takes effect after restart",
   "Settings.Save": "Save Settings",

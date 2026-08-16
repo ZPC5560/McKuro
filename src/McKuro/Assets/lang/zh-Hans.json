@@ -24,8 +24,6 @@
   "Settings.BackgroundVideoDesc": "游戏页播放官方宣传视频;未安装 VLC 时自动回退为静态封面图",
   "Settings.Account": "库街区账号",
   "Settings.AccountDesc": "在「签到」页登录;此处可切换 / 移除已保存账号",
-  "Settings.Capture": "快捷键截图",
-  "Settings.CaptureDesc": "全局热键截取整个屏幕并保存 PNG(仅 Windows)",
   "Settings.Language": "界面语言",
   "Settings.LanguageDesc": "重启后生效",
   "Settings.Save": "保存设置",

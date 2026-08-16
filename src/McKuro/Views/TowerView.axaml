@@ -10,17 +10,13 @@
              x:DataType="vm:TowerViewModel">
     <Grid RowDefinitions="Auto,*" Margin="20,16,20,16">
         <!-- 标题 -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
-            <StackPanel Spacing="2">
-                <TextBlock Text="🗼 深塔 / 海墟" FontSize="24" FontWeight="Bold" />
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <TextBlock Text="{Binding StatusText}" FontSize="12"
-                               Foreground="{DynamicResource SemiColorText2}" />
-                </StackPanel>
+        <StackPanel Grid.Row="0" Spacing="2" Margin="0,0,0,12">
+            <TextBlock Text="🗼 深塔 / 海墟" FontSize="24" FontWeight="Bold" />
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Text="{Binding StatusText}" FontSize="12"
+                           Foreground="{DynamicResource SemiColorText2}" />
             </StackPanel>
-            <Button Grid.Column="1" Content="刷新数据" Classes="primary" VerticalAlignment="Center"
-                    Command="{Binding LoadCommand}" IsEnabled="{Binding !IsBusy}" />
-        </Grid>
+        </StackPanel>
 
         <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="16"
               IsVisible="{Binding HasData}">
@@ -140,7 +136,7 @@
         <!-- 空/未登录状态 -->
         <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
                     IsVisible="{Binding !HasData}">
-            <TextBlock Text="点击「刷新数据」加载深塔与海墟(需登录库街区)" FontSize="15"
+            <TextBlock Text="进入页面自动加载深塔与海墟(需登录库街区)" FontSize="15"
                        Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
         </StackPanel>
     </Grid>

@@ -192,38 +192,6 @@
                 </Grid>
             </Border>
 
-            <!-- 快捷键截图 -->
-            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
-                    <Border Grid.Row="0" Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
-                        <TextBlock Text="📸" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
-                    <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-                        <TextBlock Text="快捷键截图" FontSize="15" FontWeight="SemiBold" />
-                        <TextBlock Text="全局热键截取整个屏幕并保存 PNG(仅 Windows)" FontSize="12"
-                                   Foreground="{DynamicResource SemiColorText2}" />
-                    </StackPanel>
-                    <ToggleSwitch Grid.Row="0" Grid.Column="2" VerticalAlignment="Center"
-                                  IsChecked="{Binding CaptureEnabled, Mode=TwoWay}" />
-
-                    <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
-                        <TextBlock Text="热键:" FontSize="13" VerticalAlignment="Center"
-                                   Foreground="{DynamicResource SemiColorText2}" />
-                        <ComboBox Width="90" ItemsSource="{Binding ModifierKeys}"
-                                  SelectedIndex="{Binding CaptureModifierIndex, Mode=TwoWay}" />
-                        <TextBlock Text="+" FontSize="14" VerticalAlignment="Center" />
-                        <ComboBox Width="90" ItemsSource="{Binding CaptureKeys}"
-                                  SelectedIndex="{Binding CaptureKeyIndex, Mode=TwoWay}" />
-                    </StackPanel>
-
-                    <Grid Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <TextBox Grid.Column="0" Text="{Binding CaptureDir}"
-                                 PlaceholderText="截图保存目录(留空 = 系统图片目录/McKuro)" VerticalAlignment="Center" />
-                        <Button Grid.Column="1" Content="浏览…" Command="{Binding BrowseCaptureDirCommand}" />
-                    </Grid>
-                </Grid>
-            </Border>
-
             <!-- 主题(对齐 Haiyu 设置主题) -->
             <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
@@ -232,7 +200,7 @@
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
                         <TextBlock Text="主题" FontSize="15" FontWeight="SemiBold" />
-                        <TextBlock Text="跟随系统 / 浅色 / 深色(保存后即时生效)" FontSize="12"
+                        <TextBlock Text="跟随系统 / 浅色 / 深色(选择后即时生效)" FontSize="12"
                                    Foreground="{DynamicResource SemiColorText2}" />
                     </StackPanel>
                     <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
@@ -306,9 +274,6 @@
                         ToolTip.Tip="{Binding LogDirText}" />
                 <TextBlock Text="{Binding StatusText}" FontSize="13"
                            Foreground="{DynamicResource SemiColorPrimary}"
-                           VerticalAlignment="Center" />
-                <TextBlock Text="{Binding CaptureStatusText}" FontSize="13"
-                           Foreground="{DynamicResource SemiColorText2}"
                            VerticalAlignment="Center" />
             </StackPanel>
         </StackPanel>

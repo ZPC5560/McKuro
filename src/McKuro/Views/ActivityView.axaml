@@ -10,6 +10,7 @@
     <UserControl.Resources>
         <vm:GanttWidthConverter x:Key="GanttWidth" />
         <vm:GanttMarginConverter x:Key="GanttMargin" />
+        <vm:GanttTodayLabelMarginConverter x:Key="GanttTodayLabelMargin" />
         <vm:OngoingOpacityConverter x:Key="OngoingOpacity" />
     </UserControl.Resources>
     <Grid RowDefinitions="Auto,*" Margin="20,16,20,16">
