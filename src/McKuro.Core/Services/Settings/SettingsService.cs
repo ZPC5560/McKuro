@@ -67,6 +67,9 @@ public sealed class AppSettings
     /// <summary>当前账号 UserId。</summary>
     public string CurrentKuroUserId { get; set; } = "";
 
+    /// <summary>稳定设备 ID(首次生成持久化,库街区 did 头需跨启动不变,否则触发极验风控)。</summary>
+    public string StableDeviceId { get; set; } = "";
+
     /// <summary>自动游戏签到(默认开启)。</summary>
     public bool AutoSignEnabled { get; set; } = true;
 
@@ -89,6 +92,14 @@ public sealed class AppSettings
 
     /// <summary>已选玩家所在服务器 ID。</summary>
     public string GuideServerId { get; set; } = "";
+
+    // ---------- 云鸣潮(云游戏)登录会话 ----------
+
+    /// <summary>云鸣潮登录数据 JSON(CloudGameLoginData 序列化,用于静默续会话拉取抽卡记录)。</summary>
+    public string CloudLoginDataJson { get; set; } = "";
+
+    /// <summary>云鸣潮登录账号名(显示用)。</summary>
+    public string CloudLoginName { get; set; } = "";
 
     // ---------- 快捷键截图 ----------
 

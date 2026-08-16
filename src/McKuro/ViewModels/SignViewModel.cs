@@ -88,8 +88,8 @@ public sealed partial class SignViewModel : ViewModelBase
     /// <summary>发送验证码按钮可用(极验/发送中或倒计时中禁用)。</summary>
     public bool CanSendSms => !SmsSending && !IsBusy && SmsCountdown <= 0;
 
-    // 设备 ID:会话内固定,贯穿发码与登录(对齐 Haiyu LoginGameViewModel 的 IdV2)
-    private readonly string _smsDeviceId = KuroClient.NewDeviceId();
+    // 设备 ID:稳定持久化(库街区 did 需跨启动不变,否则触发极验风控;对齐 Haiyu 持久 devCode)
+    private readonly string _smsDeviceId = AppServices.StableDeviceId;
 
     // 短信/极验流程日志(写本地文件,方便排查)
     private readonly ILogger? _smsLog = AppServices.LoggerFactory?.CreateLogger("McKuro.SmsLogin");

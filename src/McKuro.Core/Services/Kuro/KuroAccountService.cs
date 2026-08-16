@@ -16,7 +16,7 @@ public sealed class KuroAccountService
     /// <summary>所有已保存账号。</summary>
     public IReadOnlyList<KuroAccount> GetAccounts() => _settings.Current.KuroAccounts;
 
-    /// <summary>当前账号(登录态)。</summary>
+    /// <summary>当前账号(登录态);DeviceId 自动统一为稳定设备 ID。</summary>
     public KuroAccount? Current
     {
         get
@@ -26,7 +26,12 @@ public sealed class KuroAccountService
             {
                 return null;
             }
-            return _settings.Current.KuroAccounts.FirstOrDefault(a => a.UserId == id);
+            var account = _settings.Current.KuroAccounts.FirstOrDefault(a => a.UserId == id);
+            if (account is not null)
+            {
+                EnsureStableDeviceId(account);
+            }
+            return account;
         }
         set
         {
@@ -35,9 +40,10 @@ public sealed class KuroAccountService
         }
     }
 
-    /// <summary>添加或更新账号。</summary>
+    /// <summary>添加或更新账号(DeviceId 统一为稳定设备 ID)。</summary>
     public void AddOrUpdate(KuroAccount account)
     {
+        EnsureStableDeviceId(account);
         var accounts = _settings.Current.KuroAccounts;
         var index = accounts.FindIndex(a => a.UserId == account.UserId);
         if (index >= 0)
@@ -50,6 +56,23 @@ public sealed class KuroAccountService
         }
         _settings.Current.CurrentKuroUserId = account.UserId;
         _settings.Save();
+    }
+
+    /// <summary>确保账号 DeviceId 为稳定设备 ID(空/变化时统一,避免 did 不稳定触发极验风控)。</summary>
+    private void EnsureStableDeviceId(KuroAccount account)
+    {
+        var stable = _settings.Current.StableDeviceId;
+        if (string.IsNullOrEmpty(stable))
+        {
+            stable = KuroClient.NewDeviceId();
+            _settings.Current.StableDeviceId = stable;
+            _settings.Save();
+        }
+        if (string.IsNullOrEmpty(account.DeviceId) || !string.Equals(account.DeviceId, stable, StringComparison.Ordinal))
+        {
+            account.DeviceId = stable;
+            _settings.Save();
+        }
     }
 
     /// <summary>移除账号。</summary>

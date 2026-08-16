@@ -58,6 +58,7 @@ public static class AppServices
     public static GachaRecordStore GachaStore => Services.GetRequiredService<GachaRecordStore>();
     public static GachaAnalysisService GachaAnalysis => Services.GetRequiredService<GachaAnalysisService>();
     public static IGachaSyncService GachaSync => Services.GetRequiredService<IGachaSyncService>();
+    public static CloudGachaService CloudGacha => Services.GetRequiredService<CloudGachaService>();
     public static IUpPoolProvider UpPools => Services.GetRequiredService<IUpPoolProvider>();
     public static KujiequApiClient KujiequApi => Services.GetRequiredService<KujiequApiClient>();
     public static LocalRoleDataReader LocalRoles => Services.GetRequiredService<LocalRoleDataReader>();
@@ -66,6 +67,7 @@ public static class AppServices
     public static PlayTimeService PlayTime => Services.GetRequiredService<PlayTimeService>();
     public static TowerService Tower => Services.GetRequiredService<TowerService>();
     public static DailyDataService DailyData => Services.GetRequiredService<DailyDataService>();
+    public static LocalGameDailyDataService LocalDaily => Services.GetRequiredService<LocalGameDailyDataService>();
     public static IKuroClient Kuro => Services.GetRequiredService<IKuroClient>();
     public static KuroAccountService KuroAccounts => Services.GetRequiredService<KuroAccountService>();
     public static KuroSignService KuroSign => Services.GetRequiredService<KuroSignService>();
@@ -75,6 +77,13 @@ public static class AppServices
     public static RedemptionCodeService RedeemCodes => Services.GetRequiredService<RedemptionCodeService>();
     public static GeetVerifyService GeetVerify => Services.GetRequiredService<GeetVerifyService>();
     public static AppUpdateService AppUpdate => Services.GetRequiredService<AppUpdateService>();
+
+    /// <summary>
+    /// 稳定的设备 ID(持久化到 device-id.txt,跨启动不变)。
+    /// 库街区 did 头需用稳定设备码,否则每次启动新 did + 持久 token 会触发极验风控。
+    /// </summary>
+    public static string StableDeviceId { get; } = LoadOrCreateDeviceId(
+        AppDataDir ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "McKuro"));
 
     /// <summary>
     /// 初始化 DI 容器(只会跑一次)。
@@ -161,6 +170,9 @@ public static class AppServices
             sp.GetRequiredService<IKuroClient>(),
             sp.GetRequiredService<KuroAccountService>(),
             logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<DailyDataService>()));
+        services.AddSingleton<LocalGameDailyDataService>(sp => new LocalGameDailyDataService(
+            sp.GetRequiredService<HttpClient>(),
+            logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<LocalGameDailyDataService>()));
 
         // ---- 游戏启动器(鸣潮) ----
         services.AddSingleton<GameManifestLoader>();
@@ -180,9 +192,16 @@ public static class AppServices
             logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<GameUpdater>()));
 
         // ---- 抽卡 ----
-        services.AddSingleton<GachaApiClient>();
+        services.AddSingleton<GachaApiClient>(sp => new GachaApiClient(
+            sp.GetRequiredService<HttpClient>(),
+            logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<GachaApiClient>()));
         services.AddSingleton<GachaRecordStore>();
         services.AddSingleton<IGachaSyncService, GachaSyncService>();
+        services.AddSingleton<CloudGachaService>(sp => new CloudGachaService(
+            sp.GetRequiredService<CloudGameService>(),
+            sp.GetRequiredService<IGachaSyncService>(),
+            sp.GetRequiredService<ISettingsService>(),
+            logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<CloudGachaService>()));
         services.AddSingleton<GachaAnalysisService>();
         services.AddSingleton<IUpPoolProvider>(sp => new RemoteUpPoolProvider(
             sp.GetRequiredService<HttpClient>(),
