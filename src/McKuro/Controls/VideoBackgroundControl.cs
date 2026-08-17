@@ -370,18 +370,40 @@ public sealed class VideoBackgroundControl : Grid
         try
         {
             IntPtr plane = Marshal.ReadIntPtr(planes);
+            if (plane == IntPtr.Zero)
+            {
+                return;
+            }
+
+            // 在 lock 内取一致的帧尺寸与缓冲快照,避免与 DisposePlayer/换 URL 交错
+            byte[]? staging;
+            int pitch, height;
             lock (_sync)
             {
-                if (_staging is null)
+                if (_staging is null || _framePitch <= 0 || _frameHeight <= 0)
                 {
                     return;
                 }
+                staging = _staging;
+                pitch = _framePitch;
+                height = _frameHeight;
+            }
 
-                int size = Math.Min(_staging.Length, _framePitch * _frameHeight);
-                if (size > 0)
-                {
-                    Marshal.Copy(plane, _staging, 0, size);
-                }
+            // 只拷贝当前帧尺寸的字节数(不与缓冲实际长度耦合,避免 plane 大小不匹配时越界)
+            int size = pitch * height;
+            if (size <= 0 || size > staging.Length)
+            {
+                return;
+            }
+
+            // libvlc 可能对无效 plane 回调:用逐行受保护拷贝 + 显式捕获(含 AV)
+            try
+            {
+                Marshal.Copy(plane, staging, 0, size);
+            }
+            catch (AccessViolationException)
+            {
+                return; // 控件销毁/换源后 libvlc 残留回调,忽略
             }
 
             // 合并多帧:同一 UI 迭代只渲染最新一帧,避免刷爆消息队列
@@ -392,7 +414,7 @@ public sealed class VideoBackgroundControl : Grid
         }
         catch (Exception)
         {
-            // 忽略单帧拷贝异常
+            // 忽略单帧拷贝异常(含 native 回调期间的竞态)
         }
     }
 
