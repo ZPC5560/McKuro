@@ -201,8 +201,21 @@ public sealed class VideoBackgroundControl : Grid
 
     private void DisposePlayer()
     {
+        // 关键:先解除 VideoView 与 MediaPlayer 的关联。
+        // 若先 Children.Remove(_videoView),Avalonia NativeControlHost 销毁会触发
+        // VideoView.Detach() → MediaPlayer.set_Hwnd(IntPtr.Zero),此时 libvlc native 句柄
+        // 已释放/状态异常 → 访问违规(c0000005)崩溃(切换页面时)。
+        // 先把 MediaPlayer 置 null,让 Detach 走安全路径,再移除控件。
         if (_videoView is not null)
         {
+            try
+            {
+                _videoView.MediaPlayer = null;
+            }
+            catch (Exception)
+            {
+                // 忽略:某些状态下列列解绑本身可能抛,继续走移除
+            }
             Children.Remove(_videoView);
             _videoView = null;
         }
