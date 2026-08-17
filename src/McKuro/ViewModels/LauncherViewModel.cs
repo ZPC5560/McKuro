@@ -133,6 +133,9 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
     private UpdateCheckResult? _lastCheck;
 
+    /// <summary>最近一次加载官方背景时使用的背景视频开关(导航时据此判断是否需要重新加载背景)。</summary>
+    private bool _lastLoadedVideoSetting;
+
     public LauncherViewModel()
     {
         SelectedServerIndex = AppServices.Settings.Current.ServerType switch
@@ -145,6 +148,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
         };
         RefreshState();
         VideoEnabled = AppServices.Settings.Current.BackgroundVideoEnabled;
+        _lastLoadedVideoSetting = AppServices.Settings.Current.BackgroundVideoEnabled;
         _ = LoadLauncherInfoAsync();
 
         // 订阅游戏目录变更(设置页选择目录后) → 自动识别加载
@@ -175,11 +179,37 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
     }
 
-    /// <summary>导航到启动页时调用:自动检查更新(移除手动检查按钮后,切换到启动页即检查)。</summary>
+    /// <summary>导航到启动页时调用:同步渠道/背景视频开关,配置变化时重新加载官方背景(无需重启)。</summary>
     public void OnNavigatedTo()
     {
-        // 同步背景视频开关(用户可能在设置页切换;重新进启动页即生效)
-        var wantVideo = AppServices.Settings.Current.BackgroundVideoEnabled;
+        var s = AppServices.Settings.Current;
+
+        // 服务器渠道可能在设置页变更:同步到启动页(渠道影响官方背景/轮播/更新检查)
+        var wantServer = s.ServerType switch
+        {
+            GameServerType.Official => 1,
+            GameServerType.Bilibili => 2,
+            GameServerType.WeGame => 3,
+            GameServerType.Global => 4,
+            _ => 0,
+        };
+        var serverChanged = SelectedServerIndex != wantServer;
+        if (serverChanged)
+        {
+            SelectedServerIndex = wantServer;
+        }
+
+        // 背景视频开关(用户可能在设置页切换):重新进启动页立即反映
+        var wantVideo = s.BackgroundVideoEnabled;
+
+        // 视频开关或渠道变化 → 重新加载官方背景(视频 URL/首帧图/轮播),无需重启
+        if (wantVideo != _lastLoadedVideoSetting || serverChanged)
+        {
+            _lastLoadedVideoSetting = wantVideo;
+            _ = LoadLauncherInfoAsync();
+        }
+
+        // 即时同步开关(VideoBackgroundControl 的 IsVideoEnabled 绑定会自动响应)
         if (VideoEnabled != wantVideo)
         {
             VideoEnabled = wantVideo;
@@ -290,6 +320,11 @@ public sealed partial class LauncherViewModel : ViewModelBase
         catch (Exception)
         {
             // 静默失败
+        }
+        finally
+        {
+            // 记录本次加载使用的背景视频开关,供下次导航判断是否需要重新加载背景
+            _lastLoadedVideoSetting = AppServices.Settings.Current.BackgroundVideoEnabled;
         }
     }
 

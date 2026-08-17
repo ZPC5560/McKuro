@@ -15,6 +15,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _gameRootDir;
 
+    /// <summary>游戏目录即时保存(路径解析器通过 Func 自动读取最新值,无需重启)。</summary>
+    partial void OnGameRootDirChanged(string value)
+    {
+        AppServices.Settings.Current.GameRootDir = value;
+        AppServices.Settings.Save();
+    }
+
     [ObservableProperty]
     private string _serverTypeText = "";
 
@@ -24,26 +31,76 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private int _downloadConcurrency;
 
+    /// <summary>并发下载数即时保存(改动即生效,无需点保存)。</summary>
+    partial void OnDownloadConcurrencyChanged(int value)
+    {
+        var v = Math.Clamp(value, 1, 32);
+        var s = AppServices.Settings.Current;
+        s.DownloadConcurrency = v;
+        AppServices.Settings.Save();
+        AppServices.Downloader.SetConcurrency(v);
+    }
+
     /// <summary>下载速度限制(MB/s,0 = 不限;对齐 Haiyu LimitSpeed)。</summary>
     [ObservableProperty]
     private int _limitSpeedMbps;
+
+    /// <summary>下载限速即时保存(改动即生效,无需点保存)。</summary>
+    partial void OnLimitSpeedMbpsChanged(int value)
+    {
+        var v = Math.Max(0, value);
+        var s = AppServices.Settings.Current;
+        s.LimitSpeedMbps = v;
+        AppServices.Settings.Save();
+        AppServices.Downloader.SetSpeedLimit((long)v * 1024 * 1024);
+    }
 
     // 游戏启动参数(对齐 Haiyu StartGameOption)
     [ObservableProperty]
     private bool _useDx11;
 
+    partial void OnUseDx11Changed(bool value)
+    {
+        AppServices.Settings.Current.UseDx11 = value;
+        AppServices.Settings.Save();
+    }
+
     [ObservableProperty]
     private bool _disableDlss;
+
+    partial void OnDisableDlssChanged(bool value)
+    {
+        AppServices.Settings.Current.DisableDlss = value;
+        AppServices.Settings.Save();
+    }
 
     [ObservableProperty]
     private string _startGameArguments = "";
 
+    partial void OnStartGameArgumentsChanged(string value)
+    {
+        AppServices.Settings.Current.StartGameArguments = value;
+        AppServices.Settings.Save();
+    }
+
     [ObservableProperty]
     private string _startGameExeName = "";
+
+    partial void OnStartGameExeNameChanged(string value)
+    {
+        AppServices.Settings.Current.StartGameExeName = value;
+        AppServices.Settings.Save();
+    }
 
     /// <summary>启动游戏后最小化主窗口。</summary>
     [ObservableProperty]
     private bool _minimizeOnLaunch;
+
+    partial void OnMinimizeOnLaunchChanged(bool value)
+    {
+        AppServices.Settings.Current.MinimizeOnLaunch = value;
+        AppServices.Settings.Save();
+    }
 
     [ObservableProperty]
     private bool _backgroundVideoEnabled;
@@ -78,11 +135,25 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _autoSkipVerifyDelete = true;
 
+    /// <summary>修复游戏时是否删除被跳过文件,即时保存(无需点保存)。</summary>
+    partial void OnAutoSkipVerifyDeleteChanged(bool value)
+    {
+        AppServices.Settings.Current.AutoSkipVerifyDelete = value;
+        AppServices.Settings.Save();
+    }
+
     public ObservableCollection<string> SkipVerifyFiles { get; } = [];
 
     // 界面语言
     [ObservableProperty]
     private int _languageIndex;
+
+    /// <summary>界面语言即时保存(切换后写回配置;界面文案重启后完整应用)。</summary>
+    partial void OnLanguageIndexChanged(int value)
+    {
+        AppServices.Settings.Current.Language = value == 1 ? "en-US" : "zh-Hans";
+        AppServices.Settings.Save();
+    }
 
     // 自动游戏签到(打开软件后自动签到;与签到页开关同步同一配置)
     [ObservableProperty]
@@ -98,6 +169,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     // 应用自更新(对齐 Haiyu UpdateAppViewModel)
     [ObservableProperty]
     private string _appUpdateRepo = "";
+
+    /// <summary>更新仓库地址即时保存(无需点保存)。</summary>
+    partial void OnAppUpdateRepoChanged(string value)
+    {
+        AppServices.Settings.Current.AppUpdateRepo = value;
+        AppServices.Settings.Save();
+    }
 
     [ObservableProperty]
     private string _appUpdateStatusText = "";
@@ -251,7 +329,20 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     private static string LanguageLabel(string code) => code == "en-US" ? "English (en-US)" : "简体中文 (zh-Hans)";
 
-    partial void OnSelectedServerIndexChanged(int value) => UpdateServerTypeText();
+    /// <summary>服务器渠道选择即时保存(无需点保存)。</summary>
+    partial void OnSelectedServerIndexChanged(int value)
+    {
+        UpdateServerTypeText();
+        AppServices.Settings.Current.ServerType = value switch
+        {
+            1 => GameServerType.Official,
+            2 => GameServerType.Bilibili,
+            3 => GameServerType.WeGame,
+            4 => GameServerType.Global,
+            _ => GameServerType.Unknown,
+        };
+        AppServices.Settings.Save();
+    }
 
     private void UpdateServerTypeText()
     {
@@ -368,21 +459,19 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
 
         var dir = folders[0].Path.LocalPath;
-        GameRootDir = dir;
 
-        // 校验目录包含游戏主程序(对齐 Haiyu 选目录后自动识别:无效目录直接提示)
+        // 校验目录包含游戏主程序(对齐 Haiyu 选目录后自动识别:无效目录直接提示,不写入配置)
         if (!File.Exists(Path.Combine(dir, GamePathResolver.ExeRootName)))
         {
             StatusText = $"目录未包含 {GamePathResolver.ExeRootName},请选择正确的游戏安装目录";
             return;
         }
 
-        // 保存并通知启动器页自动识别加载(检测版本/渠道,自动检查更新)
+        // 即时保存并通知启动器页自动识别加载(检测版本/渠道,自动检查更新)
         var s = AppServices.Settings.Current;
-        s.GameRootDir = dir;
         s.ServerType = GameServerType.Unknown; // 交给自动检测
-        SelectedServerIndex = 0;
-        AppServices.Settings.Save();
+        SelectedServerIndex = 0; // 触发 OnSelectedServerIndexChanged 写回并保存
+        GameRootDir = dir; // 触发 OnGameRootDirChanged 写回并保存(含上面的 ServerType 变更)
         StatusText = "目录已设置,正在自动识别加载…";
         WeakReferenceMessenger.Default.Send(new GameDirectoryChangedMessage(dir));
     }
@@ -403,17 +492,19 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         SkipVerifyFiles.Add(path);
         SkipVerifyInput = "";
-        StatusText = $"已添加跳过文件: {path}(保存后生效)";
+        Save(); // 即时写回配置
+        StatusText = $"已添加跳过文件: {path}";
     }
 
     [RelayCommand]
     private void RemoveSkipVerifyFile(string path)
     {
         SkipVerifyFiles.Remove(path);
-        StatusText = $"已移除跳过文件: {path}(保存后生效)";
+        Save();
+        StatusText = $"已移除跳过文件: {path}";
     }
 
-    [RelayCommand]
+    /// <summary>把所有界面设置项写回配置并保存(各设置项改动时已即时保存,此方法为幂等兜底)。</summary>
     private void Save()
     {
         var s = AppServices.Settings.Current;
@@ -461,8 +552,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
         // 主题即时生效(对齐 Haiyu 设置主题;选择时已即时应用,保存时再确保一致)
         ApplyThemeVariant(s.Theme);
-
-        StatusText = "设置已保存";
     }
 
     // ---------- 应用自更新(对齐 Haiyu UpdateAppViewModel) ----------
