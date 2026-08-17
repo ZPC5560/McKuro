@@ -430,7 +430,7 @@
                                                 <ItemsControl ItemsSource="{Binding MainProps}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate x:DataType="roles:EchoProp">
-                                                            <Grid>
+                                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                                                                 <TextBlock Grid.Column="0" FontSize="15"
                                                                            FontWeight="SemiBold"
                                                                            Text="{Binding AttributeName}" />
