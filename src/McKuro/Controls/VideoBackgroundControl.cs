@@ -77,13 +77,13 @@ public sealed class VideoBackgroundControl : Grid
             {
                 if (!OperatingSystem.IsLinux() && ContainsNativeLibVlc(directory))
                 {
-                    Core.Initialize(directory);
+                    LibVLCSharp.Shared.Core.Initialize(directory);
                     return new LibVLC();
                 }
             }
 
             // macOS/Linux 优先走 LibVLCSharp 的标准探测：macOS 可用系统/应用内库，Linux 使用系统 libvlc。
-            Core.Initialize();
+            LibVLCSharp.Shared.Core.Initialize();
             return new LibVLC();
         }
         catch (Exception ex)
