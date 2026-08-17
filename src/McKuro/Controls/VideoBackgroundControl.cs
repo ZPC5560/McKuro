@@ -104,17 +104,40 @@ public sealed class VideoBackgroundControl : Grid
     {
         try
         {
-            // Windows 发布包会把 libvlc 放到输出目录；自定义 .app/便携目录也允许显式定位。
+            // 显式候选目录探测(含 mac 系统 VLC 路径;找不到再用 LibVLCSharp 标准探测)
             foreach (var directory in CandidateLibVlcDirectories())
             {
-                if (!OperatingSystem.IsLinux() && ContainsNativeLibVlc(directory))
+                if (ContainsNativeLibVlc(directory))
                 {
                     LibVLCSharp.Shared.Core.Initialize(directory);
                     return new LibVLC();
                 }
             }
 
-            // macOS/Linux 优先走 LibVLCSharp 的标准探测：macOS 可用系统/应用内库，Linux 使用系统 libvlc。
+            // Linux 优先走 LibVLCSharp 的标准探测(系统 libvlc 由包管理器提供)。
+            if (OperatingSystem.IsLinux())
+            {
+                LibVLCSharp.Shared.Core.Initialize();
+                return new LibVLC();
+            }
+
+            // macOS:无应用内 libvlc 时,再试系统 VLC 的默认安装位置。
+            if (OperatingSystem.IsMacOS())
+            {
+                foreach (var macVlc in MacSystemVlcDirs())
+                {
+                    if (ContainsNativeLibVlc(macVlc))
+                    {
+                        LibVLCSharp.Shared.Core.Initialize(macVlc);
+                        return new LibVLC();
+                    }
+                }
+                // 仍失败:尝试 LibVLCSharp 标准探测(可能用户自定义安装/brew)
+                LibVLCSharp.Shared.Core.Initialize();
+                return new LibVLC();
+            }
+
+            // Windows:上面候选目录已覆盖发布包 libvlc;最后尝试标准探测
             LibVLCSharp.Shared.Core.Initialize();
             return new LibVLC();
         }
@@ -462,6 +485,27 @@ public sealed class VideoBackgroundControl : Grid
         yield return Path.Combine(baseDirectory, "libvlc", "win-x64");
         yield return Path.Combine(baseDirectory, "Contents", "Frameworks");
         yield return Path.Combine(baseDirectory, "Contents", "Frameworks", "libvlc");
+        if (OperatingSystem.IsMacOS())
+        {
+            foreach (var d in MacSystemVlcDirs())
+            {
+                yield return d;
+            }
+        }
+    }
+
+    /// <summary>macOS 系统 VLC 的 libvlc 位置(官方安装 + 用户目录安装)。</summary>
+    private static IEnumerable<string> MacSystemVlcDirs()
+    {
+        yield return "/Applications/VLC.app/Contents/MacOS/lib";
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrEmpty(home))
+        {
+            yield return Path.Combine(home, "Applications", "VLC.app", "Contents", "MacOS", "lib");
+        }
+        // Homebrew 安装的 vlc
+        yield return "/opt/homebrew/lib";
+        yield return "/usr/local/lib";
     }
 
     private static bool ContainsNativeLibVlc(string directory)
