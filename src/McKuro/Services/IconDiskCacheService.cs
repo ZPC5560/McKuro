@@ -111,13 +111,21 @@ public sealed class IconDiskCacheService
         {
             return name ?? "";
         }
-        var invalid = Path.GetInvalidFileNameChars();
+
         var sb = new StringBuilder(name.Length);
         foreach (var c in name)
         {
-            sb.Append(invalid.Contains(c) ? '_' : c);
+            sb.Append(IsInvalidFileNameChar(c) ? '_' : c);
         }
+
         return sb.ToString();
+    }
+
+    private static bool IsInvalidFileNameChar(char c)
+    {
+        // Windows 非法文件名字符(\ / : * ? " < > |)与平台无关,统一替换;
+        // 控制字符在任意平台都不可靠,一并替换。
+        return c < 0x20 || c is '\\' or '/' or ':' or '*' or '?' or '"' or '<' or '>' or '|';
     }
 
     /// <summary>枚举角色详情所有 (category, name, url) 图标条目(跳过空名称/空 URL)。</summary>
