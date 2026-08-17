@@ -84,9 +84,9 @@
                             ClipToBounds="True"
                             VerticalAlignment="Top">
                         <Grid>
-                            <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.55" CornerRadius="12" />
+                            <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.75" CornerRadius="12" />
                             <Border Background="{DynamicResource SemiColorBg2}"
-                                    Opacity="0.4"
+                                    Opacity="0.6"
                                     Padding="18">
                                 <StackPanel Spacing="12">
                                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
@@ -101,7 +101,20 @@
                                                        Foreground="White" />
                                         </StackPanel>
                                     </Grid>
-                                                                    </StackPanel>
+                                    <!-- 版本信息(本地/服务端,对齐 Haiyu 标题区) -->
+                                    <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="16">
+                                        <StackPanel Spacing="1">
+                                            <TextBlock Text="服务端版本" FontSize="10" Foreground="#BFFFFFFF" />
+                                            <TextBlock Text="{Binding ServerVersionText}" FontSize="14" FontWeight="SemiBold"
+                                                       Foreground="White" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Spacing="1">
+                                            <TextBlock Text="本地版本" FontSize="10" Foreground="#BFFFFFFF" />
+                                            <TextBlock Text="{Binding GameVersionText}" FontSize="14" FontWeight="SemiBold"
+                                                       Foreground="White" />
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
                             </Border>
                         </Grid>
                     </Border>
@@ -112,19 +125,19 @@
                             Margin="0,10,0,0"
                             ClipToBounds="True">
                         <Grid>
-                            <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.6" CornerRadius="12" />
+                            <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.75" CornerRadius="12" />
                             <Border Background="{DynamicResource SemiColorBg2}"
-                                    Opacity="0.45"
+                                    Opacity="0.6"
                                     Padding="16">
                                 <StackPanel Spacing="10">
                                     <TextBlock Text="操作" FontSize="13" FontWeight="SemiBold" Foreground="White" />
                                     <StackPanel Orientation="Horizontal" Spacing="10">
                                         <Button Content="📂 打开目录" Command="{Binding OpenGameFolderCommand}"
-                                                Background="#55FFFFFF" BorderBrush="#6BFFFFFF" BorderThickness="1"
+                                                Background="#8C000000" BorderBrush="#4DFFFFFF" BorderThickness="1"
                                                 CornerRadius="18" Padding="18,7" Foreground="White" />
                                         <Button Content="🔧 修复游戏" Command="{Binding RepairGameCommand}"
                                                 IsEnabled="{Binding IsInstalled}"
-                                                Background="#55FFFFFF" BorderBrush="#6BFFFFFF" BorderThickness="1"
+                                                Background="#8C000000" BorderBrush="#4DFFFFFF" BorderThickness="1"
                                                 CornerRadius="18" Padding="18,7" Foreground="White" />
                                     </StackPanel>
                                 </StackPanel>
@@ -168,9 +181,10 @@
                         <ComboBox Grid.Column="1"
                                   ItemsSource="{Binding Servers}"
                                   SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}"
-                                  Background="#1CFFFFFF"
-                                  BorderBrush="#38FFFFFF"
+                                  Background="#8C000000"
+                                  BorderBrush="#4DFFFFFF"
                                   BorderThickness="1"
+                                  Foreground="White"
                                   CornerRadius="18"
                                   Padding="16,10"
                                   MinWidth="140"
@@ -207,8 +221,8 @@
                             <Button Height="56"
                                     Padding="0"
                                     FontSize="15"
-                                    Background="#1CFFFFFF"
-                                    BorderBrush="#38FFFFFF"
+                                    Background="#8C000000"
+                                    BorderBrush="#4DFFFFFF"
                                     BorderThickness="1"
                                     CornerRadius="18"
                                     Foreground="#F2F6FF"
@@ -226,7 +240,7 @@
                                 </Button.Styles>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" VerticalAlignment="Center">
                                     <TextBlock Text="下载安装" FontSize="15" FontWeight="SemiBold" />
-                                    <TextBlock Text="{Binding ServerVersionText}" FontSize="11" Opacity="0.85" />
+                                    <TextBlock Text="{Binding ServerVersionText}" FontSize="11" />
                                 </StackPanel>
                             </Button>
                             <Button Height="56"
@@ -251,7 +265,7 @@
                                 </Button.Styles>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" VerticalAlignment="Center">
                                     <TextBlock Text="启动游戏" FontSize="15" FontWeight="SemiBold" />
-                                    <TextBlock Text="{Binding ServerVersionText}" FontSize="11" Opacity="0.85" />
+                                    <TextBlock Text="{Binding ServerVersionText}" FontSize="11" />
                                 </StackPanel>
                             </Button>
                             <Button Content="安装更新"
