@@ -77,6 +77,17 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private int _languageIndex;
 
+    // 自动游戏签到(打开软件后自动签到;与签到页开关同步同一配置)
+    [ObservableProperty]
+    private bool _autoSignEnabled;
+
+    /// <summary>自动签到开关即时保存(与签到页一致),无需点保存。</summary>
+    partial void OnAutoSignEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.AutoSignEnabled = value;
+        AppServices.Settings.Save();
+    }
+
     // 应用自更新(对齐 Haiyu UpdateAppViewModel)
     [ObservableProperty]
     private string _appUpdateRepo = "";
@@ -213,6 +224,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             SkipVerifyFiles.Add(p);
         }
         _languageIndex = Math.Max(0, Languages.IndexOf(LanguageLabel(s.Language)));
+        _autoSignEnabled = s.AutoSignEnabled;
         _appUpdateRepo = s.AppUpdateRepo;
         _themeIndex = s.Theme switch
         {
@@ -411,6 +423,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.SkipVerifyFiles = [.. SkipVerifyFiles];
         s.AutoSkipVerifyDelete = AutoSkipVerifyDelete;
         s.Language = LanguageIndex == 1 ? "en-US" : "zh-Hans";
+        s.AutoSignEnabled = AutoSignEnabled;
         s.Theme = ThemeIndex switch
         {
             1 => "Light",
