@@ -26,3 +26,6 @@ coverage*.xml
 
 # 本地开发文档(不上传 GitHub)
 docs/
+
+# Runtime-generated device id
+device-id.txt
