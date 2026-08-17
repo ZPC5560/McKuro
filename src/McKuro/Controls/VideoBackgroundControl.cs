@@ -16,6 +16,7 @@ public sealed class VideoBackgroundControl : Grid
     private static readonly Lazy<LibVLC?> LibVlc = new(TryCreateLibVlc);
 
     private MediaPlayer? _player;
+    private Media? _media;
     private VideoView? _videoView;
     private AsyncImage? _fallback;
     private bool _initialized;
@@ -64,13 +65,25 @@ public sealed class VideoBackgroundControl : Grid
         FallbackImageUrlProperty.Changed.AddClassHandler<VideoBackgroundControl>((o, e) => o.OnUrlChanged());
         IsVideoEnabledProperty.Changed.AddClassHandler<VideoBackgroundControl>((o, e) => o.OnUrlChanged());
 
-        DetachedFromVisualTree += (_, _) => DisposePlayer();
+        DetachedFromVisualTree += OnDetached;
     }
 
     private static LibVLC? TryCreateLibVlc()
     {
         try
         {
+            // Windows 发布包会把 libvlc 放到输出目录；自定义 .app/便携目录也允许显式定位。
+            foreach (var directory in CandidateLibVlcDirectories())
+            {
+                if (!OperatingSystem.IsLinux() && ContainsNativeLibVlc(directory))
+                {
+                    Core.Initialize(directory);
+                    return new LibVLC();
+                }
+            }
+
+            // macOS/Linux 优先走 LibVLCSharp 的标准探测：macOS 可用系统/应用内库，Linux 使用系统 libvlc。
+            Core.Initialize();
             return new LibVLC();
         }
         catch (Exception ex)
@@ -102,6 +115,14 @@ public sealed class VideoBackgroundControl : Grid
         TryStartVideo();
     }
 
+    private void OnDetached(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        _attached = false;
+        DisposePlayer();
+        AttachedToVisualTree -= OnAttached;
+        AttachedToVisualTree += OnAttached;
+    }
+
     private void TryStartVideo()
     {
         DisposePlayer();
@@ -122,35 +143,53 @@ public sealed class VideoBackgroundControl : Grid
 
         try
         {
-            _player = new MediaPlayer(libvlc)
+            var player = new MediaPlayer(libvlc)
             {
                 EnableHardwareDecoding = true,
+                Volume = 0,
             };
+            _player = player;
 
             _videoView = new VideoView
             {
                 MediaPlayer = _player,
                 IsVisible = true,
+                IsHitTestVisible = false,
+                Opacity = 0,
                 HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
             };
             Children.Add(_videoView);
 
-            var media = new Media(libvlc, new Uri(VideoUrl));
-            _player.Play(media);
-            _player.EndReached += (_, _) =>
+            _media = new Media(libvlc, new Uri(VideoUrl));
+            player.Playing += (_, _) =>
             {
-                // 循环播放
-                try
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
-                    _player.Time = 0;
-                    _player.Play();
-                }
-                catch (Exception)
-                {
-                    // 忽略
-                }
+                    if (ReferenceEquals(_player, player) && _videoView is not null)
+                    {
+                        _videoView.Opacity = 1;
+                    }
+                });
             };
+            player.EncounteredError += (_, _) => ShowFallback();
+            player.EndReached += (_, _) =>
+            {
+                // LibVLC 事件线程不能直接再次调用播放 API，切换线程后循环播放。
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        player.Time = 0;
+                        player.Play();
+                    }
+                    catch (Exception)
+                    {
+                        ShowFallback();
+                    }
+                });
+            };
+            player.Play(_media);
         }
         catch (Exception ex)
         {
@@ -182,5 +221,39 @@ public sealed class VideoBackgroundControl : Grid
             _player.Dispose();
             _player = null;
         }
+
+        _media?.Dispose();
+        _media = null;
     }
+
+    private void ShowFallback()
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (_videoView is not null)
+            {
+                _videoView.Opacity = 0;
+            }
+            if (_fallback is not null)
+            {
+                _fallback.ImageUrl = FallbackImageUrl;
+            }
+        });
+    }
+
+    private static IEnumerable<string> CandidateLibVlcDirectories()
+    {
+        var baseDirectory = AppContext.BaseDirectory;
+        yield return baseDirectory;
+        yield return Path.Combine(baseDirectory, "libvlc");
+        yield return Path.Combine(baseDirectory, "libvlc", "win-x64");
+        yield return Path.Combine(baseDirectory, "Contents", "Frameworks");
+        yield return Path.Combine(baseDirectory, "Contents", "Frameworks", "libvlc");
+    }
+
+    private static bool ContainsNativeLibVlc(string directory)
+        => Directory.Exists(directory)
+           && (File.Exists(Path.Combine(directory, "libvlc.dll"))
+               || File.Exists(Path.Combine(directory, "libvlc.dylib"))
+               || File.Exists(Path.Combine(directory, "libvlc.so")));
 }

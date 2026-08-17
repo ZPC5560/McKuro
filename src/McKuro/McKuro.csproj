@@ -1,10 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
+    <!-- Windows 使用无控制台桌面程序；macOS/Linux 使用普通桌面入口，避免把发布行为锁死在 WinExe。 -->
+    <OutputType>Exe</OutputType>
+    <OutputType Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(RuntimeIdentifier)' == 'win-arm64' Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')">WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationManifest Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(RuntimeIdentifier)' == 'win-arm64' Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')">app.manifest</ApplicationManifest>
     <!-- 应用图标(守岸人,多尺寸 ICO) -->
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
@@ -28,6 +30,9 @@
     <PackageReference Include="Semi.Avalonia" Version="12.1.0.1" />
     <!-- 背景视频封面(可选):LibVLC native 库来自系统 VLC(macOS)或 VideoLAN.LibVLC.Windows(Windows);缺失时自动回退首帧图 -->
     <PackageReference Include="LibVLCSharp.Avalonia" Version="3.10.1" />
+    <!-- Windows 发布包内置 libvlc，避免用户必须另行安装 VLC；Linux 使用系统 libvlc，macOS 走应用内/系统探测。 -->
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1"
+                      Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(RuntimeIdentifier)' == 'win-arm64' Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')" />
     <!-- DI 容器 + 日志(AOT 兼容) -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />

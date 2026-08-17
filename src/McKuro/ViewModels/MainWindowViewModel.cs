@@ -1,5 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Messaging;
+using Avalonia.Threading;
+using McKuro.Services;
 
 namespace McKuro.ViewModels;
 
@@ -31,6 +33,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private NavigationItem? _selectedNavigationItem;
 
+    [ObservableProperty]
+    private string _wallpaperPath = "";
+
+    [ObservableProperty]
+    private bool _hasWallpaper;
+
+    [ObservableProperty]
+    private bool _isWallpaperBlurred;
+
     public List<NavigationItem> NavigationItems { get; }
 
     private readonly Dictionary<string, NavigationItem> _navByKey;
@@ -43,6 +54,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel(IMessenger messenger)
     {
         _messenger = messenger;
+        WallpaperPath = AppServices.Wallpaper.CurrentWallpaperPath;
+        HasWallpaper = AppServices.Wallpaper.HasWallpaper;
+        AppServices.Wallpaper.WallpaperChanged += OnWallpaperChanged;
 
         var home = new HomeViewModel();
         var launcher = new LauncherViewModel();
@@ -93,6 +107,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             NavigateTo(value);
         }
+    }
+
+    partial void OnCurrentPageChanged(ViewModelBase? value)
+    {
+        // 主页保持壁纸清晰；数据页使用单实例全局轻模糊和更强遮罩，避免每张卡片重复执行 BlurEffect。
+        IsWallpaperBlurred = value is not HomeViewModel && value is not LauncherViewModel;
+    }
+
+    private void OnWallpaperChanged(object? sender, EventArgs e)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            WallpaperPath = AppServices.Wallpaper.CurrentWallpaperPath;
+            HasWallpaper = AppServices.Wallpaper.HasWallpaper;
+        });
     }
 
     public void NavigateTo(NavigationItem item)

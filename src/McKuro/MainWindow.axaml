@@ -4,6 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:McKuro.ViewModels"
         xmlns:views="using:McKuro.Views"
+        xmlns:controls="using:McKuro.Controls"
         mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="720"
         x:Class="McKuro.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -13,7 +14,7 @@
         WindowStartupLocation="CenterScreen"
         Title="McKuro · 鸣潮启动器"
         Icon="avares://McKuro/Assets/app.ico"
-        Background="{DynamicResource SemiColorBg0}">
+        Background="Transparent">
 
     <Window.DataTemplates>
         <DataTemplate DataType="{x:Type vm:HomeViewModel}">
@@ -54,9 +55,30 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid ColumnDefinitions="60,*">
+    <Grid>
+        <!-- 全局壁纸宿主：普通页面只使用这一处模糊，保证性能和跨平台表现一致。 -->
+        <Grid IsHitTestVisible="False">
+            <Border Background="{DynamicResource McKuroBackdropBase}" />
+            <controls:AsyncImage ImageUrl="{Binding WallpaperPath}"
+                                 IsVisible="{Binding HasWallpaper}"
+                                 Stretch="UniformToFill"
+                                 HorizontalAlignment="Stretch"
+                                 VerticalAlignment="Stretch" />
+            <controls:AsyncImage ImageUrl="{Binding WallpaperPath}"
+                                 IsVisible="{Binding IsWallpaperBlurred}"
+                                 Stretch="UniformToFill"
+                                 Effect="{DynamicResource McKuroWallpaperBlurEffect}"
+                                 HorizontalAlignment="Stretch"
+                                 VerticalAlignment="Stretch" />
+            <Border Background="{DynamicResource McKuroBackdropTint}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="60,*">
         <!-- 左侧 60px 图标导航 (参照 Java 项目:顶部圆形应用 Logo + 导航项图标) -->
-        <Border Grid.Column="0" Background="{DynamicResource SemiColorBg2}">
+        <Border Grid.Column="0"
+                Background="{DynamicResource McKuroNavFill}"
+                BorderBrush="{DynamicResource McKuroGlassStroke}"
+                BorderThickness="0,0,1,0">
             <DockPanel>
                 <!-- 顶部应用 Logo:守岸人,圆形裁剪 (参照 WutheringWavesTool MainView 的 icon + Circle clip) -->
                 <Border DockPanel.Dock="Top"
@@ -97,7 +119,11 @@
                             <Setter Property="Background" Value="Transparent" />
                         </Style>
                         <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                            <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
+                            <Setter Property="Background" Value="{DynamicResource McKuroAccent}" />
+                            <Setter Property="CornerRadius" Value="8" />
+                        </Style>
+                        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                            <Setter Property="Background" Value="{DynamicResource McKuroGlassFill}" />
                             <Setter Property="CornerRadius" Value="8" />
                         </Style>
                     </ListBox.Styles>
@@ -106,8 +132,9 @@
         </Border>
 
         <!-- 内容区 -->
-        <Border Grid.Column="1">
+        <Border Grid.Column="1" Background="{DynamicResource McKuroContentTint}">
             <ContentControl Content="{Binding CurrentPage}" />
         </Border>
+        </Grid>
     </Grid>
 </Window>

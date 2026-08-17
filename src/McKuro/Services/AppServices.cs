@@ -78,6 +78,9 @@ public static class AppServices
     public static GeetVerifyService GeetVerify => Services.GetRequiredService<GeetVerifyService>();
     public static AppUpdateService AppUpdate => Services.GetRequiredService<AppUpdateService>();
     public static IconDiskCacheService IconCache => Services.GetRequiredService<IconDiskCacheService>();
+    public static PlatformCapabilities Capabilities => Services.GetRequiredService<PlatformCapabilities>();
+    public static WallpaperService Wallpaper => Services.GetRequiredService<WallpaperService>();
+    public static ThemePaletteService ThemePalette => Services.GetRequiredService<ThemePaletteService>();
 
     /// <summary>
     /// 稳定的设备 ID(持久化到 device-id.txt,跨启动不变)。
@@ -153,6 +156,12 @@ public static class AppServices
         services.AddSingleton(sp => new SettingsService(dataDir,
             sp.GetRequiredService<ILoggerFactory>().CreateLogger<SettingsService>()));
         services.AddSingleton<ISettingsService>(sp => sp.GetRequiredService<SettingsService>());
+        services.AddSingleton<PlatformCapabilities>();
+        services.AddSingleton<WallpaperService>(sp => new WallpaperService(
+            dataDir,
+            sp.GetRequiredService<ISettingsService>(),
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger<WallpaperService>()));
+        services.AddSingleton<ThemePaletteService>();
         // AppDatabase 构造函数需要 dataDir(不可由容器解析),必须工厂注册
         services.AddSingleton(sp => new AppDatabase(dataDir));
         services.AddSingleton(sp => new GamePathResolver(

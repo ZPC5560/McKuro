@@ -3,12 +3,34 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:McKuro.ViewModels"
+             xmlns:controls="using:McKuro.Controls"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
     <ScrollViewer>
         <StackPanel Margin="25" Spacing="12" MaxWidth="760" HorizontalAlignment="Left">
             <TextBlock Text="⚙️ 设置" FontSize="24" FontWeight="Bold" Margin="0,0,0,8" />
+
+            <!-- 跨平台能力提示：让平台差异在界面上可理解、可预期。 -->
+            <Border CornerRadius="12" Background="{DynamicResource McKuroGlassFill}"
+                    BorderBrush="{DynamicResource McKuroGlassStroke}" BorderThickness="1" Padding="14,12">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                    <Border Width="34" Height="34" CornerRadius="17" Background="{DynamicResource McKuroAccent}">
+                        <TextBlock Text="⌘" FontSize="17" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="White" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="3">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <TextBlock Text="当前平台：" FontSize="13" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding PlatformNameText}" FontSize="13" FontWeight="SemiBold" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding PlatformCapabilityText}" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding PlatformVideoText}" FontSize="11"
+                                   Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Border>
 
             <!-- 游戏目录 -->
             <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
@@ -173,6 +195,53 @@
                     </StackPanel>
                     <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
                                   IsChecked="{Binding MinimizeOnLaunch, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+
+            <!-- 个性化：壁纸、动态色板和玻璃性能档位 -->
+            <Border CornerRadius="14"
+                    Background="{DynamicResource McKuroGlassFillStrong}"
+                    BorderBrush="{DynamicResource McKuroGlassStroke}"
+                    BorderThickness="1"
+                    Padding="20">
+                <Grid ColumnDefinitions="180,*,Auto" ColumnSpacing="18">
+                    <Border Width="180" Height="102" CornerRadius="12" ClipToBounds="True"
+                            Background="{DynamicResource McKuroBackdropBase}"
+                            BorderBrush="{DynamicResource McKuroGlassStroke}" BorderThickness="1">
+                        <Grid>
+                            <controls:AsyncImage ImageUrl="{Binding WallpaperPath}"
+                                                 Stretch="UniformToFill"
+                                                 HorizontalAlignment="Stretch"
+                                                 VerticalAlignment="Stretch" />
+                            <Border Background="{DynamicResource McKuroBackdropTint}" />
+                            <TextBlock Text="默认背景" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource McKuroTextOnWallpaper}"
+                                       IsVisible="{Binding !HasWallpaper}" />
+                        </Grid>
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="7" VerticalAlignment="Center">
+                        <TextBlock Text="主页个性化" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="更换壁纸后，应用强调色、导航选中态和玻璃表面会自动同步。普通数据页会使用轻量全局模糊。"
+                                   FontSize="12" Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding WallpaperStatusText}" FontSize="12"
+                                   Foreground="{DynamicResource McKuroAccent}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="选择壁纸" Classes="primary" Command="{Binding SelectWallpaperCommand}" />
+                            <Button Content="恢复默认" Command="{Binding ResetWallpaperCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="12" MinWidth="150" VerticalAlignment="Center">
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="动态配色" FontSize="12" />
+                            <ToggleSwitch IsChecked="{Binding DynamicPaletteEnabled, Mode=TwoWay}"
+                                          OnContent="开启" OffContent="关闭" />
+                        </StackPanel>
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="玻璃效果" FontSize="12" />
+                            <ComboBox ItemsSource="{Binding GlassQualities}"
+                                      SelectedIndex="{Binding GlassQualityIndex, Mode=TwoWay}" />
+                        </StackPanel>
+                    </StackPanel>
                 </Grid>
             </Border>
 

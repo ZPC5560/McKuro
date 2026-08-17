@@ -8,4 +8,22 @@
     <Application.Styles>
         <semi:SemiTheme Locale="zh-CN" />
     </Application.Styles>
+
+    <!-- McKuro 语义材质：启动时由 ThemePaletteService 根据壁纸与明暗模式替换。 -->
+    <Application.Resources>
+        <SolidColorBrush x:Key="McKuroAccent" Color="#5A8DEE" />
+        <SolidColorBrush x:Key="McKuroAccentHover" Color="#77A4F2" />
+        <SolidColorBrush x:Key="McKuroBackdropBase" Color="#070C18" />
+        <SolidColorBrush x:Key="McKuroBackdropTint" Color="#9E050A18" />
+        <SolidColorBrush x:Key="McKuroGlassFill" Color="#94141D32" />
+        <SolidColorBrush x:Key="McKuroGlassFillStrong" Color="#C611192D" />
+        <SolidColorBrush x:Key="McKuroGlassStroke" Color="#70CDE0FA" />
+        <SolidColorBrush x:Key="McKuroTextOnWallpaper" Color="#F5F8FF" />
+        <SolidColorBrush x:Key="McKuroTextMuted" Color="#BFCCE2" />
+        <SolidColorBrush x:Key="McKuroAccentGlow" Color="#565A8DEE" />
+        <SolidColorBrush x:Key="McKuroNavFill" Color="#C611192D" />
+        <SolidColorBrush x:Key="McKuroContentTint" Color="#9E050A18" />
+        <SolidColorBrush x:Key="McKuroHomeScrim" Color="#48070C18" />
+        <BlurEffect x:Key="McKuroWallpaperBlurEffect" Radius="18" />
+    </Application.Resources>
 </Application>

@@ -12,26 +12,27 @@
 | 模块 | 说明 |
 | --- | --- |
 | 🚀 启动器 | 检查更新(版本数值比较,对齐 Haiyu)、**预下载**(不影响已安装文件,支持**暂停/继续**)、安装更新、**修复游戏**(跳过校验文件,对齐 Haiyu)、**下载速度限制**(MB/s)、**启动参数**(DX11/DLSS/自定义参数/可选启动文件,对齐 Haiyu StartGameOption)、**启动游戏后最小化主窗口**、**DLSS/XeSS 版本检测显示**、打开游戏目录;**选目录后自动识别加载**(校验 exe/渠道/版本,自动检查更新);官方封面轮播 + 公告/活动/新闻面板 + 背景视频封面(可选,LibVLC;无 VLC 自动回退官方首帧图)+ 版本 Logo |
+| 🎨 动态主题 | 主页可更换 PNG/JPG/WebP 壁纸;壁纸主色驱动强调色、导航选中态和玻璃表面;普通数据页使用单实例全局轻模糊,低性能模式自动关闭模糊;壁纸复制到应用数据目录后不依赖原文件 |
 | 🎴 抽卡分析 | 解析 `Client.log` 解密 URL → 从官方接口拉取抽卡记录;按卡池统计保底/当前垫抽/小保底歪率/欧气评分/称号/双金/歪数/平均出货/出货率/天数;标注是否 UP;**多账号切换与「全部账号」聚合分析**;**五星角色/武器真实头像图标**;本地 SQLite 去重存储;Haiyu 风格五星列表 + 统计条 + 饼图/折线图 |
 | 👤 角色数据 | 通过**库街区** API 直接拉取当前账号角色数据(等级/武器/技能/共鸣链/**声骸/属性面板**),**网格卡片原生展示**(WutheringWavesTool 风格);也支持解析游戏本地缓存 |
 | 📅 签到 | 库街区账号登录(**Token** / **手机号+验证码**:极验人机验证 → 发送验证码 → 60s 倒计时重发 → 登录,流程对齐 Haiyu)、**一键游戏签到(鸣潮全部角色)**、**库街区每日任务**(库洛币签到+浏览+点赞+分享)、每日 8:00 自动签到 |
 | ☁️ 云游戏 | 云鸣潮:手机号登录 → 节点测速 → 一键启动/排队/取消;云游戏抽卡记录接口 |
 | 📖 图鉴 | 库街区 wiki 首页数据(Banner 轮播/公告/热点/活动,鸣潮)+ 网页快捷入口(官方 wiki/地图、Gamekee/彩墨地图) |
 | 📸 快捷键截图 | 全局热键(Win/Ctrl/Alt + F1-F12,默认 Win+F8)截取全屏保存 PNG(仅 Windows) |
-| ⚙️ 设置 | 游戏目录(**选择后自动识别加载**)、服务器渠道、**游戏修复·跳过校验文件管理**(添加/移除/是否删除)、库街区 Token/账号管理、下载并发数、**下载限速**、**游戏启动参数**(DX11/DLSS/自定义参数/启动文件)、**启动后最小化**、**主题切换**(跟随系统/浅色/深色,即时生效)、**应用自更新**(GitHub Release 检查/跳过版本/下载安装,对齐 Haiyu UpdateAppViewModel)、截图配置、界面语言(zh-Hans/en-US) |
+| ⚙️ 设置 | 游戏目录(**选择后自动识别加载**)、服务器渠道、**游戏修复·跳过校验文件管理**(添加/移除/是否删除)、库街区 Token/账号管理、下载并发数、**下载限速**、**游戏启动参数**(DX11/DLSS/自定义参数/启动文件)、**启动后最小化**、**动态壁纸/色板/玻璃质量**、**主题切换**(跟随系统/浅色/深色,即时生效)、**应用自更新**(GitHub Release 检查/跳过版本/下载安装,对齐 Haiyu UpdateAppViewModel)、截图配置、界面语言(zh-Hans/en-US) |
 
 应用图标:守岸人(Shorekeeper)官方图标(萌娘共享 CC-BY-NC-SA),多尺寸 ICO 内嵌 exe 与窗口标题栏。
 
 ## 环境要求
 
 - .NET SDK 10.0 (`dotnet --version` 应显示 10.x)
-- Windows 10/11 运行游戏与完整更新功能;macOS/Linux 可编译、测试与开发(游戏本体仅 Windows)
+- Windows 10/11 运行游戏与完整更新功能;macOS/Linux 提供 UI、壁纸、主题、数据和视频首帧回退(游戏本体仅 Windows;Linux 视频优先使用系统 libvlc)
 
 ## 项目结构
 
 ```
 McKuro/
-├── McKuro.sln                  # 解决方案
+├── McKuro.slnx                 # 解决方案
 ├── src/McKuro/                 # Avalonia 桌面应用 (Semi 主题)
 │   ├── Views/                 # 主页 / 鸣潮 / 抽卡分析 / 角色数据 / 签到 / 云游戏 / 图鉴 / 工具箱 / 设置 (Haiyu Shell 风格)
 │   ├── ViewModels/            # MVVM (CommunityToolkit.Mvvm)
@@ -58,7 +59,10 @@ dotnet run --project src/McKuro                    # 运行 (开发)
 dotnet test                                       # 运行测试
 dotnet publish src/McKuro -c Release -r win-x64 --self-contained   # AOT 发布 (Windows 上执行)
 dotnet publish src/McKuro -c Release -r osx-arm64 --self-contained # macOS 本地验证 AOT
+dotnet publish src/McKuro -c Release -r linux-x64 --self-contained # Linux 本地验证 AOT/UI
 ```
+
+Windows 发布会按 RID 条件带上 `VideoLAN.LibVLC.Windows`，不要求用户另装 VLC。Linux 使用系统 `libvlc.so/libvlccore.so`；macOS 和 Linux 找不到可用媒体运行库时，启动器会保留官方静态首帧，不影响其他页面。
 
 ## 日志
 

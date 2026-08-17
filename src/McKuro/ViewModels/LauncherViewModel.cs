@@ -54,7 +54,13 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>已安装且有更新:显示「安装更新」按钮(未安装时只显示「下载安装」)。</summary>
     public bool ShowInstallUpdate => IsInstalled && HasUpdate;
 
-    partial void OnIsInstalledChanged(bool value) => OnPropertyChanged(nameof(ShowInstallUpdate));
+    public bool ShowInstallButton => NativeGameManagementSupported && !IsInstalled;
+
+    partial void OnIsInstalledChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowInstallUpdate));
+        OnPropertyChanged(nameof(ShowInstallButton));
+    }
 
     partial void OnHasUpdateChanged(bool value) => OnPropertyChanged(nameof(ShowInstallUpdate));
 
@@ -111,6 +117,10 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>背景视频开关(用户设置)。</summary>
     [ObservableProperty]
     private bool _videoEnabled = true;
+
+    public bool NativeGameManagementSupported => AppServices.Capabilities.SupportsNativeGameManagement;
+
+    public string PlatformGameNotice => AppServices.Capabilities.GameSupportText;
 
     /// <summary>服务器渠道列表(与设置页一致)。</summary>
     public IReadOnlyList<string> Servers { get; } =
@@ -245,15 +255,24 @@ public sealed partial class LauncherViewModel : ViewModelBase
             var background = await AppServices.LauncherInfo.GetLauncherBackgroundAsync(server);
             if (background is not null)
             {
+                BackgroundVideoUrl = "";
                 if (!string.IsNullOrWhiteSpace(background.FirstFrameImage))
                 {
                     BackgroundImageUrl = background.FirstFrameImage;
                 }
 
-                if (!string.IsNullOrWhiteSpace(background.BackgroundFile))
+                if (background.BackgroundFileType == 2 && !string.IsNullOrWhiteSpace(background.BackgroundFile))
                 {
                     BackgroundVideoUrl = background.BackgroundFile;
                 }
+                else if (background.BackgroundFileType == 1 && !string.IsNullOrWhiteSpace(background.BackgroundFile))
+                {
+                    // 官方接口偶尔只返回静态背景文件，仍然作为封面显示。
+                    BackgroundImageUrl = background.BackgroundFile;
+                }
+
+                VideoEnabled = background.BackgroundFileType == 2
+                    && AppServices.Settings.Current.BackgroundVideoEnabled;
 
                 if (!string.IsNullOrWhiteSpace(background.Slogan))
                 {
@@ -269,6 +288,20 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
     private void RefreshState()
     {
+        if (!NativeGameManagementSupported)
+        {
+            IsInstalled = false;
+            HasUpdate = false;
+            HasPredownload = false;
+            ServerVersionText = "-";
+            PredownloadStateText = "";
+            GameVersionText = "平台不适用";
+            InstallStateText = PlatformGameNotice;
+            GraphicsComponentsText = "";
+            OnPropertyChanged(nameof(GraphicsComponentsText));
+            return;
+        }
+
         var paths = AppServices.Paths;
         IsInstalled = paths.IsGameInstalled;
         GameVersionText = IsInstalled ? "已安装" : "未安装";
@@ -299,6 +332,11 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [RelayCommand]
     private async Task CheckUpdateAsync()
     {
+        if (!NativeGameManagementSupported)
+        {
+            StatusText = PlatformGameNotice;
+            return;
+        }
         if (IsBusy)
         {
             return;
@@ -358,6 +396,11 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [RelayCommand]
     private async Task PreDownloadAsync()
     {
+        if (!NativeGameManagementSupported)
+        {
+            StatusText = PlatformGameNotice;
+            return;
+        }
         if (IsBusy || IsDownloading)
         {
             return;
@@ -404,6 +447,11 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [RelayCommand]
     private async Task InstallAsync()
     {
+        if (!NativeGameManagementSupported)
+        {
+            StatusText = PlatformGameNotice;
+            return;
+        }
         if (IsBusy || IsDownloading)
         {
             return;
@@ -461,6 +509,11 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [RelayCommand]
     private async Task RepairGameAsync()
     {
+        if (!NativeGameManagementSupported)
+        {
+            StatusText = PlatformGameNotice;
+            return;
+        }
         if (IsBusy || IsDownloading)
         {
             return;
@@ -508,6 +561,11 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [RelayCommand]
     private void Launch()
     {
+        if (!NativeGameManagementSupported)
+        {
+            StatusText = PlatformGameNotice;
+            return;
+        }
         var ok = AppServices.GameUpdater.LaunchGame(out var error);
         StatusText = ok ? "游戏已启动" : $"启动失败: {error}";
 
@@ -526,6 +584,11 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [RelayCommand]
     private void OpenGameFolder()
     {
+        if (!NativeGameManagementSupported)
+        {
+            StatusText = PlatformGameNotice;
+            return;
+        }
         var root = AppServices.Paths.GameRootDir;
         if (!string.IsNullOrEmpty(root) && Directory.Exists(root))
         {

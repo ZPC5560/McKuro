@@ -13,9 +13,11 @@
         <!-- 全屏背景图(官方启动器封面,铺满无留白,内容叠加其上) -->
         <Grid Grid.RowSpan="3">
             <Border Background="{DynamicResource SemiColorBg1}" />
-            <controls:AsyncImage ImageUrl="{Binding BackgroundImageUrl}"
-                                 Stretch="UniformToFill"
-                                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+            <controls:VideoBackgroundControl VideoUrl="{Binding BackgroundVideoUrl}"
+                                              FallbackImageUrl="{Binding BackgroundImageUrl}"
+                                              IsVideoEnabled="{Binding VideoEnabled}"
+                                              HorizontalAlignment="Stretch"
+                                              VerticalAlignment="Stretch" />
             <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.5" />
         </Grid>
         <!-- 顶部进度条:仅下载/安装/修复时显示(检查更新不显示,避免默认出现) -->
@@ -23,6 +25,16 @@
                      IsVisible="{Binding IsDownloading}"
                      Height="3"
                      Background="Transparent" />
+
+        <Border Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Top"
+                Margin="0,10,16,0" Padding="12,7" CornerRadius="14"
+                Background="{DynamicResource McKuroGlassFillStrong}"
+                BorderBrush="{DynamicResource McKuroGlassStroke}" BorderThickness="1"
+                IsVisible="{Binding !NativeGameManagementSupported}">
+            <TextBlock Text="{Binding PlatformGameNotice}" FontSize="12"
+                       Foreground="{DynamicResource McKuroTextOnWallpaper}"
+                       TextWrapping="Wrap" MaxWidth="360" />
+        </Border>
 
         <Grid Grid.Row="1" Margin="16,10,16,0">
             <!-- 左下角轮播图(Haiyu v2 风格,可隐藏) -->
@@ -137,6 +149,7 @@
                                                 CornerRadius="18" Padding="18,7" Foreground="White" />
                                         <Button Content="🔧 修复游戏" Command="{Binding RepairGameCommand}"
                                                 IsEnabled="{Binding IsInstalled}"
+                                                IsVisible="{Binding NativeGameManagementSupported}"
                                                 Background="#8C000000" BorderBrush="#4DFFFFFF" BorderThickness="1"
                                                 CornerRadius="18" Padding="18,7" Foreground="White" />
                                     </StackPanel>
@@ -228,7 +241,7 @@
                                     Foreground="#F2F6FF"
                                     Command="{Binding InstallCommand}"
                                     IsEnabled="{Binding !IsBusy}"
-                                    IsVisible="{Binding !IsInstalled}"
+                                    IsVisible="{Binding ShowInstallButton}"
                                     HorizontalAlignment="Stretch">
                                 <Button.Styles>
                                     <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
@@ -252,6 +265,7 @@
                                     CornerRadius="18"
                                     Command="{Binding LaunchCommand}"
                                     IsEnabled="{Binding IsInstalled}"
+                                    IsVisible="{Binding NativeGameManagementSupported}"
                                     HorizontalAlignment="Stretch">
                                 <Button.Styles>
                                     <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
