@@ -592,17 +592,9 @@ public sealed partial class LauncherViewModel : ViewModelBase
         var root = AppServices.Paths.GameRootDir;
         if (!string.IsNullOrEmpty(root) && Directory.Exists(root))
         {
-            try
+            if (!AppServices.OpenInFileManager(root))
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = root,
-                    UseShellExecute = true,
-                });
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"打开目录失败: {ex.Message}";
+                StatusText = "打开目录失败";
             }
         }
         else

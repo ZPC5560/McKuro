@@ -90,6 +90,42 @@ public static class AppServices
         AppDataDir ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "McKuro"));
 
     /// <summary>
+    /// 跨平台打开文件管理器定位路径(Windows 用默认/explorer,macOS 用 open,Linux 用 xdg-open)。
+    /// 返回 false 表示打开失败。
+    /// </summary>
+    public static bool OpenInFileManager(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = path,
+                    UseShellExecute = true,
+                });
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                System.Diagnostics.Process.Start("open", $"\"{path}\"");
+            }
+            else
+            {
+                System.Diagnostics.Process.Start("xdg-open", $"\"{path}\"");
+            }
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// 初始化 DI 容器(只会跑一次)。
     /// </summary>
     public static void Initialize(string? overrideDataDir = null, ILoggerFactory? loggerFactory = null)

@@ -136,11 +136,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            if (!AppServices.OpenInFileManager(dir))
             {
-                FileName = dir,
-                UseShellExecute = true,
-            });
+                AppUpdateStatusText = "打开日志目录失败";
+            }
         }
         catch (Exception ex)
         {
@@ -323,6 +322,22 @@ public sealed partial class SettingsViewModel : ViewModelBase
         HasWallpaper = false;
         await AppServices.ThemePalette.ApplyCurrentAsync();
         WallpaperStatusText = "已恢复默认背景";
+    }
+
+    /// <summary>打开壁纸存储目录(跨平台;macOS 用 open)。</summary>
+    [RelayCommand]
+    private void OpenWallpaperDir()
+    {
+        var dir = Path.Combine(AppServices.AppDataDir, "wallpapers");
+        if (!Directory.Exists(dir))
+        {
+            WallpaperStatusText = "壁纸目录不存在";
+            return;
+        }
+        if (!AppServices.OpenInFileManager(dir))
+        {
+            WallpaperStatusText = "打开壁纸目录失败";
+        }
     }
 
     [RelayCommand]

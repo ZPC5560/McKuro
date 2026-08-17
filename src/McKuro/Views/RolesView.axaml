@@ -436,6 +436,7 @@
                                                                            Text="{Binding AttributeName}" />
                                                                 <TextBlock Grid.Column="1" FontSize="15"
                                                                            FontWeight="Bold"
+                                                                           HorizontalAlignment="Right"
                                                                            Foreground="{DynamicResource SemiColorPrimary}"
                                                                            Text="{Binding AttributeValue}" />
                                                             </Grid>

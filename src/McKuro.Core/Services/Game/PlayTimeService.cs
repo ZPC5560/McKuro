@@ -286,10 +286,13 @@ public sealed class PlayTimeService
             var todayStr = today.ToString("yyyy-MM-dd");
             analysis.TodaySeconds = rows.Where(r => r.GameDate == todayStr).Sum(r => r.DurationSec);
 
-            // 最近 7 天:日期与分布
+            // 本周(周一起):Last7Days* 索引 0=周一 … 6=周日,与 weekNames 对应。
+            // 之前用"最近 7 天滚动窗口"(today-6 起),跨周后本周数据被排到索引 6 且混入上周,
+            // 导致"新的一周没有计算时间"。改为本周起始(周一)后索引与周几正确对应。
+            var weekStart = today.AddDays(-((int)today.DayOfWeek + 6) % 7);
             for (int i = 0; i < 7; i++)
             {
-                var day = today.AddDays(-(6 - i));
+                var day = weekStart.AddDays(i);
                 var dayStr = day.ToString("yyyy-MM-dd");
                 analysis.Last7DaysDates[i] = dayStr;
                 var dayRows = rows.Where(r => r.GameDate == dayStr).ToList();

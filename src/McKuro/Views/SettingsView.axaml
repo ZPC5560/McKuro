@@ -228,6 +228,7 @@
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Button Content="选择壁纸" Classes="primary" Command="{Binding SelectWallpaperCommand}" />
                             <Button Content="恢复默认" Command="{Binding ResetWallpaperCommand}" />
+                            <Button Content="打开目录" Command="{Binding OpenWallpaperDirCommand}" />
                         </StackPanel>
                     </StackPanel>
                     <StackPanel Grid.Column="2" Spacing="12" MinWidth="150" VerticalAlignment="Center">
