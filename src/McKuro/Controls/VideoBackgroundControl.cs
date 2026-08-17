@@ -42,6 +42,7 @@ public sealed class VideoBackgroundControl : Grid
 
     // 软件渲染帧状态(回调线程写,UI 线程读)
     private byte[]? _staging;
+    private GCHandle _stagingHandle;
     private int _frameWidth;
     private int _frameHeight;
     private int _framePitch;
@@ -291,6 +292,7 @@ public sealed class VideoBackgroundControl : Grid
             _frameHeight = 0;
             _framePitch = 0;
             _staging = null;
+            FreeStagingHandle();
             _bitmap?.Dispose();
             _bitmap = null;
         }
@@ -335,7 +337,13 @@ public sealed class VideoBackgroundControl : Grid
                 _frameHeight = (int)height;
                 _framePitch = (int)(width * 4);
                 pitches = (uint)_framePitch;
+                lines = height;
+
+                // 分配自管托管缓冲并 pin:libvlc 把帧写入我们的缓冲(Lock 返回其指针),
+                // Unlock 时从托管数组读 —— 绝不访问 libvlc 内部缓冲,避免其释放后指针失效崩溃。
+                FreeStagingHandle();
                 _staging = new byte[_framePitch * _frameHeight];
+                _stagingHandle = GCHandle.Alloc(_staging, GCHandleType.Pinned);
             }
 
             // 在 UI 线程创建/更新位图
@@ -353,29 +361,34 @@ public sealed class VideoBackgroundControl : Grid
         // 无需额外清理
     }
 
+    /// <summary>释放自管缓冲的 pin 句柄(须在 _sync 锁内调用)。</summary>
+    private void FreeStagingHandle()
+    {
+        if (_stagingHandle.IsAllocated)
+        {
+            _stagingHandle.Free();
+        }
+        _stagingHandle = default;
+    }
+
     private IntPtr VideoLockCb(IntPtr opaque, IntPtr planes)
     {
-        try
+        // 返回我们 pin 的托管缓冲指针(libvlc 直接写入);缓冲始终有效,不依赖 libvlc 内部生命周期
+        lock (_sync)
         {
-            return Marshal.ReadIntPtr(planes);
+            if (_stagingHandle.IsAllocated)
+            {
+                return _stagingHandle.AddrOfPinnedObject();
+            }
         }
-        catch (Exception)
-        {
-            return IntPtr.Zero;
-        }
+        return IntPtr.Zero;
     }
 
     private void VideoUnlockCb(IntPtr opaque, IntPtr picture, IntPtr planes)
     {
         try
         {
-            IntPtr plane = Marshal.ReadIntPtr(planes);
-            if (plane == IntPtr.Zero)
-            {
-                return;
-            }
-
-            // 在 lock 内取一致的帧尺寸与缓冲快照,避免与 DisposePlayer/换 URL 交错
+            // 帧已被 libvlc 写入我们的 _staging(托管数组),从托管读,不触碰任何 native plane
             byte[]? staging;
             int pitch, height;
             lock (_sync)
@@ -389,21 +402,10 @@ public sealed class VideoBackgroundControl : Grid
                 height = _frameHeight;
             }
 
-            // 只拷贝当前帧尺寸的字节数(不与缓冲实际长度耦合,避免 plane 大小不匹配时越界)
             int size = pitch * height;
             if (size <= 0 || size > staging.Length)
             {
                 return;
-            }
-
-            // libvlc 可能对无效 plane 回调:用逐行受保护拷贝 + 显式捕获(含 AV)
-            try
-            {
-                Marshal.Copy(plane, staging, 0, size);
-            }
-            catch (AccessViolationException)
-            {
-                return; // 控件销毁/换源后 libvlc 残留回调,忽略
             }
 
             // 合并多帧:同一 UI 迭代只渲染最新一帧,避免刷爆消息队列
@@ -414,7 +416,7 @@ public sealed class VideoBackgroundControl : Grid
         }
         catch (Exception)
         {
-            // 忽略单帧拷贝异常(含 native 回调期间的竞态)
+            // 忽略单帧异常(含回调期间的竞态)
         }
     }
 
