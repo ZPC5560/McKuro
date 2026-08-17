@@ -29,3 +29,5 @@ docs/
 
 # Runtime-generated device id
 device-id.txt
+
+publish.log
