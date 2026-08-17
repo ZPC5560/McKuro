@@ -48,6 +48,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _backgroundVideoEnabled;
 
+    /// <summary>背景视频开关即时保存(切换立即生效,无需点保存)。</summary>
+    partial void OnBackgroundVideoEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.BackgroundVideoEnabled = value;
+        AppServices.Settings.Save();
+    }
+
     // 动态壁纸与玻璃主题
     [ObservableProperty]
     private string _wallpaperPath = "";

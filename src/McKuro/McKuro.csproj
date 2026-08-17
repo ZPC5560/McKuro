@@ -28,8 +28,9 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Semi.Avalonia" Version="12.1.0.1" />
-    <!-- 背景视频封面(可选):LibVLC native 库来自系统 VLC(macOS)或 VideoLAN.LibVLC.Windows(Windows);缺失时自动回退首帧图 -->
-    <PackageReference Include="LibVLCSharp.Avalonia" Version="3.10.1" />
+    <!-- 背景视频封面(可选):LibVLC native 库来自系统 VLC(macOS)或 VideoLAN.LibVLC.Windows(Windows);缺失时自动回退首帧图。
+         用 LibVLCSharp 纯软件回调(vmem)渲染到托管位图,不用 LibVLCSharp.Avalonia 的 VideoView(NativeControlHost 会盖住 UI)。 -->
+    <PackageReference Include="LibVLCSharp" Version="3.10.1" />
     <!-- Windows 发布包内置 libvlc，避免用户必须另行安装 VLC；Linux 使用系统 libvlc，macOS 走应用内/系统探测。 -->
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1"
                       Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(RuntimeIdentifier)' == 'win-arm64' Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')" />

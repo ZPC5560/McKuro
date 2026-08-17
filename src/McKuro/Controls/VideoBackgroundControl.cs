@@ -1,7 +1,12 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
-using LibVLCSharp.Avalonia;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using Avalonia.Threading;
 using LibVLCSharp.Shared;
 
 namespace McKuro.Controls;
@@ -10,17 +15,44 @@ namespace McKuro.Controls;
 /// 背景封面控件:优先用 LibVLC 播放宣传视频,无可用 native 库或播放失败时回退到首帧静态图。
 /// 依赖:系统装有 VLC(macOS/Linux)或应用目录带 VideoLAN.LibVLC native 库(Windows)。
 /// 视频不可用不影响其余功能 —— 全程 try-catch,绝不抛出。
+/// <para>
+/// 渲染方式:通过 LibVLCSharp 的软件回调(vmem)把每帧 RGBA 像素拷贝进托管
+/// <see cref="WriteableBitmap"/>,再用普通 <see cref="Image"/> 显示。
+/// 不使用 LibVLCSharp.Avalonia 的 <c>VideoView</c>(它内部是 <c>NativeControlHost</c>):
+/// native 子窗口被操作系统合成在 Avalonia 渲染表面之上(airspace 问题),
+/// 会盖住同窗口内的所有普通控件(ZIndex/不透明/层级均无效) —— 这正是"视频播放时
+/// 版本信息/启动按键/渠道/轮播全部消失"的根因。托管 Image 参与正常 ZIndex 层叠,
+/// 视频在背景层、UI 在上层,两者可同时可见。
+/// </para>
 /// </summary>
 public sealed class VideoBackgroundControl : Grid
 {
     private static readonly Lazy<LibVLC?> LibVlc = new(TryCreateLibVlc);
 
+    private readonly object _sync = new();
+
     private MediaPlayer? _player;
     private Media? _media;
-    private VideoView? _videoView;
+    private Image? _videoImage;
+    private WriteableBitmap? _bitmap;
     private AsyncImage? _fallback;
     private bool _initialized;
     private bool _attached;
+    private bool _disposed;
+
+    // 软件渲染帧状态(回调线程写,UI 线程读)
+    private byte[]? _staging;
+    private int _frameWidth;
+    private int _frameHeight;
+    private int _framePitch;
+    private int _framePending;
+
+    // 持有委托强引用,防止被 GC 回收(libvlc 内部持有原生回调指针)
+    private MediaPlayer.LibVLCVideoFormatCb? _formatCb;
+    private MediaPlayer.LibVLCVideoCleanupCb? _cleanupCb;
+    private MediaPlayer.LibVLCVideoLockCb? _lockCb;
+    private MediaPlayer.LibVLCVideoUnlockCb? _unlockCb;
+    private MediaPlayer.LibVLCVideoDisplayCb? _displayCb;
 
     public static readonly StyledProperty<string> VideoUrlProperty =
         AvaloniaProperty.Register<VideoBackgroundControl, string>(nameof(VideoUrl));
@@ -57,7 +89,7 @@ public sealed class VideoBackgroundControl : Grid
         ClipToBounds = true;
         _fallback = new AsyncImage
         {
-            Stretch = Avalonia.Media.Stretch.UniformToFill,
+            Stretch = Stretch.UniformToFill,
         };
         Children.Add(_fallback);
 
@@ -126,6 +158,7 @@ public sealed class VideoBackgroundControl : Grid
     private void TryStartVideo()
     {
         DisposePlayer();
+        _disposed = false;
 
         if (!IsVideoEnabled || string.IsNullOrWhiteSpace(VideoUrl))
         {
@@ -145,33 +178,33 @@ public sealed class VideoBackgroundControl : Grid
         {
             var player = new MediaPlayer(libvlc)
             {
-                EnableHardwareDecoding = true,
+                // 软件回调(vmem)路径:关闭硬件解码,确保像素回调可用
+                EnableHardwareDecoding = false,
                 Volume = 0,
             };
             _player = player;
 
-            _videoView = new VideoView
+            // 托管 Image 显示软件渲染帧(参与正常 ZIndex,不遮挡 UI)
+            _videoImage = new Image
             {
-                MediaPlayer = _player,
-                IsVisible = true,
+                Stretch = Stretch.UniformToFill,
                 IsHitTestVisible = false,
                 Opacity = 0,
-                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
-                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
             };
-            Children.Add(_videoView);
+            Children.Add(_videoImage);
+
+            // 持有委托强引用 + 注册软件渲染回调(libvlc 解码后把帧写入 vmem 缓冲)
+            _formatCb = VideoFormatCb;
+            _cleanupCb = VideoCleanupCb;
+            _lockCb = VideoLockCb;
+            _unlockCb = VideoUnlockCb;
+            _displayCb = VideoDisplayCb;
+            player.SetVideoFormatCallbacks(_formatCb, _cleanupCb);
+            player.SetVideoCallbacks(_lockCb, _unlockCb, _displayCb);
 
             _media = new Media(libvlc, new Uri(VideoUrl));
-            player.Playing += (_, _) =>
-            {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    if (ReferenceEquals(_player, player) && _videoView is not null)
-                    {
-                        _videoView.Opacity = 1;
-                    }
-                });
-            };
             player.EncounteredError += (_, _) => ShowFallback();
             player.EndReached += (_, _) =>
             {
@@ -201,24 +234,7 @@ public sealed class VideoBackgroundControl : Grid
 
     private void DisposePlayer()
     {
-        // 关键:先解除 VideoView 与 MediaPlayer 的关联。
-        // 若先 Children.Remove(_videoView),Avalonia NativeControlHost 销毁会触发
-        // VideoView.Detach() → MediaPlayer.set_Hwnd(IntPtr.Zero),此时 libvlc native 句柄
-        // 已释放/状态异常 → 访问违规(c0000005)崩溃(切换页面时)。
-        // 先把 MediaPlayer 置 null,让 Detach 走安全路径,再移除控件。
-        if (_videoView is not null)
-        {
-            try
-            {
-                _videoView.MediaPlayer = null;
-            }
-            catch (Exception)
-            {
-                // 忽略:某些状态下列列解绑本身可能抛,继续走移除
-            }
-            Children.Remove(_videoView);
-            _videoView = null;
-        }
+        _disposed = true;
 
         if (_player is not null)
         {
@@ -231,27 +247,211 @@ public sealed class VideoBackgroundControl : Grid
                 // 忽略
             }
 
-            _player.Dispose();
+            try
+            {
+                _player.Dispose();
+            }
+            catch (Exception)
+            {
+                // 忽略
+            }
+
             _player = null;
         }
 
         _media?.Dispose();
         _media = null;
+
+        lock (_sync)
+        {
+            _frameWidth = 0;
+            _frameHeight = 0;
+            _framePitch = 0;
+            _staging = null;
+            _bitmap?.Dispose();
+            _bitmap = null;
+        }
+
+        if (_videoImage is not null)
+        {
+            _videoImage.Source = null;
+            Children.Remove(_videoImage);
+            _videoImage = null;
+        }
     }
 
     private void ShowFallback()
     {
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        Dispatcher.UIThread.Post(() =>
         {
-            if (_videoView is not null)
+            if (_videoImage is not null)
             {
-                _videoView.Opacity = 0;
+                _videoImage.Opacity = 0;
             }
+
             if (_fallback is not null)
             {
                 _fallback.ImageUrl = FallbackImageUrl;
             }
         });
+    }
+
+    // ---- LibVLC vmem 软件渲染回调(libvlc 线程) ----
+
+    private uint VideoFormatCb(ref IntPtr opaque, IntPtr chroma, ref uint width, ref uint height, ref uint pitches, ref uint lines)
+    {
+        try
+        {
+            // 请求 RGBA(4 字节/像素,与 Avalonia Rgba8888 直接对应)
+            byte[] fourcc = { (byte)'R', (byte)'G', (byte)'B', (byte)'A' };
+            Marshal.Copy(fourcc, 0, chroma, 4);
+
+            lock (_sync)
+            {
+                _frameWidth = (int)width;
+                _frameHeight = (int)height;
+                _framePitch = (int)(width * 4);
+                pitches = (uint)_framePitch;
+                _staging = new byte[_framePitch * _frameHeight];
+            }
+
+            // 在 UI 线程创建/更新位图
+            Dispatcher.UIThread.Post(CreateBitmap);
+            return 1; // 成功
+        }
+        catch (Exception)
+        {
+            return 0; // 失败 → libvlc 终止该输出
+        }
+    }
+
+    private void VideoCleanupCb(ref IntPtr opaque)
+    {
+        // 无需额外清理
+    }
+
+    private IntPtr VideoLockCb(IntPtr opaque, IntPtr planes)
+    {
+        try
+        {
+            return Marshal.ReadIntPtr(planes);
+        }
+        catch (Exception)
+        {
+            return IntPtr.Zero;
+        }
+    }
+
+    private void VideoUnlockCb(IntPtr opaque, IntPtr picture, IntPtr planes)
+    {
+        try
+        {
+            IntPtr plane = Marshal.ReadIntPtr(planes);
+            lock (_sync)
+            {
+                if (_staging is null)
+                {
+                    return;
+                }
+
+                int size = Math.Min(_staging.Length, _framePitch * _frameHeight);
+                if (size > 0)
+                {
+                    Marshal.Copy(plane, _staging, 0, size);
+                }
+            }
+
+            // 合并多帧:同一 UI 迭代只渲染最新一帧,避免刷爆消息队列
+            if (Interlocked.Exchange(ref _framePending, 1) == 0)
+            {
+                Dispatcher.UIThread.Post(RenderFrame);
+            }
+        }
+        catch (Exception)
+        {
+            // 忽略单帧拷贝异常
+        }
+    }
+
+    private void VideoDisplayCb(IntPtr opaque, IntPtr picture)
+    {
+        // 帧已通过 Unlock 拷出,无需在此再处理
+    }
+
+    // ---- UI 线程渲染 ----
+
+    private void CreateBitmap()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        lock (_sync)
+        {
+            if (_frameWidth <= 0 || _frameHeight <= 0)
+            {
+                return;
+            }
+
+            if (_bitmap is null
+                || _bitmap.PixelSize.Width != _frameWidth
+                || _bitmap.PixelSize.Height != _frameHeight)
+            {
+                _bitmap?.Dispose();
+                _bitmap = new WriteableBitmap(
+                    new PixelSize(_frameWidth, _frameHeight),
+                    new Vector(96, 96),
+                    PixelFormats.Rgba8888,
+                    AlphaFormat.Opaque);
+                if (_videoImage is not null)
+                {
+                    _videoImage.Source = _bitmap;
+                }
+            }
+        }
+    }
+
+    private void RenderFrame()
+    {
+        Interlocked.Exchange(ref _framePending, 0);
+        if (_disposed)
+        {
+            return;
+        }
+
+        lock (_sync)
+        {
+            if (_bitmap is null || _staging is null)
+            {
+                return;
+            }
+
+            try
+            {
+                using (var fb = _bitmap.Lock())
+                {
+                    int srcRowBytes = _framePitch;
+                    int dstRowBytes = fb.RowBytes;
+                    int height = Math.Min(_frameHeight, fb.Size.Height);
+                    int copyRow = Math.Min(srcRowBytes, dstRowBytes);
+                    for (int y = 0; y < height; y++)
+                    {
+                        Marshal.Copy(_staging, y * srcRowBytes, IntPtr.Add(fb.Address, y * dstRowBytes), copyRow);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // 忽略渲染异常
+            }
+        }
+
+        // 首个真实帧到达后才显示视频(此前保持透明,让静态图可见)
+        if (_videoImage is not null && _videoImage.Opacity < 1)
+        {
+            _videoImage.Opacity = 1;
+        }
     }
 
     private static IEnumerable<string> CandidateLibVlcDirectories()

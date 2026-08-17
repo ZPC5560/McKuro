@@ -178,6 +178,13 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>导航到启动页时调用:自动检查更新(移除手动检查按钮后,切换到启动页即检查)。</summary>
     public void OnNavigatedTo()
     {
+        // 同步背景视频开关(用户可能在设置页切换;重新进启动页即生效)
+        var wantVideo = AppServices.Settings.Current.BackgroundVideoEnabled;
+        if (VideoEnabled != wantVideo)
+        {
+            VideoEnabled = wantVideo;
+        }
+
         if (IsInstalled && !IsBusy)
         {
             _ = CheckUpdateAsync();
