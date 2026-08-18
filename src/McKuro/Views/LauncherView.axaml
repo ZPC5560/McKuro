@@ -175,53 +175,72 @@
                     </Border>
                     </StackPanel>
 
-                    <!-- 底部:速度曲线+文本 | 预下载环+合并按钮 | 启动/安装大按钮(三列) -->
-                    <Grid Grid.Row="1" ColumnDefinitions="3*,1.6*,220" ColumnSpacing="24" Margin="0,16,0,20"
+                    <!-- 底部:进度卡片(半透明) | 启动/安装大按钮(两列,避免贴最左被信息横幅挤压) -->
+                    <Grid Grid.Row="1" ColumnDefinitions="*,220" ColumnSpacing="24" Margin="0,16,0,20"
                           VerticalAlignment="Bottom">
-                        <!-- 左:速度波动曲线(窄,文本显示在曲线上方) -->
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="6"
-                                    HorizontalAlignment="Left">
-                            <StackPanel Spacing="2">
-                                <StackPanel Orientation="Horizontal" Spacing="12">
-                                    <TextBlock Text="{Binding ProgressText}" FontSize="12"
-                                               Foreground="{DynamicResource SemiColorText2}" />
-                                    <TextBlock Text="{Binding SpeedText}" FontSize="12"
-                                               Foreground="{DynamicResource SemiColorPrimary}" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="12">
-                                    <TextBlock Text="{Binding RemainingTimeText}" FontSize="11"
-                                               Foreground="{DynamicResource SemiColorText2}"
-                                               IsVisible="{Binding RemainingTimeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                                    <TextBlock Text="{Binding DownloadSizeText}" FontSize="11"
-                                               Foreground="{DynamicResource SemiColorText2}"
-                                               IsVisible="{Binding DownloadSizeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                                </StackPanel>
-                            </StackPanel>
-                            <controls:SpeedTrendChart Height="56"
-                                                      Values="{Binding DownloadSpeedHistory}" />
-                        </StackPanel>
-
-                        <!-- 中:预下载进度环(显示%) + 合并下载按钮 -->
-                        <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
-                                    IsVisible="{Binding IsPreDownloadActive}">
-                            <controls:RingProgress Width="72" Height="72"
-                                                   Value="{Binding ProgressPercent}"
-                                                   Thickness="6"
-                                                   ShowText="True"
-                                                   FontSize="15" />
-                            <Button Content="{Binding PreDownloadButtonText}"
-                                    Classes="primary"
-                                    Command="{Binding TogglePreDownloadCommand}"
-                                    IsEnabled="{Binding PreDownloadButtonEnabled}"
-                                    HorizontalAlignment="Center" />
-                            <TextBlock Text="{Binding DiskSpaceText}" FontSize="10"
-                                       Foreground="{DynamicResource SemiColorText3}"
-                                       HorizontalAlignment="Center"
-                                       IsVisible="{Binding DiskSpaceText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                        </StackPanel>
+                        <!-- 左:半透明进度卡片(速度文本在曲线上方 + 预下载环/合并按钮) -->
+                        <Border Grid.Column="0"
+                                CornerRadius="12"
+                                Padding="16"
+                                ClipToBounds="True"
+                                IsVisible="{Binding IsPreDownloadActive}"
+                                VerticalAlignment="Center">
+                            <Grid>
+                                <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.7" CornerRadius="12" />
+                                <Border Background="{DynamicResource SemiColorBg2}"
+                                        Opacity="0.65"
+                                        Padding="16"
+                                        CornerRadius="12">
+                                    <StackPanel Spacing="8">
+                                        <!-- 速度/进度文本(在曲线上方) -->
+                                        <StackPanel Spacing="2">
+                                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                                <TextBlock Text="{Binding ProgressText}" FontSize="12"
+                                                           Foreground="White" />
+                                                <TextBlock Text="{Binding SpeedText}" FontSize="12"
+                                                           Foreground="{DynamicResource SemiColorPrimary}" />
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                                <TextBlock Text="{Binding RemainingTimeText}" FontSize="11"
+                                                           Foreground="{DynamicResource SemiColorText2}"
+                                                           IsVisible="{Binding RemainingTimeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                                <TextBlock Text="{Binding DownloadSizeText}" FontSize="11"
+                                                           Foreground="{DynamicResource SemiColorText2}"
+                                                           IsVisible="{Binding DownloadSizeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                                <TextBlock Text="{Binding DiskSpaceText}" FontSize="11"
+                                                           Foreground="{DynamicResource SemiColorText3}"
+                                                           IsVisible="{Binding DiskSpaceText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <!-- 速度波动曲线 -->
+                                        <controls:SpeedTrendChart Height="56"
+                                                                  Values="{Binding DownloadSpeedHistory}" />
+                                        <!-- 预下载环(显示%) + 合并下载按钮,横排 -->
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16" Margin="0,2,0,0">
+                                            <Grid Width="72" Height="72" Grid.Column="0"
+                                                  HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <controls:RingProgress Width="72" Height="72"
+                                                                       Value="{Binding ProgressPercent}"
+                                                                       Thickness="6"
+                                                                       ShowText="True"
+                                                                       FontSize="15" />
+                                            </Grid>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="6">
+                                                <Button Content="{Binding PreDownloadButtonText}"
+                                                        Classes="primary"
+                                                        Command="{Binding TogglePreDownloadCommand}"
+                                                        IsEnabled="{Binding PreDownloadButtonEnabled}"
+                                                        HorizontalAlignment="Left"
+                                                        Padding="18,8" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
 
                         <!-- 右:启动/安装大按钮 -->
-                        <StackPanel Grid.Column="2" Width="220" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="10">
+                        <StackPanel Grid.Column="1" Width="220" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="10">
                             <Button Height="56"
                                     Padding="0"
                                     FontSize="15"
