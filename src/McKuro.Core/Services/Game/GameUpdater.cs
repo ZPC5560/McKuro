@@ -269,7 +269,24 @@ public sealed class GameUpdater : IGameUpdater
         }
 
         var manifest = load.Manifest;
-        var diff = _installer.ComputeDiff(manifest, root);
+        // 校验阶段进度:转发为 DownloadProgress(Percent=校验进度,FileIndex=已校验数)
+        IProgress<DiffProgress>? diffProgress = null;
+        if (progress is not null)
+        {
+            diffProgress = new Progress<DiffProgress>(p =>
+            {
+                progress.Report(new DownloadProgress
+                {
+                    FileIndex = p.Checked,
+                    FileTotal = Math.Max(p.Total, 1),
+                    BytesDownloaded = 0,
+                    BytesTotal = 0,
+                    SpeedBps = 0,
+                    CurrentFile = $"正在校验本地文件 {p.Checked}/{p.Total}…",
+                });
+            });
+        }
+        var diff = _installer.ComputeDiff(manifest, root, progress: diffProgress);
         if (!diff.HasChanges)
         {
             return (true, null, "游戏已是最新版本,无需下载");

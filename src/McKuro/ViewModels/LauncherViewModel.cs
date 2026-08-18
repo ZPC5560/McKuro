@@ -486,6 +486,15 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
         var progress = new Progress<DownloadProgress>(p =>
         {
+            // 校验阶段(BytesTotal==0):进度按文件数显示,告知用户"正在校验本地文件"
+            if (p.BytesTotal <= 0 && p.FileTotal > 0)
+            {
+                ProgressPercent = Math.Clamp(p.FileIndex * 100.0 / p.FileTotal, 0, 100);
+                ProgressText = $"正在校验本地文件 {p.FileIndex}/{p.FileTotal}…";
+                CurrentFileText = p.CurrentFile;
+                SpeedText = "";
+                return;
+            }
             ProgressPercent = p.Percent * 100;
             ProgressText = $"{p.FileIndex}/{p.FileTotal} 文件 · {FormatSize(p.BytesDownloaded)}/{FormatSize(p.BytesTotal)} · {FormatSpeed(p.SpeedBps)}";
             CurrentFileText = p.CurrentFile;

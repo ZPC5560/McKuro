@@ -10,6 +10,9 @@ public sealed class UpdateDiff
     public bool HasChanges => ToDownload.Count > 0;
 }
 
+/// <summary>本地文件校验进度(供 UI 显示"校验文件 x/N")。</summary>
+public readonly record struct DiffProgress(int Checked, int Total, string CurrentFile);
+
 /// <summary>
 /// 更新安装器:对比本地文件与清单,计算差异,并将(预下载的)文件原子化安装到游戏目录。
 /// 替换文件前备份到 <c>.McKuro_backup</c>,安装完成后写入版本标记。
@@ -22,14 +25,23 @@ public sealed class UpdateInstaller
     /// <param name="manifest">服务端清单。</param>
     /// <param name="gameRootDir">游戏根目录。</param>
     /// <param name="skipPaths">跳过校验的相对路径集合(OrdinalIgnoreCase,使用正斜杠);命中则视为无需下载。</param>
-    public UpdateDiff ComputeDiff(GameManifest manifest, string gameRootDir, IReadOnlySet<string>? skipPaths = null)
+    /// <param name="progress">校验进度回调(每秒节流,避免几万文件高频回调阻塞 UI)。</param>
+    public UpdateDiff ComputeDiff(
+        GameManifest manifest,
+        string gameRootDir,
+        IReadOnlySet<string>? skipPaths = null,
+        IProgress<DiffProgress>? progress = null)
     {
         var diff = new UpdateDiff();
+        var total = manifest.Files.Count;
+        int checkedCount = 0;
+        var lastReport = DateTime.UtcNow;
         foreach (var entry in manifest.Files)
         {
             // 用户配置的跳过校验文件:直接忽略(对齐 Haiyu SkipVerifyFiles)
             if (skipPaths is not null && skipPaths.Contains(entry.Path))
             {
+                checkedCount++;
                 continue;
             }
 
@@ -37,14 +49,22 @@ public sealed class UpdateInstaller
             if (!File.Exists(localPath))
             {
                 diff.ToDownload.Add(entry);
-                continue;
             }
-
-            if (!string.IsNullOrEmpty(entry.Md5) && !FileDownloader.VerifyLocalFile(localPath, entry))
+            else if (!string.IsNullOrEmpty(entry.Md5) && !FileDownloader.VerifyLocalFile(localPath, entry))
             {
                 diff.ToDownload.Add(entry);
             }
+
+            checkedCount++;
+            // 节流:最多每 100ms 报一次,避免几万文件高频回调阻塞 UI
+            var now = DateTime.UtcNow;
+            if (progress is not null && (now - lastReport).TotalMilliseconds >= 100)
+            {
+                lastReport = now;
+                progress.Report(new DiffProgress(checkedCount, total, entry.Path));
+            }
         }
+        progress?.Report(new DiffProgress(total, total, ""));
         return diff;
     }
 
