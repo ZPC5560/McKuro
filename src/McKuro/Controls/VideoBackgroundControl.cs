@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -51,9 +53,19 @@ public sealed class VideoBackgroundControl : Grid
     private bool _attached;
     private bool _disposed;
 
-    // 软件渲染帧状态。更新回调线程只置标志并 Post,实际渲染全在 UI 线程,
-    // 因此 _framePending 用 Interlocked 合并多帧,避免同一 UI 迭代重复渲染。
+    // 软件渲染帧状态。更新回调线程只置标志并用信号唤醒后台渲染线程,
+    // 实际 SoftwareRender 在独立渲染线程执行(解码/渲染不阻塞 UI),UI 线程只做缓冲拷贝。
     private int _framePending;
+
+    // 后台渲染线程:等待帧信号 → SoftwareRender 写入 pin 缓冲 → 通知 UI 拷贝。
+    private Thread? _renderThread;
+    private readonly SemaphoreSlim _frameSignal = new(0);
+    private readonly SemaphoreSlim _frameRendered = new(0);
+    private byte[]? _renderBuffer;
+    private GCHandle _bufferHandle;
+    private IntPtr _bufferPtr;
+    private volatile bool _renderThreadRunning;
+    private bool _uiFramePending;
 
     // 从 mpv video-params 读取的实际视频尺寸(首帧到达后解析一次);
     // 位图按视频原生分辨率创建,交给 Image 的 UniformToFill 做封面缩放 —— 与原 LibVLC 行为一致。
@@ -186,7 +198,7 @@ public sealed class VideoBackgroundControl : Grid
             };
             _mpv.RequestLogMessages("warn");
 
-            // 软件渲染:update 回调在 mpv 线程,只合并标志并 Post 到 UI 线程渲染
+            // 软件渲染:update 回调在 mpv 线程,只合并标志并唤醒后台渲染线程(解码/渲染不阻塞 UI)
             _mpv.StartSoftwareRendering(() =>
             {
                 if (_disposed)
@@ -195,9 +207,19 @@ public sealed class VideoBackgroundControl : Grid
                 }
                 if (Interlocked.Exchange(ref _framePending, 1) == 0)
                 {
-                    Dispatcher.UIThread.Post(RenderFrame);
+                    try
+                    {
+                        _frameSignal.Release();
+                    }
+                    catch (SemaphoreFullException)
+                    {
+                        // 已排队,忽略
+                    }
                 }
             });
+
+            // 启动独立渲染线程:每帧 SoftwareRender 写入 pin 缓冲,UI 只做轻量拷贝
+            StartRenderThread();
 
             // 看门狗:15s 内无首帧 → 回退静态图
             _timeoutCts = new CancellationTokenSource();
@@ -295,6 +317,9 @@ public sealed class VideoBackgroundControl : Grid
         _timeoutCts?.Dispose();
         _timeoutCts = null;
 
+        // 先停渲染线程,避免它还在用 mpv render context 时 Dispose
+        StopRenderThread();
+
         if (_mpv is not null)
         {
             // libmpv render API 是嵌入式一等 API:MpvContext.Dispose() 内部 StopRendering(停帧+释放 render context)
@@ -344,12 +369,136 @@ public sealed class VideoBackgroundControl : Grid
         });
     }
 
-    // ---- UI 线程渲染 ----
+    // ---- 独立渲染线程 ----
 
-    private void RenderFrame()
+    /// <summary>启动后台渲染线程(与 UI 线程解耦,UI 卡顿不影响视频解码/渲染)。</summary>
+    private void StartRenderThread()
     {
-        Interlocked.Exchange(ref _framePending, 0);
-        if (_disposed || _mpv is null)
+        StopRenderThread();
+        _renderThreadRunning = true;
+        _renderThread = new Thread(RenderLoop)
+        {
+            IsBackground = true,
+            Name = "McKuroVideoRender",
+        };
+        _renderThread.Start();
+    }
+
+    private void StopRenderThread()
+    {
+        _renderThreadRunning = false;
+        try
+        {
+            _frameSignal.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+        }
+        if (_renderThread is { IsAlive: true })
+        {
+            // 等待渲染线程退出(最多 1s),避免 Dispose 时正占用 mpv render context
+            if (!_renderThread.Join(1000))
+            {
+                // 超时:线程可能卡在 mpv 内部,由 mpv.Dispose 兜底
+            }
+        }
+        _renderThread = null;
+        ReleaseRenderBuffer();
+        _framePending = 0;
+        _uiFramePending = false;
+    }
+
+    /// <summary>渲染循环:等待帧信号 → SoftwareRender 到 pin 缓冲 → 通知 UI 拷贝。</summary>
+    private void RenderLoop()
+    {
+        while (_renderThreadRunning)
+        {
+            try
+            {
+                _frameSignal.Wait();
+            }
+            catch
+            {
+                break;
+            }
+            if (!_renderThreadRunning || _disposed || _mpv is null)
+            {
+                break;
+            }
+
+            Interlocked.Exchange(ref _framePending, 0);
+            try
+            {
+                if (!_sizeResolved)
+                {
+                    if (!TryResolveVideoSize())
+                    {
+                        continue;
+                    }
+                }
+                if (_videoWidth <= 0 || _videoHeight <= 0)
+                {
+                    continue;
+                }
+
+                lock (_sync)
+                {
+                    if (_mpv is null)
+                    {
+                        continue;
+                    }
+                    EnsureRenderBuffer(_videoWidth, _videoHeight);
+                    if (_bufferPtr != IntPtr.Zero)
+                    {
+                        // 在独立线程调用 mpv SoftwareRender(解码/渲染不占 UI)
+                        _mpv.SoftwareRender(_videoWidth, _videoHeight, _bufferPtr, "bgra");
+                    }
+                }
+
+                // 通知 UI 线程将缓冲拷贝到位图(纯 memcpy,~1ms)
+                if (!_uiFramePending)
+                {
+                    _uiFramePending = true;
+                    Dispatcher.UIThread.Post(FlushFrameToBitmap);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"libmpv 渲染帧失败: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>确保渲染缓冲存在(按视频尺寸分配并 pin)。</summary>
+    private void EnsureRenderBuffer(int width, int height)
+    {
+        var size = width * height * 4;
+        if (_renderBuffer is not null && _renderBuffer.Length >= size)
+        {
+            return;
+        }
+        ReleaseRenderBuffer();
+        _renderBuffer = new byte[size];
+        _bufferHandle = GCHandle.Alloc(_renderBuffer, GCHandleType.Pinned);
+        _bufferPtr = _bufferHandle.AddrOfPinnedObject();
+    }
+
+    private void ReleaseRenderBuffer()
+    {
+        if (_bufferHandle.IsAllocated)
+        {
+            _bufferHandle.Free();
+            _bufferHandle = default;
+        }
+        _renderBuffer = null;
+        _bufferPtr = IntPtr.Zero;
+    }
+
+    /// <summary>UI 线程:把渲染缓冲拷贝到 WriteableBitmap(纯拷贝,不参与解码)。</summary>
+    private void FlushFrameToBitmap()
+    {
+        _uiFramePending = false;
+        if (_disposed || _mpv is null || _renderBuffer is null)
         {
             return;
         }
@@ -358,20 +507,7 @@ public sealed class VideoBackgroundControl : Grid
         {
             lock (_sync)
             {
-                if (_mpv is null)
-                {
-                    return;
-                }
-
-                if (!_sizeResolved)
-                {
-                    if (!TryResolveVideoSize())
-                    {
-                        return;
-                    }
-                }
-
-                if (_videoWidth <= 0 || _videoHeight <= 0)
+                if (_mpv is null || _renderBuffer is null)
                 {
                     return;
                 }
@@ -392,16 +528,16 @@ public sealed class VideoBackgroundControl : Grid
                     }
                 }
 
-                // mpv SW render 直接写入锁定位图缓冲(stride = width*4,与 Bgra8888 对齐)
+                // 纯内存拷贝到锁定位图缓冲(stride = width*4,与 Bgra8888 对齐)
                 using (var fb = _bitmap.Lock())
                 {
-                    _mpv.SoftwareRender(fb.Size.Width, fb.Size.Height, fb.Address, "bgra");
+                    Marshal.Copy(_renderBuffer, 0, fb.Address, _renderBuffer.Length);
                 }
             }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"libmpv 渲染帧失败: {ex.Message}");
+            Debug.WriteLine($"libmpv 拷贝帧失败: {ex.Message}");
         }
 
         // 首个真实帧到达后才显示视频(此前保持透明,让静态图可见)
