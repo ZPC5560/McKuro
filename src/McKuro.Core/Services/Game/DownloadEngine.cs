@@ -94,6 +94,26 @@ public sealed class DownloadEngine
                         downloadedBytes = 0;
                     }
                     speedMeter.Add(downloadedBytes);
+
+                    // 数据流级节流报告:大文件下载期间无文件完成,也要实时刷新网速/进度
+                    var now = sw.ElapsedMilliseconds;
+                    if (now - lastReport < 200)
+                    {
+                        return;
+                    }
+                    lastReport = now;
+                    var done = Math.Min(completedBytes, totalBytes);
+                    var filesDone = Math.Min(files.Count,
+                        (int)(done / Math.Max(totalBytes, 1) * files.Count) + 1);
+                    progress.Report(new DownloadProgress
+                    {
+                        CurrentFile = "正在下载…",
+                        FileIndex = filesDone,
+                        FileTotal = files.Count,
+                        BytesDownloaded = done,
+                        BytesTotal = totalBytes,
+                        SpeedBps = speedMeter.BytesPerSecond,
+                    });
                 }
             });
         }
