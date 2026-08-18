@@ -200,6 +200,18 @@
                             <TextBlock Text="{Binding CurrentFileText}" FontSize="11"
                                        Foreground="{DynamicResource SemiColorText3}"
                                        TextTrimming="CharacterEllipsis" />
+                            <!-- 预估信息:下载大小 + 剩余时间 + 磁盘空间(参考 Haiyu 下载预估/磁盘预估) -->
+                            <StackPanel Orientation="Horizontal" Spacing="16">
+                                <TextBlock Text="{Binding DownloadSizeText}" FontSize="11"
+                                           Foreground="{DynamicResource SemiColorText2}"
+                                           IsVisible="{Binding DownloadSizeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                <TextBlock Text="{Binding RemainingTimeText}" FontSize="11"
+                                           Foreground="{DynamicResource SemiColorText2}"
+                                           IsVisible="{Binding RemainingTimeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                <TextBlock Text="{Binding DiskSpaceText}" FontSize="11"
+                                           Foreground="{DynamicResource SemiColorText2}"
+                                           IsVisible="{Binding DiskSpaceText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                            </StackPanel>
                         </StackPanel>
                     </Border>
                     </StackPanel>
@@ -233,6 +245,15 @@
                                         Command="{Binding PreDownloadCommand}"
                                         IsEnabled="{Binding HasPredownload}"
                                         HorizontalAlignment="Center" />
+                                <!-- 下载预估 + 磁盘预估(参考 Haiyu,点击前告知用户体积/空间) -->
+                                <TextBlock Text="{Binding DownloadSizeText}" FontSize="11"
+                                           Foreground="{DynamicResource SemiColorText2}"
+                                           HorizontalAlignment="Center"
+                                           IsVisible="{Binding DownloadSizeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                <TextBlock Text="{Binding DiskSpaceText}" FontSize="10"
+                                           Foreground="{DynamicResource SemiColorText3}"
+                                           HorizontalAlignment="Center"
+                                           IsVisible="{Binding DiskSpaceText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                             </StackPanel>
                             <Button Height="56"
                                     Padding="0"

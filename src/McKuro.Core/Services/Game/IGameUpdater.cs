@@ -26,6 +26,9 @@ public interface IGameUpdater
         IProgress<DownloadProgress>? progress = null,
         CancellationToken ct = default);
 
+    /// <summary>获取预下载清单的总下载体积(供 UI 显示下载/磁盘预估,参考 Haiyu Config.Size)。</summary>
+    Task<long> GetPredownloadTotalBytesAsync(GameServerType serverType, CancellationToken ct = default);
+
     bool LaunchGame(out string? error);
 
     /// <summary>本地 DLSS/XeSS 图形组件版本(对齐 Haiyu GetLocalDLSSAsync)。</summary>

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -81,6 +82,22 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _bytesText = "";
+
+    /// <summary>下载总大小预估(如 "12.5 GB",参考 Haiyu Config.Size)。</summary>
+    [ObservableProperty]
+    private string _downloadSizeText = "";
+
+    /// <summary>磁盘空间预估(如 "需要 15 GB,可用 80 GB",参考 Haiyu UnCompressSize + DriveInfo)。</summary>
+    [ObservableProperty]
+    private string _diskSpaceText = "";
+
+    /// <summary>磁盘空间是否不足(空间不足时置 true,显示警告色)。</summary>
+    [ObservableProperty]
+    private bool _diskSpaceWarning;
+
+    /// <summary>预估剩余时间(如 "剩余约 15 分钟",按当前速度估算)。</summary>
+    [ObservableProperty]
+    private string _remainingTimeText = "";
 
     /// <summary>封面轮播图(官方启动器信息)。</summary>
     public ObservableCollection<SlideshowItem> Slideshows { get; } = [];
@@ -409,6 +426,20 @@ public sealed partial class LauncherViewModel : ViewModelBase
                 ? $"可预下载:版本 {result.PredownloadVersion}"
                 : "";
 
+            // 下载/磁盘预估(参考 Haiyu Config.Size + UnCompressSize;空间不足时置警告)
+            UpdateDownloadEstimate(result.TotalBytes);
+
+            // 预下载场景:FilesToDownload 为空(CheckUpdate 不计算文件差异),
+            // 额外加载预下载清单获取总下载体积,用于预下载环的下载/磁盘预估
+            if (result.HasPredownload)
+            {
+                var predownloadBytes = await AppServices.GameUpdater.GetPredownloadTotalBytesAsync(ServerType);
+                if (predownloadBytes > 0)
+                {
+                    UpdateDownloadEstimate(predownloadBytes);
+                }
+            }
+
             if (result.NotInstalled)
             {
                 InstallStateText = "未安装游戏,点击「下载安装」安装";
@@ -460,6 +491,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             CurrentFileText = p.CurrentFile;
             SpeedText = FormatSpeed(p.SpeedBps);
             BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
+            UpdateRemainingTime(p.BytesTotal - p.BytesDownloaded, p.SpeedBps);
         });
 
         try
@@ -510,6 +542,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             CurrentFileText = p.CurrentFile;
             SpeedText = FormatSpeed(p.SpeedBps);
             BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
+            UpdateRemainingTime(p.BytesTotal - p.BytesDownloaded, p.SpeedBps);
         });
 
         try
@@ -573,6 +606,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             CurrentFileText = p.CurrentFile;
             SpeedText = FormatSpeed(p.SpeedBps);
             BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
+            UpdateRemainingTime(p.BytesTotal - p.BytesDownloaded, p.SpeedBps);
         });
 
         try
@@ -673,5 +707,64 @@ public sealed partial class LauncherViewModel : ViewModelBase
             unit++;
         }
         return $"{v:0.#} {units[unit]}";
+    }
+
+    /// <summary>更新下载/磁盘预估(参考 Haiyu Config.Size + UnCompressSize,磁盘空间用 DriveInfo 实测)。</summary>
+    private void UpdateDownloadEstimate(long downloadBytes)
+    {
+        DownloadSizeText = downloadBytes > 0 ? $"需下载 {FormatSize(downloadBytes)}" : "";
+        DiskSpaceText = BuildDiskSpaceText(downloadBytes);
+        OnPropertyChanged(nameof(DiskSpaceWarning));
+    }
+
+    /// <summary>预估剩余时间(按当前速度,参考 Haiyu 下载器 ETA 显示)。</summary>
+    private void UpdateRemainingTime(long remainingBytes, double speedBps)
+    {
+        if (remainingBytes <= 0 || speedBps <= 0)
+        {
+            RemainingTimeText = "";
+            return;
+        }
+        var seconds = (long)(remainingBytes / speedBps);
+        if (seconds < 60)
+        {
+            RemainingTimeText = "剩余不到 1 分钟";
+        }
+        else if (seconds < 3600)
+        {
+            RemainingTimeText = $"剩余约 {seconds / 60} 分钟";
+        }
+        else
+        {
+            RemainingTimeText = $"剩余约 {seconds / 3600} 小时 {seconds % 3600 / 60} 分钟";
+        }
+    }
+
+    /// <summary>磁盘空间预估:解压后所需空间 vs 游戏目录所在盘可用空间(不足时置警告)。</summary>
+    private string BuildDiskSpaceText(long downloadBytes)
+    {
+        try
+        {
+            var gameDir = AppServices.Settings.Current.GameRootDir;
+            if (string.IsNullOrWhiteSpace(gameDir) || !Directory.Exists(gameDir))
+            {
+                return "";
+            }
+            var drive = new DriveInfo(Path.GetPathRoot(gameDir) ?? gameDir);
+            if (!drive.IsReady)
+            {
+                return "";
+            }
+            // 解压后所需空间 ≈ 下载体积 × 1.1(压缩比估算,对齐 Haiyu UnCompressSize 语义)
+            var needed = (long)(downloadBytes * 1.1);
+            var free = drive.AvailableFreeSpace;
+            DiskSpaceWarning = free < needed;
+            return $"需 {FormatSize(needed)} 磁盘空间,可用 {FormatSize(free)}"
+                + (DiskSpaceWarning ? "(空间不足!)" : "");
+        }
+        catch
+        {
+            return "";
+        }
     }
 }

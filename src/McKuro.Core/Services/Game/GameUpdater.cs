@@ -78,6 +78,27 @@ public sealed class GameUpdater : IGameUpdater
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<GameUpdater>.Instance;
     }
 
+    /// <summary>获取预下载清单的总下载体积(供 UI 显示下载/磁盘预估,参考 Haiyu Config.Size)。</summary>
+    public async Task<long> GetPredownloadTotalBytesAsync(
+        GameServerType serverType,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var indexUrl = _indexUrlProvider(serverType);
+            var load = await _loader.LoadKuroAsync(indexUrl, preDownload: true, ct).ConfigureAwait(false);
+            if (!load.Success || load.Manifest is null)
+            {
+                return 0;
+            }
+            return load.Manifest.Files.Sum(f => f.Size);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
     /// <summary>检查更新(依据当前渠道的 index.json)。</summary>
     /// <remarks>
     /// 只比较版本号判断是否有更新,不做全量文件 MD5 校验(数万文件会耗时数分钟,
