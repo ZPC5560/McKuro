@@ -72,6 +72,14 @@ public sealed class KuroPatchConfig
     [JsonPropertyName("version")] public string? Version { get; set; }
 
     [JsonPropertyName("ext")] public KuroPatchExt? Ext { get; set; }
+
+    /// <summary>补丁文件清单(indexFile.json)的相对路径(参考 Haiyu PatchConfig.IndexFile)。</summary>
+    [JsonPropertyName("indexFile")] public string? IndexFile { get; set; }
+
+    /// <summary>补丁资源下载前缀(参考 Haiyu PatchConfig.BaseUrl)。</summary>
+    [JsonPropertyName("baseUrl")] public string? BaseUrl { get; set; }
+
+    [JsonPropertyName("indexFileMd5")] public string? IndexFileMd5 { get; set; }
 }
 
 public sealed class KuroPatchExt
@@ -104,6 +112,64 @@ public sealed class KuroChunkInfo
     [JsonPropertyName("md5")] public string? Md5 { get; set; }
     [JsonPropertyName("size")] public long? Size { get; set; }
     [JsonPropertyName("offset")] public long? Offset { get; set; }
+}
+
+// ---- 官方补丁清单(indexFile.json,参考 Haiyu PatchIndexGameResource) ----
+
+public sealed class KuroPatchIndex
+{
+    [JsonPropertyName("patchInfos")] public List<KuroPatchFile>? PatchInfos { get; set; }
+
+    [JsonPropertyName("groupInfos")] public List<KuroPatchGroup>? GroupInfos { get; set; }
+
+    [JsonPropertyName("zipInfos")] public List<KuroPatchZip>? ZipInfos { get; set; }
+
+    [JsonPropertyName("deleteFiles")] public List<string>? DeleteFiles { get; set; }
+
+    [JsonPropertyName("applyTypes")] public List<string>? ApplyTypes { get; set; }
+
+    [JsonPropertyName("resource")] public List<KuroPatchEntry>? Resource { get; set; }
+}
+
+/// <summary>补丁差异文件(下载 krdiff 差分文件应用到游戏目录)。</summary>
+public sealed class KuroPatchFile
+{
+    [JsonPropertyName("dest")] public string? Dest { get; set; }
+
+    [JsonPropertyName("entries")] public List<KuroPatchEntry>? Entries { get; set; }
+}
+
+/// <summary>补丁条目(与全量清单一致:dest + md5 + size)。</summary>
+public sealed class KuroPatchEntry
+{
+    [JsonPropertyName("dest")] public string? Dest { get; set; }
+
+    [JsonPropertyName("md5")] public string? Md5 { get; set; }
+
+    [JsonPropertyName("size")] public long? Size { get; set; }
+
+    [JsonPropertyName("chunkInfos")] public List<KuroChunkInfo>? ChunkInfos { get; set; }
+
+    /// <summary>文件所在资源目录(如 .../zip/;官方补丁 resource 条目带,用于拼下载 URL)。</summary>
+    [JsonPropertyName("fromFolder")] public string? FromFolder { get; set; }
+}
+
+/// <summary>分组文件(源文件组 → 目标文件;下载差分生成目标)。</summary>
+public sealed class KuroPatchGroup
+{
+    [JsonPropertyName("dest")] public string? Dest { get; set; }
+
+    [JsonPropertyName("srcFiles")] public List<KuroPatchEntry>? SrcFiles { get; set; }
+
+    [JsonPropertyName("dstFiles")] public List<KuroPatchEntry>? DstFiles { get; set; }
+}
+
+/// <summary>zip 补丁包(下载 zip 后解压到游戏目录)。</summary>
+public sealed class KuroPatchZip
+{
+    [JsonPropertyName("dest")] public string? Dest { get; set; }
+
+    [JsonPropertyName("entries")] public List<KuroPatchEntry>? Entries { get; set; }
 }
 
 /// <summary>各地区启动器 index.json 地址。</summary>

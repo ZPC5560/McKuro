@@ -187,6 +187,85 @@ public sealed class GameManifestLoader
         }
     }
 
+    /// <summary>
+    /// 加载官方补丁清单(indexFile.json)。补丁清单只列出"需要更新的差异/zip 文件",
+    /// 不做全量 MD5 校验 —— 对齐 Haiyu 的预下载逻辑(patchConfig → indexFile → 差异下载)。
+    /// 下载 URL = CDN + entry.FromFolder + entry.Dest(Haiyu GetBaseUrl 用 FromFolder)。
+    /// </summary>
+    public async Task<ManifestLoadResult> LoadPatchAsync(
+        string patchIndexUrl,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await _http.GetAsync(patchIndexUrl, ct).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            var patch = JsonSerializer.Deserialize(json, GameJsonContext.Default.KuroPatchIndex);
+            if (patch is null)
+            {
+                return Fail("解析补丁清单失败");
+            }
+
+            var manifest = new GameManifest
+            {
+                Version = "",
+            };
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            void AddEntry(KuroPatchEntry? e, string? fromFolder)
+            {
+                if (e?.Dest is null || !seen.Add(e.Dest))
+                {
+                    return;
+                }
+                var folder = e.FromFolder ?? fromFolder ?? "";
+                manifest.Files.Add(new GameFileEntry
+                {
+                    Path = NormalizePath(e.Dest),
+                    Size = e.Size ?? 0,
+                    Md5 = e.Md5 ?? "",
+                    // 相对 CDN 的下载地址(FromFolder 通常为 .../zip/)
+                    Url = folder.TrimStart('/') + "/" + NormalizePath(e.Dest),
+                });
+            }
+
+            if (patch.Resource is { Count: > 0 })
+            {
+                foreach (var e in patch.Resource)
+                {
+                    AddEntry(e, null);
+                }
+            }
+            else
+            {
+                foreach (var f in patch.PatchInfos ?? [])
+                {
+                    foreach (var e in f.Entries ?? [])
+                    {
+                        AddEntry(e, null);
+                    }
+                }
+            }
+            foreach (var z in patch.ZipInfos ?? [])
+            {
+                foreach (var e in z.Entries ?? [])
+                {
+                    AddEntry(e, null);
+                }
+            }
+
+            return new ManifestLoadResult
+            {
+                Success = true,
+                Manifest = manifest,
+            };
+        }
+        catch (Exception ex)
+        {
+            return Fail($"获取补丁清单失败: {ex.Message}");
+        }
+    }
+
     private static ManifestLoadResult Fail(string message) =>
         new() { Success = false, Message = message };
 
@@ -198,9 +277,16 @@ public sealed class GameManifestLoader
 [JsonSerializable(typeof(KuroUpdateData))]
 [JsonSerializable(typeof(KuroCdnData))]
 [JsonSerializable(typeof(KuroConfig))]
+[JsonSerializable(typeof(KuroPatchConfig))]
+[JsonSerializable(typeof(KuroPatchExt))]
 [JsonSerializable(typeof(KuroGameResourceList))]
 [JsonSerializable(typeof(KuroFileInfo))]
 [JsonSerializable(typeof(KuroChunkInfo))]
+[JsonSerializable(typeof(KuroPatchIndex))]
+[JsonSerializable(typeof(KuroPatchFile))]
+[JsonSerializable(typeof(KuroPatchEntry))]
+[JsonSerializable(typeof(KuroPatchGroup))]
+[JsonSerializable(typeof(KuroPatchZip))]
 [JsonSerializable(typeof(GameManifest))]
 [JsonSerializable(typeof(GameFileEntry))]
 [JsonSerializable(typeof(List<GameFileEntry>))]

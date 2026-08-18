@@ -248,7 +248,12 @@ public sealed class GameUpdater : IGameUpdater
         return true;
     }
 
-    /// <summary>预下载:将需要更新的文件下载到暂存目录,不触碰游戏目录。</summary>
+    /// <summary>预下载:按官方补丁清单下载差异文件到暂存目录,不触碰游戏目录、不做全量 MD5 校验。</summary>
+    /// <remarks>
+    /// 对齐 Haiyu 预下载逻辑:从 predownload.config.patchConfig 找到匹配本地版本的补丁 →
+    /// 下载该补丁的 indexFile.json(差异清单) → 仅下载清单中的文件。不做 ComputeDiff 全量校验,
+    /// 因此数万文件的游戏也能立即开始下载。
+    /// </remarks>
     /// <returns>暂存目录路径(供稍后安装)。</returns>
     public async Task<(bool Success, string? StagingDir, string? Message)> PreDownloadAsync(
         GameServerType serverType,
@@ -269,7 +274,126 @@ public sealed class GameUpdater : IGameUpdater
         }
 
         var manifest = load.Manifest;
-        // 校验阶段进度:转发为 DownloadProgress(Percent=校验进度,FileIndex=已校验数)
+        // 本地安装版本
+        var installedVersion = ReadInstalledVersion(root);
+
+        // 找匹配本地版本的补丁项(predownload.config.patchConfig)
+        var (patchUrl, cdnPrefix) = FindPatchIndexUrl(indexUrl, installedVersion);
+        if (string.IsNullOrWhiteSpace(patchUrl))
+        {
+            // 无匹配补丁:回退全量差异下载(慢,保底)
+            return await PreDownloadFallbackAsync(serverType, manifest, root, progress, ct);
+        }
+
+        var patchLoad = await _loader.LoadPatchAsync(patchUrl, ct).ConfigureAwait(false);
+        if (!patchLoad.Success || patchLoad.Manifest is null || patchLoad.Manifest.Files.Count == 0)
+        {
+            return (false, null, patchLoad.Message ?? "补丁清单为空");
+        }
+
+        // 为补丁文件补全下载地址(CDN + FromFolder + dest,与 Haiyu GetBaseUrl 一致)
+        var patchFiles = patchLoad.Manifest.Files;
+        foreach (var f in patchFiles)
+        {
+            if (string.IsNullOrEmpty(f.Url))
+            {
+                f.Url = cdnPrefix + "/" + f.Path;
+            }
+            else if (!f.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                f.Url = cdnPrefix + "/" + f.Url;
+            }
+        }
+
+        // 预下载目标版本号记录,暂存目录按版本隔离
+        var staging = Path.Combine(_appDataDir, "predownload", manifest.Version);
+        if (Directory.Exists(staging))
+        {
+            Directory.Delete(staging, recursive: true);
+        }
+
+        progress?.Report(new DownloadProgress
+        {
+            FileIndex = 0,
+            FileTotal = patchFiles.Count,
+            BytesDownloaded = 0,
+            BytesTotal = patchFiles.Sum(f => f.Size),
+            SpeedBps = 0,
+            CurrentFile = $"发现 {patchFiles.Count} 个待下载文件,开始下载…",
+        });
+
+        // 下载补丁差异文件到暂存目录
+        var (success, failures) = await _downloader.DownloadManyAsync(
+            patchFiles,
+            baseUrl: "",
+            staging,
+            progress,
+            ct).ConfigureAwait(false);
+
+        if (failures.Count > 0)
+        {
+            return (false, staging, $"有 {failures.Count} 个文件下载失败: {failures[0]}");
+        }
+
+        // 记录预下载元信息
+        var meta = new PreDownloadMeta { Version = manifest.Version, ServerType = serverType };
+        var json = JsonSerializer.Serialize(meta, GameMetaJsonContext.Default.PreDownloadMeta);
+        await File.WriteAllTextAsync(Path.Combine(staging, "predownload.json"), json, ct).ConfigureAwait(false);
+
+        return (true, staging, null);
+    }
+
+    /// <summary>根据本地版本查找预下载补丁的 indexFile 完整 URL 与 CDN 前缀。无匹配补丁返回 null。</summary>
+    private (string? Url, string? CdnPrefix) FindPatchIndexUrl(string indexUrl, string? installedVersion)
+    {
+        try
+        {
+            // 重新请求 index.json 获取 predownload 节点(patchConfig 在预下载节点中)
+            using var http = new HttpClient();
+            var json = http.GetStringAsync(indexUrl).GetAwaiter().GetResult();
+            var index = JsonSerializer.Deserialize(json, GameJsonContext.Default.KuroIndex);
+            var pd = index?.Predownload;
+            if (pd?.Config?.PatchConfig is not { Count: > 0 })
+            {
+                return (null, null);
+            }
+
+            // 匹配本地版本;匹配不到则用最新补丁(patchConfig 最后一项)
+            var match = pd.Config.PatchConfig.FirstOrDefault(p =>
+                p.Version is not null && string.Equals(p.Version, installedVersion, StringComparison.OrdinalIgnoreCase));
+            match ??= pd.Config.PatchConfig[^1];
+            if (string.IsNullOrWhiteSpace(match.IndexFile))
+            {
+                return (null, null);
+            }
+
+            // 用 default 的 CDN 列表拼 URL(predownload 节点无 cdnList,与 Haiyu 一致)
+            var cdn = index?.Default?.CdnList
+                ?.Where(c => !string.IsNullOrEmpty(c.Url))
+                .OrderBy(c => c.Ping)
+                .FirstOrDefault();
+            if (cdn is null)
+            {
+                return (null, null);
+            }
+            var cdnPrefix = cdn.Url.TrimEnd('/');
+            var patchUrl = cdnPrefix + "/" + match.IndexFile;
+            return (patchUrl, cdnPrefix);
+        }
+        catch
+        {
+            return (null, null);
+        }
+    }
+
+    /// <summary>回退方案:全量 ComputeDiff 差异下载(无匹配补丁时保底)。</summary>
+    private async Task<(bool Success, string? StagingDir, string? Message)> PreDownloadFallbackAsync(
+        GameServerType serverType,
+        GameManifest manifest,
+        string root,
+        IProgress<DownloadProgress>? progress,
+        CancellationToken ct)
+    {
         IProgress<DiffProgress>? diffProgress = null;
         if (progress is not null)
         {
@@ -292,14 +416,12 @@ public sealed class GameUpdater : IGameUpdater
             return (true, null, "游戏已是最新版本,无需下载");
         }
 
-        // 预下载目标版本号记录,暂存目录按版本隔离
         var staging = Path.Combine(_appDataDir, "predownload", manifest.Version);
         if (Directory.Exists(staging))
         {
             Directory.Delete(staging, recursive: true);
         }
 
-        // 文件均带完整 CDN 下载地址(entry.Url),baseUrl 留空即可
         var (success, failures) = await _downloader.DownloadManyAsync(
             diff.ToDownload,
             baseUrl: "",
@@ -312,7 +434,6 @@ public sealed class GameUpdater : IGameUpdater
             return (false, staging, $"有 {failures.Count} 个文件下载失败: {failures[0]}");
         }
 
-        // 记录预下载元信息
         var meta = new PreDownloadMeta { Version = manifest.Version, ServerType = serverType };
         var json = JsonSerializer.Serialize(meta, GameMetaJsonContext.Default.PreDownloadMeta);
         await File.WriteAllTextAsync(Path.Combine(staging, "predownload.json"), json, ct).ConfigureAwait(false);
