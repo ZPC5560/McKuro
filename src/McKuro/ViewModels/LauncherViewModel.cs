@@ -52,6 +52,58 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>是否显示暂停/继续按钮(下载进行中)。</summary>
     public bool ShowPauseResume => IsDownloading;
 
+    /// <summary>合并按钮文案:未下载时"预下载",下载中"暂停下载"/"继续下载"。</summary>
+    public string PreDownloadButtonText => IsDownloading
+        ? (DownloadPaused ? "继续下载" : "暂停下载")
+        : "预下载";
+
+    /// <summary>合并按钮是否可用:未下载时有预下载可用;下载中始终可用。</summary>
+    public bool PreDownloadButtonEnabled => IsDownloading || HasPredownload;
+
+    partial void OnIsDownloadingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(PreDownloadButtonText));
+        OnPropertyChanged(nameof(PreDownloadButtonEnabled));
+        OnPropertyChanged(nameof(ShowPauseResume));
+        OnPropertyChanged(nameof(IsPreDownloadActive));
+    }
+
+    partial void OnHasPredownloadChanged(bool value)
+    {
+        OnPropertyChanged(nameof(PreDownloadButtonEnabled));
+        OnPropertyChanged(nameof(ShowPreDownloadRing));
+    }
+
+    /// <summary>是否正在预下载/下载(显示进度环)。</summary>
+    public bool IsPreDownloadActive => IsDownloading || HasPredownload;
+
+    /// <summary>是否显示预下载进度环(有预下载或正在下载)。</summary>
+    public bool ShowPreDownloadRing => IsDownloading || HasPredownload;
+
+    /// <summary>合并下载按钮命令:未下载时触发预下载,下载中切换暂停/继续。</summary>
+    [RelayCommand]
+    private void TogglePreDownload()
+    {
+        if (IsDownloading)
+        {
+            if (AppServices.Downloader.IsPaused)
+            {
+                AppServices.Downloader.Resume();
+            }
+            else
+            {
+                AppServices.Downloader.Pause();
+            }
+            OnPropertyChanged(nameof(PreDownloadButtonText));
+            OnPropertyChanged(nameof(PauseResumeText));
+            OnPropertyChanged(nameof(DownloadPaused));
+        }
+        else
+        {
+            PreDownloadCommand.Execute(null);
+        }
+    }
+
     /// <summary>已安装且有更新:显示「安装更新」按钮(未安装时只显示「下载安装」)。</summary>
     public bool ShowInstallUpdate => IsInstalled && HasUpdate;
 
