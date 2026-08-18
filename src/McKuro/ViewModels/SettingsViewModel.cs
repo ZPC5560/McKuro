@@ -208,8 +208,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string PlatformCapabilityText => AppServices.Capabilities.GameSupportText;
 
-    public string PlatformVideoText => AppServices.Capabilities.VideoSupportText;
-
     [RelayCommand]
     private void OpenLogDir()
     {

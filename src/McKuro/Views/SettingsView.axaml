@@ -30,8 +30,6 @@
                         </StackPanel>
                         <TextBlock Text="{Binding PlatformCapabilityText}" FontSize="12"
                                    Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding PlatformVideoText}" FontSize="11"
-                                   Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
             </Border>

@@ -32,14 +32,6 @@ public sealed class PlatformCapabilities
                 ? "Linux 保留数据与启动器功能；原生游戏与兼容层需用户自行配置"
                 : "当前平台提供通用数据与界面功能，游戏管理能力有限";
 
-    public string VideoSupportText => IsWindows
-        ? "优先使用应用内置媒体运行库，失败时自动显示静态首帧"
-        : IsMacOS
-            ? "优先使用应用内媒体运行库，失败时自动显示静态首帧"
-            : IsLinux
-                ? "优先使用系统 libmpv，缺失时自动显示静态首帧"
-                : "媒体运行库不可用时自动显示静态首帧";
-
     public PlatformCapabilities()
     {
         PlatformName = IsWindows
