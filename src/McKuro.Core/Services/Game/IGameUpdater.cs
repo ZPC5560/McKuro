@@ -26,8 +26,8 @@ public interface IGameUpdater
         IProgress<DownloadProgress>? progress = null,
         CancellationToken ct = default);
 
-    /// <summary>获取预下载清单的总下载体积(供 UI 显示下载/磁盘预估,参考 Haiyu Config.Size)。</summary>
-    Task<long> GetPredownloadTotalBytesAsync(GameServerType serverType, CancellationToken ct = default);
+    /// <summary>获取预下载清单的下载体积与所需磁盘空间(供 UI 显示下载/磁盘预估,参考 Haiyu Config.Size/UnCompressSize)。</summary>
+    Task<(long DownloadBytes, long DiskBytes)> GetPredownloadEstimateAsync(GameServerType serverType, CancellationToken ct = default);
 
     bool LaunchGame(out string? error);
 

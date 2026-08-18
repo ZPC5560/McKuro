@@ -430,13 +430,13 @@ public sealed partial class LauncherViewModel : ViewModelBase
             UpdateDownloadEstimate(result.TotalBytes);
 
             // 预下载场景:FilesToDownload 为空(CheckUpdate 不计算文件差异),
-            // 额外加载预下载清单获取总下载体积,用于预下载环的下载/磁盘预估
+            // 额外加载预下载清单获取下载体积与磁盘需求,用于预下载环的下载/磁盘预估
             if (result.HasPredownload)
             {
-                var predownloadBytes = await AppServices.GameUpdater.GetPredownloadTotalBytesAsync(ServerType);
-                if (predownloadBytes > 0)
+                var (pdDownload, pdDisk) = await AppServices.GameUpdater.GetPredownloadEstimateAsync(ServerType);
+                if (pdDownload > 0 || pdDisk > 0)
                 {
-                    UpdateDownloadEstimate(predownloadBytes);
+                    UpdateDownloadEstimate(pdDownload, pdDisk);
                 }
             }
 
@@ -710,10 +710,10 @@ public sealed partial class LauncherViewModel : ViewModelBase
     }
 
     /// <summary>更新下载/磁盘预估(参考 Haiyu Config.Size + UnCompressSize,磁盘空间用 DriveInfo 实测)。</summary>
-    private void UpdateDownloadEstimate(long downloadBytes)
+    private void UpdateDownloadEstimate(long downloadBytes, long diskBytes = 0)
     {
         DownloadSizeText = downloadBytes > 0 ? $"需下载 {FormatSize(downloadBytes)}" : "";
-        DiskSpaceText = BuildDiskSpaceText(downloadBytes);
+        DiskSpaceText = BuildDiskSpaceText(downloadBytes, diskBytes);
         OnPropertyChanged(nameof(DiskSpaceWarning));
     }
 
@@ -740,8 +740,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
     }
 
-    /// <summary>磁盘空间预估:解压后所需空间 vs 游戏目录所在盘可用空间(不足时置警告)。</summary>
-    private string BuildDiskSpaceText(long downloadBytes)
+    /// <summary>磁盘空间预估:所需磁盘空间 vs 游戏目录所在盘可用空间(不足时置警告)。</summary>
+    private string BuildDiskSpaceText(long downloadBytes, long diskBytes)
     {
         try
         {
@@ -755,8 +755,10 @@ public sealed partial class LauncherViewModel : ViewModelBase
             {
                 return "";
             }
-            // 解压后所需空间 ≈ 下载体积 × 1.1(压缩比估算,对齐 Haiyu UnCompressSize 语义)
-            var needed = (long)(downloadBytes * 1.1);
+            // 所需磁盘空间:优先用服务端 unCompressSize/requiredDiskSpace,回退下载体积估算
+            var needed = diskBytes > 0
+                ? diskBytes
+                : (long)(downloadBytes * 1.1);
             var free = drive.AvailableFreeSpace;
             DiskSpaceWarning = free < needed;
             return $"需 {FormatSize(needed)} 磁盘空间,可用 {FormatSize(free)}"

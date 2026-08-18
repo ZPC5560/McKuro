@@ -52,6 +52,34 @@ public sealed class KuroConfig
 {
     [JsonPropertyName("downloadLimit")] public int? DownloadLimit { get; set; }
     [JsonPropertyName("disableUserDownload")] public bool DisableUserDownload { get; set; }
+
+    /// <summary>当前版本补丁的下载体积(参考 Haiyu Config.Size)。</summary>
+    [JsonPropertyName("size")] public long? Size { get; set; }
+
+    /// <summary>解压后体积(参考 Haiyu Config.UnCompressSize)。</summary>
+    [JsonPropertyName("unCompressSize")] public long? UnCompressSize { get; set; }
+
+    /// <summary>历史补丁配置(最新一项为当前版本)。</summary>
+    [JsonPropertyName("patchConfig")] public List<KuroPatchConfig>? PatchConfig { get; set; }
+}
+
+public sealed class KuroPatchConfig
+{
+    [JsonPropertyName("size")] public long? Size { get; set; }
+
+    [JsonPropertyName("unCompressSize")] public long? UnCompressSize { get; set; }
+
+    [JsonPropertyName("version")] public string? Version { get; set; }
+
+    [JsonPropertyName("ext")] public KuroPatchExt? Ext { get; set; }
+}
+
+public sealed class KuroPatchExt
+{
+    /// <summary>安装该补丁所需额外磁盘空间(官方启动器"所需磁盘空间"显示值)。</summary>
+    [JsonPropertyName("requiredDiskSpace")] public long? RequiredDiskSpace { get; set; }
+
+    [JsonPropertyName("maxFileSize")] public long? MaxFileSize { get; set; }
 }
 
 public sealed class KuroGameResourceList

@@ -13,6 +13,12 @@ public sealed class ManifestLoadResult
     public string? ServerVersion { get; init; }
     public bool HasPredownload { get; init; }
     public string? PredownloadVersion { get; init; }
+
+    /// <summary>预下载下载体积(预下载节点的 config.patchConfig 最新项 size;0 表示未知)。</summary>
+    public long PredownloadDownloadBytes { get; init; }
+
+    /// <summary>预下载所需磁盘空间(ext.requiredDiskSpace;0 表示未知)。</summary>
+    public long PredownloadDiskBytes { get; init; }
 }
 
 /// <summary>
@@ -65,9 +71,9 @@ public sealed class GameManifestLoader
 
             var resourceJsonUrl = updateData.ResourceJsonUrl;
             var fileList = index.GameResourceList?.Resource ?? [];
-            if (!string.IsNullOrEmpty(resourceJsonUrl) && preDownload is false)
+            if (!string.IsNullOrEmpty(resourceJsonUrl))
             {
-                // 完整文件清单在 resource.json 中
+                // 完整文件清单在 resource.json 中(默认清单与预下载节点各有自己的 resource.json)
                 try
                 {
                     using var resourceResponse = await _http.GetAsync(resourceJsonUrl, ct).ConfigureAwait(false);
@@ -109,6 +115,10 @@ public sealed class GameManifestLoader
                 });
             }
 
+            // 预下载体积:预下载节点无 cdnList,resource.json 拿不到全量清单,
+            // 改用 config.patchConfig 最新项(官方"预下载"显示值)或 config 本身
+            var (pdDownload, pdDisk) = ExtractPredownloadSizes(index.Predownload);
+
             return new ManifestLoadResult
             {
                 Success = true,
@@ -116,12 +126,33 @@ public sealed class GameManifestLoader
                 ServerVersion = manifest.Version,
                 HasPredownload = index.Predownload is not null,
                 PredownloadVersion = index.Predownload?.Version,
+                PredownloadDownloadBytes = pdDownload,
+                PredownloadDiskBytes = pdDisk,
             };
         }
         catch (Exception ex)
         {
             return Fail($"获取更新清单失败: {ex.Message}");
         }
+    }
+
+    /// <summary>从预下载节点提取下载体积与所需磁盘空间(优先最新 patchConfig,回退 config)。</summary>
+    private static (long Download, long Disk) ExtractPredownloadSizes(KuroUpdateData? predownload)
+    {
+        if (predownload?.Config is null)
+        {
+            return (0, 0);
+        }
+        var cfg = predownload.Config;
+        // 最新补丁为 patchConfig 最后一项
+        KuroPatchConfig? latest = cfg.PatchConfig is { Count: > 0 } ? cfg.PatchConfig[^1] : null;
+        var download = latest?.Size ?? cfg.Size ?? 0;
+        var disk = latest?.Ext?.RequiredDiskSpace ?? 0;
+        if (disk <= 0 && latest?.UnCompressSize is { } un and > 0)
+        {
+            disk = un;
+        }
+        return (download, disk);
     }
 
     /// <summary>从通用 GameManifest JSON 地址加载。</summary>
