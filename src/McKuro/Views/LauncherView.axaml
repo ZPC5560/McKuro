@@ -231,26 +231,19 @@
                     <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="18" Margin="0,12,0,20">
                         <!-- 启动/安装大按钮 (窄 20%,右下角,文字居中);预载环叠在其上方 -->
                         <StackPanel Grid.Column="1" Width="220" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="10">
-                            <!-- 预下载环(仅存在预下载时显示,叠在启动按钮上方) -->
+                            <!-- 预下载环(仅存在预下载时显示,叠在启动按钮上方;弧长随预下载进度增长为完整圆) -->
                             <StackPanel HorizontalAlignment="Center" Spacing="6"
                                         IsVisible="{Binding HasPredownload}">
                                 <Grid Width="96" Height="96">
-                                    <Border Width="96" Height="96" CornerRadius="48"
-                                            BorderThickness="6"
-                                            BorderBrush="{DynamicResource SemiColorBg3}">
-                                        <Border Width="96" Height="96" CornerRadius="48"
-                                                BorderThickness="6"
-                                                BorderBrush="{DynamicResource SemiColorPrimary}">
-                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="0">
-                                                <TextBlock Text="{Binding ProgressPercent, StringFormat={}{0:0}%}"
-                                                           FontSize="16" FontWeight="Bold"
-                                                           HorizontalAlignment="Center" />
-                                                <TextBlock Text="预下载" FontSize="10"
-                                                           Foreground="{DynamicResource SemiColorText2}"
-                                                           HorizontalAlignment="Center" />
-                                            </StackPanel>
-                                        </Border>
-                                    </Border>
+                                    <controls:RingProgress Width="96" Height="96"
+                                                           Value="{Binding ProgressPercent}"
+                                                           Thickness="6"
+                                                           ShowText="False"
+                                                           FontSize="16" />
+                                    <TextBlock Text="预下载" FontSize="10"
+                                               Foreground="{DynamicResource SemiColorText2}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Margin="0,14,0,0" />
                                 </Grid>
                                 <Button Content="预下载" Classes="primary"
                                         Command="{Binding PreDownloadCommand}"

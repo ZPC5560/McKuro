@@ -728,18 +728,19 @@ public sealed partial class LauncherViewModel : ViewModelBase
         return $"{v:0.##} {units[unit]}";
     }
 
-    /// <summary>采样网速到历史集合(1s 一点,保留最近 60 点,供波动曲线显示)。</summary>
+    /// <summary>采样网速到历史集合(500ms 一点,保留最近 5 秒约 10 点,供 5 秒波动曲线显示)。</summary>
     private void SampleSpeedHistory(double speedBps)
     {
         var now = DateTime.UtcNow;
-        if ((now - _lastSpeedSample).TotalMilliseconds < 1000)
+        if ((now - _lastSpeedSample).TotalMilliseconds < 500)
         {
             return;
         }
         _lastSpeedSample = now;
         var mbps = speedBps / 1024.0 / 1024.0;
         DownloadSpeedHistory.Add(mbps);
-        while (DownloadSpeedHistory.Count > 60)
+        // 保留最近 5 秒(10 点)
+        while (DownloadSpeedHistory.Count > 10)
         {
             DownloadSpeedHistory.RemoveAt(0);
         }

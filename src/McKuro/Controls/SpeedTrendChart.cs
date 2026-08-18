@@ -94,19 +94,37 @@ public sealed class SpeedTrendChart : Control
             return;
         }
 
-        // 纵轴最大速度(取集合最大值,最小 1 MB/s 兜底)
-        var maxMbps = 1.0;
+        // 纵轴范围:取波动幅度(点集合 max-min),稳定时(波动小)放大显示,让微小上下起伏清晰可见
+        var minMbps = double.MaxValue;
+        var maxMbps = 0.0;
         foreach (var v in Values)
         {
+            if (v < minMbps)
+            {
+                minMbps = v;
+            }
             if (v > maxMbps)
             {
                 maxMbps = v;
             }
         }
-        if (maxMbps <= 0)
+        if (minMbps == double.MaxValue)
         {
-            maxMbps = 1.0;
+            minMbps = 0;
         }
+        var span = maxMbps - minMbps;
+        // 范围至少取波动幅度的 1.25 倍,并保证非零;稳定时自动缩小范围以放大波动
+        var scale = Math.Max(span * 1.25, maxMbps * 0.1);
+        if (scale <= 0)
+        {
+            scale = 1.0;
+        }
+        var yBottom = maxMbps - scale * 0.15; // 顶部留 15% margin
+        if (yBottom < 0)
+        {
+            yBottom = 0;
+        }
+        var yTop = yBottom + scale;
 
         // 底部留 4px 边距
         var drawHeight = height - 4;
@@ -118,8 +136,9 @@ public sealed class SpeedTrendChart : Control
         for (int i = 0; i < n; i++)
         {
             var x = padLeft + i * stepX;
-            var ratio = Values[i] / maxMbps;
-            var y = drawHeight - drawHeight * Math.Clamp(ratio, 0, 1);
+            // 值映射到 [yBottom, yTop] 范围(波动范围自适应,稳定时放大微小起伏)
+            var ratio = Math.Clamp((Values[i] - yBottom) / (yTop - yBottom), 0, 1);
+            var y = drawHeight - drawHeight * ratio;
             points.Add(new Point(x, y));
         }
 
