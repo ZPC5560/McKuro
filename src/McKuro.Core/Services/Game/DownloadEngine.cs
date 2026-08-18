@@ -76,8 +76,27 @@ public sealed class DownloadEngine
         var tasks = new List<Task>();
         long totalBytes = files.Sum(f => f.Size);
         long completedBytes = 0;
+        long downloadedBytes = 0;   // 数据流中真实下载字节(含断点续传期间新读字节)
         var byteLock = new object();
         long lastReport = 0;
+
+        // 每个并发文件把"本次新下载字节"累加到全局,供速率计实时采样(而非文件完成时跳变)
+        IProgress<int>? byteProgress = null;
+        if (progress is not null)
+        {
+            byteProgress = new Progress<int>(bytes =>
+            {
+                lock (byteLock)
+                {
+                    downloadedBytes += bytes;
+                    if (downloadedBytes < 0)
+                    {
+                        downloadedBytes = 0;
+                    }
+                    speedMeter.Add(downloadedBytes);
+                }
+            });
+        }
 
         var downloader = new FileDownloader(_http);
 
@@ -94,7 +113,7 @@ public sealed class DownloadEngine
                         entry,
                         baseUrl,
                         destPath,
-                        progress: null,
+                        progress: byteProgress,
                         ct,
                         rateLimiter: _rateLimiter,
                         pauseToken: _pauseToken).ConfigureAwait(false);
@@ -111,9 +130,6 @@ public sealed class DownloadEngine
                         }
                     }
 
-                    // 滑动窗口速率(平滑,不受并发完成抖动影响)
-                    speedMeter.Add(completedBytes);
-
                     // 节流:至少 200ms 报告一次,避免高频刷新 UI
                     var now = sw.ElapsedMilliseconds;
                     if (now - lastReport < 200)
@@ -127,7 +143,7 @@ public sealed class DownloadEngine
                         CurrentFile = entry.Path,
                         FileIndex = index + 1,
                         FileTotal = files.Count,
-                        BytesDownloaded = completedBytes,
+                        BytesDownloaded = Math.Min(completedBytes, totalBytes),
                         BytesTotal = totalBytes,
                         SpeedBps = speedMeter.BytesPerSecond,
                     });

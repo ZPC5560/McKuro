@@ -29,7 +29,7 @@ public sealed class FileDownloader
         GameFileEntry entry,
         string baseUrl,
         string destPath,
-        IProgress<double>? progress = null,
+        IProgress<int>? progress = null,
         CancellationToken ct = default,
         DownloadRateLimiter? rateLimiter = null,
         PauseTokenSource? pauseToken = null)
@@ -106,7 +106,7 @@ public sealed class FileDownloader
                     await rateLimiter.ConsumeAsync(read, ct).ConfigureAwait(false);
                 }
 
-                progress?.Report(totalLength > 0 ? (double)downloaded / totalLength : 0);
+                progress?.Report(read);
             }
 
             await target.FlushAsync(ct).ConfigureAwait(false);

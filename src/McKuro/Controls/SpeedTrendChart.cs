@@ -67,15 +67,21 @@ public sealed class SpeedTrendChart : Control
     {
         AffectsRender<SpeedTrendChart>(ValuesProperty, LineBrushProperty, FillBrushProperty, MaxPointsProperty);
         ClipToBoundsProperty.OverrideDefaultValue<SpeedTrendChart>(true);
+        // 值集合变化(InotifyPropertyChanged / ObservableCollection)时重绘
+        ValuesProperty.Changed.AddClassHandler<SpeedTrendChart>((o, _) => o.OnValuesChanged());
     }
 
-    public SpeedTrendChart()
+    private void OnValuesChanged()
     {
-        // 列表变化时重绘(ObservableCollection)
         if (Values is ObservableCollection<double> oc)
         {
             oc.CollectionChanged += (_, _) => Dispatcher.UIThread.Post(InvalidateVisual);
         }
+        Dispatcher.UIThread.Post(InvalidateVisual);
+    }
+
+    public SpeedTrendChart()
+    {
     }
 
     public override void Render(DrawingContext context)
