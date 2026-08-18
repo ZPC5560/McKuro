@@ -277,18 +277,19 @@ public sealed class GameUpdater : IGameUpdater
         // 本地安装版本
         var installedVersion = ReadInstalledVersion(root);
 
-        // 找匹配本地版本的补丁项(predownload.config.patchConfig)
-        var (patchUrl, cdnPrefix) = FindPatchIndexUrl(indexUrl, installedVersion);
+        // 找匹配本地版本的补丁项(predownload.config.patchConfig,纯内存匹配,无二次网络请求)
+        var (patchUrl, cdnPrefix) = ResolvePatchFromIndex(load.Predownload, load.DefaultData, installedVersion);
         if (string.IsNullOrWhiteSpace(patchUrl))
         {
-            // 无匹配补丁:回退全量差异下载(慢,保底)
+            // 无预下载补丁:回退全量差异下载(慢,保底)
             return await PreDownloadFallbackAsync(serverType, manifest, root, progress, ct);
         }
 
         var patchLoad = await _loader.LoadPatchAsync(patchUrl, ct).ConfigureAwait(false);
         if (!patchLoad.Success || patchLoad.Manifest is null || patchLoad.Manifest.Files.Count == 0)
         {
-            return (false, null, patchLoad.Message ?? "补丁清单为空");
+            // 补丁清单加载失败:回退全量下载保底,保证预下载能完成
+            return await PreDownloadFallbackAsync(serverType, manifest, root, progress, ct);
         }
 
         // 为补丁文件补全下载地址(CDN + FromFolder + dest,与 Haiyu GetBaseUrl 一致)
@@ -343,32 +344,30 @@ public sealed class GameUpdater : IGameUpdater
         return (true, staging, null);
     }
 
-    /// <summary>根据本地版本查找预下载补丁的 indexFile 完整 URL 与 CDN 前缀。无匹配补丁返回 null。</summary>
-    private (string? Url, string? CdnPrefix) FindPatchIndexUrl(string indexUrl, string? installedVersion)
+    /// <summary>从已加载的 index 数据匹配本地版本补丁,返回 indexFile URL 与 CDN 前缀。纯内存,无网络。</summary>
+    private static (string? Url, string? CdnPrefix) ResolvePatchFromIndex(
+        KuroUpdateData? predownload,
+        KuroUpdateData? defaultData,
+        string? installedVersion)
     {
         try
         {
-            // 重新请求 index.json 获取 predownload 节点(patchConfig 在预下载节点中)
-            using var http = new HttpClient();
-            var json = http.GetStringAsync(indexUrl).GetAwaiter().GetResult();
-            var index = JsonSerializer.Deserialize(json, GameJsonContext.Default.KuroIndex);
-            var pd = index?.Predownload;
-            if (pd?.Config?.PatchConfig is not { Count: > 0 })
+            if (predownload?.Config?.PatchConfig is not { Count: > 0 })
             {
                 return (null, null);
             }
 
             // 匹配本地版本;匹配不到则用最新补丁(patchConfig 最后一项)
-            var match = pd.Config.PatchConfig.FirstOrDefault(p =>
+            var match = predownload.Config.PatchConfig.FirstOrDefault(p =>
                 p.Version is not null && string.Equals(p.Version, installedVersion, StringComparison.OrdinalIgnoreCase));
-            match ??= pd.Config.PatchConfig[^1];
+            match ??= predownload.Config.PatchConfig[^1];
             if (string.IsNullOrWhiteSpace(match.IndexFile))
             {
                 return (null, null);
             }
 
             // 用 default 的 CDN 列表拼 URL(predownload 节点无 cdnList,与 Haiyu 一致)
-            var cdn = index?.Default?.CdnList
+            var cdn = defaultData?.CdnList
                 ?.Where(c => !string.IsNullOrEmpty(c.Url))
                 .OrderBy(c => c.Ping)
                 .FirstOrDefault();

@@ -14,6 +14,12 @@ public sealed class ManifestLoadResult
     public bool HasPredownload { get; init; }
     public string? PredownloadVersion { get; init; }
 
+    /// <summary>预下载节点完整数据(含 patchConfig 与 config;index.json 有预下载时非 null)。</summary>
+    public KuroUpdateData? Predownload { get; init; }
+
+    /// <summary>默认节点(用于取 CDN 列表拼预下载资源 URL)。</summary>
+    public KuroUpdateData? DefaultData { get; init; }
+
     /// <summary>预下载下载体积(预下载节点的 config.patchConfig 最新项 size;0 表示未知)。</summary>
     public long PredownloadDownloadBytes { get; init; }
 
@@ -128,6 +134,8 @@ public sealed class GameManifestLoader
                 PredownloadVersion = index.Predownload?.Version,
                 PredownloadDownloadBytes = pdDownload,
                 PredownloadDiskBytes = pdDisk,
+                Predownload = index.Predownload,
+                DefaultData = index.Default,
             };
         }
         catch (Exception ex)
