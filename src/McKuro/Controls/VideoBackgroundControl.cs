@@ -204,14 +204,74 @@ public sealed class VideoBackgroundControl : Grid
             var token = _timeoutCts.Token;
             _ = WatchdogAsync(token);
 
-            // loadfile replace → 自动开始播放(loop-file=inf 由 OnPreInitialize 设置,循环不产生 EOF)
-            _mpv.LoadFile(VideoUrl).Invoke();
+            // 预下载视频到本地缓存目录再播放:CDN 流式缓冲不可靠(只播一秒),本地文件最稳。
+            // 缓存按 URL 哈希命名,重复进入启动页直接用缓存,不重复下载。
+            var url = VideoUrl;
+            _ = LoadLocalVideoAsync(url, token);
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"视频背景播放失败(回退首帧图): {ex.Message}");
             DisposePlayer();
             _fallback!.ImageUrl = FallbackImageUrl;
+        }
+    }
+
+    /// <summary>下载视频到本地缓存目录,完成后用本地文件播放(CDN 流式缓冲不可靠)。</summary>
+    private async Task LoadLocalVideoAsync(string url, CancellationToken token)
+    {
+        try
+        {
+            var cacheDir = Path.Combine(Path.GetTempPath(), "McKuroVideo");
+            Directory.CreateDirectory(cacheDir);
+            var hash = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(url)));
+            var localPath = Path.Combine(cacheDir, hash + ".mp4");
+
+            if (!File.Exists(localPath) || new FileInfo(localPath).Length == 0)
+            {
+                Debug.WriteLine($"[libmpv] 下载视频到本地: {url}");
+                using var http = new HttpClient();
+                var bytes = await http.GetByteArrayAsync(url, token).ConfigureAwait(false);
+                if (bytes.Length == 0)
+                {
+                    Debug.WriteLine("[libmpv] 视频下载为空,回退静态图");
+                    Dispatcher.UIThread.Post(ShowFallback);
+                    return;
+                }
+                await File.WriteAllBytesAsync(localPath, bytes, token).ConfigureAwait(false);
+            }
+
+            if (token.IsCancellationRequested || _disposed)
+            {
+                return;
+            }
+
+            // 回 UI 线程 LoadFile 本地路径 → 自动播放(loop-file=inf 循环)
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_disposed || _mpv is null)
+                {
+                    return;
+                }
+                try
+                {
+                    _mpv.LoadFile(localPath).Invoke();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[libmpv] 本地播放失败: {ex.Message}");
+                    ShowFallback();
+                }
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // 已释放/取消:忽略
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[libmpv] 视频预下载失败(回退静态图): {ex.Message}");
+            Dispatcher.UIThread.Post(ShowFallback);
         }
     }
 
@@ -436,6 +496,14 @@ public sealed class VideoBackgroundControl : Grid
             SetOptionString("hwdec", "no");
             SetOptionString("loop-file", "inf");
             SetOptionString("volume", "0");
+            // 网络缓冲:CDN 视频首次缓冲耗尽后卡住"只动了一下",增大 demuxer 缓冲
+            SetOptionString("demuxer-max-bytes", "50M");
+            SetOptionString("cache-secs", "30");
+            SetOptionString("demuxer-readahead-secs", "30");
+            SetOptionString("network-timeout", "30");
+            // CDN 可能校验请求头(库洛游戏静态资源 CDN)
+            SetOptionString("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            SetOptionString("referrer", "https://kurogame.com");
         }
     }
 }

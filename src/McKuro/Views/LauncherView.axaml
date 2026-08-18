@@ -204,49 +204,36 @@
                     </Border>
                     </StackPanel>
 
-                    <!-- 底部:预下载环 + 渠道 + 启动大按钮(同一行) -->
-                    <Grid Grid.Row="1" ColumnDefinitions="120,Auto,*" ColumnSpacing="18" Margin="0,12,0,20">
-                        <!-- 渠道检测:服务器下拉(胶囊样式,与按键同一行) -->
-                        <ComboBox Grid.Column="1"
-                                  ItemsSource="{Binding Servers}"
-                                  SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}"
-                                  Background="#8C000000"
-                                  BorderBrush="#4DFFFFFF"
-                                  BorderThickness="1"
-                                  Foreground="White"
-                                  CornerRadius="18"
-                                  Padding="16,10"
-                                  MinWidth="140"
-                                  VerticalAlignment="Center" />
-                        <!-- 预下载环(仅存在预下载时显示,避免默认显示 0%) -->
-                        <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="8"
-                                    IsVisible="{Binding HasPredownload}">
-                            <Grid Width="96" Height="96">
-                                <Border Width="96" Height="96" CornerRadius="48"
-                                        BorderThickness="6"
-                                        BorderBrush="{DynamicResource SemiColorBg3}">
+                    <!-- 底部:启动大按钮(右侧) + 预载环(叠在启动按钮上方) -->
+                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="18" Margin="0,12,0,20">
+                        <!-- 启动/安装大按钮 (窄 20%,右下角,文字居中);预载环叠在其上方 -->
+                        <StackPanel Grid.Column="1" Width="220" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="10">
+                            <!-- 预下载环(仅存在预下载时显示,叠在启动按钮上方) -->
+                            <StackPanel HorizontalAlignment="Center" Spacing="6"
+                                        IsVisible="{Binding HasPredownload}">
+                                <Grid Width="96" Height="96">
                                     <Border Width="96" Height="96" CornerRadius="48"
                                             BorderThickness="6"
-                                            BorderBrush="{DynamicResource SemiColorPrimary}">
-                                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="0">
-                                            <TextBlock Text="{Binding ProgressPercent, StringFormat={}{0:0}%}"
-                                                       FontSize="16" FontWeight="Bold"
-                                                       HorizontalAlignment="Center" />
-                                            <TextBlock Text="预下载" FontSize="10"
-                                                       Foreground="{DynamicResource SemiColorText2}"
-                                                       HorizontalAlignment="Center" />
-                                        </StackPanel>
+                                            BorderBrush="{DynamicResource SemiColorBg3}">
+                                        <Border Width="96" Height="96" CornerRadius="48"
+                                                BorderThickness="6"
+                                                BorderBrush="{DynamicResource SemiColorPrimary}">
+                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="0">
+                                                <TextBlock Text="{Binding ProgressPercent, StringFormat={}{0:0}%}"
+                                                           FontSize="16" FontWeight="Bold"
+                                                           HorizontalAlignment="Center" />
+                                                <TextBlock Text="预下载" FontSize="10"
+                                                           Foreground="{DynamicResource SemiColorText2}"
+                                                           HorizontalAlignment="Center" />
+                                            </StackPanel>
+                                        </Border>
                                     </Border>
-                                </Border>
-                            </Grid>
-                            <Button Content="预下载" Classes="primary"
-                                    Command="{Binding PreDownloadCommand}"
-                                    IsEnabled="{Binding HasUpdate}"
-                                    HorizontalAlignment="Center" />
-                        </StackPanel>
-
-                        <!-- 启动/安装大按钮 (窄 20%,右下角,文字居中) -->
-                        <StackPanel Grid.Column="2" Width="220" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="10">
+                                </Grid>
+                                <Button Content="预下载" Classes="primary"
+                                        Command="{Binding PreDownloadCommand}"
+                                        IsEnabled="{Binding HasPredownload}"
+                                        HorizontalAlignment="Center" />
+                            </StackPanel>
                             <Button Height="56"
                                     Padding="0"
                                     FontSize="15"
