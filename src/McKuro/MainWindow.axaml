@@ -5,6 +5,7 @@
         xmlns:vm="using:McKuro.ViewModels"
         xmlns:views="using:McKuro.Views"
         xmlns:controls="using:McKuro.Controls"
+        xmlns:ic="using:FluentIcons.Avalonia"
         mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="720"
         x:Class="McKuro.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -101,9 +102,10 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:NavigationItem">
                             <StackPanel Width="60" Spacing="2">
-                                <TextBlock Text="{Binding Icon}"
-                                           FontSize="20"
-                                           HorizontalAlignment="Center" />
+                                <ic:FluentIcon Icon="{Binding Icon}"
+                                               IconVariant="Regular"
+                                               IconSize="Size20"
+                                               HorizontalAlignment="Center" />
                                 <TextBlock Text="{Binding Title}"
                                            FontSize="10"
                                            HorizontalAlignment="Center"
@@ -118,8 +120,16 @@
                             <Setter Property="HorizontalContentAlignment" Value="Center" />
                             <Setter Property="Background" Value="Transparent" />
                         </Style>
+                        <!-- 图标统一着色:常态灰 / 选中主题蓝(参照效果预览页) -->
+                        <Style Selector="ListBoxItem ic|FluentIcon">
+                            <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+                        </Style>
+                        <Style Selector="ListBoxItem:selected ic|FluentIcon">
+                            <Setter Property="Foreground" Value="{DynamicResource McKuroAccent}" />
+                        </Style>
                         <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                            <Setter Property="Background" Value="{DynamicResource McKuroAccent}" />
+                            <!-- 选中:浅色主题蓝底(图标为蓝色时保持可见,对齐效果预览页) -->
+                            <Setter Property="Background" Value="#2E5A8DEE" />
                             <Setter Property="CornerRadius" Value="8" />
                         </Style>
                         <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">

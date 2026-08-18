@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using FluentIcons.Common;
 using McKuro.Core.Models.User;
 using McKuro.Core.Services.Game;
 using McKuro.Services;
@@ -11,7 +12,7 @@ namespace McKuro.ViewModels;
 /// <summary>首页每日数据项(体力/结晶单质/活跃度/周本/终焉矩阵/冥歌海墟/千道门扉/周度游历/战令)。</summary>
 public sealed class DailyItem
 {
-    public required string Icon { get; init; }
+    public required Icon Icon { get; init; }
     /// <summary>官方图标 URL(库街区 getData 每项 img;非空时优先显示)。</summary>
     public string? ImageUrl { get; init; }
     public required string Name { get; init; }
@@ -158,14 +159,14 @@ public sealed partial class HomeViewModel : ViewModelBase
     private void ApplyDailyData(RoleDailyData data, string source)
     {
         DailyItems.Clear();
-        AddItem(data.EnergyData, "⚡", "体力");
-        AddItem(data.StoreEnergyData, "💎", "结晶单质");
-        AddItem(data.LivenessData, "🔥", "活跃度", curOnly: true);
-        AddItem(data.WeeklyData, "🗡", "周本", curOnly: true);
-        AddItem(data.NewTowerData, "🏯", "终焉矩阵");
-        AddItem(data.SlashTowerData, "🌊", "冥歌海墟");
-        AddItem(data.RougeData, "📻", "千道门扉", curOnly: true);
-        AddItem(data.WeeklyFrameData, "🗺", "周度游历", curOnly: true);
+        AddItem(data.EnergyData, Icon.Flash, "体力");
+        AddItem(data.StoreEnergyData, Icon.Diamond, "结晶单质");
+        AddItem(data.LivenessData, Icon.Fire, "活跃度", curOnly: true);
+        AddItem(data.WeeklyData, Icon.Trophy, "周本", curOnly: true);
+        AddItem(data.NewTowerData, Icon.BuildingSkyscraper, "终焉矩阵");
+        AddItem(data.SlashTowerData, Icon.Beach, "冥歌海墟");
+        AddItem(data.RougeData, Icon.Door, "千道门扉", curOnly: true);
+        AddItem(data.WeeklyFrameData, Icon.Map, "周度游历", curOnly: true);
         AddBattlePass(data.BattlePassData);
         StatusText = $"已更新({source}) · {data.RoleName ?? ""}({data.RoleId ?? ""})";
     }
@@ -181,7 +182,7 @@ public sealed partial class HomeViewModel : ViewModelBase
         var progress = battlePass.Count > 1 ? battlePass[1] : null;
         DailyItems.Add(new DailyItem
         {
-            Icon = "🎖",
+            Icon = Icon.Medal,
             Name = "战令",
             ValueText = $"LV.{level}",
             Cur = progress?.Cur ?? 0,
@@ -189,7 +190,7 @@ public sealed partial class HomeViewModel : ViewModelBase
         });
     }
 
-    private void AddItem(RoleDailyDetail? detail, string icon, string fallbackName, bool curOnly = false)
+    private void AddItem(RoleDailyDetail? detail, Icon icon, string fallbackName, bool curOnly = false)
     {
         if (detail is null)
         {

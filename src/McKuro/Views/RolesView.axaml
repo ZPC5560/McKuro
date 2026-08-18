@@ -6,6 +6,7 @@
              xmlns:guide="using:McKuro.Core.Models.Guide"
              xmlns:vm="using:McKuro.ViewModels"
              xmlns:controls="using:McKuro.Controls"
+             xmlns:ic="using:FluentIcons.Avalonia"
              mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="700"
              x:Class="McKuro.Views.RolesView"
              x:DataType="vm:RolesViewModel">
@@ -29,7 +30,10 @@
         <!-- 标题 -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="20,12,20,6">
             <StackPanel Spacing="2">
-                <TextBlock Text="👤 角色数据" FontSize="24" FontWeight="Bold" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ic:FluentIcon Icon="Person" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
+                    <TextBlock Text="角色数据" FontSize="24" FontWeight="Bold" />
+                </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <TextBlock Text="{Binding StatusText}"
                                FontSize="12"
@@ -265,7 +269,10 @@
                                 Background="{DynamicResource SemiColorBg3}">
                             <StackPanel Spacing="10">
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <TextBlock Text="🔗 共鸣链" FontSize="14" FontWeight="SemiBold" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <ic:FluentIcon Icon="Link" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
+                                        <TextBlock Text="共鸣链" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </StackPanel>
                                     <TextBlock FontSize="13" FontWeight="SemiBold"
                                                Foreground="{DynamicResource SemiColorPrimary}">
                                         <Run Text="{Binding SelectedRole.UnlockedChainCount}" />
@@ -308,7 +315,10 @@
                                 IsVisible="{Binding GuideLoggedIn}">
                             <StackPanel Spacing="10">
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <TextBlock Text="🎯 mcguide 官方达成度" FontSize="14" FontWeight="SemiBold" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <ic:FluentIcon Icon="ChatBubblesQuestion" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
+                                        <TextBlock Text="mcguide 官方达成度" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </StackPanel>
                                     <TextBlock Text="{Binding GuideStatusText}" FontSize="12"
                                                Foreground="{DynamicResource SemiColorText2}"
                                                VerticalAlignment="Center" />

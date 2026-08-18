@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:McKuro.ViewModels"
+             xmlns:ic="using:FluentIcons.Avalonia"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.PlayTimeView"
              x:DataType="vm:PlayTimeViewModel">
@@ -16,7 +17,10 @@
         <StackPanel Margin="20,16,20,16" Spacing="16">
             <!-- 标题 -->
             <StackPanel Spacing="2">
-                <TextBlock Text="🕒 游玩统计" FontSize="24" FontWeight="Bold" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ic:FluentIcon Icon="Timer" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
+                    <TextBlock Text="游玩统计" FontSize="24" FontWeight="Bold" />
+                </StackPanel>
                 <TextBlock Text="{Binding StatusText}" FontSize="12"
                            Foreground="{DynamicResource SemiColorText2}" />
             </StackPanel>
@@ -148,7 +152,10 @@
             <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                 <StackPanel Spacing="10">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="📋 每周游玩时间范围报告" FontSize="15" FontWeight="SemiBold" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <ic:FluentIcon Icon="DocumentText" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
+                            <TextBlock Text="每周游玩时间范围报告" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </StackPanel>
                         <TextBlock Text="每次开始玩到结束独立统计,相邻会话(≤60min)合并为同一时段" FontSize="11"
                                    Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
                     </StackPanel>

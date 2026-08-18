@@ -6,6 +6,7 @@
              xmlns:game="using:McKuro.Core.Models.Game"
              xmlns:controls="using:McKuro.Controls"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:ic="using:FluentIcons.Avalonia"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.LauncherView"
              x:DataType="vm:LauncherViewModel">
@@ -77,11 +78,13 @@
                     </ItemsControl>
 
                     <!-- 隐藏轮播按钮 -->
-                    <Button Content="✕" Padding="6,2" FontSize="11"
+                    <Button Padding="6,2" FontSize="11"
                             HorizontalAlignment="Right" VerticalAlignment="Top"
                             Margin="0,6,6,0"
                             Background="#66000000" BorderThickness="0" Foreground="White"
-                            Command="{Binding ToggleSlideShowCommand}" />
+                            Command="{Binding ToggleSlideShowCommand}">
+                        <ic:FluentIcon Icon="Dismiss" IconVariant="Regular" IconSize="Size16" Foreground="White" />
+                    </Button>
                 </Grid>
                 </Border>
 
@@ -104,8 +107,9 @@
                                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
                                         <Border Width="48" Height="48" CornerRadius="10"
                                                 Background="{DynamicResource SemiColorBg3}">
-                                            <TextBlock Text="🌊" FontSize="24"
-                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            <ic:FluentIcon Icon="Play" IconVariant="Regular" IconSize="Size24"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           Foreground="White" />
                                         </Border>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                             <TextBlock Text="鸣潮 · 启动器" FontSize="16" FontWeight="SemiBold" />
@@ -144,14 +148,26 @@
                                 <StackPanel Spacing="10">
                                     <TextBlock Text="操作" FontSize="13" FontWeight="SemiBold" Foreground="White" />
                                     <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <Button Content="📂 打开目录" Command="{Binding OpenGameFolderCommand}"
+                                        <Button Command="{Binding OpenGameFolderCommand}"
                                                 Background="#8C000000" BorderBrush="#4DFFFFFF" BorderThickness="1"
-                                                CornerRadius="18" Padding="18,7" Foreground="White" />
-                                        <Button Content="🔧 修复游戏" Command="{Binding RepairGameCommand}"
+                                                CornerRadius="18" Padding="18,7" Foreground="White">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <ic:FluentIcon Icon="Folder" IconVariant="Regular" IconSize="Size16"
+                                                               Foreground="White" VerticalAlignment="Center" />
+                                                <TextBlock Text="打开目录" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Command="{Binding RepairGameCommand}"
                                                 IsEnabled="{Binding IsInstalled}"
                                                 IsVisible="{Binding NativeGameManagementSupported}"
                                                 Background="#8C000000" BorderBrush="#4DFFFFFF" BorderThickness="1"
-                                                CornerRadius="18" Padding="18,7" Foreground="White" />
+                                                CornerRadius="18" Padding="18,7" Foreground="White">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <ic:FluentIcon Icon="Wrench" IconVariant="Regular" IconSize="Size16"
+                                                               Foreground="White" VerticalAlignment="Center" />
+                                                <TextBlock Text="修复游戏" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>

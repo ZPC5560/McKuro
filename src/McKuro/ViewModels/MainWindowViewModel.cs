@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Messaging;
 using Avalonia.Threading;
+using FluentIcons.Common;
 using McKuro.Services;
 
 namespace McKuro.ViewModels;
@@ -9,7 +10,7 @@ namespace McKuro.ViewModels;
 public sealed class NavigationItem : ObservableObject
 {
     public required string Title { get; init; }
-    public required string Icon { get; init; }
+    public required Icon Icon { get; init; }
     public required string Key { get; init; }
     public required ViewModelBase ViewModel { get; init; }
 
@@ -73,18 +74,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         NavigationItems =
         [
-            new NavigationItem { Title = "主页",        Icon = "🏠", Key = NavigationKeys.Home,      ViewModel = home },
-            new NavigationItem { Title = "鸣潮",        Icon = "🌊", Key = NavigationKeys.Launcher, ViewModel = launcher },
-            new NavigationItem { Title = "抽卡分析",    Icon = "🎴", Key = NavigationKeys.Gacha,    ViewModel = gacha },
-            new NavigationItem { Title = "角色数据",    Icon = "👤", Key = NavigationKeys.Roles,    ViewModel = roles },
-            new NavigationItem { Title = "签到",        Icon = "📅", Key = NavigationKeys.Sign,     ViewModel = sign },
-            new NavigationItem { Title = "活动",        Icon = "🎡", Key = NavigationKeys.Activity, ViewModel = activity },
-            new NavigationItem { Title = "图鉴",        Icon = "📖", Key = NavigationKeys.Wiki,     ViewModel = wiki },
-            new NavigationItem { Title = "兑换码",      Icon = "🎁", Key = NavigationKeys.RedeemCodes, ViewModel = redeem },
-            new NavigationItem { Title = "游玩统计",    Icon = "🕒", Key = NavigationKeys.PlayTime,  ViewModel = playTime },
-            new NavigationItem { Title = "深塔海墟",    Icon = "🗼", Key = NavigationKeys.Tower,     ViewModel = tower },
-            new NavigationItem { Title = "账号",        Icon = "👤", Key = NavigationKeys.Account,   ViewModel = account },
-            new NavigationItem { Title = "设置",        Icon = "⚙️", Key = NavigationKeys.Settings, ViewModel = settings },
+            new NavigationItem { Title = "主页",        Icon = Icon.Home,               Key = NavigationKeys.Home,      ViewModel = home },
+            new NavigationItem { Title = "鸣潮",        Icon = Icon.Play,               Key = NavigationKeys.Launcher, ViewModel = launcher },
+            new NavigationItem { Title = "抽卡分析",    Icon = Icon.Gauge,              Key = NavigationKeys.Gacha,    ViewModel = gacha },
+            new NavigationItem { Title = "角色数据",    Icon = Icon.Person,             Key = NavigationKeys.Roles,    ViewModel = roles },
+            new NavigationItem { Title = "签到",        Icon = Icon.CalendarCheckmark,  Key = NavigationKeys.Sign,     ViewModel = sign },
+            new NavigationItem { Title = "活动",        Icon = Icon.CalendarStar,       Key = NavigationKeys.Activity, ViewModel = activity },
+            new NavigationItem { Title = "图鉴",        Icon = Icon.BookOpen,           Key = NavigationKeys.Wiki,     ViewModel = wiki },
+            new NavigationItem { Title = "兑换码",      Icon = Icon.TicketDiagonal,     Key = NavigationKeys.RedeemCodes, ViewModel = redeem },
+            new NavigationItem { Title = "游玩统计",    Icon = Icon.Timer,              Key = NavigationKeys.PlayTime,  ViewModel = playTime },
+            new NavigationItem { Title = "深塔海墟",    Icon = Icon.BuildingSkyscraper, Key = NavigationKeys.Tower,     ViewModel = tower },
+            new NavigationItem { Title = "账号",        Icon = Icon.PersonCircle,       Key = NavigationKeys.Account,   ViewModel = account },
+            new NavigationItem { Title = "设置",        Icon = Icon.Settings,           Key = NavigationKeys.Settings, ViewModel = settings },
         ];
 
         _navByKey = NavigationItems.ToDictionary(n => n.Key, StringComparer.Ordinal);

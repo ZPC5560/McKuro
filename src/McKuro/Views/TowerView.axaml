@@ -5,13 +5,17 @@
              xmlns:vm="using:McKuro.ViewModels"
              xmlns:controls="using:McKuro.Controls"
              xmlns:tower="using:McKuro.Core.Models.Tower"
+             xmlns:ic="using:FluentIcons.Avalonia"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.TowerView"
              x:DataType="vm:TowerViewModel">
     <Grid RowDefinitions="Auto,*" Margin="20,16,20,16">
         <!-- 标题 -->
         <StackPanel Grid.Row="0" Spacing="2" Margin="0,0,0,12">
-            <TextBlock Text="🗼 深塔 / 海墟" FontSize="24" FontWeight="Bold" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <ic:FluentIcon Icon="BuildingSkyscraper" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
+                <TextBlock Text="深塔 / 海墟" FontSize="24" FontWeight="Bold" />
+            </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="10">
                 <TextBlock Text="{Binding StatusText}" FontSize="12"
                            Foreground="{DynamicResource SemiColorText2}" />
@@ -23,8 +27,10 @@
             <!-- 深塔 -->
             <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="16">
                 <Grid RowDefinitions="Auto,*">
-                    <TextBlock Grid.Row="0" Text="🏯 深塔(终焉矩阵)" FontSize="15" FontWeight="SemiBold"
-                               Margin="0,0,0,10" />
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,10">
+                        <ic:FluentIcon Icon="BuildingSkyscraper" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
+                        <TextBlock Text="深塔(终焉矩阵)" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
                     <ScrollViewer Grid.Row="1">
                         <ItemsControl ItemsSource="{Binding TowerModes}">
                             <ItemsControl.ItemsPanel>
@@ -79,8 +85,10 @@
             <!-- 海墟 -->
             <Border Grid.Column="1" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="16">
                 <Grid RowDefinitions="Auto,*">
-                    <TextBlock Grid.Row="0" Text="🌊 海墟(再生海域)" FontSize="15" FontWeight="SemiBold"
-                               Margin="0,0,0,10" />
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,10">
+                        <ic:FluentIcon Icon="Beach" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
+                        <TextBlock Text="海墟(再生海域)" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
                     <ScrollViewer Grid.Row="1">
                         <ItemsControl ItemsSource="{Binding SlashChallenges}">
                             <ItemsControl.ItemsPanel>

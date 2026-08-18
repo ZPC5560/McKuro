@@ -28,13 +28,33 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Semi.Avalonia" Version="12.1.0.1" />
-    <!-- 背景视频封面(可选):LibVLC native 库来自系统 VLC(macOS)或 VideoLAN.LibVLC.Windows(Windows);缺失时自动回退首帧图。
-         用 LibVLCSharp 纯软件回调(vmem)渲染到托管位图,不用 LibVLCSharp.Avalonia 的 VideoView(NativeControlHost 会盖住 UI)。 -->
-    <PackageReference Include="LibVLCSharp" Version="3.10.1" />
-    <!-- Windows 发布包内置 libvlc，避免用户必须另行安装 VLC；Linux 使用系统 libvlc，macOS 走应用内/系统探测。 -->
-    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1"
+    <!-- 统一单色线框图标:替代全部 emoji 图标。FluentIcons.Avalonia 2.1.337(依赖 Avalonia 12.0.0,net10.0,Native AOT 实测 0 警告)。 -->
+    <PackageReference Include="FluentIcons.Avalonia" Version="2.1.337" />
+    <!-- 背景视频封面(可选):libmpv 嵌入式渲染 API(MPV_RENDER_API_TYPE_SW)软件渲染到托管位图,
+         比 LibVLC vmem 回调稳定(Native AOT 安全:LoadLibrary + GetProcAddress → Marshal.GetDelegateForFunctionPointer,无反射)。
+         Windows native 库由 Endpne.LibMPV.Windows 内置(自动拷到输出 libmpv\win-x64\libmpv-2.dll);
+         mac/Linux 用系统/Homebrew libmpv(resolver 内置搜索 + MpvApi.RootPath 兜底)。 -->
+    <PackageReference Include="HanumanInstitute.LibMpv" Version="0.10.1" />
+    <PackageReference Include="Endpne.LibMPV.Windows" Version="0.41.0"
                       Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(RuntimeIdentifier)' == 'win-arm64' Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')" />
-    <!-- DI 容器 + 日志(AOT 兼容) -->
+  </ItemGroup>
+
+  <!-- Endpne.LibMPV.Windows 自带 targets 的 glob 是 libmpv.*(只匹配 libmpv.lib),匹配不到实际文件名 libmpv-2.dll,
+       因此 native 库不会自动拷到输出目录。这里手动把 libmpv-2.dll 拷到 libmpv\win-x64\(或 win-arm64\),
+       与 libmpv Windows resolver 的搜索路径(MpvApi.RootPath)对齐。 -->
+  <ItemGroup>
+    <None Include="$(NuGetPackageRoot)endpne.libmpv.windows\0.41.0\build\x64\libmpv-2.dll"
+          Condition="'$(RuntimeIdentifier)' == 'win-x64' Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')"
+          Link="libmpv\win-x64\libmpv-2.dll"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NuGetPackageRoot)endpne.libmpv.windows\0.41.0\build\arm64\libmpv-2.dll"
+          Condition="'$(RuntimeIdentifier)' == 'win-arm64'"
+          Link="libmpv\win-arm64\libmpv-2.dll"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- DI 容器 + 日志(AOT 兼容) -->
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />

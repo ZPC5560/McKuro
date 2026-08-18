@@ -37,7 +37,7 @@ public sealed class PlatformCapabilities
         : IsMacOS
             ? "优先使用应用内媒体运行库，失败时自动显示静态首帧"
             : IsLinux
-                ? "优先使用系统 libvlc，缺失时自动显示静态首帧"
+                ? "优先使用系统 libmpv，缺失时自动显示静态首帧"
                 : "媒体运行库不可用时自动显示静态首帧";
 
     public PlatformCapabilities()

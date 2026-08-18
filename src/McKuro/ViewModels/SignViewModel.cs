@@ -446,7 +446,7 @@ public sealed partial class SignViewModel : ViewModelBase
                                     SignGoods.Add(ordered[i]);
                                 }
                             }
-                            TodaySignText = signed ? "✅ 今日已签到" : "今日尚未签到";
+                            TodaySignText = signed ? "今日已签到" : "今日尚未签到";
                             SignCountText = $"累计签到 {sigInNum} 天";
                         }
                     });

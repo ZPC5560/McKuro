@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:McKuro.ViewModels"
              xmlns:controls="using:McKuro.Controls"
+             xmlns:ic="using:FluentIcons.Avalonia"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.ActivityView"
              x:DataType="vm:ActivityViewModel">
@@ -17,7 +18,10 @@
         <!-- 标题 -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
             <StackPanel Spacing="2">
-                <TextBlock Text="🎡 活动" FontSize="24" FontWeight="Bold" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ic:FluentIcon Icon="CalendarStar" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
+                    <TextBlock Text="活动" FontSize="24" FontWeight="Bold" />
+                </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <TextBlock Text="{Binding StatusText}" FontSize="12"
                                Foreground="{DynamicResource SemiColorText2}" />
@@ -33,7 +37,10 @@
                 <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                     <StackPanel Spacing="12">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="🎴 换取活动 (卡池)" FontSize="16" FontWeight="SemiBold" />
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <ic:FluentIcon Icon="TicketDiagonal" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
+                                <TextBlock Text="换取活动 (卡池)" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </StackPanel>
                             <TextBlock Text="带倒计时,独立于版本活动" FontSize="11"
                                        Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
                         </StackPanel>
@@ -104,7 +111,10 @@
                 <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                     <StackPanel Spacing="12">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="📅 版本活动 (甘特图)" FontSize="16" FontWeight="SemiBold" />
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <ic:FluentIcon Icon="CalendarStar" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
+                                <TextBlock Text="版本活动 (甘特图)" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </StackPanel>
                             <TextBlock Text="已过期的自动剔除" FontSize="11"
                                        Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
                         </StackPanel>

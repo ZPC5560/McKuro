@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -7,42 +6,44 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
-using LibVLCSharp.Shared;
+using HanumanInstitute.LibMpv;
+using HanumanInstitute.LibMpv.Core;
 
 namespace McKuro.Controls;
 
 /// <summary>
-/// 背景封面控件:优先用 LibVLC 播放宣传视频,无可用 native 库或播放失败时回退到首帧静态图。
-/// 依赖:系统装有 VLC(macOS/Linux)或应用目录带 VideoLAN.LibVLC native 库(Windows)。
+/// 背景封面控件:优先用 libmpv 嵌入式渲染 API 播放宣传视频,无可用 native 库或播放失败时回退到首帧静态图。
 /// 视频不可用不影响其余功能 —— 全程 try-catch,绝不抛出。
 /// <para>
-/// 渲染方式:通过 LibVLCSharp 的软件回调(vmem)把每帧 RGBA 像素拷贝进托管
-/// <see cref="WriteableBitmap"/>,再用普通 <see cref="Image"/> 显示。
-/// 不使用 LibVLCSharp.Avalonia 的 <c>VideoView</c>(它内部是 <c>NativeControlHost</c>):
-/// native 子窗口被操作系统合成在 Avalonia 渲染表面之上(airspace 问题),
-/// 会盖住同窗口内的所有普通控件(ZIndex/不透明/层级均无效) —— 这正是"视频播放时
-/// 版本信息/启动按键/渠道/轮播全部消失"的根因。托管 Image 参与正常 ZIndex 层叠,
-/// 视频在背景层、UI 在上层,两者可同时可见。
+/// v3(2026):从 LibVLC 换到 libmpv,解决 LibVLC 在 Windows 上播放失败(显示静态图)+ msvcrt c0000005
+/// 崩溃问题。渲染方式:libmpv 官方 <c>MPV_RENDER_API_TYPE_SW</c> 软件渲染(<see cref="MpvContextBase.StartSoftwareRendering"/>),
+/// 每次把整帧写入托管 <see cref="WriteableBitmap"/> 的锁定位图缓冲(封装 <see cref="MpvContextBase.SoftwareRender"/>),
+/// 再用普通 <see cref="Image"/> 显示。不使用 <c>HanumanInstitute.LibMpv.Avalonia</c>(避开 ReactiveUI 依赖),
+/// 不创建任何 native 子窗口 —— 托管 Image 参与正常 ZIndex 层叠,视频在背景层、UI 在上层,两者同时可见。
 /// </para>
 /// <para>
-/// v2(Windows native 崩溃修复):已用进程级探针复现并定位两类 msvcrt.dll c0000005 崩溃:
-/// ①<b>主根因</b>:<see cref="VideoLockCb"/> 只返回 pin 缓冲地址、没把指针写入
-/// <c>planes[0]</c>(libvlc 3.x vmem 实际从 <c>void** planes</c> 取像素缓冲)——
-/// libvlc 用未初始化指针写帧 → 播放中就堆损坏崩溃。修复:同时写 <c>planes[0]</c> 并返回地址。
-/// ②缓冲生命周期:vmem 帧缓冲在 <see cref="VideoFormatCb"/> 分配并 pin、
-/// 在 <see cref="VideoCleanupCb"/>(libvlc 保证所有 lock/unlock 结束后调用)释放;
-/// 绝不从 UI 线程在 libvlc 仍可能写入时释放。缓冲按播放器捕获(closure),
-/// 旧播放器迟到的 cleanup 不会释放新播放器的缓冲。
+/// 线程模型:mpv 的 update 回调跑在 mpv 内部线程,这里只把它 <see cref="Dispatcher.UIThread.Post"/> 到 UI 线程,
+/// 所有 <see cref="MpvContextBase.SoftwareRender"/> 与资源释放都串行在 UI 线程,天然规避 LibVLC vmem 那类
+/// 跨线程缓冲生命周期崩溃。每个播放器是独立 <see cref="MpvContext"/>,Dispose 时内部会
+/// StopRendering + TerminateDestroy,旧播放器不会触碰新播放器的缓冲。
+/// </para>
+/// <para>
+/// Native AOT 安全:libmpv 绑定走 LoadLibrary/dlopen + GetProcAddress/dlsym →
+/// <see cref="System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer{T}"/>,无反射。
+/// 注意<b>不要</b>调用 <see cref="MpvContextBase.ClientName"/>(库中唯一自定义 marshaler 入口,与 AOT 裁剪冲突)。
+/// </para>
+/// <para>
+/// native 库定位:Windows 由 <c>Endpne.LibMPV.Windows</c> 自动拷到输出 <c>libmpv\win-x64\libmpv-2.dll</c>
+/// (或 win-arm64)。libmpv 的 Windows resolver 只搜索 <see cref="MpvApi.RootPath"/>,因此首次创建
+/// <see cref="MpvContext"/> 前必须把 <see cref="MpvApi.RootPath"/> 指向含 <c>libmpv-2.dll</c> 的目录;
+/// macOS/Linux 走系统/Homebrew libmpv(resolver 内置搜索 + RootPath 兜底)。
 /// </para>
 /// </summary>
 public sealed class VideoBackgroundControl : Grid
 {
-    private static readonly Lazy<LibVLC?> LibVlc = new(TryCreateLibVlc);
-
     private readonly object _sync = new();
 
-    private MediaPlayer? _player;
-    private Media? _media;
+    private BackgroundMpvContext? _mpv;
     private Image? _videoImage;
     private WriteableBitmap? _bitmap;
     private AsyncImage? _fallback;
@@ -50,23 +51,19 @@ public sealed class VideoBackgroundControl : Grid
     private bool _attached;
     private bool _disposed;
 
-    // 软件渲染帧状态(回调线程写,UI 线程读)。
-    // 帧数据缓冲的生命周期由每个播放器的 vmem 回调闭包管理(FormatCb 分配、CleanupCb 释放);
-    // _staging/_framePitch/_frameHeight 仅是对"当前播放器"缓冲的引用,供 UI 线程渲染读取。
-    private byte[]? _staging;
-    private int _frameWidth;
-    private int _frameHeight;
-    private int _framePitch;
+    // 软件渲染帧状态。更新回调线程只置标志并 Post,实际渲染全在 UI 线程,
+    // 因此 _framePending 用 Interlocked 合并多帧,避免同一 UI 迭代重复渲染。
     private int _framePending;
 
-    // 持有委托强引用,防止被 GC 回收(libvlc 内部持有原生回调指针)。
-    // 注意:这些字段不应在 DisposePlayer 里同步置空 —— 旧播放器的 vout 销毁是异步的,
-    // 期间 libvlc 仍可能回调;字段随控件被 GC 回收(或在对应播放器的 cleanup 回调中)才安全释放。
-    private MediaPlayer.LibVLCVideoFormatCb? _formatCb;
-    private MediaPlayer.LibVLCVideoCleanupCb? _cleanupCb;
-    private MediaPlayer.LibVLCVideoLockCb? _lockCb;
-    private MediaPlayer.LibVLCVideoUnlockCb? _unlockCb;
-    private MediaPlayer.LibVLCVideoDisplayCb? _displayCb;
+    // 从 mpv video-params 读取的实际视频尺寸(首帧到达后解析一次);
+    // 位图按视频原生分辨率创建,交给 Image 的 UniformToFill 做封面缩放 —— 与原 LibVLC 行为一致。
+    private int _videoWidth;
+    private int _videoHeight;
+    private bool _sizeResolved;
+    private bool _firstFrameShown;
+
+    // 播放启动看门狗:规定时间内没有首帧(网络卡死/解码失败无事件)则回退静态图。
+    private CancellationTokenSource? _timeoutCts;
 
     public static readonly StyledProperty<string> VideoUrlProperty =
         AvaloniaProperty.Register<VideoBackgroundControl, string>(nameof(VideoUrl));
@@ -114,54 +111,6 @@ public sealed class VideoBackgroundControl : Grid
         DetachedFromVisualTree += OnDetached;
     }
 
-    private static LibVLC? TryCreateLibVlc()
-    {
-        try
-        {
-            // 显式候选目录探测(含 mac 系统 VLC 路径;找不到再用 LibVLCSharp 标准探测)
-            foreach (var directory in CandidateLibVlcDirectories())
-            {
-                if (ContainsNativeLibVlc(directory))
-                {
-                    LibVLCSharp.Shared.Core.Initialize(directory);
-                    return new LibVLC();
-                }
-            }
-
-            // Linux 优先走 LibVLCSharp 的标准探测(系统 libvlc 由包管理器提供)。
-            if (OperatingSystem.IsLinux())
-            {
-                LibVLCSharp.Shared.Core.Initialize();
-                return new LibVLC();
-            }
-
-            // macOS:无应用内 libvlc 时,再试系统 VLC 的默认安装位置。
-            if (OperatingSystem.IsMacOS())
-            {
-                foreach (var macVlc in MacSystemVlcDirs())
-                {
-                    if (ContainsNativeLibVlc(macVlc))
-                    {
-                        LibVLCSharp.Shared.Core.Initialize(macVlc);
-                        return new LibVLC();
-                    }
-                }
-                // 仍失败:尝试 LibVLCSharp 标准探测(可能用户自定义安装/brew)
-                LibVLCSharp.Shared.Core.Initialize();
-                return new LibVLC();
-            }
-
-            // Windows:上面候选目录已覆盖发布包 libvlc;最后尝试标准探测
-            LibVLCSharp.Shared.Core.Initialize();
-            return new LibVLC();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"LibVLC 初始化失败(将回退首帧图): {ex.Message}");
-            return null;
-        }
-    }
-
     private void OnUrlChanged()
     {
         if (!_initialized)
@@ -203,25 +152,12 @@ public sealed class VideoBackgroundControl : Grid
             return;
         }
 
-        var libvlc = LibVlc.Value;
-        if (libvlc is null)
-        {
-            // 无 native 库 → 回退首帧图
-            _fallback!.ImageUrl = FallbackImageUrl;
-            return;
-        }
-
         try
         {
-            var player = new MediaPlayer(libvlc)
-            {
-                // 软件回调(vmem)路径:关闭硬件解码,确保像素回调可用
-                EnableHardwareDecoding = false,
-                Volume = 0,
-            };
-            _player = player;
+            // 必须在 new MpvContext() 之前完成:libmpv Windows resolver 只在 MpvApi.RootPath 下找 libmpv-2.dll
+            EnsureNativeRootPath();
 
-            // 托管 Image 显示软件渲染帧(参与正常 ZIndex,不遮挡 UI)
+            _mpv = new BackgroundMpvContext();
             _videoImage = new Image
             {
                 Stretch = Stretch.UniformToFill,
@@ -232,144 +168,44 @@ public sealed class VideoBackgroundControl : Grid
             };
             Children.Add(_videoImage);
 
-            // 本播放器独立的 vmem 缓冲 + 回调闭包。核心安全点:
-            //   - 缓冲在 FormatCb 分配并 pin,在 CleanupCb(libvlc 所有 lock/unlock 结束后)释放;
-            //   - 缓冲随闭包捕获,旧播放器迟到的 CleanupCb 只会释放它自己的缓冲,
-            //     绝不会误伤新播放器的缓冲;
-            //   - 任何时刻 VideoLockCb 都返回有效的 pin 指针 —— 即使 Dispose 后 libvlc
-            //     仍有残留回调,也只会写进有效缓冲,不会 use-after-free / memcpy 到 NULL。
-            var buf = new FrameBuffer();
-
-            _formatCb = (ref IntPtr opaque, IntPtr chroma, ref uint width, ref uint height, ref uint pitches, ref uint lines) =>
+            // 错误/失败 → 回退静态图(EndFile 的 Error reason,含加载/网络/解码失败)
+            _mpv.EndFile += (_, e) =>
             {
-                try
+                if (e.Reason == MpvEndFileReason.Error)
                 {
-                    if (width == 0 || height == 0)
-                    {
-                        return 0;
-                    }
-
-                    // 请求 RGBA(4 字节/像素,与 Avalonia Rgba8888 直接对应)
-                    byte[] fourcc = { (byte)'R', (byte)'G', (byte)'B', (byte)'A' };
-                    Marshal.Copy(fourcc, 0, chroma, 4);
-
-                    int pitch = (int)(width * 4);
-                    lock (_sync)
-                    {
-                        buf.EnsureAllocated(pitch, (int)height);
-                        _staging = buf.Data;
-                        _frameWidth = (int)width;
-                        _frameHeight = (int)height;
-                        _framePitch = pitch;
-                        pitches = (uint)pitch;
-                        lines = height;
-                    }
-
-                    // 在 UI 线程创建/更新位图
-                    Dispatcher.UIThread.Post(CreateBitmap);
-                    return 1; // 成功
-                }
-                catch (Exception)
-                {
-                    return 0; // 失败 → libvlc 终止该输出
+                    ShowFallback();
                 }
             };
-
-            _cleanupCb = (ref IntPtr opaque) =>
+            // 可选诊断日志
+            _mpv.LogMessage += (_, e) =>
             {
-                lock (_sync)
+                if (e.Level == "error" || e.Level == "fatal")
                 {
-                    // libvlc 保证 CleanupCb 在 vout 销毁(所有 lock/unlock 完成后)调用,
-                    // 此时释放本播放器的缓冲是线程安全的 —— 绝不提前到 UI 线程释放。
-                    if (ReferenceEquals(_staging, buf.Data))
-                    {
-                        _staging = null;
-                    }
-                    buf.Free();
+                    Debug.WriteLine($"[libmpv] {e.Level}: {e.Text}");
                 }
             };
+            _mpv.RequestLogMessages("warn");
 
-            _lockCb = (opaque, planes) =>
+            // 软件渲染:update 回调在 mpv 线程,只合并标志并 Post 到 UI 线程渲染
+            _mpv.StartSoftwareRendering(() =>
             {
-                // 关键:libvlc 3.x 的 vmem 从 planes[0](void**) 读取像素缓冲指针,
-                // 而不仅仅是使用返回值。只返回地址而不写 planes[0] 会让 libvlc 用
-                // 未初始化/残留指针写帧 → 堆损坏 / msvcrt.dll c0000005(播放中就崩)。
-                // 因此把 pin 指针同时写入 planes[0] 并返回地址(兼容各 libvlc 版本/平台)。
-                lock (_sync)
+                if (_disposed)
                 {
-                    var ptr = buf.IsAllocated ? buf.Address : IntPtr.Zero;
-                    if (planes != IntPtr.Zero)
-                    {
-                        Marshal.WriteIntPtr(planes, ptr);
-                    }
-                    return ptr;
+                    return;
                 }
-            };
-
-            _unlockCb = (opaque, picture, planes) =>
-            {
-                try
+                if (Interlocked.Exchange(ref _framePending, 1) == 0)
                 {
-                    // 播放器已销毁,或该缓冲已被新播放器替换:忽略该帧。
-                    if (_disposed || !ReferenceEquals(_staging, buf.Data))
-                    {
-                        return;
-                    }
-
-                    // 合并多帧:同一 UI 迭代只渲染最新一帧,避免刷爆消息队列
-                    if (Interlocked.Exchange(ref _framePending, 1) == 0)
-                    {
-                        Dispatcher.UIThread.Post(RenderFrame);
-                    }
+                    Dispatcher.UIThread.Post(RenderFrame);
                 }
-                catch (Exception)
-                {
-                    // 忽略单帧异常(含回调期间的竞态)
-                }
-            };
+            });
 
-            _displayCb = (opaque, picture) =>
-            {
-                // 帧已通过 Unlock 拷出,无需在此再处理
-            };
+            // 看门狗:15s 内无首帧 → 回退静态图
+            _timeoutCts = new CancellationTokenSource();
+            var token = _timeoutCts.Token;
+            _ = WatchdogAsync(token);
 
-            player.SetVideoFormatCallbacks(_formatCb, _cleanupCb);
-            player.SetVideoCallbacks(_lockCb, _unlockCb, _displayCb);
-
-            _media = new Media(libvlc, new Uri(VideoUrl));
-            player.EncounteredError += (_, _) => ShowFallback();
-            player.EndReached += (_, _) =>
-            {
-                // LibVLC 事件线程不能直接再次调用播放 API,切换线程后循环播放。
-                // 播放前校验:该播放器仍是当前活动播放器且未被销毁 —— 避免对已释放对象调用 native。
-                ThreadPool.QueueUserWorkItem(_ =>
-                {
-                    try
-                    {
-                        lock (_sync)
-                        {
-                            if (_disposed || !ReferenceEquals(_player, player))
-                            {
-                                return;
-                            }
-                        }
-                        player.Time = 0;
-                        lock (_sync)
-                        {
-                            if (_disposed || !ReferenceEquals(_player, player))
-                            {
-                                return;
-                            }
-                        }
-                        player.Play();
-                    }
-                    catch (Exception)
-                    {
-                        ShowFallback();
-                    }
-                });
-            };
-            player.Play(_media);
+            // loadfile replace → 自动开始播放(loop-file=inf 由 OnPreInitialize 设置,循环不产生 EOF)
+            _mpv.LoadFile(VideoUrl).Invoke();
         }
         catch (Exception ex)
         {
@@ -379,52 +215,50 @@ public sealed class VideoBackgroundControl : Grid
         }
     }
 
+    private async Task WatchdogAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(15), token).ConfigureAwait(false);
+            ShowFallback();
+        }
+        catch (OperationCanceledException)
+        {
+            // 首帧已到或已释放:正常路径
+        }
+    }
+
     private void DisposePlayer()
     {
         _disposed = true;
+        _timeoutCts?.Cancel();
+        _timeoutCts?.Dispose();
+        _timeoutCts = null;
 
-        if (_player is not null)
+        if (_mpv is not null)
         {
+            // libmpv render API 是嵌入式一等 API:MpvContext.Dispose() 内部 StopRendering(停帧+释放 render context)
+            // + TerminateDestroy(mpv_terminate_destroy),比 libvlc 手动管理 vmem 缓冲生命周期可靠得多。
             try
             {
-                _player.Stop();
+                _mpv.Dispose();
             }
             catch (Exception)
             {
-                // 忽略
+                // 忽略释放异常
             }
-
-            try
-            {
-                _player.Dispose();
-            }
-            catch (Exception)
-            {
-                // 忽略
-            }
-
-            _player = null;
+            _mpv = null;
         }
 
-        try
-        {
-            _media?.Dispose();
-        }
-        catch (Exception)
-        {
-            // 忽略
-        }
-        _media = null;
-
-        // 注意:这里【绝不】同步释放 vmem 帧缓冲 / 置空 _staging —— 该缓冲由本播放器的
-        // CleanupCb 在 libvlc vout 销毁时释放。若在此释放,libvlc 解码线程可能仍在写入
-        // (use-after-free → msvcrt heap corruption),或 VideoLockCb 返回空平面 → c0000005。
-        // 旧缓冲由旧播放器的 cleanup 回调回收;新播放器的 FormatCb 会分配新缓冲。
         lock (_sync)
         {
             _bitmap?.Dispose();
             _bitmap = null;
         }
+        _sizeResolved = false;
+        _firstFrameShown = false;
+        _videoWidth = 0;
+        _videoHeight = 0;
 
         if (_videoImage is not null)
         {
@@ -452,157 +286,156 @@ public sealed class VideoBackgroundControl : Grid
 
     // ---- UI 线程渲染 ----
 
-    private void CreateBitmap()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        lock (_sync)
-        {
-            if (_frameWidth <= 0 || _frameHeight <= 0)
-            {
-                return;
-            }
-
-            if (_bitmap is null
-                || _bitmap.PixelSize.Width != _frameWidth
-                || _bitmap.PixelSize.Height != _frameHeight)
-            {
-                _bitmap?.Dispose();
-                _bitmap = new WriteableBitmap(
-                    new PixelSize(_frameWidth, _frameHeight),
-                    new Vector(96, 96),
-                    PixelFormats.Rgba8888,
-                    AlphaFormat.Opaque);
-                if (_videoImage is not null)
-                {
-                    _videoImage.Source = _bitmap;
-                }
-            }
-        }
-    }
-
     private void RenderFrame()
     {
         Interlocked.Exchange(ref _framePending, 0);
-        if (_disposed)
+        if (_disposed || _mpv is null)
         {
             return;
         }
 
-        lock (_sync)
+        try
         {
-            if (_bitmap is null || _staging is null)
+            lock (_sync)
             {
-                return;
-            }
-
-            try
-            {
-                using (var fb = _bitmap.Lock())
+                if (_mpv is null)
                 {
-                    int srcRowBytes = _framePitch;
-                    int dstRowBytes = fb.RowBytes;
-                    int height = Math.Min(_frameHeight, fb.Size.Height);
-                    int copyRow = Math.Min(srcRowBytes, dstRowBytes);
-                    for (int y = 0; y < height; y++)
+                    return;
+                }
+
+                if (!_sizeResolved)
+                {
+                    if (!TryResolveVideoSize())
                     {
-                        Marshal.Copy(_staging, y * srcRowBytes, IntPtr.Add(fb.Address, y * dstRowBytes), copyRow);
+                        return;
                     }
                 }
+
+                if (_videoWidth <= 0 || _videoHeight <= 0)
+                {
+                    return;
+                }
+
+                if (_bitmap is null
+                    || _bitmap.PixelSize.Width != _videoWidth
+                    || _bitmap.PixelSize.Height != _videoHeight)
+                {
+                    _bitmap?.Dispose();
+                    _bitmap = new WriteableBitmap(
+                        new PixelSize(_videoWidth, _videoHeight),
+                        new Vector(96, 96),
+                        PixelFormats.Bgra8888,
+                        AlphaFormat.Opaque);
+                    if (_videoImage is not null)
+                    {
+                        _videoImage.Source = _bitmap;
+                    }
+                }
+
+                // mpv SW render 直接写入锁定位图缓冲(stride = width*4,与 Bgra8888 对齐)
+                using (var fb = _bitmap.Lock())
+                {
+                    _mpv.SoftwareRender(fb.Size.Width, fb.Size.Height, fb.Address, "bgra");
+                }
             }
-            catch (Exception)
-            {
-                // 忽略渲染异常
-            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"libmpv 渲染帧失败: {ex.Message}");
         }
 
         // 首个真实帧到达后才显示视频(此前保持透明,让静态图可见)
-        if (_videoImage is not null && _videoImage.Opacity < 1)
+        if (!_firstFrameShown)
         {
-            _videoImage.Opacity = 1;
-        }
-    }
-
-    private static IEnumerable<string> CandidateLibVlcDirectories()
-    {
-        var baseDirectory = AppContext.BaseDirectory;
-        yield return baseDirectory;
-        yield return Path.Combine(baseDirectory, "libvlc");
-        yield return Path.Combine(baseDirectory, "libvlc", "win-x64");
-        yield return Path.Combine(baseDirectory, "Contents", "Frameworks");
-        yield return Path.Combine(baseDirectory, "Contents", "Frameworks", "libvlc");
-        if (OperatingSystem.IsMacOS())
-        {
-            foreach (var d in MacSystemVlcDirs())
+            _firstFrameShown = true;
+            _timeoutCts?.Cancel();
+            if (_videoImage is not null)
             {
-                yield return d;
+                _videoImage.Opacity = 1;
             }
         }
     }
 
-    /// <summary>macOS 系统 VLC 的 libvlc 位置(官方安装 + 用户目录安装)。</summary>
-    private static IEnumerable<string> MacSystemVlcDirs()
+    /// <summary>从 mpv video-params 读取实际视频分辨率(超过上限按比例缩小,防止 4K/8K 源撑爆软件缓冲)。</summary>
+    private bool TryResolveVideoSize()
     {
-        yield return "/Applications/VLC.app/Contents/MacOS/lib";
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        if (!string.IsNullOrEmpty(home))
+        if (_mpv is null)
         {
-            yield return Path.Combine(home, "Applications", "VLC.app", "Contents", "MacOS", "lib");
+            return false;
         }
-        // Homebrew 安装的 vlc
-        yield return "/opt/homebrew/lib";
-        yield return "/usr/local/lib";
+
+        try
+        {
+            int w = _mpv.GetProperty<int>("video-params/w");
+            int h = _mpv.GetProperty<int>("video-params/h");
+            if (w <= 0 || h <= 0)
+            {
+                return false;
+            }
+
+            // 上限保护:软件渲染缓冲过大(>2K 宽)时按比例降采样,背景播放无需原分辨率
+            const int maxWidth = 2560;
+            if (w > maxWidth)
+            {
+                h = (int)((long)h * maxWidth / w);
+                w = maxWidth;
+            }
+
+            _videoWidth = w;
+            _videoHeight = h;
+            _sizeResolved = true;
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
-    private static bool ContainsNativeLibVlc(string directory)
-        => Directory.Exists(directory)
-           && (File.Exists(Path.Combine(directory, "libvlc.dll"))
-               || File.Exists(Path.Combine(directory, "libvlc.dylib"))
-               || File.Exists(Path.Combine(directory, "libvlc.so")));
-
-    /// <summary>
-    /// 单帧 vmem 缓冲。分配即 pin,由对应播放器的 CleanupCb 释放 ——
-    /// 生命周期与 libvlc vout 完全对齐,从不在 libvlc 可能仍在写入时释放。
-    /// </summary>
-    private sealed class FrameBuffer
+    private static void EnsureNativeRootPath()
     {
-        public byte[] Data = null!;
-        public GCHandle Handle;
-        public int Pitch;
-        public int Height;
-
-        public bool IsAllocated => Handle.IsAllocated;
-
-        public IntPtr Address => Handle.AddrOfPinnedObject();
-
-        /// <summary>尺寸不变时复用已 pin 缓冲;否则重新分配(旧的会在此释放)。</summary>
-        public void EnsureAllocated(int pitch, int height)
+        // libmpv 的 Windows resolver 只在 MpvApi.RootPath 下搜索 libmpv-2.dll(单一路径,无系统回退)。
+        // Endpne.LibMPV.Windows 会把 dll 拷到 libmpv\win-x64(AnyCPU→x64)或 libmpv\win-arm64;
+        // 探测到就把 RootPath 指过去;找不到则保持默认(AppContext.BaseDirectory,可能直接放 dll)。
+        // macOS/Linux resolver 自带系统路径,不需要改 RootPath。
+        if (!OperatingSystem.IsWindows())
         {
-            if (IsAllocated && Pitch == pitch && Height == height)
+            return;
+        }
+
+        var baseDir = AppContext.BaseDirectory;
+        string[] candidates =
+        {
+            Path.Combine(baseDir, "libmpv", "win-x64"),
+            Path.Combine(baseDir, "libmpv", "win-arm64"),
+            baseDir,
+        };
+
+        foreach (var dir in candidates)
+        {
+            if (Directory.Exists(dir) && File.Exists(Path.Combine(dir, "libmpv-2.dll")))
             {
+                MpvApi.RootPath = dir;
                 return;
             }
-
-            Free();
-            Data = new byte[pitch * height];
-            Handle = GCHandle.Alloc(Data, GCHandleType.Pinned);
-            Pitch = pitch;
-            Height = height;
         }
+    }
 
-        public void Free()
+    /// <summary>
+    /// 带预初始化选项的 libmpv 上下文。基类构造顺序:mpv_create → <see cref="OnPreInitialize"/>
+    /// (设置必须在 mpv_initialize 之前的核心选项)→ mpv_initialize → 事件循环。
+    /// <c>vo=libmpv</c> 必须在此设置,render API 才能接管输出;其余为后台封面播放的合理默认。
+    /// </summary>
+    private sealed class BackgroundMpvContext : MpvContext
+    {
+        protected override void OnPreInitialize()
         {
-            if (Handle.IsAllocated)
-            {
-                Handle.Free();
-            }
-            Handle = default;
-            Data = null!;
-            Pitch = 0;
-            Height = 0;
+            // 渲染 API 要求 vo=libmpv 在 initialize 前设置
+            SetOptionString("vo", "libmpv");
+            SetOptionString("audio", "no");
+            SetOptionString("hwdec", "no");
+            SetOptionString("loop-file", "inf");
+            SetOptionString("volume", "0");
         }
     }
 }

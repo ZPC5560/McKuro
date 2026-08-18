@@ -104,7 +104,7 @@ public sealed partial class TowerViewModel : ViewModelBase
                         SlashChallenges.Add(new SlashChallengeItem
                         {
                             ChallengeName = isTurbid
-                                ? $"🌪 {c.ChallengeName ?? $"湍渊 {c.ChallengeId}"}"
+                                ? (c.ChallengeName ?? $"湍渊 {c.ChallengeId}")
                                 : (c.ChallengeName ?? $"关卡 {c.ChallengeId}"),
                             ScoreText = $"{c.Score}",
                             RankText = SlashRankText(c.Rank),
