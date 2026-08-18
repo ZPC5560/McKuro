@@ -99,6 +99,12 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [ObservableProperty]
     private string _remainingTimeText = "";
 
+    /// <summary>实时下载速度历史(每秒一点,单位 MB/s;供 SpeedTrendChart 画波动曲线,参考 Haiyu DownloadSpeedPoints)。</summary>
+    public ObservableCollection<double> DownloadSpeedHistory { get; } = [];
+
+    // 速度曲线采集:距上次采集时间,用于 1s 采样节流
+    private DateTime _lastSpeedSample = DateTime.MinValue;
+
     /// <summary>封面轮播图(官方启动器信息)。</summary>
     public ObservableCollection<SlideshowItem> Slideshows { get; } = [];
 
@@ -501,6 +507,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             SpeedText = FormatSpeed(p.SpeedBps);
             BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
             UpdateRemainingTime(p.BytesTotal - p.BytesDownloaded, p.SpeedBps);
+            SampleSpeedHistory(p.SpeedBps);
         });
 
         try
@@ -552,6 +559,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             SpeedText = FormatSpeed(p.SpeedBps);
             BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
             UpdateRemainingTime(p.BytesTotal - p.BytesDownloaded, p.SpeedBps);
+            SampleSpeedHistory(p.SpeedBps);
         });
 
         try
@@ -616,6 +624,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             SpeedText = FormatSpeed(p.SpeedBps);
             BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
             UpdateRemainingTime(p.BytesTotal - p.BytesDownloaded, p.SpeedBps);
+            SampleSpeedHistory(p.SpeedBps);
         });
 
         try
@@ -715,7 +724,25 @@ public sealed partial class LauncherViewModel : ViewModelBase
             v /= 1024;
             unit++;
         }
-        return $"{v:0.#} {units[unit]}";
+        // 对齐 Haiyu:保留两位小数的字节速率(MB/s)
+        return $"{v:0.##} {units[unit]}";
+    }
+
+    /// <summary>采样网速到历史集合(1s 一点,保留最近 60 点,供波动曲线显示)。</summary>
+    private void SampleSpeedHistory(double speedBps)
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _lastSpeedSample).TotalMilliseconds < 1000)
+        {
+            return;
+        }
+        _lastSpeedSample = now;
+        var mbps = speedBps / 1024.0 / 1024.0;
+        DownloadSpeedHistory.Add(mbps);
+        while (DownloadSpeedHistory.Count > 60)
+        {
+            DownloadSpeedHistory.RemoveAt(0);
+        }
     }
 
     /// <summary>更新下载/磁盘预估(参考 Haiyu Config.Size + UnCompressSize,磁盘空间用 DriveInfo 实测)。</summary>

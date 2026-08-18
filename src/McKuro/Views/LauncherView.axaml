@@ -212,6 +212,9 @@
                                            Foreground="{DynamicResource SemiColorText2}"
                                            IsVisible="{Binding DiskSpaceText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                             </StackPanel>
+                            <!-- 实时网速波动曲线(参考 Haiyu DownloadSpeedPoints,每秒一点MB/s) -->
+                            <controls:SpeedTrendChart Height="56"
+                                                      Values="{Binding DownloadSpeedHistory}" />
                         </StackPanel>
                     </Border>
                     </StackPanel>
