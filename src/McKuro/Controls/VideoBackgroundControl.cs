@@ -411,6 +411,7 @@ public sealed class VideoBackgroundControl : Grid
     /// <summary>渲染循环:等待帧信号 → SoftwareRender 到 pin 缓冲 → 通知 UI 拷贝。</summary>
     private void RenderLoop()
     {
+        var lastRender = DateTime.UtcNow;
         while (_renderThreadRunning)
         {
             try
@@ -427,6 +428,13 @@ public sealed class VideoBackgroundControl : Grid
             }
 
             Interlocked.Exchange(ref _framePending, 0);
+            // 30fps 节流:UI 忙叠加导致帧信号堆积时跳过本次,避免 CPU 满负荷软解
+            var now = DateTime.UtcNow;
+            if ((now - lastRender).TotalMilliseconds < 33)
+            {
+                continue;
+            }
+            lastRender = now;
             try
             {
                 if (!_sizeResolved)
@@ -569,8 +577,9 @@ public sealed class VideoBackgroundControl : Grid
                 return false;
             }
 
-            // 上限保护:软件渲染缓冲过大(>2K 宽)时按比例降采样,背景播放无需原分辨率
-            const int maxWidth = 2560;
+            // 上限保护:软件渲染缓冲过大(>HD 宽)时按比例降采样,背景装饰无需原分辨率。
+            // 1280 宽即可满足满屏背景观感,显著降低软件解码+UI 拷贝负载(参考 Haiyu 用系统硬解)。
+            const int maxWidth = 1280;
             if (w > maxWidth)
             {
                 h = (int)((long)h * maxWidth / w);
