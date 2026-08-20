@@ -1,0 +1,12 @@
+HDiffPatch hpatchz
+
+This directory contains hpatchz.exe from HDiffPatch v4.8.0, used to apply Kuro krdiff/krpdiff game patches.
+Upstream project: https://github.com/sisong/HDiffPatch
+
+HDiffPatch is distributed under the MIT License.
+Copyright (c) 2012-2025 housisong
+
+The binary may include libdivsufsort, also distributed under the MIT License.
+Copyright (c) 2003-2008 Yuta Mori
+
+The complete license text and source are available from the upstream project.

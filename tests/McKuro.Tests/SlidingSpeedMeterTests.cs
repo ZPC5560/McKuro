@@ -18,11 +18,40 @@ public class SlidingSpeedMeterTests
         public void Advance(TimeSpan t) => _ticks += t.Ticks;
     }
 
+    private sealed class LowFrequencyTimeProvider : TimeProvider
+    {
+        private long _ticks;
+
+        public override long GetTimestamp() => _ticks;
+
+        public override long TimestampFrequency => 1_000;
+
+        public void Advance(TimeSpan duration) => _ticks += (long)(duration.TotalSeconds * TimestampFrequency);
+    }
+
     private static (SlidingSpeedMeter Meter, FakeTimeProvider Clock) Create(
         TimeSpan? window = null, TimeSpan? interval = null)
     {
         var clock = new FakeTimeProvider();
         return (new SlidingSpeedMeter(window, interval, clock), clock);
+    }
+
+    [Fact]
+    public void Uses_TimeProvider_Frequency_For_Sampling_Window()
+    {
+        var clock = new LowFrequencyTimeProvider();
+        var meter = new SlidingSpeedMeter(
+            window: TimeSpan.FromSeconds(2),
+            interval: TimeSpan.FromSeconds(1),
+            time: clock);
+
+        meter.Add(0);
+        clock.Advance(TimeSpan.FromSeconds(1));
+        meter.Add(1000);
+        clock.Advance(TimeSpan.FromSeconds(1));
+        meter.Add(2000);
+
+        Assert.Equal(1000, meter.BytesPerSecond, precision: 1);
     }
 
     [Fact]

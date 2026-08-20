@@ -15,7 +15,7 @@ public sealed class AppDatabase : IDisposable
     {
         Directory.CreateDirectory(dataDirectory);
         _dbPath = Path.Combine(dataDirectory, "McKuro.db");
-        _connection = new SqliteConnection($"Data Source={_dbPath}");
+        _connection = new SqliteConnection($"Data Source={_dbPath};Default Timeout=30");
         _connection.Open();
         Initialize();
     }
@@ -23,6 +23,25 @@ public sealed class AppDatabase : IDisposable
     public SqliteConnection Connection => _connection;
 
     private void Initialize()
+    {
+        const int maxAttempts = 6;
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                InitializeCore();
+                return;
+            }
+            catch (SqliteException ex) when
+                ((ex.SqliteErrorCode == 5 || ex.SqliteErrorCode == 6) && attempt < maxAttempts - 1)
+            {
+                // 另一实例正在短暂提交 WAL/迁移时,等待后重试整个可重入初始化。
+                Thread.Sleep(250 * (attempt + 1));
+            }
+        }
+    }
+
+    private void InitializeCore()
     {
         using var cmd = _connection.CreateCommand();
         cmd.CommandText =
@@ -38,8 +57,7 @@ public sealed class AppDatabase : IDisposable
                 resource_type TEXT NOT NULL DEFAULT '',
                 name TEXT NOT NULL DEFAULT '',
                 count INTEGER NOT NULL DEFAULT 1,
-                time TEXT NOT NULL,
-                UNIQUE(player_id, card_pool_type, time, resource_id, name)
+                time TEXT NOT NULL
             );
 
             CREATE INDEX IF NOT EXISTS idx_gacha_player_pool
@@ -79,45 +97,122 @@ public sealed class AppDatabase : IDisposable
             """;
         cmd.ExecuteNonQuery();
 
-        // 迁移:旧版 role_cache 无 account_id 列(旧主键 player_id),补列并重建主键
-        using (var migCmd = _connection.CreateCommand())
+        // 迁移过程必须先关闭 PRAGMA 查询的 reader,再执行 ALTER/DROP,否则 SQLite 会认为表仍被读取并返回 SQLITE_BUSY.
+        bool TableExists(string tableName)
         {
-            migCmd.CommandText = "PRAGMA table_info(role_cache)";
-            bool hasAccount = false;
-            using var reader = migCmd.ExecuteReader();
+            using var c = _connection.CreateCommand();
+            c.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=$name LIMIT 1";
+            c.Parameters.AddWithValue("$name", tableName);
+            return c.ExecuteScalar() is not null;
+        }
+
+        bool HasColumn(string tableName, string columnName)
+        {
+            using var c = _connection.CreateCommand();
+            c.CommandText = $"PRAGMA table_info({tableName})";
+            using var reader = c.ExecuteReader();
             while (reader.Read())
             {
-                if (string.Equals(reader.GetString(1), "account_id", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
                 {
-                    hasAccount = true;
-                    break;
+                    return true;
                 }
             }
-            if (!hasAccount)
+            return false;
+        }
+
+        bool IndexExists(string indexName)
+        {
+            using var c = _connection.CreateCommand();
+            c.CommandText = "SELECT 1 FROM sqlite_master WHERE type='index' AND name=$name LIMIT 1";
+            c.Parameters.AddWithValue("$name", indexName);
+            return c.ExecuteScalar() is not null;
+        }
+
+        long RowCount(string tableName, SqliteTransaction? tx = null)
+        {
+            using var c = _connection.CreateCommand();
+            c.Transaction = tx;
+            c.CommandText = $"SELECT COUNT(*) FROM {tableName}";
+            return Convert.ToInt64(c.ExecuteScalar());
+        }
+
+        void Run(SqliteTransaction tx, string sql)
+        {
+            using var c = _connection.CreateCommand();
+            c.Transaction = tx;
+            c.CommandText = sql;
+            c.ExecuteNonQuery();
+        }
+
+        // 处理上次异常退出可能留下的 role_cache_old。新表已有数据时只清理旧副本,
+        // 新表为空时先恢复旧数据,保证迁移可重入且不丢缓存。
+        bool roleCacheOldExists = TableExists("role_cache_old");
+        bool roleCacheHasAccount = HasColumn("role_cache", "account_id");
+        if (roleCacheOldExists && roleCacheHasAccount)
+        {
+            using var tx = _connection.BeginTransaction();
+            if (RowCount("role_cache", tx) == 0)
             {
-                // 旧表结构:player_id 为主键;新建带账号列的表并拷贝数据
-                using var tx = _connection.BeginTransaction();
-                using (var c = _connection.CreateCommand())
-                {
-                    c.Transaction = tx;
-                    c.CommandText =
-                        """
-                        ALTER TABLE role_cache RENAME TO role_cache_old;
-                        CREATE TABLE role_cache (
-                            account_id TEXT NOT NULL DEFAULT '',
-                            player_id TEXT NOT NULL,
-                            json TEXT NOT NULL,
-                            update_time TEXT NOT NULL,
-                            PRIMARY KEY (account_id, player_id)
-                        );
-                        INSERT INTO role_cache (account_id, player_id, json, update_time)
-                            SELECT '', player_id, json, update_time FROM role_cache_old;
-                        DROP TABLE role_cache_old;
-                        """;
-                    c.ExecuteNonQuery();
-                }
-                tx.Commit();
+                Run(tx, "INSERT INTO role_cache (account_id, player_id, json, update_time) SELECT account_id, player_id, json, update_time FROM role_cache_old");
             }
+            Run(tx, "DROP TABLE role_cache_old");
+            tx.Commit();
+        }
+        else if (!roleCacheHasAccount)
+        {
+            // 旧表结构:player_id 为主键;新建带账号列的表并拷贝数据。
+            using var tx = _connection.BeginTransaction();
+            Run(tx, "ALTER TABLE role_cache RENAME TO role_cache_old");
+            Run(tx, """
+                CREATE TABLE role_cache (
+                    account_id TEXT NOT NULL DEFAULT '',
+                    player_id TEXT NOT NULL,
+                    json TEXT NOT NULL,
+                    update_time TEXT NOT NULL,
+                    PRIMARY KEY (account_id, player_id)
+                )
+                """);
+            Run(tx, "INSERT INTO role_cache (account_id, player_id, json, update_time) SELECT '', player_id, json, update_time FROM role_cache_old");
+            Run(tx, "DROP TABLE role_cache_old");
+            tx.Commit();
+        }
+
+        // 处理上次异常退出可能留下的 gacha_records_old,并移除旧版唯一约束。
+        bool gachaOldExists = TableExists("gacha_records_old");
+        bool gachaHasUniqueIndex = IndexExists("sqlite_autoindex_gacha_records_1");
+        if (gachaOldExists)
+        {
+            using var tx = _connection.BeginTransaction();
+            if (RowCount("gacha_records", tx) == 0)
+            {
+                Run(tx, "INSERT INTO gacha_records (id, player_id, card_pool_type, resource_id, quality_level, resource_type, name, count, time) SELECT id, player_id, card_pool_type, resource_id, quality_level, resource_type, name, count, time FROM gacha_records_old");
+            }
+            Run(tx, "DROP TABLE gacha_records_old");
+            Run(tx, "CREATE INDEX IF NOT EXISTS idx_gacha_player_pool ON gacha_records(player_id, card_pool_type)");
+            tx.Commit();
+        }
+        else if (gachaHasUniqueIndex)
+        {
+            using var tx = _connection.BeginTransaction();
+            Run(tx, "ALTER TABLE gacha_records RENAME TO gacha_records_old");
+            Run(tx, """
+                CREATE TABLE gacha_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    player_id TEXT NOT NULL,
+                    card_pool_type INTEGER NOT NULL,
+                    resource_id INTEGER NOT NULL,
+                    quality_level INTEGER NOT NULL,
+                    resource_type TEXT NOT NULL DEFAULT '',
+                    name TEXT NOT NULL DEFAULT '',
+                    count INTEGER NOT NULL DEFAULT 1,
+                    time TEXT NOT NULL
+                )
+                """);
+            Run(tx, "INSERT INTO gacha_records (id, player_id, card_pool_type, resource_id, quality_level, resource_type, name, count, time) SELECT id, player_id, card_pool_type, resource_id, quality_level, resource_type, name, count, time FROM gacha_records_old");
+            Run(tx, "DROP TABLE gacha_records_old");
+            Run(tx, "CREATE INDEX IF NOT EXISTS idx_gacha_player_pool ON gacha_records(player_id, card_pool_type)");
+            tx.Commit();
         }
     }
 

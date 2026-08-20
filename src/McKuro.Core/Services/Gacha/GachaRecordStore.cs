@@ -17,9 +17,10 @@ public sealed class GachaRecordStore
     }
 
     /// <summary>
-    /// 批量写入记录(去重:同一玩家/卡池/时间/资源/名称只保留一条)。
+    /// 批量写入记录(无去重:修复10连同秒UP角色丢记录的问题)。
+    /// 调用方应在写入前按池删除旧记录,避免重复累积。
     /// </summary>
-    public int UpsertRecords(string playerId, IEnumerable<GachaRecord> records)
+    public int InsertRecords(string playerId, IEnumerable<GachaRecord> records)
     {
         int inserted = 0;
         using var tx = _db.Connection.BeginTransaction();
@@ -27,7 +28,7 @@ public sealed class GachaRecordStore
         cmd.Transaction = tx;
         cmd.CommandText =
             """
-            INSERT OR IGNORE INTO gacha_records
+            INSERT INTO gacha_records
                 (player_id, card_pool_type, resource_id, quality_level, resource_type, name, count, time)
             VALUES ($playerId, $pool, $resourceId, $quality, $resourceType, $name, $count, $time)
             """;
@@ -68,6 +69,17 @@ public sealed class GachaRecordStore
         upsert.ExecuteNonQuery();
 
         return inserted;
+    }
+
+    /// <summary>删除某玩家某卡池类型的全部记录(同步前按池清空再重写)。</summary>
+    public void DeletePlayerPool(string playerId, CardPoolType poolType)
+    {
+        using var cmd = _db.Connection.CreateCommand();
+        cmd.CommandText =
+            "DELETE FROM gacha_records WHERE player_id = $playerId AND card_pool_type = $pool";
+        cmd.Parameters.AddWithValue("$playerId", playerId);
+        cmd.Parameters.AddWithValue("$pool", (int)poolType);
+        cmd.ExecuteNonQuery();
     }
 
     /// <summary>读取某玩家的全部记录(按时间从旧到新)。</summary>

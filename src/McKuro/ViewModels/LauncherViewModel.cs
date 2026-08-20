@@ -66,13 +66,18 @@ public sealed partial class LauncherViewModel : ViewModelBase
         OnPropertyChanged(nameof(PreDownloadButtonEnabled));
         OnPropertyChanged(nameof(ShowPauseResume));
         OnPropertyChanged(nameof(IsPreDownloadActive));
+        OnPropertyChanged(nameof(ShowDownloadCard));
     }
 
     partial void OnHasPredownloadChanged(bool value)
     {
         OnPropertyChanged(nameof(PreDownloadButtonEnabled));
         OnPropertyChanged(nameof(ShowPreDownloadRing));
+        OnPropertyChanged(nameof(ShowDownloadCard));
     }
+
+    /// <summary>是否显示下载/安装进度卡片:有下载/安装活动或有预下载可领取时才显示。</summary>
+    public bool ShowDownloadCard => IsDownloading || HasPredownload;
 
     /// <summary>是否正在预下载/下载(显示进度环)。</summary>
     public bool IsPreDownloadActive => IsDownloading || HasPredownload;
@@ -107,15 +112,26 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>已安装且有更新:显示「安装更新」按钮(未安装时只显示「下载安装」)。</summary>
     public bool ShowInstallUpdate => IsInstalled && HasUpdate;
 
+    /// <summary>无更新时显示「启动游戏」按钮;有更新时由「安装更新」按钮占据同一位置。</summary>
+    public bool ShowLaunchButton => NativeGameManagementSupported && IsInstalled && !HasUpdate;
+
+    /// <summary>操作区是否显示修复按钮。</summary>
+    public bool ShowRepairButton => NativeGameManagementSupported;
+
     public bool ShowInstallButton => NativeGameManagementSupported && !IsInstalled;
 
     partial void OnIsInstalledChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowInstallUpdate));
+        OnPropertyChanged(nameof(ShowLaunchButton));
         OnPropertyChanged(nameof(ShowInstallButton));
     }
 
-    partial void OnHasUpdateChanged(bool value) => OnPropertyChanged(nameof(ShowInstallUpdate));
+    partial void OnHasUpdateChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowInstallUpdate));
+        OnPropertyChanged(nameof(ShowLaunchButton));
+    }
 
     [ObservableProperty]
     private double _progressPercent;
@@ -156,6 +172,9 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
     // 速度曲线采集:距上次采集时间,用于 1s 采样节流
     private DateTime _lastSpeedSample = DateTime.MinValue;
+
+    // 安装进度 UI 节流:下载线程可以高频上报,界面最多每 500ms 刷新一次
+    private DateTime _lastInstallUiUpdate = DateTime.MinValue;
 
     /// <summary>封面轮播图(官方启动器信息)。</summary>
     public ObservableCollection<SlideshowItem> Slideshows { get; } = [];
@@ -567,8 +586,10 @@ public sealed partial class LauncherViewModel : ViewModelBase
             var (success, _, message) = await AppServices.GameUpdater.PreDownloadAsync(ServerType, progress);
             if (success)
             {
-                PredownloadStateText = "预下载完成,可点击「安装更新」";
-                StatusText = "预下载完成";
+                PredownloadStateText = "预下载完成,正在自动安装…";
+                StatusText = "预下载完成,自动开始安装…";
+                // 下载完成后自动进入安装阶段,进度卡片继续显示安装进度。
+                await InstallCoreAsync();
             }
             else
             {
@@ -600,11 +621,33 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
 
         IsDownloading = true;
+        try
+        {
+            await InstallCoreAsync();
+        }
+        finally
+        {
+            IsDownloading = false;
+            ProgressText = "";
+        }
+    }
+
+    /// <summary>执行安装/更新并刷新状态。由「安装更新」和预下载完成后的自动安装共用。</summary>
+    private async Task InstallCoreAsync()
+    {
         ProgressPercent = 0;
         StatusText = "正在安装/更新…";
 
         var progress = new Progress<DownloadProgress>(p =>
         {
+            var now = DateTime.UtcNow;
+            var isFinal = p.FileTotal > 0 && p.FileIndex >= p.FileTotal;
+            if (!isFinal && (now - _lastInstallUiUpdate).TotalMilliseconds < 500)
+            {
+                return;
+            }
+
+            _lastInstallUiUpdate = now;
             ProgressPercent = p.Percent * 100;
             ProgressText = $"{p.FileIndex}/{p.FileTotal} 文件 · {FormatSize(p.BytesDownloaded)}/{FormatSize(p.BytesTotal)}";
             CurrentFileText = p.CurrentFile;
@@ -627,11 +670,6 @@ public sealed partial class LauncherViewModel : ViewModelBase
         catch (Exception ex)
         {
             StatusText = $"安装失败: {ex.Message}";
-        }
-        finally
-        {
-            IsDownloading = false;
-            ProgressText = "";
         }
     }
 

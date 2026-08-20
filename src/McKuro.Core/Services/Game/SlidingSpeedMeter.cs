@@ -36,7 +36,7 @@ public sealed class SlidingSpeedMeter
         {
             _lastBytes = cumulativeBytes;
             var now = _time.GetTimestamp();
-            if (_hasSample && now - _lastSampleTimestamp < _interval.Ticks)
+            if (_hasSample && now - _lastSampleTimestamp < ToTimestampTicks(_interval))
             {
                 return; // 未到采样间隔
             }
@@ -46,12 +46,17 @@ public sealed class SlidingSpeedMeter
             _samples.Enqueue((now, cumulativeBytes));
 
             // 淘汰超出窗口的旧采样(至少保留 1 个)
-            var cutoff = now - _window.Ticks;
+            var cutoff = now - ToTimestampTicks(_window);
             while (_samples.Count > 1 && _samples.Peek().Timestamp < cutoff)
             {
                 _samples.Dequeue();
             }
         }
+    }
+
+    private long ToTimestampTicks(TimeSpan duration)
+    {
+        return (long)(duration.TotalSeconds * _time.TimestampFrequency);
     }
 
     /// <summary>当前窗口内平均速率(Bytes/s);采样不足 2 个时返回 0。</summary>

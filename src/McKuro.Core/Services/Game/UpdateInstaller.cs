@@ -30,7 +30,8 @@ public sealed class UpdateInstaller
         GameManifest manifest,
         string gameRootDir,
         IReadOnlySet<string>? skipPaths = null,
-        IProgress<DiffProgress>? progress = null)
+        IProgress<DiffProgress>? progress = null,
+        CancellationToken ct = default)
     {
         var diff = new UpdateDiff();
         var total = manifest.Files.Count;
@@ -38,6 +39,7 @@ public sealed class UpdateInstaller
         var lastReport = DateTime.UtcNow;
         foreach (var entry in manifest.Files)
         {
+            ct.ThrowIfCancellationRequested();
             // 用户配置的跳过校验文件:直接忽略(对齐 Haiyu SkipVerifyFiles)
             if (skipPaths is not null && skipPaths.Contains(entry.Path))
             {
@@ -45,7 +47,7 @@ public sealed class UpdateInstaller
                 continue;
             }
 
-            var localPath = Path.Combine(gameRootDir, entry.Path.Replace('/', Path.DirectorySeparatorChar));
+            var localPath = GameFilePath.CombineUnderRoot(gameRootDir, entry.Path);
             if (!File.Exists(localPath))
             {
                 diff.ToDownload.Add(entry);
@@ -84,8 +86,7 @@ public sealed class UpdateInstaller
 
         foreach (var entry in manifest.Files)
         {
-            var relative = entry.Path.Replace('/', Path.DirectorySeparatorChar);
-            var stagedPath = Path.Combine(stagingDir, relative);
+            var stagedPath = GameFilePath.CombineUnderRoot(stagingDir, entry.Path);
             if (!File.Exists(stagedPath))
             {
                 continue;
@@ -93,7 +94,7 @@ public sealed class UpdateInstaller
 
             try
             {
-                var destPath = Path.Combine(gameRootDir, relative);
+                var destPath = GameFilePath.CombineUnderRoot(gameRootDir, entry.Path);
                 var destDir = Path.GetDirectoryName(destPath);
                 if (!string.IsNullOrEmpty(destDir))
                 {
@@ -129,14 +130,59 @@ public sealed class UpdateInstaller
         return (installed, failures);
     }
 
+    /// <summary>安装指定普通资源,跳过 krdiff/krpdiff/krzip 等补丁包。</summary>
+    public (int Installed, List<string> Failures) InstallFilesFromStaging(
+        string stagingDir,
+        string gameRootDir,
+        IReadOnlyList<GameFileEntry> entries)
+    {
+        var failures = new List<string>();
+        var installed = 0;
+        foreach (var entry in entries)
+        {
+            var stagedPath = GameFilePath.CombineUnderRoot(stagingDir, entry.Path);
+            if (!File.Exists(stagedPath))
+            {
+                continue;
+            }
+
+            try
+            {
+                var destPath = GameFilePath.CombineUnderRoot(gameRootDir, entry.Path);
+                var destDir = Path.GetDirectoryName(destPath);
+                if (!string.IsNullOrEmpty(destDir))
+                {
+                    Directory.CreateDirectory(destDir);
+                }
+                if (!string.IsNullOrEmpty(entry.Md5) && !FileDownloader.VerifyLocalFile(stagedPath, entry))
+                {
+                    failures.Add($"{entry.Path}: 暂存文件校验失败");
+                    continue;
+                }
+                if (File.Exists(destPath))
+                {
+                    Backup(destPath, gameRootDir);
+                    File.Delete(destPath);
+                }
+                File.Move(stagedPath, destPath, overwrite: true);
+                installed++;
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"{entry.Path}: {ex.Message}");
+            }
+        }
+        return (installed, failures);
+    }
+
     /// <summary>备份将被替换的文件。</summary>
     private static void Backup(string filePath, string gameRootDir)
     {
         try
         {
-            var backupDir = Path.Combine(gameRootDir, BackupDirName);
+            var backupDir = GameFilePath.CombineUnderRoot(gameRootDir, BackupDirName);
             var relative = Path.GetRelativePath(gameRootDir, filePath);
-            var dest = Path.Combine(backupDir, relative);
+            var dest = GameFilePath.CombineUnderRoot(backupDir, relative);
             var destDir = Path.GetDirectoryName(dest);
             if (!string.IsNullOrEmpty(destDir))
             {

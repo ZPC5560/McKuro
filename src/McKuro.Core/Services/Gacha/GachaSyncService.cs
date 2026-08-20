@@ -96,14 +96,32 @@ public sealed class GachaSyncService : IGachaSyncService
     {
         try
         {
-            var all = await _api.QueryAllAsync(request, ct).ConfigureAwait(false);
-
             int newRecords = 0;
             int total = 0;
-            foreach (var (type, records) in all)
+
+            // 按池查询:成功时清空旧记录再重写(修复同秒同角色10连丢记录的问题),
+            // 失败时保留旧缓存避免丢历史。
+            foreach (var poolType in CardPoolTypeValues.All)
             {
-                newRecords += _store.UpsertRecords(request.PlayerId, records);
+                IReadOnlyList<GachaRecord> records;
+                try
+                {
+                    records = await _api.QueryAsync(request, poolType, ct).ConfigureAwait(false);
+                }
+                catch (GachaApiException)
+                {
+                    // 该池查询失败(网络/限流等):保留旧缓存,不删除已有记录
+                    continue;
+                }
+
                 total += records.Count;
+                if (records.Count == 0)
+                {
+                    continue;
+                }
+
+                _store.DeletePlayerPool(request.PlayerId, poolType);
+                newRecords += _store.InsertRecords(request.PlayerId, records);
             }
 
             var stored = _store.GetRecords(request.PlayerId);

@@ -6,7 +6,7 @@ using McKuro.Services;
 
 namespace McKuro.ViewModels;
 
-/// <summary>一周某天游玩数据项。</summary>
+/// <summary>最近 7 天中的某天游玩数据项。</summary>
 public sealed class PlayDayItem
 {
     public required string Date { get; init; }
@@ -31,7 +31,7 @@ public sealed class PlayHourCell
 
 /// <summary>
 /// 游玩统计页:只统计游玩时长与时间区间(不统计操作数量)。
-/// 解析游戏日志 → 本地库 → 展示总/今日时长、最近一周每日时长与 7×24 时段分布。
+/// 解析游戏日志 → 本地库 → 展示总/今日时长、最近 7 天每日时长与 7×24 时段分布。
 /// </summary>
 public sealed partial class PlayTimeViewModel : ViewModelBase
 {
@@ -102,7 +102,6 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
         // 最近 7 天每日时长(柱状)
         Last7Days.Clear();
         long maxDay = Math.Max(1, a.Last7DaysSeconds.Max());
-        string[] weekNames = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
         for (int i = 0; i < 7; i++)
         {
             long secs = a.Last7DaysSeconds[i];
@@ -118,7 +117,7 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
             Last7Days.Add(new PlayDayItem
             {
                 Date = a.Last7DaysDates[i],
-                Label = weekNames[i],
+                Label = FormatDayLabel(a.Last7DaysDates[i]),
                 HoursText = FormatHours(secs),
                 Minutes = secs / 60.0,
                 BarHeight = secs * 100.0 / maxDay,
@@ -152,6 +151,13 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
                 });
             }
         }
+    }
+
+    private static string FormatDayLabel(string date)
+    {
+        return DateTime.TryParse(date, out var day)
+            ? day.ToString("MM/dd")
+            : date;
     }
 
     private static string FormatHours(long totalSeconds)

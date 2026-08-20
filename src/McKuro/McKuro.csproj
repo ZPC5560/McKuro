@@ -83,5 +83,8 @@
     <None Include="Assets\geetest.html" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\Js\*.js" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\attr\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\HpatchzResource\hpatchz.exe" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\HpatchzResource\NOTICE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\HpatchzResource\LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

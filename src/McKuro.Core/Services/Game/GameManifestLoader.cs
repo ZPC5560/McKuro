@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using McKuro.Core.Models.Game;
@@ -75,7 +76,10 @@ public sealed class GameManifestLoader
                 };
             }
 
-            var resourceJsonUrl = updateData.ResourceJsonUrl;
+            var cdnUrl = (await SelectCdnAsync(updateData.CdnList, updateData.Resources, ct).ConfigureAwait(false))?.TrimEnd('/') ?? "";
+            var resourceJsonUrl = !string.IsNullOrWhiteSpace(cdnUrl) && !string.IsNullOrWhiteSpace(updateData.Resources)
+                ? cdnUrl + "/" + updateData.Resources.TrimStart('/')
+                : null;
             var fileList = index.GameResourceList?.Resource ?? [];
             if (!string.IsNullOrEmpty(resourceJsonUrl))
             {
@@ -91,13 +95,16 @@ public sealed class GameManifestLoader
                         fileList = resourceList.Resource;
                     }
                 }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
                 catch (Exception)
                 {
                     // resource.json 不可用时退回 index.json 内嵌清单
                 }
             }
 
-            var cdnUrl = updateData.CdnList?.FirstOrDefault()?.Url?.TrimEnd('/') ?? "";
             var basePath = (updateData.ResourcesBasePath ?? "").TrimStart('/');
             var manifest = new GameManifest
             {
@@ -111,14 +118,16 @@ public sealed class GameManifestLoader
                     continue;
                 }
 
-                manifest.Files.Add(new GameFileEntry
+                var entry = new GameFileEntry
                 {
                     Path = NormalizePath(file.Dest),
                     Size = file.Size ?? 0,
                     Md5 = file.Md5 ?? "",
                     // 下载地址 = CDN + resourcesBasePath + dest
                     Url = !string.IsNullOrEmpty(cdnUrl) ? $"{cdnUrl}/{basePath}{file.Dest}" : null,
-                });
+                };
+                CopyChunks(entry, file.ChunkInfos);
+                manifest.Files.Add(entry);
             }
 
             // 预下载体积:预下载节点无 cdnList,resource.json 拿不到全量清单,
@@ -137,6 +146,10 @@ public sealed class GameManifestLoader
                 Predownload = index.Predownload,
                 DefaultData = index.Default,
             };
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -189,6 +202,10 @@ public sealed class GameManifestLoader
                 ServerVersion = manifest.Version,
             };
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             return Fail($"获取清单失败: {ex.Message}");
@@ -202,83 +219,305 @@ public sealed class GameManifestLoader
     /// </summary>
     public async Task<ManifestLoadResult> LoadPatchAsync(
         string patchIndexUrl,
+        string? baseUrl = null,
+        string? indexFileMd5 = null,
         CancellationToken ct = default)
     {
         try
         {
             using var response = await _http.GetAsync(patchIndexUrl, ct).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
-            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            var patch = JsonSerializer.Deserialize(json, GameJsonContext.Default.KuroPatchIndex);
+            var payload = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(indexFileMd5) && !HashMatches(payload, indexFileMd5))
+            {
+                return Fail("补丁清单 MD5 校验失败");
+            }
+
+            var patch = JsonSerializer.Deserialize(payload, GameJsonContext.Default.KuroPatchIndex);
             if (patch is null)
             {
                 return Fail("解析补丁清单失败");
             }
 
-            var manifest = new GameManifest
+            var effectiveBase = (baseUrl ?? "").TrimEnd('/') + "/";
+            var manifest = new GameManifest { Version = "" };
+            var plan = new GamePatchPlan { BaseUrl = effectiveBase, IndexFileMd5 = indexFileMd5 };
+            var packageCache = new Dictionary<string, GameFileEntry>(StringComparer.OrdinalIgnoreCase);
+
+            GameFileEntry PackageEntry(KuroPatchEntry e, string? folder)
             {
-                Version = "",
-            };
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            void AddEntry(KuroPatchEntry? e, string? fromFolder)
-            {
-                if (e?.Dest is null || !seen.Add(e.Dest))
+                var key = NormalizePath(e.Dest ?? "");
+                if (packageCache.TryGetValue(key, out var cached))
                 {
-                    return;
+                    return cached;
                 }
-                var folder = e.FromFolder ?? fromFolder ?? "";
-                manifest.Files.Add(new GameFileEntry
+                var folderPath = (folder ?? "").Trim('/');
+                var relative = string.IsNullOrEmpty(folderPath) ? key : folderPath + "/" + key;
+                var urlBase = folderPath.StartsWith("launcher/", StringComparison.OrdinalIgnoreCase)
+                    ? effectiveBase[..Math.Max(0, effectiveBase.IndexOf("launcher/", StringComparison.OrdinalIgnoreCase))]
+                    : effectiveBase;
+                var entry = new GameFileEntry
                 {
-                    Path = NormalizePath(e.Dest),
+                    Path = key,
                     Size = e.Size ?? 0,
                     Md5 = e.Md5 ?? "",
-                    // 相对 CDN 的下载地址(FromFolder 通常为 .../zip/)
-                    Url = folder.TrimStart('/') + "/" + NormalizePath(e.Dest),
-                });
+                    Url = IsAbsoluteUrl(relative) ? relative : urlBase + relative,
+                };
+                CopyChunks(entry, e.ChunkInfos);
+                packageCache[key] = entry;
+                manifest.Files.Add(entry);
+                return entry;
             }
 
-            if (patch.Resource is { Count: > 0 })
+            void AddOrdinary(KuroPatchEntry e) => PackageEntry(e, e.FromFolder);
+            foreach (var e in patch.Resource ?? [])
             {
-                foreach (var e in patch.Resource)
+                if (e?.Dest is null)
                 {
-                    AddEntry(e, null);
+                    continue;
+                }
+                if (e.Dest.EndsWith(".krdiff", StringComparison.OrdinalIgnoreCase))
+                {
+                    plan.DiffPackages.Add(new GamePatchPackage { Package = PackageEntry(e, e.FromFolder) });
+                }
+                else if (e.Dest.EndsWith(".krpdiff", StringComparison.OrdinalIgnoreCase))
+                {
+                    // groupInfos carries the destination metadata; keep package available for download.
+                    PackageEntry(e, e.FromFolder);
+                }
+                else if (e.Dest.EndsWith(".krzip", StringComparison.OrdinalIgnoreCase))
+                {
+                    plan.ZipPackages.Add(new GamePatchPackage { Package = PackageEntry(e, e.FromFolder) });
+                }
+                else
+                {
+                    AddOrdinary(e);
                 }
             }
-            else
+
+            foreach (var patchFile in patch.PatchInfos ?? [])
             {
-                foreach (var f in patch.PatchInfos ?? [])
+                if (patchFile?.Dest is null)
                 {
-                    foreach (var e in f.Entries ?? [])
+                    continue;
+                }
+                var package = new GamePatchPackage
+                {
+                    Package = PackageEntry(new KuroPatchEntry
                     {
-                        AddEntry(e, null);
-                    }
-                }
-            }
-            foreach (var z in patch.ZipInfos ?? [])
-            {
-                foreach (var e in z.Entries ?? [])
+                        Dest = patchFile.Dest,
+                        Size = patchFile.Size,
+                        Md5 = patchFile.Md5,
+                        ChunkInfos = patchFile.ChunkInfos,
+                        FromFolder = patchFile.FromFolder,
+                    }, patchFile.FromFolder),
+                };
+                foreach (var e in patchFile.Entries ?? [])
                 {
-                    AddEntry(e, null);
+                    AddPatchEntry(package.Entries, e);
                 }
+                plan.DiffPackages.Add(package);
             }
 
-            return new ManifestLoadResult
+            foreach (var group in patch.GroupInfos ?? [])
             {
-                Success = true,
-                Manifest = manifest,
-            };
+                if (group?.Dest is null)
+                {
+                    continue;
+                }
+                var packageEntry = packageCache.TryGetValue(NormalizePath(group.Dest), out var package)
+                    ? package
+                    : PackageEntry(new KuroPatchEntry { Dest = group.Dest }, null);
+                var patchGroup = new GamePatchGroup { Package = packageEntry };
+                foreach (var e in group.SrcFiles ?? [])
+                {
+                    AddPatchEntry(patchGroup.SourceFiles, e);
+                }
+                foreach (var e in group.DstFiles ?? [])
+                {
+                    AddPatchEntry(patchGroup.DestinationFiles, e);
+                }
+                plan.DiffGroups.Add(patchGroup);
+            }
+
+            foreach (var zip in patch.ZipInfos ?? [])
+            {
+                if (zip?.Dest is null)
+                {
+                    continue;
+                }
+                var package = new GamePatchPackage
+                {
+                    Package = PackageEntry(new KuroPatchEntry
+                    {
+                        Dest = zip.Dest,
+                        Size = zip.Size,
+                        Md5 = zip.Md5,
+                        ChunkInfos = zip.ChunkInfos,
+                        FromFolder = zip.FromFolder,
+                    }, zip.FromFolder),
+                };
+                foreach (var e in zip.Entries ?? [])
+                {
+                    AddPatchEntry(package.Entries, e);
+                }
+                plan.ZipPackages.Add(package);
+            }
+
+            plan.DeleteFiles.AddRange((patch.DeleteFiles ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Select(NormalizePath));
+            manifest.PatchPlan = plan;
+            return new ManifestLoadResult { Success = true, Manifest = manifest };
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             return Fail($"获取补丁清单失败: {ex.Message}");
         }
+
+        static void AddPatchEntry(List<GamePatchEntry> target, KuroPatchEntry? source)
+        {
+            if (source?.Dest is null)
+            {
+                return;
+            }
+            var entry = new GamePatchEntry
+            {
+                Path = NormalizePath(source.Dest),
+                Size = source.Size ?? 0,
+                Md5 = source.Md5 ?? "",
+            };
+            CopyChunks(entry, source.ChunkInfos);
+            target.Add(entry);
+        }
     }
+
+    /// <summary>轻量探测可用 CDN,失败时遵循官方 P 优先级回退。</summary>
+    /// <summary>探测指定资源路径并返回最快可用 CDN；全部失败时回退官方 P 优先级。</summary>
+    public async Task<string?> SelectCdnAsync(
+        IEnumerable<KuroCdnData>? cdns,
+        string? probePath,
+        CancellationToken ct)
+    {
+        var candidates = cdns?
+            .Where(c => !string.IsNullOrWhiteSpace(c.Url))
+            .OrderBy(c => c.P == 0 ? int.MaxValue : c.P)
+            .ToArray() ?? [];
+        if (candidates.Length == 0)
+        {
+            return null;
+        }
+
+        var probes = candidates.Select(async cdn =>
+        {
+            try
+            {
+                using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                probeCts.CancelAfter(TimeSpan.FromSeconds(2));
+                var watch = Stopwatch.StartNew();
+                var url = string.IsNullOrWhiteSpace(probePath)
+                    ? cdn.Url
+                    : cdn.Url.TrimEnd('/') + "/" + probePath.TrimStart('/');
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 0);
+                using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, probeCts.Token)
+                    .ConfigureAwait(false);
+                return response.IsSuccessStatusCode ? (Url: cdn.Url, Milliseconds: watch.ElapsedMilliseconds) : ((string Url, long Milliseconds)?)null;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                return null;
+            }
+            catch (HttpRequestException)
+            {
+                return null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        });
+        var results = await Task.WhenAll(probes).ConfigureAwait(false);
+        return results
+            .Where(r => r is not null)
+            .Select(r => r!.Value)
+            .OrderBy(r => r.Milliseconds)
+            .Select(r => r.Url)
+            .FirstOrDefault()
+            ?? candidates[0].Url;
+    }
+
+    private static void CopyChunks(GameFileEntry destination, IEnumerable<KuroChunkInfo>? chunks)
+    {
+        if (chunks is null)
+        {
+            return;
+        }
+
+        foreach (var chunk in chunks)
+        {
+            var start = chunk.Start ?? chunk.Offset ?? -1;
+            var end = chunk.End ?? (start >= 0 && chunk.Size is > 0 ? start + chunk.Size.Value - 1 : -1);
+            if (start < 0 || end < start)
+            {
+                continue;
+            }
+            destination.ChunkInfos.Add(new GameChunkInfo
+            {
+                Start = start,
+                End = end,
+                Md5 = chunk.Md5 ?? "",
+            });
+        }
+    }
+
+    private static void CopyChunks(GamePatchEntry destination, IEnumerable<KuroChunkInfo>? chunks)
+    {
+        if (chunks is null)
+        {
+            return;
+        }
+
+        foreach (var chunk in chunks)
+        {
+            var start = chunk.Start ?? chunk.Offset ?? -1;
+            var end = chunk.End ?? (start >= 0 && chunk.Size is > 0 ? start + chunk.Size.Value - 1 : -1);
+            if (start < 0 || end < start)
+            {
+                continue;
+            }
+            destination.ChunkInfos.Add(new GameChunkInfo
+            {
+                Start = start,
+                End = end,
+                Md5 = chunk.Md5 ?? "",
+            });
+        }
+    }
+
+    private static bool HashMatches(byte[] payload, string expected)
+    {
+        var actual = Convert.ToHexStringLower(System.Security.Cryptography.MD5.HashData(payload));
+        return string.Equals(actual, expected.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAbsoluteUrl(string value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri)
+        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     private static ManifestLoadResult Fail(string message) =>
         new() { Success = false, Message = message };
 
-    private static string NormalizePath(string path) =>
-        path.Replace('\\', '/').TrimStart('/');
+    private static string NormalizePath(string path)
+    {
+        if (!GameFilePath.IsSafeRelativePath(path))
+        {
+            throw new InvalidDataException($"资源路径越界: {path}");
+        }
+        return path.Replace('\\', '/');
+    }
 }
 
 [JsonSerializable(typeof(KuroIndex))]

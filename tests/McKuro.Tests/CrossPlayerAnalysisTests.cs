@@ -77,8 +77,8 @@ public class CrossPlayerAnalysisTests : IDisposable
     [Fact]
     public void GetAllRecords_Returns_Everything()
     {
-        _store.UpsertRecords("P1", [Record("P1", "2025-01-01 10:00:00", false)]);
-        _store.UpsertRecords("P2", [Record("P2", "2025-01-02 10:00:00", true, name: "忌炎", resourceId: 2)]);
+        _store.InsertRecords("P1", [Record("P1", "2025-01-01 10:00:00", false)]);
+        _store.InsertRecords("P2", [Record("P2", "2025-01-02 10:00:00", true, name: "忌炎", resourceId: 2)]);
 
         var all = _store.GetAllRecords();
 

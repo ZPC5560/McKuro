@@ -108,6 +108,24 @@ public class GameManifestLoaderTests
     }
 
     [Fact]
+    public async Task SelectCdnAsync_SkipsUnavailableCandidate()
+    {
+        var loader = new GameManifestLoader(new HttpClient(new FakeHandler(new Dictionary<string, string>
+        {
+            ["https://good.example.com/launcher/patch/indexFile.json"] = "{}",
+        })));
+        var cdns = new List<KuroCdnData>
+        {
+            new() { Url = "https://offline.example.com/", P = 1 },
+            new() { Url = "https://good.example.com/", P = 2 },
+        };
+
+        var selected = await loader.SelectCdnAsync(cdns, "launcher/patch/indexFile.json", CancellationToken.None);
+
+        Assert.Equal("https://good.example.com/", selected);
+    }
+
+    [Fact]
     public async Task LoadKuroAsync_PredownloadFlag_UsesPredownloadSection()
     {
         var indexUrl = "https://cdn.example.com/index.json";
@@ -132,6 +150,97 @@ public class GameManifestLoaderTests
         Assert.Equal("2.3.0", result.Manifest!.Version);
         Assert.Equal("2.3.0", result.PredownloadVersion);
         Assert.True(result.HasPredownload);
+    }
+
+    [Fact]
+    public async Task LoadPatchAsync_PreservesGroupPlanChunksAndResourceUrls()
+    {
+        const string indexUrl = "https://cdn.example.com/launcher/patch/indexFile.json";
+        const string baseUrl = "https://cdn.example.com/launcher/game/3.6.0/resource/3.5.3/resources/";
+        const string patchJson = """
+        {
+          "resource": [
+            {
+              "dest": "Client/a.bin", "md5": "aaa", "size": 12,
+              "fromFolder": "launcher/game/3.6.0/zip/",
+              "chunkInfos": [ { "start": 0, "end": 11, "md5": "c1" } ]
+            },
+            { "dest": "group_0.krpdiff", "md5": "bbb", "size": 20 }
+          ],
+          "groupInfos": [
+            {
+              "dest": "group_0.krpdiff",
+              "srcFiles": [ { "dest": "Client/old.pak", "md5": "old", "size": 10 } ],
+              "dstFiles": [
+                {
+                  "dest": "Client/new.pak", "md5": "new", "size": 12,
+                  "chunkInfos": [ { "start": 0, "end": 11, "md5": "newchunk" } ]
+                }
+              ]
+            }
+          ],
+          "deleteFiles": [ "Client/removed.bin" ],
+          "applyTypes": [ "group" ]
+        }
+        """;
+        var loader = new GameManifestLoader(new HttpClient(new FakeHandler(new Dictionary<string, string>
+        {
+            [indexUrl] = patchJson,
+        })));
+
+        var result = await loader.LoadPatchAsync(indexUrl, baseUrl);
+
+        Assert.True(result.Success, result.Message);
+        Assert.NotNull(result.Manifest);
+        Assert.NotNull(result.Manifest!.PatchPlan);
+        Assert.Equal(2, result.Manifest.Files.Count);
+        var ordinary = Assert.Single(result.Manifest.Files, x => x.Path == "Client/a.bin");
+        Assert.Equal("https://cdn.example.com/launcher/game/3.6.0/zip/Client/a.bin", ordinary.Url);
+        Assert.Single(ordinary.ChunkInfos);
+        Assert.Equal(0, ordinary.ChunkInfos[0].Start);
+        Assert.Equal(11, ordinary.ChunkInfos[0].End);
+
+        var group = Assert.Single(result.Manifest.PatchPlan!.DiffGroups);
+        Assert.Equal("group_0.krpdiff", group.Package.Path);
+        Assert.Equal(20, group.Package.Size);
+        var target = Assert.Single(group.DestinationFiles);
+        Assert.Equal("Client/new.pak", target.Path);
+        Assert.Single(target.ChunkInfos);
+        Assert.Equal("Client/removed.bin", Assert.Single(result.Manifest.PatchPlan.DeleteFiles));
+    }
+
+    [Fact]
+    public async Task LoadPatchAsync_RejectsPathTraversal()
+    {
+        const string indexUrl = "https://cdn.example.com/indexFile.json";
+        var loader = new GameManifestLoader(new HttpClient(new FakeHandler(new Dictionary<string, string>
+        {
+            [indexUrl] = """{ "resource": [ { "dest": "../outside.bin", "size": 1 } ] }""",
+        })));
+
+        var result = await loader.LoadPatchAsync(indexUrl);
+
+        Assert.False(result.Success);
+        Assert.Contains("越界", result.Message);
+    }
+
+    [Fact]
+    public async Task LoadPatchAsync_RejectsUnexpectedRawPayloadMd5()
+    {
+        const string indexUrl = "https://cdn.example.com/indexFile.json";
+        const string payload = "{ \"resource\": [] }";
+        var loader = new GameManifestLoader(new HttpClient(new FakeHandler(new Dictionary<string, string>
+        {
+            [indexUrl] = payload,
+        })));
+
+        var goodMd5 = Convert.ToHexStringLower(System.Security.Cryptography.MD5.HashData(Encoding.UTF8.GetBytes(payload)));
+        var valid = await loader.LoadPatchAsync(indexUrl, indexFileMd5: goodMd5);
+        var invalid = await loader.LoadPatchAsync(indexUrl, indexFileMd5: "00000000000000000000000000000000");
+
+        Assert.True(valid.Success);
+        Assert.False(invalid.Success);
+        Assert.Equal("补丁清单 MD5 校验失败", invalid.Message);
     }
 
     [Fact]

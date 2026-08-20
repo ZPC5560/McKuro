@@ -52,7 +52,7 @@ public sealed class PlayTimeAnalysis
     public string[] Last7DaysEndTime { get; set; } = new string[7];
     /// <summary>最近 7 天每天每次游玩的独立时段(索引对齐 Last7DaysSeconds)。</summary>
     public List<PlayTimeSession>[] Last7DaysSessions { get; set; } = new List<PlayTimeSession>[7];
-    /// <summary>本周游玩时间范围报告(参考睡眠检测:合并相邻会话为时段)。</summary>
+    /// <summary>最近 7 天游玩时间范围报告(参考睡眠检测:合并相邻会话为时段)。</summary>
     public string WeeklyReportText { get; set; } = "";
 }
 
@@ -253,7 +253,7 @@ public sealed class PlayTimeService
         }
     }
 
-    /// <summary>从本地库聚合游玩时长分析(总/今日/最近一周分布)。</summary>
+    /// <summary>从本地库聚合游玩时长分析(总/今日/最近 7 天滚动窗口分布)。</summary>
     public PlayTimeAnalysis GetAnalysis()
     {
         var analysis = new PlayTimeAnalysis();
@@ -286,13 +286,11 @@ public sealed class PlayTimeService
             var todayStr = today.ToString("yyyy-MM-dd");
             analysis.TodaySeconds = rows.Where(r => r.GameDate == todayStr).Sum(r => r.DurationSec);
 
-            // 本周(周一起):Last7Days* 索引 0=周一 … 6=周日,与 weekNames 对应。
-            // 之前用"最近 7 天滚动窗口"(today-6 起),跨周后本周数据被排到索引 6 且混入上周,
-            // 导致"新的一周没有计算时间"。改为本周起始(周一)后索引与周几正确对应。
-            var weekStart = today.AddDays(-((int)today.DayOfWeek + 6) % 7);
+            // 最近 7 天滚动窗口:从今天往前 6 天到今天,索引 0=最早一天,6=今天。
+            var rangeStart = today.AddDays(-6);
             for (int i = 0; i < 7; i++)
             {
-                var day = weekStart.AddDays(i);
+                var day = rangeStart.AddDays(i);
                 var dayStr = day.ToString("yyyy-MM-dd");
                 analysis.Last7DaysDates[i] = dayStr;
                 var dayRows = rows.Where(r => r.GameDate == dayStr).ToList();
@@ -388,7 +386,6 @@ public sealed class PlayTimeService
     /// <summary>生成每周游玩时间范围报告(参考睡眠检测报告:列出每天时段 + 汇总)。</summary>
     private static string BuildWeeklyReport(PlayTimeAnalysis analysis)
     {
-        string[] weekNames = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
         var lines = new List<string>();
         var playedDays = 0;
         for (int i = 0; i < 7; i++)
@@ -400,13 +397,13 @@ public sealed class PlayTimeService
             }
             playedDays++;
             var ranges = string.Join("、", sessions.Select(s => s.Display));
-            lines.Add($"{weekNames[i]}: {ranges}");
+            lines.Add($"{analysis.Last7DaysDates[i]}: {ranges}");
         }
         if (playedDays == 0)
         {
-            return "本周暂无游玩记录";
+            return "最近 7 天暂无游玩记录";
         }
-        var report = $"本周共 {playedDays} 天有游玩,每日时段如下:\n" + string.Join("\n", lines);
+        var report = $"最近 7 天共 {playedDays} 天有游玩,每日时段如下:\n" + string.Join("\n", lines);
         return report;
     }
 }

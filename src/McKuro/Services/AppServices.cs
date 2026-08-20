@@ -227,10 +227,12 @@ public static class AppServices
             8,
             sp.GetRequiredService<ILoggerFactory>().CreateLogger<DownloadEngine>()));
         services.AddSingleton<UpdateInstaller>();
+        services.AddSingleton<PatchInstaller>();
         services.AddSingleton<IGameUpdater>(sp => new GameUpdater(
             sp.GetRequiredService<GameManifestLoader>(),
             sp.GetRequiredService<DownloadEngine>(),
             sp.GetRequiredService<UpdateInstaller>(),
+             sp.GetRequiredService<PatchInstaller>(),
             sp.GetRequiredService<GamePathResolver>(),
             dataDir,
             sp.GetRequiredService<AppDatabase>(),

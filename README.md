@@ -11,14 +11,14 @@
 
 | 模块 | 说明 |
 | --- | --- |
-| 🚀 启动器 | 检查更新(版本数值比较,对齐 Haiyu)、**预下载**(不影响已安装文件,支持**暂停/继续**)、安装更新、**修复游戏**(跳过校验文件,对齐 Haiyu)、**下载速度限制**(MB/s)、**启动参数**(DX11/DLSS/自定义参数/可选启动文件,对齐 Haiyu StartGameOption)、**启动游戏后最小化主窗口**、**DLSS/XeSS 版本检测显示**、打开游戏目录;**选目录后自动识别加载**(校验 exe/渠道/版本,自动检查更新);官方封面轮播 + 公告/活动/新闻面板 + 背景视频封面(可选,LibVLC;无 VLC 自动回退官方首帧图)+ 版本 Logo |
+| 🚀 启动器 | 检查更新(版本数值比较,对齐 Haiyu)、**预下载**(不影响已安装文件,支持**暂停/继续**)、安装更新、**修复游戏**(跳过校验文件,对齐 Haiyu)、**下载速度限制**(MB/s)、**启动参数**(DX11/DLSS/自定义参数/可选启动文件,对齐 Haiyu StartGameOption)、**启动游戏后最小化主窗口**、**DLSS/XeSS 版本检测显示**、打开游戏目录;**选目录后自动识别加载**(校验 exe/渠道/版本,自动检查更新);官方封面轮播 + 公告/活动/新闻面板 + 背景视频封面(可选,libmpv 软件渲染;无 native 库自动回退官方首帧图)+ 版本 Logo |
 | 🎨 动态主题 | 主页可更换 PNG/JPG/WebP 壁纸;壁纸主色驱动强调色、导航选中态和玻璃表面;普通数据页使用单实例全局轻模糊,低性能模式自动关闭模糊;壁纸复制到应用数据目录后不依赖原文件 |
-| 🎴 抽卡分析 | 解析 `Client.log` 解密 URL → 从官方接口拉取抽卡记录;按卡池统计保底/当前垫抽/小保底歪率/欧气评分/称号/双金/歪数/平均出货/出货率/天数;标注是否 UP;**多账号切换与「全部账号」聚合分析**;**五星角色/武器真实头像图标**;本地 SQLite 去重存储;Haiyu 风格五星列表 + 统计条 + 饼图/折线图 |
-| 👤 角色数据 | 通过**库街区** API 直接拉取当前账号角色数据(等级/武器/技能/共鸣链/**声骸/属性面板**),**网格卡片原生展示**(WutheringWavesTool 风格);也支持解析游戏本地缓存 |
+| 🎴 抽卡分析 | 解析 `Client.log` 解密 URL → 从官方接口拉取抽卡记录;**双通道同步(云鸣潮接口优先,本地日志回退)**;按卡池统计保底/当前垫抽/小保底歪率/欧气评分/称号/双金/歪数/平均出货/出货率/天数;标注是否 UP;**多账号切换与「全部账号」聚合分析**;**五星角色/武器真实头像图标**;本地 SQLite 去重存储;Haiyu 风格五星列表 + 统计条 + 饼图/折线图 |
+| 👤 角色数据 | 通过**库街区** API 或 **mcguide 攻略站**双数据源拉取当前账号角色数据(等级/武器/技能/共鸣链/**声骸/属性面板**),**网格卡片原生展示**(WutheringWavesTool 风格);图标磁盘持久化缓存(6 类,切换数据源不丢图);也支持解析游戏本地缓存;Echo 评分 |
 | 📅 签到 | 库街区账号登录(**Token** / **手机号+验证码**:极验人机验证 → 发送验证码 → 60s 倒计时重发 → 登录,流程对齐 Haiyu)、**一键游戏签到(鸣潮全部角色)**、**库街区每日任务**(库洛币签到+浏览+点赞+分享)、每日 8:00 自动签到 |
-| ☁️ 云游戏 | 云鸣潮:手机号登录 → 节点测速 → 一键启动/排队/取消;云游戏抽卡记录接口 |
+| ☁️ 云游戏 | 云鸣潮 SDK 服务(手机号登录/节点测速/启动排队,对齐 Haiyu WavesCloudGameService);当前 UI 通过其会话用于**抽卡分析云鸣潮双通道**拉取记录 |
 | 📖 图鉴 | 库街区 wiki 首页数据(Banner 轮播/公告/热点/活动,鸣潮)+ 网页快捷入口(官方 wiki/地图、Gamekee/彩墨地图) |
-| 📸 快捷键截图 | 全局热键(Win/Ctrl/Alt + F1-F12,默认 Win+F8)截取全屏保存 PNG(仅 Windows) |
+| 📸 快捷键截图 | 设置中保留截图配置字段(开关/修饰键/按键/保存目录,默认 Win+F8),**当前版本尚未实现全局热键截图**(仅为设置项预留) |
 | ⚙️ 设置 | 游戏目录(**选择后自动识别加载**)、服务器渠道、**游戏修复·跳过校验文件管理**(添加/移除/是否删除)、库街区 Token/账号管理、下载并发数、**下载限速**、**游戏启动参数**(DX11/DLSS/自定义参数/启动文件)、**启动后最小化**、**动态壁纸/色板/玻璃质量**、**主题切换**(跟随系统/浅色/深色,即时生效)、**应用自更新**(GitHub Release 检查/跳过版本/下载安装,对齐 Haiyu UpdateAppViewModel)、截图配置、界面语言(zh-Hans/en-US) |
 
 应用图标:守岸人(Shorekeeper)官方图标(萌娘共享 CC-BY-NC-SA),多尺寸 ICO 内嵌 exe 与窗口标题栏。
@@ -26,7 +26,7 @@
 ## 环境要求
 
 - .NET SDK 10.0 (`dotnet --version` 应显示 10.x)
-- Windows 10/11 运行游戏与完整更新功能;macOS/Linux 提供 UI、壁纸、主题、数据和视频首帧回退(游戏本体仅 Windows;Linux 视频优先使用系统 libvlc)
+- Windows 10/11 运行游戏与完整更新功能;macOS/Linux 提供 UI、壁纸、主题、数据和视频首帧回退(游戏本体仅 Windows;Linux 视频优先使用系统 libmpv)
 
 ## 项目结构
 
@@ -34,20 +34,20 @@
 McKuro/
 ├── McKuro.slnx                 # 解决方案
 ├── src/McKuro/                 # Avalonia 桌面应用 (Semi 主题)
-│   ├── Views/                 # 主页 / 鸣潮 / 抽卡分析 / 角色数据 / 签到 / 云游戏 / 图鉴 / 工具箱 / 设置 (Haiyu Shell 风格)
+│   ├── Views/                 # 主页 / 鸣潮(启动器) / 抽卡分析 / 角色数据 / 签到 / 活动 / 图鉴 / 兑换码 / 游玩统计 / 深塔海墟 / 账号 / 设置
 │   ├── ViewModels/            # MVVM (CommunityToolkit.Mvvm)
-│   ├── Controls/              # AsyncImage / VideoBackgroundControl
-│   ├── Services/              # 手动 DI (AppServices) + 截图热键 + 每日调度 + 多语言
+│   ├── Controls/              # AsyncImage / VideoBackgroundControl(libmpv) / LruCache / RingProgress / SpeedTrendChart
+│   ├── Services/              # 手动 DI (AppServices) + 壁纸/色板/平台能力 + 极验 + 每日调度 + 多语言
 │   └── Assets/lang/           # zh-Hans / en-US 界面语言资源
 ├── src/McKuro.Core/            # 与 UI 无关的核心库 (AOT 兼容,源生成 JSON)
-│   ├── Services/Gacha/        # 日志解密 / URL 提取 / 接口 / 分析 / 存储
-│   ├── Services/Game/         # 清单加载 / 断点下载 / 差分安装 / 更新(鸣潮)
-│   ├── Services/Roles/        # 库街区 API / 本地数据读取 / 缓存
+│   ├── Services/Gacha/        # 日志解密 / URL 提取 / 接口 / 分析 / 存储 / 云鸣潮双通道
+│   ├── Services/Game/         # 清单加载 / 断点下载 / 差分安装(hpatchz) / 更新 / 游玩时长
+│   ├── Services/Roles/        # 库街区 API / mcguide 攻略站 / 本地数据读取 / 缓存 / Echo 评分
 │   ├── Services/Kuro/         # 库街区登录 / 签到 / 每日任务
 │   ├── Services/CloudGame/    # 云鸣潮 SDK 登录 / 节点测速 / 启动排队
 │   ├── Services/Wiki/         # 库街区图鉴首页 / 热点 / 活动
 │   └── Infrastructure/        # SQLite (Microsoft.Data.Sqlite)
-└── tests/McKuro.Tests/         # xUnit 单元测试 (107 个)
+└── tests/McKuro.Tests/         # xUnit 单元测试 (195 个用例)
 ```
 
 ## 常用命令
@@ -62,11 +62,11 @@ dotnet publish src/McKuro -c Release -r osx-arm64 --self-contained # macOS 本�
 dotnet publish src/McKuro -c Release -r linux-x64 --self-contained # Linux 本地验证 AOT/UI
 ```
 
-Windows 发布会按 RID 条件带上 `VideoLAN.LibVLC.Windows`，不要求用户另装 VLC。Linux 使用系统 `libvlc.so/libvlccore.so`；macOS 和 Linux 找不到可用媒体运行库时，启动器会保留官方静态首帧，不影响其他页面。
+Windows 发布会按 RID 条件带上 `Endpne.LibMPV.Windows`(libmpv-2.dll),不要求用户另装 VLC。Linux 使用系统 `libmpv`;macOS 和 Linux 找不到可用媒体运行库时,启动器会保留官方静态首帧,不影响其他页面。
 
 ## 日志
 
-应用将运行日志写入 `%AppData%\McKuro\logs\`,**按类型分目录**(如 `SmsLogin`/`GeetVerifyService`/`GameUpdater`),目录内**按日期分文件**(`McKuro-yyyyMMdd.log`),跨天自动新建当日文件、旧文件保留。内容覆盖极验验证(本地服务端口/页面地址/回调提取结果)、短信验证码发送响应、更新与下载等关键流程,便于本地排查。设置页「打开日志目录」按钮可直达日志根目录。
+应用将运行日志写入日志目录(**Windows: exe 所在目录\logs;macOS/Linux: %AppData%\McKuro\logs**),**按类型分目录**(如 `SmsLogin`/`GeetVerifyService`/`GameUpdater`),目录内**按日期分文件**(`McKuro-yyyyMMdd.log`),跨天自动新建当日文件、旧文件保留。内容覆盖极验验证(本地服务端口/页面地址/回调提取结果)、短信验证码发送响应、更新与下载等关键流程,便于本地排查。设置页「打开日志目录」按钮可直达日志根目录。
 
 ## 安装包
 
@@ -84,7 +84,7 @@ ISCC.exe installer\setup.iss /DMyAppVersion=1.0.0
 ### 抽卡分析
 
 1. 在设置页指定游戏安装目录(或自动检测)
-2. 点击「抽卡分析 → 从日志同步」:工具解密 `Client/Saved/Logs/Client.log`,提取抽卡记录 URL,从官方接口拉取全部记录
+2. 点击「抽卡分析 → 同步」:优先走**云鸣潮接口**(已登录时),失败自动回退解密 `Client/Saved/Logs/Client.log` 提取抽卡记录 URL,从官方接口拉取全部记录;两者都失败时回退本地 SQLite 缓存展示
 3. 卡池列表展示各池统计,点击查看五星出货明细(垫抽数/是否 UP)
 
 > UP 标注依赖第三方卡池数据源(可能不可用),不可用时仅展示保底统计,不判定是否 UP。

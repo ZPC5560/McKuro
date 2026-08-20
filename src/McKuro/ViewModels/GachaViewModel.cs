@@ -661,7 +661,8 @@ public sealed partial class GachaViewModel : ViewModelBase
         }
         TableRecords.Clear();
         var page = all
-            .OrderBy(r => r.Time)
+            .AsEnumerable()
+            .Reverse() // 已按时间旧→新;反转后最新排最前,同时间保持最新插入优先
             .Skip((TableCurrentPage - 1) * TablePageSize)
             .Take(TablePageSize)
             .ToList();

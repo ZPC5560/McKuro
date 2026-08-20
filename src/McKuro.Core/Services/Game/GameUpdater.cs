@@ -49,6 +49,7 @@ public sealed class GameUpdater : IGameUpdater
     private readonly GameManifestLoader _loader;
     private readonly DownloadEngine _downloader;
     private readonly UpdateInstaller _installer;
+    private readonly PatchInstaller _patchInstaller;
     private readonly GamePathResolver _paths;
     private readonly string _appDataDir;
     private readonly AppDatabase? _database;
@@ -66,10 +67,36 @@ public sealed class GameUpdater : IGameUpdater
         ISettingsService? settings = null,
         Func<GameServerType, string>? indexUrlProvider = null,
         ILogger<GameUpdater>? logger = null)
+        : this(
+            loader,
+            downloader,
+            installer,
+            new PatchInstaller(installer),
+            paths,
+            appDataDir,
+            database,
+            settings,
+            indexUrlProvider,
+            logger)
+    {
+    }
+
+    public GameUpdater(
+        GameManifestLoader loader,
+        DownloadEngine downloader,
+        UpdateInstaller installer,
+        PatchInstaller patchInstaller,
+        GamePathResolver paths,
+        string appDataDir,
+        AppDatabase? database = null,
+        ISettingsService? settings = null,
+        Func<GameServerType, string>? indexUrlProvider = null,
+        ILogger<GameUpdater>? logger = null)
     {
         _loader = loader;
         _downloader = downloader;
         _installer = installer;
+        _patchInstaller = patchInstaller;
         _paths = paths;
         _appDataDir = appDataDir;
         _database = database;
@@ -274,44 +301,78 @@ public sealed class GameUpdater : IGameUpdater
         }
 
         var manifest = load.Manifest;
+        var targetVersion = load.Predownload?.Version;
+        if (string.IsNullOrWhiteSpace(targetVersion))
+        {
+            return (false, null, "当前没有可用的预载版本");
+        }
         // 本地安装版本
         var installedVersion = ReadInstalledVersion(root);
 
         // 找匹配本地版本的补丁项(predownload.config.patchConfig,纯内存匹配,无二次网络请求)
-        var (patchUrl, cdnPrefix) = ResolvePatchFromIndex(load.Predownload, load.DefaultData, installedVersion);
-        if (string.IsNullOrWhiteSpace(patchUrl))
+        var (patchUrl, cdnPrefix, patchConfig) = await ResolvePatchFromIndexAsync(
+            load.Predownload,
+            load.DefaultData,
+            installedVersion,
+            ct).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(patchUrl) || patchConfig is null)
         {
-            // 无预下载补丁:回退全量差异下载(慢,保底)
-            return await PreDownloadFallbackAsync(serverType, manifest, root, progress, ct);
+            // Haiyu 只接受从当前本地版本精确匹配到的预载补丁,不能误把默认版本差异当未来版本预载。
+            return (false, null, "未找到与本地版本匹配的官方预载补丁");
         }
 
-        var patchLoad = await _loader.LoadPatchAsync(patchUrl, ct).ConfigureAwait(false);
+        var patchLoad = await _loader.LoadPatchAsync(
+            patchUrl,
+            baseUrl: cdnPrefix + "/" + (patchConfig.BaseUrl ?? "").TrimStart('/'),
+            indexFileMd5: patchConfig.IndexFileMd5,
+            ct: ct).ConfigureAwait(false);
         if (!patchLoad.Success || patchLoad.Manifest is null || patchLoad.Manifest.Files.Count == 0)
         {
-            // 补丁清单加载失败:回退全量下载保底,保证预下载能完成
-            return await PreDownloadFallbackAsync(serverType, manifest, root, progress, ct);
+            return (false, null, patchLoad.Message ?? "预载补丁清单不可用");
         }
 
         // 为补丁文件补全下载地址(CDN + FromFolder + dest,与 Haiyu GetBaseUrl 一致)
         var patchFiles = patchLoad.Manifest.Files;
-        foreach (var f in patchFiles)
+        // 预下载目标版本号记录,暂存目录按版本隔离。保留已有 .part 文件以支持断点续传。
+        var downloadBytes = patchFiles.Sum(f => f.Size);
+        if (!HasFreeSpace(_appDataDir, downloadBytes))
         {
-            if (string.IsNullOrEmpty(f.Url))
-            {
-                f.Url = cdnPrefix + "/" + f.Path;
-            }
-            else if (!f.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-            {
-                f.Url = cdnPrefix + "/" + f.Url;
-            }
+            return (false, null, $"预载下载盘空间不足: {FormatBytes(downloadBytes)}");
         }
-
-        // 预下载目标版本号记录,暂存目录按版本隔离
-        var staging = Path.Combine(_appDataDir, "predownload", manifest.Version);
-        if (Directory.Exists(staging))
+        var requiredBytes = patchConfig.Ext?.RequiredDiskSpace ?? patchConfig.UnCompressSize ?? 0;
+        if (!HasFreeSpace(root, requiredBytes))
+        {
+            return (false, null, $"游戏盘空间不足: {FormatBytes(requiredBytes)}");
+        }
+        var staging = Path.Combine(_appDataDir, "predownload", targetVersion);
+        Directory.CreateDirectory(staging);
+        var existingMeta = await ReadPreDownloadMetaAsync(staging, ct).ConfigureAwait(false);
+        if (existingMeta is null
+            ? Directory.EnumerateFileSystemEntries(staging).Any()
+            : !string.Equals(existingMeta.Version, targetVersion, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(existingMeta.SourceVersion, installedVersion, StringComparison.OrdinalIgnoreCase)
+                || existingMeta.ServerType != serverType)
         {
             Directory.Delete(staging, recursive: true);
+            Directory.CreateDirectory(staging);
         }
+
+        var meta = new PreDownloadMeta
+        {
+            Version = targetVersion,
+            SourceVersion = installedVersion,
+            ServerType = serverType,
+            Completed = false,
+            PatchIndexUrl = patchUrl,
+            IndexFileMd5 = patchConfig.IndexFileMd5,
+            BaseUrl = patchConfig.BaseUrl,
+            DownloadBaseUrl = patchLoad.Manifest.PatchPlan?.BaseUrl,
+        };
+        var metaPath = Path.Combine(staging, "predownload.json");
+        await File.WriteAllTextAsync(
+            metaPath,
+            JsonSerializer.Serialize(meta, GameMetaJsonContext.Default.PreDownloadMeta),
+            ct).ConfigureAwait(false);
 
         progress?.Report(new DownloadProgress
         {
@@ -336,112 +397,49 @@ public sealed class GameUpdater : IGameUpdater
             return (false, staging, $"有 {failures.Count} 个文件下载失败: {failures[0]}");
         }
 
-        // 记录预下载元信息
-        var meta = new PreDownloadMeta { Version = manifest.Version, ServerType = serverType };
-        var json = JsonSerializer.Serialize(meta, GameMetaJsonContext.Default.PreDownloadMeta);
-        await File.WriteAllTextAsync(Path.Combine(staging, "predownload.json"), json, ct).ConfigureAwait(false);
-
-        return (true, staging, null);
-    }
-
-    /// <summary>从已加载的 index 数据匹配本地版本补丁,返回 indexFile URL 与 CDN 前缀。纯内存,无网络。</summary>
-    private static (string? Url, string? CdnPrefix) ResolvePatchFromIndex(
-        KuroUpdateData? predownload,
-        KuroUpdateData? defaultData,
-        string? installedVersion)
-    {
-        try
-        {
-            if (predownload?.Config?.PatchConfig is not { Count: > 0 })
-            {
-                return (null, null);
-            }
-
-            // 匹配本地版本;匹配不到则用最新补丁(patchConfig 最后一项)
-            var match = predownload.Config.PatchConfig.FirstOrDefault(p =>
-                p.Version is not null && string.Equals(p.Version, installedVersion, StringComparison.OrdinalIgnoreCase));
-            match ??= predownload.Config.PatchConfig[^1];
-            if (string.IsNullOrWhiteSpace(match.IndexFile))
-            {
-                return (null, null);
-            }
-
-            // 用 default 的 CDN 列表拼 URL(predownload 节点无 cdnList,与 Haiyu 一致)
-            var cdn = defaultData?.CdnList
-                ?.Where(c => !string.IsNullOrEmpty(c.Url))
-                .OrderBy(c => c.Ping)
-                .FirstOrDefault();
-            if (cdn is null)
-            {
-                return (null, null);
-            }
-            var cdnPrefix = cdn.Url.TrimEnd('/');
-            var patchUrl = cdnPrefix + "/" + match.IndexFile;
-            return (patchUrl, cdnPrefix);
-        }
-        catch
-        {
-            return (null, null);
-        }
-    }
-
-    /// <summary>回退方案:全量 ComputeDiff 差异下载(无匹配补丁时保底)。</summary>
-    private async Task<(bool Success, string? StagingDir, string? Message)> PreDownloadFallbackAsync(
-        GameServerType serverType,
-        GameManifest manifest,
-        string root,
-        IProgress<DownloadProgress>? progress,
-        CancellationToken ct)
-    {
-        IProgress<DiffProgress>? diffProgress = null;
-        if (progress is not null)
-        {
-            diffProgress = new Progress<DiffProgress>(p =>
-            {
-                progress.Report(new DownloadProgress
-                {
-                    FileIndex = p.Checked,
-                    FileTotal = Math.Max(p.Total, 1),
-                    BytesDownloaded = 0,
-                    BytesTotal = 0,
-                    SpeedBps = 0,
-                    CurrentFile = $"正在校验本地文件 {p.Checked}/{p.Total}…",
-                });
-            });
-        }
-        var diff = _installer.ComputeDiff(manifest, root, progress: diffProgress);
-        if (!diff.HasChanges)
-        {
-            return (true, null, "游戏已是最新版本,无需下载");
-        }
-
-        var staging = Path.Combine(_appDataDir, "predownload", manifest.Version);
-        if (Directory.Exists(staging))
-        {
-            Directory.Delete(staging, recursive: true);
-        }
-
-        var (success, failures) = await _downloader.DownloadManyAsync(
-            diff.ToDownload,
-            baseUrl: "",
-            staging,
-            progress,
+        // 仅在全部包完成 MD5 校验后将预载标记切换为可安装。
+        meta.Completed = true;
+        await File.WriteAllTextAsync(
+            metaPath,
+            JsonSerializer.Serialize(meta, GameMetaJsonContext.Default.PreDownloadMeta),
             ct).ConfigureAwait(false);
 
-        if (failures.Count > 0)
+        return (true, staging, null);
+    }
+
+    /// <summary>精确匹配本地版本的补丁，并探测承载 indexFile 的可用 CDN。</summary>
+    private async Task<(string? Url, string? CdnPrefix, KuroPatchConfig? PatchConfig)> ResolvePatchFromIndexAsync(
+        KuroUpdateData? patchData,
+        KuroUpdateData? cdnData,
+        string? installedVersion,
+        CancellationToken ct)
+    {
+        if (patchData?.Config?.PatchConfig is not { Count: > 0 }
+            || string.IsNullOrWhiteSpace(installedVersion))
         {
-            return (false, staging, $"有 {failures.Count} 个文件下载失败: {failures[0]}");
+            return (null, null, null);
         }
 
-        var meta = new PreDownloadMeta { Version = manifest.Version, ServerType = serverType };
-        var json = JsonSerializer.Serialize(meta, GameMetaJsonContext.Default.PreDownloadMeta);
-        await File.WriteAllTextAsync(Path.Combine(staging, "predownload.json"), json, ct).ConfigureAwait(false);
+        // 必须与当前本地资源版本精确匹配。Haiyu 不会把最新项误当成任意本地版本的补丁。
+        var match = patchData.Config.PatchConfig.FirstOrDefault(p =>
+            p.Version is not null
+            && string.Equals(p.Version, installedVersion, StringComparison.OrdinalIgnoreCase));
+        if (match is null || string.IsNullOrWhiteSpace(match.IndexFile))
+        {
+            return (null, null, null);
+        }
 
-        return (true, staging, null);
+        var cdnPrefix = await _loader.SelectCdnAsync(cdnData?.CdnList, match.IndexFile, ct).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(cdnPrefix))
+        {
+            return (null, null, null);
+        }
+        cdnPrefix = cdnPrefix.TrimEnd('/');
+        return (cdnPrefix + "/" + match.IndexFile.TrimStart('/'), cdnPrefix, match);
     }
 
     /// <summary>
-    /// 执行安装:若存在预下载暂存目录则从暂存安装,否则直接下载并安装。
+    /// 执行安装:优先消费已完成预载,否则匹配当前本地版本的官方补丁,最后回退完整清单。
     /// </summary>
     public async Task<(bool Success, string? Message)> InstallAsync(
         GameServerType serverType,
@@ -458,65 +456,243 @@ public sealed class GameUpdater : IGameUpdater
         var load = await _loader.LoadKuroAsync(indexUrl, preDownload: false, ct).ConfigureAwait(false);
         if (!load.Success || load.Manifest is null)
         {
-            return (false, load.Message);
+            return (false, load.Message ?? "获取更新清单失败");
         }
 
         var manifest = load.Manifest;
-        var diff = _installer.ComputeDiff(manifest, root);
+        var installedVersion = ReadInstalledVersion(root);
+        var stagingDir = FindStaging(manifest.Version, serverType, installedVersion);
+        ManifestLoadResult? patchLoad = null;
 
-        // 优先使用预下载暂存
-        string? stagingDir = FindStaging(manifest.Version);
         if (stagingDir is not null)
         {
-            var (installed, failures) = _installer.InstallFromStaging(stagingDir, root, manifest);
-            if (failures.Count > 0)
+            var meta = await ReadPreDownloadMetaAsync(stagingDir, ct).ConfigureAwait(false);
+            if (meta?.PatchIndexUrl is not null && meta.DownloadBaseUrl is not null)
             {
-                return (false, $"安装失败: {failures[0]}");
+                patchLoad = await _loader.LoadPatchAsync(
+                    meta.PatchIndexUrl,
+                    meta.DownloadBaseUrl,
+                    meta.IndexFileMd5,
+                    ct).ConfigureAwait(false);
+                if (!patchLoad.Success || patchLoad.Manifest?.PatchPlan is null)
+                {
+                    _logger.LogWarning("预载补丁清单重新加载失败,回退当前版本更新: {Message}", patchLoad.Message);
+                    patchLoad = null;
+                    stagingDir = null;
+                }
+            }
+            else
+            {
+                stagingDir = null;
+            }
+        }
+
+        // 只有默认节点已经切换到预载目标版本时,才消费预载目录。
+        // 服务器存在 predownload 节点本身不会触发未来版本下载。
+        if (stagingDir is null)
+        {
+            var (patchUrl, cdnPrefix, patchConfig) = await ResolvePatchFromIndexAsync(
+                load.DefaultData,
+                load.DefaultData,
+                installedVersion,
+                ct).ConfigureAwait(false);
+            if (patchUrl is not null && cdnPrefix is not null && patchConfig is not null)
+            {
+                var patchBaseUrl = cdnPrefix + "/" + (patchConfig.BaseUrl ?? "").TrimStart('/');
+                patchLoad = await _loader.LoadPatchAsync(
+                    patchUrl,
+                    patchBaseUrl,
+                    patchConfig.IndexFileMd5,
+                    ct).ConfigureAwait(false);
+                if (patchLoad.Success && patchLoad.Manifest?.PatchPlan is not null)
+                {
+                    var patchFiles = patchLoad.Manifest.Files;
+                    var patchDownloadBytes = patchFiles.Sum(f => f.Size);
+                    var patchDiskBytes = patchConfig.Ext?.RequiredDiskSpace ?? patchConfig.UnCompressSize ?? 0;
+                    if (!HasFreeSpace(_appDataDir, patchDownloadBytes))
+                    {
+                        return (false, $"更新下载盘空间不足: {FormatBytes(patchDownloadBytes)}");
+                    }
+                    if (!HasFreeSpace(root, patchDiskBytes))
+                    {
+                        return (false, $"游戏盘空间不足: {FormatBytes(patchDiskBytes)}");
+                    }
+                    stagingDir = Path.Combine(_appDataDir, "install_tmp", Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(stagingDir);
+                    var (_, failures) = await _downloader.DownloadManyAsync(
+                        patchFiles,
+                        "",
+                        stagingDir,
+                        progress,
+                        ct).ConfigureAwait(false);
+                    if (failures.Count > 0)
+                    {
+                        _logger.LogWarning("官方补丁下载失败,回退完整清单: {Message}", failures[0]);
+                        patchLoad = null;
+                        TryDeleteDirectory(stagingDir);
+                        stagingDir = null;
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("官方补丁清单不可用,回退完整清单: {Message}", patchLoad.Message);
+                    patchLoad = null;
+                }
+            }
+        }
+
+        if (stagingDir is not null && patchLoad?.Manifest?.PatchPlan is not null)
+        {
+            var patchResult = await _patchInstaller.InstallAsync(
+                patchLoad.Manifest.PatchPlan,
+                stagingDir,
+                root,
+                patchLoad.Manifest.Files,
+                progress,
+                ct).ConfigureAwait(false);
+            if (patchResult.Success)
+            {
+                var verified = await EnsureManifestCompleteAsync(manifest, root, progress, ct).ConfigureAwait(false);
+                if (verified.Success)
+                {
+                    DeletePatchFiles(root, patchLoad.Manifest.PatchPlan.DeleteFiles, manifest);
+                    WriteInstalledVersion(root, manifest.Version);
+                    TryDeleteDirectory(stagingDir);
+                    return (true, $"补丁安装完成,版本 {manifest.Version}");
+                }
+                _logger.LogWarning("补丁安装后最终校验未通过,回退完整清单: {Message}", verified.Message);
+            }
+            else
+            {
+                _logger.LogWarning("补丁安装失败,回退完整清单: {Message}", patchResult.Message);
             }
 
-            WriteInstalledVersion(root, manifest.Version);
-            return (true, $"已从预下载安装 {installed} 个文件");
+            // 补丁已尝试应用但未完成时,其预载包不能再复用,否则会对已变更目录重复打差分。
+            TryDeleteDirectory(stagingDir);
         }
 
+        var fullResult = await EnsureManifestCompleteAsync(manifest, root, progress, ct).ConfigureAwait(false);
+        if (!fullResult.Success)
+        {
+            return fullResult;
+        }
+        WriteInstalledVersion(root, manifest.Version);
+        return (true, fullResult.Message ?? $"更新完成,版本 {manifest.Version}");
+    }
+
+    private async Task<(bool Success, string? Message)> EnsureManifestCompleteAsync(
+        GameManifest manifest,
+        string root,
+        IProgress<DownloadProgress>? progress,
+        CancellationToken ct)
+    {
+        IProgress<DiffProgress>? diffProgress = null;
+        if (progress is not null)
+        {
+            diffProgress = new Progress<DiffProgress>(p => progress.Report(new DownloadProgress
+            {
+                FileIndex = p.Checked,
+                FileTotal = Math.Max(p.Total, 1),
+                BytesDownloaded = 0,
+                BytesTotal = 0,
+                SpeedBps = 0,
+                CurrentFile = $"正在校验本地文件 {p.Checked}/{p.Total}…",
+            }));
+        }
+
+        var diff = await Task.Run(
+            () => _installer.ComputeDiff(manifest, root, progress: diffProgress, ct: ct),
+            ct).ConfigureAwait(false);
         if (!diff.HasChanges)
         {
-            WriteInstalledVersion(root, manifest.Version);
-            return (true, "游戏已是最新版本");
+            return (true, "游戏文件完整,无需额外下载");
         }
 
-        // 直接下载并安装(安装到临时目录,完成后整体搬移)
+        var downloadBytes = diff.ToDownload.Sum(file => file.Size);
+        if (!HasFreeSpace(_appDataDir, downloadBytes))
+        {
+            return (false, $"下载盘空间不足: {FormatBytes(downloadBytes)}");
+        }
         var tempInstall = Path.Combine(_appDataDir, "install_tmp", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempInstall);
-        var baseUrl = "";
-        var (success, failures2) = await _downloader.DownloadManyAsync(
-            diff.ToDownload,
-            baseUrl,
-            tempInstall,
-            progress,
-            ct).ConfigureAwait(false);
-
-        if (failures2.Count > 0)
-        {
-            return (false, $"下载失败: {failures2[0]}");
-        }
-
-        var (installed2, failures3) = _installer.InstallFromStaging(tempInstall, root, manifest);
-        if (failures3.Count > 0)
-        {
-            return (false, $"安装失败: {failures3[0]}");
-        }
-
         try
         {
-            Directory.Delete(tempInstall, recursive: true);
+            var (_, failures) = await _downloader.DownloadManyAsync(
+                diff.ToDownload,
+                baseUrl: "",
+                tempInstall,
+                progress,
+                ct).ConfigureAwait(false);
+            if (failures.Count > 0)
+            {
+                return (false, $"下载失败: {failures[0]}");
+            }
+
+            var installed = await Task.Run(
+                () => _installer.InstallFromStaging(tempInstall, root, manifest),
+                ct).ConfigureAwait(false);
+            if (installed.Failures.Count > 0)
+            {
+                return (false, $"安装失败: {installed.Failures[0]}");
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            _logger.LogWarning(ex, "清理临时安装目录失败: {Dir}", tempInstall);
+            TryDeleteDirectory(tempInstall);
         }
 
-        WriteInstalledVersion(root, manifest.Version);
-        return (true, $"已安装 {installed2} 个文件,版本 {manifest.Version}");
+        var remaining = await Task.Run(
+            () => _installer.ComputeDiff(manifest, root, ct: ct),
+            ct).ConfigureAwait(false);
+        return remaining.HasChanges
+            ? (false, $"最终校验仍有 {remaining.ToDownload.Count} 个文件不完整")
+            : (true, $"已补齐 {diff.ToDownload.Count} 个文件");
+    }
+
+    private static void DeletePatchFiles(string gameRoot, IEnumerable<string> relativePaths, GameManifest targetManifest)
+    {
+        var targetPaths = targetManifest.Files
+            .Select(file => file.Path.Replace('/', Path.DirectorySeparatorChar))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var relative in relativePaths)
+        {
+            try
+            {
+                var normalizedRelative = relative.Replace('/', Path.DirectorySeparatorChar);
+                if (targetPaths.Contains(normalizedRelative))
+                {
+                    continue;
+                }
+                var path = GameFilePath.CombineUnderRoot(gameRoot, relative);
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+            catch
+            {
+                // 单个旧资源删除失败不阻断已完成的安装。
+            }
+        }
+    }
+
+    private static void TryDeleteDirectory(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch
+        {
+            // 临时目录被占用时保留,下次启动可清理。
+        }
     }
 
     /// <summary>
@@ -544,51 +720,75 @@ public sealed class GameUpdater : IGameUpdater
         }
 
         var manifest = load.Manifest;
-        var diff = _installer.ComputeDiff(manifest, root, skipPaths);
+        IProgress<DiffProgress>? diffProgress = progress is null
+            ? null
+            : new Progress<DiffProgress>(p => progress.Report(new DownloadProgress
+            {
+                FileIndex = p.Checked,
+                FileTotal = Math.Max(p.Total, 1),
+                BytesDownloaded = 0,
+                BytesTotal = 0,
+                SpeedBps = 0,
+                CurrentFile = $"正在检查本地文件 {p.Checked}/{p.Total}…",
+            }));
+        var diff = await Task.Run(
+            () => _installer.ComputeDiff(manifest, root, skipPaths, diffProgress, ct),
+            ct).ConfigureAwait(false);
         if (!diff.HasChanges)
         {
             return (true, "游戏文件完整,无需修复");
         }
 
         // 下载缺失/损坏文件到临时目录,再整体安装
+        var repairDownloadBytes = diff.ToDownload.Sum(file => file.Size);
+        if (!HasFreeSpace(_appDataDir, repairDownloadBytes))
+        {
+            return (false, $"修复下载盘空间不足: {FormatBytes(repairDownloadBytes)}");
+        }
         var tempInstall = Path.Combine(_appDataDir, "repair_tmp", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempInstall);
-        var (success, failures) = await _downloader.DownloadManyAsync(
-            diff.ToDownload,
-            baseUrl: "",
-            tempInstall,
-            progress,
-            ct).ConfigureAwait(false);
-
-        if (failures.Count > 0)
-        {
-            return (false, $"下载失败: {failures[0]}");
-        }
-
-        var (installed, installFailures) = _installer.InstallFromStaging(tempInstall, root, manifest);
-        if (installFailures.Count > 0)
-        {
-            return (false, $"安装失败: {installFailures[0]}");
-        }
-
         try
         {
-            Directory.Delete(tempInstall, recursive: true);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "清理修复临时目录失败: {Dir}", tempInstall);
-        }
+            var (_, failures) = await _downloader.DownloadManyAsync(
+                diff.ToDownload,
+                baseUrl: "",
+                tempInstall,
+                progress,
+                ct).ConfigureAwait(false);
+            if (failures.Count > 0)
+            {
+                return (false, $"下载失败: {failures[0]}");
+            }
 
-        // 删除被跳过的文件(对齐 Haiyu:修复将缓存全部删除,保持与服务器最新一致)
-        if (deleteSkipped && skipPaths is not null)
-        {
-            int deleted = DeleteSkippedFiles(root, skipPaths);
-            _logger.LogInformation("修复时删除被跳过文件 {Count} 个", deleted);
-        }
+            var (installed, installFailures) = await Task.Run(
+                () => _installer.InstallFromStaging(tempInstall, root, manifest),
+                ct).ConfigureAwait(false);
+            if (installFailures.Count > 0)
+            {
+                return (false, $"安装失败: {installFailures[0]}");
+            }
 
-        WriteInstalledVersion(root, manifest.Version);
-        return (true, $"修复完成:重新下载 {installed} 个文件,版本 {manifest.Version}");
+            // 与 Haiyu 一致:仅在用户选择删除跳过文件时清理,不擅自删除游戏目录中的额外文件。
+            if (deleteSkipped && skipPaths is not null)
+            {
+                int deleted = DeleteSkippedFiles(root, skipPaths);
+                _logger.LogInformation("修复时删除被跳过文件 {Count} 个", deleted);
+            }
+
+            WriteInstalledVersion(root, manifest.Version);
+            return (true, $"修复完成:重新下载 {installed} 个文件,版本 {manifest.Version}");
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(tempInstall, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "清理修复临时目录失败: {Dir}", tempInstall);
+            }
+        }
     }
 
     private static int DeleteSkippedFiles(string gameRoot, IReadOnlySet<string> skipPaths)
@@ -596,9 +796,9 @@ public sealed class GameUpdater : IGameUpdater
         int deleted = 0;
         foreach (var relative in skipPaths)
         {
-            var full = Path.Combine(gameRoot, relative.Replace('/', Path.DirectorySeparatorChar));
             try
             {
+                var full = GameFilePath.CombineUnderRoot(gameRoot, relative);
                 if (File.Exists(full))
                 {
                     File.Delete(full);
@@ -733,14 +933,91 @@ public sealed class GameUpdater : IGameUpdater
         ("libxess.dll", "XeSS"),
     ];
 
-    private string? FindStaging(string version)
+    private static bool HasFreeSpace(string path, long requiredBytes)
+    {
+        if (requiredBytes <= 0)
+        {
+            return true;
+        }
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            var root = Path.GetPathRoot(fullPath);
+            return !string.IsNullOrEmpty(root) && new DriveInfo(root).AvailableFreeSpace >= requiredBytes;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024)
+        {
+            return $"{bytes} B";
+        }
+        var units = new[] { "KB", "MB", "GB", "TB" };
+        double value = bytes;
+        var index = -1;
+        do
+        {
+            value /= 1024;
+            index++;
+        } while (value >= 1024 && index < units.Length - 1);
+        return $"{value:0.##} {units[index]}";
+    }
+
+    private string? FindStaging(string version, GameServerType? serverType = null, string? sourceVersion = null)
     {
         var staging = Path.Combine(_appDataDir, "predownload", version);
-        if (Directory.Exists(staging) && File.Exists(Path.Combine(staging, "predownload.json")))
+        var marker = Path.Combine(staging, "predownload.json");
+        if (!Directory.Exists(staging) || !File.Exists(marker))
         {
+            return null;
+        }
+        try
+        {
+            var meta = JsonSerializer.Deserialize(File.ReadAllText(marker), GameMetaJsonContext.Default.PreDownloadMeta);
+            if (meta is null
+                || !meta.Completed
+                || string.IsNullOrWhiteSpace(meta.PatchIndexUrl)
+                || string.IsNullOrWhiteSpace(meta.DownloadBaseUrl)
+                || !string.Equals(meta.Version, version, StringComparison.OrdinalIgnoreCase)
+                || (serverType is not null && meta.ServerType != serverType.Value)
+                || (sourceVersion is not null
+                    && !string.Equals(meta.SourceVersion, sourceVersion, StringComparison.OrdinalIgnoreCase)))
+            {
+                return null;
+            }
             return staging;
         }
-        return null;
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "读取预载标记失败: {Path}", marker);
+            return null;
+        }
+    }
+
+    private static async Task<PreDownloadMeta?> ReadPreDownloadMetaAsync(string staging, CancellationToken ct)
+    {
+        var marker = Path.Combine(staging, "predownload.json");
+        if (!File.Exists(marker))
+        {
+            return null;
+        }
+        try
+        {
+            await using var stream = File.OpenRead(marker);
+            return await JsonSerializer.DeserializeAsync(
+                stream,
+                GameMetaJsonContext.Default.PreDownloadMeta,
+                ct).ConfigureAwait(false);
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            return null;
+        }
     }
 
     private string? ReadInstalledVersion(string gameRoot)
@@ -877,8 +1154,14 @@ public sealed class GameUpdater : IGameUpdater
 public sealed class PreDownloadMeta
 {
     [JsonPropertyName("version")] public string Version { get; set; } = "";
+    [JsonPropertyName("sourceVersion")] public string? SourceVersion { get; set; }
     [JsonPropertyName("serverType")] public GameServerType ServerType { get; set; }
     [JsonPropertyName("time")] public DateTime Time { get; set; } = DateTime.Now;
+    [JsonPropertyName("completed")] public bool Completed { get; set; }
+    [JsonPropertyName("patchIndexUrl")] public string? PatchIndexUrl { get; set; }
+    [JsonPropertyName("indexFileMd5")] public string? IndexFileMd5 { get; set; }
+    [JsonPropertyName("baseUrl")] public string? BaseUrl { get; set; }
+    [JsonPropertyName("downloadBaseUrl")] public string? DownloadBaseUrl { get; set; }
 }
 
 [JsonSerializable(typeof(PreDownloadMeta))]

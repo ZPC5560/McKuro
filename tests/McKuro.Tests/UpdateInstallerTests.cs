@@ -111,6 +111,34 @@ public class UpdateInstallerTests : IDisposable
     }
 
     [Fact]
+    public void ComputeDiff_RejectsPathTraversal()
+    {
+        var manifest = new GameManifest
+        {
+            Version = "1.0",
+            Files = [Entry("../outside.bin", "hello")],
+        };
+
+        Assert.Throws<InvalidDataException>(() =>
+            new UpdateInstaller().ComputeDiff(manifest, _gameDir));
+    }
+
+    [Fact]
+    public void ComputeDiff_Cancelled_Throws()
+    {
+        var manifest = new GameManifest
+        {
+            Version = "1.0",
+            Files = [Entry("Client/Data/a.bin", "hello")],
+        };
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            new UpdateInstaller().ComputeDiff(manifest, _gameDir, ct: cts.Token));
+    }
+
+    [Fact]
     public void InstallFromStaging_MovesFilesAndVerifies()
     {
         var manifest = new GameManifest

@@ -44,21 +44,34 @@ public class GachaRecordStoreTests : IDisposable
         };
 
     [Fact]
-    public void Upsert_Deduplicates()
+    public void Insert_KeepsAllRecords()
     {
         var a = Make("SSR", "2024-01-01 10:00:00");
-        var b = Make("SSR", "2024-01-01 10:00:00"); // 完全重复
+        var b = Make("SSR", "2024-01-01 10:00:00"); // 同秒同角色:10连两次出金均保留
 
-        _store.UpsertRecords("p1", [a, b]);
+        _store.InsertRecords("p1", [a, b]);
         var records = _store.GetRecords("p1");
-        Assert.Single(records);
+        Assert.Equal(2, records.Count);
     }
 
     [Fact]
-    public void Upsert_KeepsDistinctTimes()
+    public void DeletePlayerPool_ClearsOnlyThatPool()
     {
-        _store.UpsertRecords("p1", [Make("SSR", "2024-01-01 10:00:00")]);
-        _store.UpsertRecords("p1", [Make("SSR", "2024-01-02 10:00:00")]);
+        _store.InsertRecords("p1",
+        [
+            Make("SSR", "2024-01-01 10:00:00", pool: 1),
+            Make("SSR", "2024-01-01 10:00:00", pool: 2),
+        ]);
+        _store.DeletePlayerPool("p1", CardPoolType.RoleActivity);
+        Assert.Empty(_store.GetRecords("p1", CardPoolType.RoleActivity));
+        Assert.Single(_store.GetRecords("p1", CardPoolType.WeaponsActivity));
+    }
+
+    [Fact]
+    public void Insert_KeepsDistinctTimes()
+    {
+        _store.InsertRecords("p1", [Make("SSR", "2024-01-01 10:00:00")]);
+        _store.InsertRecords("p1", [Make("SSR", "2024-01-02 10:00:00")]);
 
         Assert.Equal(2, _store.GetRecords("p1").Count);
     }
@@ -66,7 +79,7 @@ public class GachaRecordStoreTests : IDisposable
     [Fact]
     public void GetRecords_FiltersByPool()
     {
-        _store.UpsertRecords("p1",
+        _store.InsertRecords("p1",
         [
             Make("R1", "2024-01-01 10:00:00", pool: 1),
             Make("R2", "2024-01-02 10:00:00", pool: 2),
@@ -80,8 +93,8 @@ public class GachaRecordStoreTests : IDisposable
     [Fact]
     public void GetAllPlayerIds_And_Delete()
     {
-        _store.UpsertRecords("p1", [Make("SSR", "2024-01-01 10:00:00")]);
-        _store.UpsertRecords("p2", [Make("SSR", "2024-01-01 10:00:00")]);
+        _store.InsertRecords("p1", [Make("SSR", "2024-01-01 10:00:00")]);
+        _store.InsertRecords("p2", [Make("SSR", "2024-01-01 10:00:00")]);
 
         var ids = _store.GetAllPlayerIds();
         Assert.Equal(2, ids.Count);

@@ -24,10 +24,9 @@ namespace McKuro.Controls;
 /// 不创建任何 native 子窗口 —— 托管 Image 参与正常 ZIndex 层叠,视频在背景层、UI 在上层,两者同时可见。
 /// </para>
 /// <para>
-/// 线程模型:mpv 的 update 回调跑在 mpv 内部线程,这里只把它 <see cref="Dispatcher.UIThread.Post"/> 到 UI 线程,
-/// 所有 <see cref="MpvContextBase.SoftwareRender"/> 与资源释放都串行在 UI 线程,天然规避 LibVLC vmem 那类
-/// 跨线程缓冲生命周期崩溃。每个播放器是独立 <see cref="MpvContext"/>,Dispose 时内部会
-/// StopRendering + TerminateDestroy,旧播放器不会触碰新播放器的缓冲。
+/// 线程模型:mpv 的 update 回调只唤醒专用视频线程,视频线程固定频率执行 LoadFile、解码和
+/// <see cref="MpvContextBase.SoftwareRender"/>;UI 线程只负责把最新帧拷贝到位图。资源释放会先等待视频线程退出,
+/// 再销毁 <see cref="MpvContext"/>,避免跨线程访问 native render context。
 /// </para>
 /// <para>
 /// Native AOT 安全:libmpv 绑定走 LoadLibrary/dlopen + GetProcAddress/dlsym →
@@ -51,16 +50,13 @@ public sealed class VideoBackgroundControl : Grid
     private AsyncImage? _fallback;
     private bool _initialized;
     private bool _attached;
-    private bool _disposed;
+    private volatile bool _disposed;
 
-    // 软件渲染帧状态。更新回调线程只置标志并用信号唤醒后台渲染线程,
-    // 实际 SoftwareRender 在独立渲染线程执行(解码/渲染不阻塞 UI),UI 线程只做缓冲拷贝。
-    private int _framePending;
-
-    // 后台渲染线程:等待帧信号 → SoftwareRender 写入 pin 缓冲 → 通知 UI 拷贝。
+    // mpv 的更新回调只负责唤醒视频线程。视频线程自身按固定帧率驱动渲染，
+    // 不依赖回调次数，避免回调与取标志并发时丢信号导致播放停在首秒。
     private Thread? _renderThread;
-    private readonly SemaphoreSlim _frameSignal = new(0);
-    private readonly SemaphoreSlim _frameRendered = new(0);
+    private readonly AutoResetEvent _frameSignal = new(false);
+    private string? _pendingVideoPath;
     private byte[]? _renderBuffer;
     private GCHandle _bufferHandle;
     private IntPtr _bufferPtr;
@@ -198,22 +194,17 @@ public sealed class VideoBackgroundControl : Grid
             };
             _mpv.RequestLogMessages("warn");
 
-            // 软件渲染:update 回调在 mpv 线程,只合并标志并唤醒后台渲染线程(解码/渲染不阻塞 UI)
+            // mpv 更新回调来自 native 线程，只唤醒专用视频线程；不在回调里做 UI 或渲染。
             _mpv.StartSoftwareRendering(() =>
             {
-                if (_disposed)
-                {
-                    return;
-                }
-                if (Interlocked.Exchange(ref _framePending, 1) == 0)
+                if (!_disposed)
                 {
                     try
                     {
-                        _frameSignal.Release();
+                        _frameSignal.Set();
                     }
-                    catch (SemaphoreFullException)
+                    catch (ObjectDisposedException)
                     {
-                        // 已排队,忽略
                     }
                 }
             });
@@ -268,23 +259,12 @@ public sealed class VideoBackgroundControl : Grid
                 return;
             }
 
-            // 回 UI 线程 LoadFile 本地路径 → 自动播放(loop-file=inf 循环)
-            Dispatcher.UIThread.Post(() =>
+            // 把 LoadFile 排队到专用视频线程，UI 线程只负责控件和位图更新。
+            lock (_sync)
             {
-                if (_disposed || _mpv is null)
-                {
-                    return;
-                }
-                try
-                {
-                    _mpv.LoadFile(localPath).Invoke();
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[libmpv] 本地播放失败: {ex.Message}");
-                    ShowFallback();
-                }
-            });
+                _pendingVideoPath = localPath;
+            }
+            _frameSignal.Set();
         }
         catch (OperationCanceledException)
         {
@@ -389,9 +369,9 @@ public sealed class VideoBackgroundControl : Grid
         _renderThreadRunning = false;
         try
         {
-            _frameSignal.Release();
+            _frameSignal.Set();
         }
-        catch (SemaphoreFullException)
+        catch (ObjectDisposedException)
         {
         }
         if (_renderThread is { IsAlive: true })
@@ -404,45 +384,64 @@ public sealed class VideoBackgroundControl : Grid
         }
         _renderThread = null;
         ReleaseRenderBuffer();
-        _framePending = 0;
+        lock (_sync)
+        {
+            _pendingVideoPath = null;
+        }
         _uiFramePending = false;
     }
 
-    /// <summary>渲染循环:等待帧信号 → SoftwareRender 到 pin 缓冲 → 通知 UI 拷贝。</summary>
+    /// <summary>
+    /// 专用视频线程:定时处理 LoadFile 并持续调用 SoftwareRender。
+    /// mpv 回调只负责唤醒线程，回调丢失也不会让播放停住；UI 线程只接收最新帧。
+    /// </summary>
     private void RenderLoop()
     {
-        var lastRender = DateTime.UtcNow;
         while (_renderThreadRunning)
         {
             try
             {
-                _frameSignal.Wait();
+                // 即使 mpv 没有发 update 回调，也每 33ms 驱动一次，避免首秒后停帧。
+                _frameSignal.WaitOne(33);
             }
-            catch
-            {
-                break;
-            }
-            if (!_renderThreadRunning || _disposed || _mpv is null)
+            catch (ObjectDisposedException)
             {
                 break;
             }
 
-            Interlocked.Exchange(ref _framePending, 0);
-            // 30fps 节流:UI 忙叠加导致帧信号堆积时跳过本次,避免 CPU 满负荷软解
-            var now = DateTime.UtcNow;
-            if ((now - lastRender).TotalMilliseconds < 33)
+            if (!_renderThreadRunning || _disposed)
             {
-                continue;
+                break;
             }
-            lastRender = now;
+
             try
             {
-                if (!_sizeResolved)
+                string? path = null;
+                lock (_sync)
                 {
-                    if (!TryResolveVideoSize())
+                    if (_pendingVideoPath is not null)
                     {
-                        continue;
+                        path = _pendingVideoPath;
+                        _pendingVideoPath = null;
                     }
+                }
+
+                if (path is not null && _mpv is not null)
+                {
+                    // 播放控制与 mpv 渲染都在同一个视频线程，避免 UI Dispatcher 介入。
+                    _mpv.LoadFile(path).Invoke();
+                    _sizeResolved = false;
+                    _firstFrameShown = false;
+                }
+
+                if (_mpv is null)
+                {
+                    continue;
+                }
+
+                if (!_sizeResolved && !TryResolveVideoSize())
+                {
+                    continue;
                 }
                 if (_videoWidth <= 0 || _videoHeight <= 0)
                 {
@@ -458,12 +457,11 @@ public sealed class VideoBackgroundControl : Grid
                     EnsureRenderBuffer(_videoWidth, _videoHeight);
                     if (_bufferPtr != IntPtr.Zero)
                     {
-                        // 在独立线程调用 mpv SoftwareRender(解码/渲染不占 UI)
                         _mpv.SoftwareRender(_videoWidth, _videoHeight, _bufferPtr, "bgra");
                     }
                 }
 
-                // 通知 UI 线程将缓冲拷贝到位图(纯 memcpy,~1ms)
+                // 只排一个 UI 拷贝任务；任务执行时会复制当前最新帧。
                 if (!_uiFramePending)
                 {
                     _uiFramePending = true;
@@ -472,7 +470,7 @@ public sealed class VideoBackgroundControl : Grid
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"libmpv 渲染帧失败: {ex.Message}");
+                Debug.WriteLine($"libmpv 播放/渲染帧失败: {ex.Message}");
             }
         }
     }

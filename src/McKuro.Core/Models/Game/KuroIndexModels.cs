@@ -31,12 +31,22 @@ public sealed class KuroUpdateData
 
     [JsonPropertyName("config")] public KuroConfig? Config { get; set; }
 
-    /// <summary>resource.json 的完整下载地址(取 ping 最小的 CDN)。</summary>
+    /// <summary>resource.json 的完整下载地址(按官方 P 优先级选择 CDN)。</summary>
     [JsonIgnore]
-    public string? ResourceJsonUrl =>
-        CdnList is { Count: > 0 } && !string.IsNullOrEmpty(Resources)
-            ? CdnList[0].Url + Resources
-            : null;
+    public string? ResourceJsonUrl
+    {
+        get
+        {
+            var cdn = CdnList?
+                .Where(c => !string.IsNullOrWhiteSpace(c.Url) && c.P != 0)
+                .OrderBy(c => c.P)
+                .FirstOrDefault()
+                ?? CdnList?.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.Url));
+            return cdn is not null && !string.IsNullOrEmpty(Resources)
+                ? cdn.Url.TrimEnd('/') + "/" + Resources.TrimStart('/')
+                : null;
+        }
+    }
 }
 
 public sealed class KuroCdnData
@@ -46,6 +56,9 @@ public sealed class KuroCdnData
     [JsonPropertyName("ping")] public int Ping { get; set; }
 
     [JsonPropertyName("priority")] public int Priority { get; set; }
+
+    // 库洛启动器当前协议使用大写 P 作为 CDN 优先级。
+    [JsonPropertyName("P")] public int P { get; set; }
 }
 
 public sealed class KuroConfig
@@ -112,6 +125,10 @@ public sealed class KuroChunkInfo
     [JsonPropertyName("md5")] public string? Md5 { get; set; }
     [JsonPropertyName("size")] public long? Size { get; set; }
     [JsonPropertyName("offset")] public long? Offset { get; set; }
+
+    // Haiyu indexFile 使用 start/end;部分旧清单使用 offset/size,两种格式都兼容。
+    [JsonPropertyName("start")] public long? Start { get; set; }
+    [JsonPropertyName("end")] public long? End { get; set; }
 }
 
 // ---- 官方补丁清单(indexFile.json,参考 Haiyu PatchIndexGameResource) ----
@@ -135,6 +152,14 @@ public sealed class KuroPatchIndex
 public sealed class KuroPatchFile
 {
     [JsonPropertyName("dest")] public string? Dest { get; set; }
+
+    [JsonPropertyName("md5")] public string? Md5 { get; set; }
+
+    [JsonPropertyName("size")] public long? Size { get; set; }
+
+    [JsonPropertyName("chunkInfos")] public List<KuroChunkInfo>? ChunkInfos { get; set; }
+
+    [JsonPropertyName("fromFolder")] public string? FromFolder { get; set; }
 
     [JsonPropertyName("entries")] public List<KuroPatchEntry>? Entries { get; set; }
 }
@@ -168,6 +193,14 @@ public sealed class KuroPatchGroup
 public sealed class KuroPatchZip
 {
     [JsonPropertyName("dest")] public string? Dest { get; set; }
+
+    [JsonPropertyName("md5")] public string? Md5 { get; set; }
+
+    [JsonPropertyName("size")] public long? Size { get; set; }
+
+    [JsonPropertyName("chunkInfos")] public List<KuroChunkInfo>? ChunkInfos { get; set; }
+
+    [JsonPropertyName("fromFolder")] public string? FromFolder { get; set; }
 
     [JsonPropertyName("entries")] public List<KuroPatchEntry>? Entries { get; set; }
 }

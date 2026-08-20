@@ -75,47 +75,39 @@ public sealed class DownloadEngine
         using var semaphore = new SemaphoreSlim(_maxConcurrency);
         var tasks = new List<Task>();
         long totalBytes = files.Sum(f => f.Size);
-        long completedBytes = 0;
-        long downloadedBytes = 0;   // 数据流中真实下载字节(含断点续传期间新读字节)
+        long downloadedBytes = 0;
+        long transferredBytes = 0;
+        var completedFiles = 0;
         var byteLock = new object();
         long lastReport = 0;
 
-        // 每个并发文件把"本次新下载字节"累加到全局,供速率计实时采样(而非文件完成时跳变)
-        IProgress<int>? byteProgress = null;
-        if (progress is not null)
+        void ReportProgress(string currentFile, bool force = false)
         {
-            byteProgress = new Progress<int>(bytes =>
+            if (progress is null)
             {
-                lock (byteLock)
-                {
-                    downloadedBytes += bytes;
-                    if (downloadedBytes < 0)
-                    {
-                        downloadedBytes = 0;
-                    }
-                    speedMeter.Add(downloadedBytes);
+                return;
+            }
 
-                    // 数据流级节流报告:大文件下载期间无文件完成,也要实时刷新网速/进度
-                    var now = sw.ElapsedMilliseconds;
-                    if (now - lastReport < 200)
-                    {
-                        return;
-                    }
-                    lastReport = now;
-                    var done = Math.Min(completedBytes, totalBytes);
-                    var filesDone = Math.Min(files.Count,
-                        (int)(done / Math.Max(totalBytes, 1) * files.Count) + 1);
-                    progress.Report(new DownloadProgress
-                    {
-                        CurrentFile = "正在下载…",
-                        FileIndex = filesDone,
-                        FileTotal = files.Count,
-                        BytesDownloaded = done,
-                        BytesTotal = totalBytes,
-                        SpeedBps = speedMeter.BytesPerSecond,
-                    });
+            DownloadProgress? update = null;
+            lock (byteLock)
+            {
+                var now = sw.ElapsedMilliseconds;
+                if (!force && now - lastReport < 200)
+                {
+                    return;
                 }
-            });
+                lastReport = now;
+                update = new DownloadProgress
+                {
+                    CurrentFile = currentFile,
+                    FileIndex = completedFiles,
+                    FileTotal = files.Count,
+                    BytesDownloaded = Math.Min(downloadedBytes, totalBytes),
+                    BytesTotal = totalBytes,
+                    SpeedBps = speedMeter.BytesPerSecond,
+                };
+            }
+            progress.Report(update);
         }
 
         var downloader = new FileDownloader(_http);
@@ -128,7 +120,22 @@ public sealed class DownloadEngine
                 await semaphore.WaitAsync(ct).ConfigureAwait(false);
                 try
                 {
-                    var destPath = Path.Combine(destDir, entry.Path.Replace('/', Path.DirectorySeparatorChar));
+                    var destPath = GameFilePath.CombineUnderRoot(destDir, entry.Path);
+                    long fileDownloadedBytes = 0;
+                    IProgress<int>? byteProgress = progress is null
+                        ? null
+                        : new InlineProgress<int>(bytes =>
+                        {
+                            lock (byteLock)
+                            {
+                                fileDownloadedBytes += bytes;
+                                downloadedBytes += bytes;
+                                transferredBytes += bytes;
+                                speedMeter.Add(transferredBytes);
+                            }
+                            ReportProgress(entry.Path);
+                        });
+
                     var result = await downloader.DownloadAsync(
                         entry,
                         baseUrl,
@@ -139,9 +146,14 @@ public sealed class DownloadEngine
                         pauseToken: _pauseToken).ConfigureAwait(false);
                     lock (byteLock)
                     {
-                        completedBytes += entry.Size;
                         if (result.Success)
                         {
+                            // 对已存在、已校验或由 .part 续传跳过的字节补齐进度。
+                            var remaining = entry.Size > fileDownloadedBytes
+                                ? entry.Size - fileDownloadedBytes
+                                : 0;
+                            downloadedBytes += remaining;
+                            completedFiles++;
                             success++;
                         }
                         else
@@ -149,24 +161,7 @@ public sealed class DownloadEngine
                             failures.Add($"{entry.Path}: {result.Error}");
                         }
                     }
-
-                    // 节流:至少 200ms 报告一次,避免高频刷新 UI
-                    var now = sw.ElapsedMilliseconds;
-                    if (now - lastReport < 200)
-                    {
-                        return;
-                    }
-                    lastReport = now;
-
-                    progress?.Report(new DownloadProgress
-                    {
-                        CurrentFile = entry.Path,
-                        FileIndex = index + 1,
-                        FileTotal = files.Count,
-                        BytesDownloaded = Math.Min(completedBytes, totalBytes),
-                        BytesTotal = totalBytes,
-                        SpeedBps = speedMeter.BytesPerSecond,
-                    });
+                    ReportProgress(entry.Path);
                 }
                 finally
                 {
@@ -177,15 +172,12 @@ public sealed class DownloadEngine
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
         // 最后补一次最终进度报告
-        progress?.Report(new DownloadProgress
-        {
-            CurrentFile = files.Count > 0 ? files[^1].Path : "",
-            FileIndex = files.Count,
-            FileTotal = files.Count,
-            BytesDownloaded = completedBytes,
-            BytesTotal = totalBytes,
-            SpeedBps = speedMeter.BytesPerSecond,
-        });
+        ReportProgress(files.Count > 0 ? files[^1].Path : "", force: true);
         return (success, failures);
+    }
+
+    private sealed class InlineProgress<T>(Action<T> callback) : IProgress<T>
+    {
+        public void Report(T value) => callback(value);
     }
 }
