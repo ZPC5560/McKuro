@@ -8,14 +8,14 @@ public sealed class GachaPullEntry
     /// <summary>该条记录在当前卡池中的抽卡序号(1 起)。</summary>
     public int Index { get; init; }
 
-    /// <summary>若该条是五星,则为含本次五星的间隔抽数,否则为空。</summary>
+    /// <summary>若该条是五星,则为该五星的垫抽数(不含本次,即距离上一个五星的普通抽数)。</summary>
     public int? Pity { get; init; }
 
     /// <summary>该条之前是否已经出现过五星。</summary>
     public bool HasPreviousFiveStar { get; init; }
 
     /// <summary>若该条是五星且之前已有五星,则为两个五星之间的普通抽数。</summary>
-    public int? FiveStarGap => HasPreviousFiveStar && Pity.HasValue ? Pity.Value - 1 : null;
+    public int? FiveStarGap => HasPreviousFiveStar && Pity.HasValue ? Pity.Value : null;
 
     /// <summary>是否歪了(false=UP,true=歪,null=无法判定)。</summary>
     public bool? IsOffBanner { get; init; }
@@ -41,14 +41,17 @@ public sealed class FiveStarEntry
 {
     public required GachaRecord Record { get; init; }
 
-    /// <summary>抽到该五星时的垫抽数(距离上一个五星的抽数)。</summary>
+    /// <summary>该五星的垫抽数(不含本次,即距离上一个五星的普通抽数;与 Haiyu FormatStartFive 一致)。</summary>
     public int Pity { get; init; }
+
+    /// <summary>进度条显示值(封顶 80,避免超保底数据撑破进度条)。</summary>
+    public int PityBarValue => Math.Min(Pity, 80);
 
     /// <summary>是否歪了(false=UP,true=歪,null=无法判定)。</summary>
     public bool? IsOffBanner { get; init; }
 
-    /// <summary>含本次五星的间隔抽数减一,即两个五星之间的普通抽数。</summary>
-    public int FiveStarGap => Math.Max(0, Pity - 1);
+    /// <summary>两个五星之间的普通抽数(与 Pity 相同,不含本次)。</summary>
+    public int FiveStarGap => Math.Max(0, Pity);
 
     public string FiveStarGapText => Index > 1 ? $"间隔 {FiveStarGap} 抽" : "首次五星";
 
@@ -86,9 +89,9 @@ public sealed class PoolStats
     /// <summary>用于界面显示的最近一次 UP 垫抽文本。</summary>
     public string CurrentUpPityText => UpCount > 0 ? $"UP 后垫抽: {CurrentUpPity} 抽" : "UP 后垫抽: -";
 
-    /// <summary>距上次五星的平均抽数(若至少有 1 个五星)。</summary>
+    /// <summary>距上次五星的平均抽数(含本次,与 Haiyu FormatRecordFive 一致;若至少有 1 个五星)。</summary>
     public double? AveragePity => FiveStarEntries.Count > 0
-        ? FiveStarEntries.Average(x => x.Pity)
+        ? FiveStarEntries.Average(x => x.Pity + 1)
         : null;
 
     /// <summary>小保底歪率(0~1,无法判定时为 null)。</summary>

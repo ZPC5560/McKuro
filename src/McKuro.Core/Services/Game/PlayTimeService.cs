@@ -46,14 +46,8 @@ public sealed class PlayTimeAnalysis
     public long[,] Last7DaysHourlyMinutes { get; set; } = new long[7, 24];
     /// <summary>最近 7 天的日期(索引对齐 Last7DaysSeconds)。</summary>
     public string[] Last7DaysDates { get; set; } = new string[7];
-    /// <summary>最近 7 天每天最早开始游玩时间(时:分,无记录为空)。</summary>
-    public string[] Last7DaysStartTime { get; set; } = new string[7];
-    /// <summary>最近 7 天每天最晚结束游玩时间(时:分,无记录为空)。</summary>
-    public string[] Last7DaysEndTime { get; set; } = new string[7];
     /// <summary>最近 7 天每天每次游玩的独立时段(索引对齐 Last7DaysSeconds)。</summary>
     public List<PlayTimeSession>[] Last7DaysSessions { get; set; } = new List<PlayTimeSession>[7];
-    /// <summary>最近 7 天游玩时间范围报告(参考睡眠检测:合并相邻会话为时段)。</summary>
-    public string WeeklyReportText { get; set; } = "";
 }
 
 /// <summary>
@@ -69,6 +63,9 @@ public sealed class PlayTimeService
 
     private static readonly Regex PlayerIdRegex = new(
         @"SetUserId\s*\[playerId:\s*(\d+)", RegexOptions.Compiled);
+
+    /// <summary>连续日志活动间隔超过该分钟数即判定为空闲,结束当前游玩会话,避免把菜单/挂机/两次非连续游玩之间的空闲计入时长。</summary>
+    internal const int IdleMinutes = 60;
 
     private readonly GamePathResolver _paths;
     private readonly AppDatabase _db;
@@ -122,15 +119,23 @@ public sealed class PlayTimeService
         return records.Count;
     }
 
-    /// <summary>从解密后的日志文本提取游玩会话(每次会话 = 从账号登录到日志末尾/下次登录)。</summary>
+    /// <summary>从解密后的日志文本提取游玩会话。</summary>
+    /// <remarks>
+    /// 会话边界规则:
+    /// <list type="bullet">
+    ///   <item>新账号登录(<c>SetUserId [playerId:…]</c>)结算上一会话(到当前登录时刻)。</item>
+    ///   <item>连续日志活动间隔超过 <see cref="IdleMinutes"/> 分钟判定为空闲,结算上一会话(到最后一次活动时刻),
+    ///         从而把挂机/菜单/两次非连续游玩之间的空闲排除在游玩时长之外。</item>
+    /// </list>
+    /// </remarks>
     public static List<PlayTimeRecord> ParseSessions(string plainText)
     {
         var sessions = new List<PlayTimeRecord>();
         using var reader = new StringReader(plainText);
 
-        string? currentRole = "";
+        string currentRole = "";
         DateTime? sessionStart = null;
-        DateTime? sessionEnd = null;
+        DateTime? lastSeen = null;
 
         string? line;
         while ((line = reader.ReadLine()) is not null)
@@ -142,16 +147,27 @@ public sealed class PlayTimeService
             }
 
             var playerMatch = PlayerIdRegex.Match(line);
-            if (playerMatch.Success)
+            var isLogin = playerMatch.Success;
+
+            // 已有进行中的会话:遇到新账号登录,或日志活动出现长时间空闲,都应先结算当前会话。
+            if (sessionStart is not null && lastSeen is not null)
             {
-                // 新账号登录:结算上一个会话(到当前登录时刻)
-                if (sessionStart is not null && sessionEnd is not null)
+                var idleGap = (ts.Value - lastSeen.Value).TotalMinutes > IdleMinutes;
+                if (isLogin || idleGap)
                 {
-                    AddSession(sessions, currentRole, sessionStart.Value, ts.Value);
+                    // 登录切换结算到"登录时刻";空闲切分结算到"最后一次活动时刻",避免把空闲计入游玩。
+                    var closeAt = isLogin ? ts.Value : lastSeen.Value;
+                    AddSession(sessions, currentRole, sessionStart.Value, closeAt);
+                    sessionStart = null;
+                    lastSeen = null;
                 }
+            }
+
+            if (isLogin)
+            {
                 currentRole = playerMatch.Groups[1].Value;
                 sessionStart = ts.Value;
-                sessionEnd = ts.Value;
+                lastSeen = ts.Value;
             }
             else
             {
@@ -159,13 +175,13 @@ public sealed class PlayTimeService
                 {
                     sessionStart = ts.Value;
                 }
-                sessionEnd = ts.Value;
+                lastSeen = ts.Value;
             }
         }
 
-        if (sessionStart is not null && sessionEnd is not null)
+        if (sessionStart is not null && lastSeen is not null)
         {
-            AddSession(sessions, currentRole, sessionStart.Value, sessionEnd.Value);
+            AddSession(sessions, currentRole, sessionStart.Value, lastSeen.Value);
         }
         return sessions;
     }
@@ -235,8 +251,12 @@ public sealed class PlayTimeService
                 cmd.Transaction = tx;
                 cmd.CommandText =
                     """
-                    INSERT OR IGNORE INTO game_time (role_id, game_date, start_time, end_time, duration_sec)
-                    VALUES ($role, $date, $start, $end, $dur)
+                    INSERT INTO game_time (role_id, game_date, start_time, end_time, duration_sec)
+                    SELECT $role, $date, $start, $end, $dur
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM game_time
+                        WHERE role_id=$role AND game_date=$date AND start_time=$start AND end_time=$end
+                    )
                     """;
                 cmd.Parameters.AddWithValue("$role", r.RoleId);
                 cmd.Parameters.AddWithValue("$date", r.GameDate);
@@ -261,22 +281,31 @@ public sealed class PlayTimeService
 
         try
         {
-            var rows = new List<PlayTimeRecord>();
+            // 按会话起点(role+date+start)聚合:历史版本因反复解析可能累积重复行,或游戏运行时
+            // 同一进行中会话的结束时间每次解析都不同。这里按会话身份去重并保留"最完整"的一条(时长最大),
+            // 避免把同一次游玩重复计入总时长。
+            var bySession = new Dictionary<string, PlayTimeRecord>(StringComparer.Ordinal);
             using (var cmd = _db.Connection.CreateCommand())
             {
                 cmd.CommandText = "SELECT role_id, game_date, start_time, end_time, duration_sec FROM game_time";
                 using var reader = cmd.ExecuteReader();
                 while (reader.Read())
                 {
-                    rows.Add(new PlayTimeRecord
+                    var role = reader.IsDBNull(0) ? "" : reader.GetString(0);
+                    var date = reader.IsDBNull(1) ? "" : reader.GetString(1);
+                    var startStr = reader.IsDBNull(2) ? "" : reader.GetString(2);
+                    var endStr = reader.IsDBNull(3) ? "" : reader.GetString(3);
+                    var start = DateTime.TryParse(startStr, out var s) ? s : DateTime.MinValue;
+                    var end = DateTime.TryParse(endStr, out var e) ? e : DateTime.MinValue;
+                    var rec = new PlayTimeRecord { RoleId = role, GameDate = date, StartTime = start, EndTime = end };
+                    var key = $"{role}|{date}|{startStr}";
+                    if (!bySession.TryGetValue(key, out var existing) || rec.DurationSec > existing.DurationSec)
                     {
-                        RoleId = reader.IsDBNull(0) ? "" : reader.GetString(0),
-                        GameDate = reader.IsDBNull(1) ? "" : reader.GetString(1),
-                        StartTime = DateTime.TryParse(reader.IsDBNull(2) ? "" : reader.GetString(2), out var s) ? s : DateTime.MinValue,
-                        EndTime = DateTime.TryParse(reader.IsDBNull(3) ? "" : reader.GetString(3), out var e) ? e : DateTime.MinValue,
-                    });
+                        bySession[key] = rec;
+                    }
                 }
             }
+            var rows = bySession.Values.ToList();
 
             // 总时长 + 记录天数
             analysis.TotalSeconds = rows.Sum(r => r.DurationSec);
@@ -312,15 +341,6 @@ public sealed class PlayTimeService
                     }
                 }
 
-                // 每天玩的时间范围:最早开始 ~ 最晚结束(仅取当天时间部分)
-                if (dayRows.Count > 0)
-                {
-                    var startMin = dayRows.Where(r => r.StartTime > DateTime.MinValue).Min(r => r.StartTime);
-                    var endMax = dayRows.Where(r => r.EndTime > DateTime.MinValue).Max(r => r.EndTime);
-                    analysis.Last7DaysStartTime[i] = startMin.ToString("HH:mm");
-                    analysis.Last7DaysEndTime[i] = endMax.ToString("HH:mm");
-                }
-
                 // 每次开始玩到结束的时间段独立统计(参考睡眠检测:相邻会话间隔≤60min 合并为同一时段)
                 var ordered = dayRows
                     .Where(r => r.StartTime > DateTime.MinValue && r.EndTime > r.StartTime)
@@ -328,8 +348,6 @@ public sealed class PlayTimeService
                     .ToList();
                 analysis.Last7DaysSessions[i] = MergeSessions(ordered);
             }
-
-            analysis.WeeklyReportText = BuildWeeklyReport(analysis);
         }
         catch (Exception ex)
         {
@@ -381,29 +399,5 @@ public sealed class PlayTimeService
             End = end.ToString("HH:mm"),
             Minutes = (long)(end - start).TotalMinutes,
         });
-    }
-
-    /// <summary>生成每周游玩时间范围报告(参考睡眠检测报告:列出每天时段 + 汇总)。</summary>
-    private static string BuildWeeklyReport(PlayTimeAnalysis analysis)
-    {
-        var lines = new List<string>();
-        var playedDays = 0;
-        for (int i = 0; i < 7; i++)
-        {
-            var sessions = analysis.Last7DaysSessions[i] ?? [];
-            if (sessions.Count == 0)
-            {
-                continue;
-            }
-            playedDays++;
-            var ranges = string.Join("、", sessions.Select(s => s.Display));
-            lines.Add($"{analysis.Last7DaysDates[i]}: {ranges}");
-        }
-        if (playedDays == 0)
-        {
-            return "最近 7 天暂无游玩记录";
-        }
-        var report = $"最近 7 天共 {playedDays} 天有游玩,每日时段如下:\n" + string.Join("\n", lines);
-        return report;
     }
 }

@@ -55,6 +55,29 @@ public class GachaRecordStoreTests : IDisposable
     }
 
     [Fact]
+    public void GetRecords_SameTimeBatch_ReturnsTruePullOrder()
+    {
+        // 官方接口按"新→旧"返回,入库 id 递增即新→旧;
+        // 读取按 time ASC, id DESC 还原真实抽取顺序(旧→新,5星位于批次末尾)。
+        var batch = new List<GachaRecord>
+        {
+            Make("SSR", "2024-01-01 10:00:00"), // API 第1条 = 最新抽(真实最后)
+            Make("A", "2024-01-01 10:00:00"),
+            Make("B", "2024-01-01 10:00:00"),
+            Make("C", "2024-01-01 10:00:00"),
+        };
+        _store.InsertRecords("p1", batch);
+
+        var records = _store.GetRecords("p1");
+        Assert.Equal(4, records.Count);
+        // 同秒内 id 倒序:后插入的(更早的抽取)在前,5星(最后抽取)在后
+        Assert.Equal("C", records[0].Name);
+        Assert.Equal("B", records[1].Name);
+        Assert.Equal("A", records[2].Name);
+        Assert.Equal("SSR", records[3].Name);
+    }
+
+    [Fact]
     public void DeletePlayerPool_ClearsOnlyThatPool()
     {
         _store.InsertRecords("p1",

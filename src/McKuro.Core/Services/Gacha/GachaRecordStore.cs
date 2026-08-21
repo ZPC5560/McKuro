@@ -82,7 +82,7 @@ public sealed class GachaRecordStore
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>读取某玩家的全部记录(按时间从旧到新)。</summary>
+    /// <summary>读取某玩家的全部记录(按时间从旧→新;同秒内按 id 倒序还原真实抽取顺序,因 API 按新→旧返回)。</summary>
     public List<GachaRecord> GetRecords(string playerId, CardPoolType? poolType = null)
     {
         var list = new List<GachaRecord>();
@@ -93,7 +93,7 @@ public sealed class GachaRecordStore
             FROM gacha_records
             WHERE player_id = $playerId
             """ + (poolType is null ? "" : " AND card_pool_type = $pool") +
-            " ORDER BY time ASC, id ASC";
+            " ORDER BY time ASC, id DESC";
         cmd.Parameters.AddWithValue("$playerId", playerId);
         if (poolType is not null)
         {
@@ -118,7 +118,7 @@ public sealed class GachaRecordStore
         return list;
     }
 
-    /// <summary>读取所有玩家的全部记录(按时间从旧到新)。</summary>
+    /// <summary>读取所有玩家的全部记录(按时间从旧→新;同秒内按 id 倒序还原真实抽取顺序)。</summary>
     public List<GachaRecord> GetAllRecords()
     {
         var list = new List<GachaRecord>();
@@ -127,7 +127,7 @@ public sealed class GachaRecordStore
             """
             SELECT player_id, card_pool_type, resource_id, quality_level, resource_type, name, count, time
             FROM gacha_records
-            ORDER BY time ASC, id ASC
+            ORDER BY time ASC, id DESC
             """;
 
         using var reader = cmd.ExecuteReader();

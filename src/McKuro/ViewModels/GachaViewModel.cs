@@ -106,6 +106,15 @@ public sealed partial class GachaViewModel : ViewModelBase
 
     public AvaloniaList<FiveStarEntry> FiveStarEntries { get; } = [];
 
+    /// <summary>最近一次五星之后已垫抽数大于 0 时,在五星列表顶部显示"已垫"行。</summary>
+    public bool ShowCurrentPityRow => SelectedPool is { CurrentPity: > 0 };
+
+    /// <summary>已垫行进度条值(封顶 80)。</summary>
+    public int CurrentPityBarValue => Math.Min(SelectedPool?.CurrentPity ?? 0, 80);
+
+    /// <summary>已垫行文本(出五星——无论是否歪——后刷新为角色行)。</summary>
+    public string CurrentPityRowText => $"已垫 {SelectedPool?.CurrentPity ?? 0} 抽";
+
     public AvaloniaList<GachaRecord> AllRecords { get; } = [];
 
     // ---- 视图切换(0=综合分析[默认] 1=统计卡片 2=详细分析 3=表格) ----
@@ -590,6 +599,10 @@ public sealed partial class GachaViewModel : ViewModelBase
         // 五星列表:从旧到新展示(最新的在最下)
         FiveStarEntries.Clear();
         FiveStarEntries.AddRange(pool.FiveStarEntries.Reverse());
+
+        OnPropertyChanged(nameof(ShowCurrentPityRow));
+        OnPropertyChanged(nameof(CurrentPityRowText));
+        OnPropertyChanged(nameof(CurrentPityBarValue));
 
         StarAvgValue = pool.FiveStarEntries.Count > 0
             ? Math.Round(pool.FiveStarEntries.Average(e => e.Pity), 1)

@@ -170,7 +170,7 @@ public sealed class GachaAnalysisService
                     currentUpPity++;
                 }
 
-                var pity = pityCount + 1; // 含本次出货的抽数
+                var pity = pityCount; // 不含本次五星的垫抽数(与 Haiyu FormatStartFive 一致)
                 entries.Add(new FiveStarEntry
                 {
                     Record = record,

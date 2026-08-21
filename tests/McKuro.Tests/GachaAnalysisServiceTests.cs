@@ -21,7 +21,7 @@ public class GachaAnalysisServiceTests
     [Fact]
     public void Analyze_ComputesPityAndCurrentPity()
     {
-        // 时间从旧到新:3 个非 5 星 → 5 星 (pity=4) → 2 个非 5 星 (当前垫 2)
+        // 时间从旧到新:3 个非 5 星 → 5 星 (pity=3,不含本次) → 2 个非 5 星 (当前垫 2)
         var records = new List<GachaRecord>
         {
             R(1, 101, 4, "A", "2024-01-01 10:00:00"),
@@ -37,9 +37,9 @@ public class GachaAnalysisServiceTests
         Assert.NotNull(pool);
         Assert.Equal(6, pool!.TotalPulls);
         Assert.Equal(1, pool.FiveStarCount);
-        Assert.Equal(4, pool.FiveStarEntries[0].Pity); // 含本次共 4 抽
+        Assert.Equal(3, pool.FiveStarEntries[0].Pity); // 不含本次,前 3 个普通抽
         Assert.Equal(2, pool.CurrentPity);              // 垫 2 抽
-        Assert.Equal(4.0, pool.AveragePity!.Value, 2);
+        Assert.Equal(4.0, pool.AveragePity!.Value, 2);  // 平均含本次 3+1
         Assert.Equal(6, result.TotalPulls);
         Assert.Equal(1, result.TotalFiveStars);
     }
@@ -92,7 +92,7 @@ public class GachaAnalysisServiceTests
 
         Assert.NotNull(pool);
         Assert.Equal(1, pool!.UpCount);
-        Assert.Equal(4, pool.FiveStarEntries[1].Pity);
+        Assert.Equal(3, pool.FiveStarEntries[1].Pity); // 不含本次:两个五星之间 3 个普通抽
         Assert.Equal(3, pool.FiveStarEntries[1].FiveStarGap);
         Assert.Equal("间隔 3 抽", pool.FiveStarEntries[1].FiveStarGapText);
         Assert.Equal(6, pool.CurrentUpPity);

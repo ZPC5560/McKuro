@@ -1,3 +1,4 @@
+using McKuro.Core.Infrastructure;
 using McKuro.Core.Services.Game;
 
 namespace McKuro.Tests;
@@ -91,5 +92,113 @@ public class PlayTimeServiceTests
         Assert.Equal(2, merged.Count);
         Assert.Equal("20:00", merged[0].Start);
         Assert.Equal("23:00", merged[1].Start);
+    }
+
+    [Fact]
+    public void ParseSessions_Splits_On_Idle_Gap_Over_60_Minutes()
+    {
+        // 21:00 → 22:30 空闲 90 分钟(>60),应切分为两个独立会话,空闲不计入时长。
+        string log = """
+            [2026.08.15-20.00.00:000] 开始
+            [2026.08.15-21.00.00:000] 结束
+            [2026.08.15-22.30.00:000] 再次开始
+            [2026.08.15-23.00.00:000] 再次结束
+            """;
+        var sessions = PlayTimeService.ParseSessions(log);
+        Assert.Equal(2, sessions.Count);
+        // 若不切分会把 20:00-23:00 整段(10800s)都算作游玩。
+        Assert.Equal(3600, sessions[0].DurationSec);
+        Assert.Equal(1800, sessions[1].DurationSec);
+        Assert.Equal(20, sessions[0].StartTime.Hour);
+        Assert.Equal(22, sessions[1].StartTime.Hour);
+    }
+
+    [Fact]
+    public void ParseSessions_Keeps_Short_Break_Within_One_Session()
+    {
+        // 21:00 → 21:30 间隔 30 分钟(≤60),视为同一次游玩,合并为一段。
+        string log = """
+            [2026.08.15-20.00.00:000] 开始
+            [2026.08.15-21.00.00:000] 结束
+            [2026.08.15-21.30.00:000] 继续
+            [2026.08.15-22.00.00:000] 结束
+            """;
+        var sessions = PlayTimeService.ParseSessions(log);
+        var s = Assert.Single(sessions);
+        Assert.Equal(7200, s.DurationSec); // 20:00-22:00
+    }
+
+    [Fact]
+    public void GetAnalysis_Deduplicates_Repeated_Insertions_From_Same_Session()
+    {
+        // 历史版本反复解析会重复写入同一行;聚合时应按会话键去重,避免时长翻倍。
+        var dir = Path.Combine(Path.GetTempPath(), "McKuro_pt_" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var db = new AppDatabase(dir);
+            var today = DateTime.Today.ToString("yyyy-MM-dd");
+            var start = $"{today} 12:00:00";
+            var end = $"{today} 14:00:00";
+            for (int i = 0; i < 3; i++)
+            {
+                using var cmd = db.Connection.CreateCommand();
+                cmd.CommandText =
+                    """
+                    INSERT INTO game_time (role_id, game_date, start_time, end_time, duration_sec)
+                    VALUES ('111', $date, $start, $end, 7200)
+                    """;
+                cmd.Parameters.AddWithValue("$date", today);
+                cmd.Parameters.AddWithValue("$start", start);
+                cmd.Parameters.AddWithValue("$end", end);
+                cmd.ExecuteNonQuery();
+            }
+
+            var service = new PlayTimeService(new GamePathResolver(() => null), db);
+            var analysis = service.GetAnalysis();
+
+            Assert.Equal(7200, analysis.TodaySeconds); // 仅计一次,而非 21600
+            Assert.Equal(7200, analysis.Last7DaysSeconds[6]); // 今天(窗口索引 6)
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch (Exception) { }
+        }
+    }
+
+    [Fact]
+    public void GetAnalysis_Keeps_Most_Complete_Record_When_Open_Session_Grows()
+    {
+        // 游戏运行时反复解析:同一个进行中会话的结束时间会随解析推进而变长,应保留"最完整"的一条而非重复累加。
+        var dir = Path.Combine(Path.GetTempPath(), "McKuro_pt_" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var db = new AppDatabase(dir);
+            var today = DateTime.Today.ToString("yyyy-MM-dd");
+            void Insert(string start, string end, int dur)
+            {
+                using var cmd = db.Connection.CreateCommand();
+                cmd.CommandText =
+                    """
+                    INSERT INTO game_time (role_id, game_date, start_time, end_time, duration_sec)
+                    VALUES ('111', $date, $start, $end, $dur)
+                    """;
+                cmd.Parameters.AddWithValue("$date", today);
+                cmd.Parameters.AddWithValue("$start", start);
+                cmd.Parameters.AddWithValue("$end", end);
+                cmd.Parameters.AddWithValue("$dur", dur);
+                cmd.ExecuteNonQuery();
+            }
+            Insert($"{today} 12:00:00", $"{today} 13:00:00", 3600);
+            Insert($"{today} 12:00:00", $"{today} 14:00:00", 7200);
+
+            var service = new PlayTimeService(new GamePathResolver(() => null), db);
+            var analysis = service.GetAnalysis();
+
+            Assert.Equal(7200, analysis.TodaySeconds); // 取最完整的一条,而非 3600+7200
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch (Exception) { }
+        }
     }
 }

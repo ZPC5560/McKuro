@@ -94,18 +94,51 @@
                                FontSize="12"
                                Foreground="{DynamicResource SemiColorText2}">
                         <Run Text="平均出货: " /><Run Text="{Binding StarAvgValue, StringFormat={}{0:0.#}}" /><Run Text=" 抽" />
-                        <Run Text="  ·  当前垫 " /><Run Text="{Binding SelectedPool.CurrentPity}" />
                         <Run Text="  ·  " /><Run Text="{Binding SelectedPool.CurrentUpPityText}" />
                     </TextBlock>
                     <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Hidden">
-                        <ItemsControl ItemsSource="{Binding FiveStarEntries}">
+                        <StackPanel>
+                            <!-- 已垫行:出五星(不论歪/UP)后刷新为角色行;列结构与角色行一致保持等长 -->
+                            <Border Margin="0,4"
+                                    Padding="10"
+                                    CornerRadius="8"
+                                    Background="{DynamicResource SemiColorBg3}"
+                                    IsVisible="{Binding ShowCurrentPityRow}">
+                                <Grid ColumnDefinitions="Auto,*,44" RowDefinitions="Auto,Auto">
+                                    <!-- 空图标占位(无图片),与角色行图标同列同宽 -->
+                                    <Border Grid.RowSpan="2"
+                                            Width="36" Height="36"
+                                            CornerRadius="6"
+                                            Background="{DynamicResource SemiColorBg2}" />
+                                    <StackPanel Grid.Column="1"
+                                                Margin="8,0,0,0"
+                                                Orientation="Horizontal"
+                                                Spacing="6"
+                                                VerticalAlignment="Center">
+                                        <TextBlock Text="已垫" FontSize="13" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding SelectedPool.CurrentPity}"
+                                                   FontSize="13"
+                                                   FontWeight="Bold"
+                                                   Foreground="{Binding SelectedPool.CurrentPity, Converter={x:Static vm:PityColorConverter.Instance}}" />
+                                    </StackPanel>
+                                    <!-- 进度条:列结构与角色行(*,56)一致,保持等长 -->
+                                    <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,56" Margin="8,2,0,0">
+                                        <ProgressBar Minimum="0" Maximum="80"
+                                                     Height="8"
+                                                     CornerRadius="4"
+                                                     Value="{Binding CurrentPityBarValue}"
+                                                     Foreground="{Binding SelectedPool.CurrentPity, Converter={x:Static vm:PityColorConverter.Instance}}" />
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                            <ItemsControl ItemsSource="{Binding FiveStarEntries}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="gacha:FiveStarEntry">
                                     <Border Margin="0,4"
                                             Padding="10"
                                             Background="{DynamicResource SemiColorBg3}"
                                             CornerRadius="8">
-                                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+                                        <Grid ColumnDefinitions="Auto,*,44" RowDefinitions="Auto,Auto">
                                             <Border Grid.RowSpan="2"
                                                     Width="36" Height="36"
                                                     CornerRadius="6"
@@ -133,23 +166,26 @@
                                                            HorizontalAlignment="Center"
                                                            Text="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagTextConverter.Instance}}" />
                                             </Border>
-                                            <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="8,2,0,0">
+                                            <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,56" Margin="8,2,0,0">
                                                 <ProgressBar Minimum="0" Maximum="80"
                                                              Height="8"
                                                              CornerRadius="4"
-                                                             Value="{Binding Pity}"
+                                                             Value="{Binding PityBarValue}"
                                                              Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}" />
                                                 <TextBlock Grid.Column="1"
                                                            Margin="6,0,0,0"
                                                            FontSize="11"
+                                                           FontWeight="Bold"
                                                            Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}"
-                                                           Text="{Binding Pity, StringFormat={}{0} 抽}" />
+                                                           ToolTip.Tip="{Binding FiveStarGapText}"
+                                                           Text="{Binding Pity}" />
                                             </Grid>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        </StackPanel>
                     </ScrollViewer>
                 </Grid>
             </Border>
@@ -420,7 +456,8 @@
                                                 <DataTemplate x:DataType="gacha:FiveStarEntry">
                                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                                         <TextBlock Text="{Binding Record.Name}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="130" />
-                                                        <TextBlock Text="{Binding Pity, StringFormat={}{0}抽}" FontSize="11" Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}" />
+                                                        <TextBlock Text="{Binding Pity, StringFormat={}{0}抽}" FontSize="11" Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}"
+                                                                    ToolTip.Tip="{Binding FiveStarGapText}" />
                                                         <Border CornerRadius="3" Padding="4,1"
                                                                 Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagConverter.Instance}}">
                                                             <TextBlock Text="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagTextConverter.Instance}}" FontSize="9" Foreground="White" />
@@ -449,7 +486,7 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="gacha:FiveStarEntry">
                                             <Border Margin="0,4" Padding="10" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
-                                                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+                                                <Grid ColumnDefinitions="Auto,*,100" RowDefinitions="Auto,Auto">
                                                     <Border Grid.RowSpan="2" Width="44" Height="44" CornerRadius="22" ClipToBounds="True"
                                                             Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagBgConverter.Instance}}">
                                                         <Grid>
@@ -462,7 +499,7 @@
                                                         <TextBlock Text="{Binding Record.Time}" FontSize="10" Foreground="{DynamicResource SemiColorText3}" />
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Spacing="2">
-                                                        <TextBlock Text="{Binding Pity, StringFormat={}{0} 抽}" FontSize="12" FontWeight="Bold"
+                                                        <TextBlock Text="{Binding Pity}" FontSize="12" FontWeight="Bold"
                                                                     ToolTip.Tip="{Binding FiveStarGapText}"
                                                                    Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}" HorizontalAlignment="Right" />
                                                         <Border CornerRadius="3" Padding="5,1" Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagConverter.Instance}}">
@@ -470,7 +507,7 @@
                                                         </Border>
                                                     </StackPanel>
                                                     <ProgressBar Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Minimum="0" Maximum="80" Height="6" CornerRadius="3"
-                                                                 Margin="8,4,0,0" Value="{Binding Pity}"
+                                                                 Margin="8,4,0,0" Value="{Binding PityBarValue}"
                                                                  Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}" />
                                                 </Grid>
                                             </Border>

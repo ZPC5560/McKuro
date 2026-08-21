@@ -99,8 +99,8 @@ public sealed class GachaSyncService : IGachaSyncService
             int newRecords = 0;
             int total = 0;
 
-            // 按池查询:成功时清空旧记录再重写(修复同秒同角色10连丢记录的问题),
-            // 失败时保留旧缓存避免丢历史。
+            // 按池查询:成功即"直接覆盖"(先删后插,含空池清空旧数据),避免残留/累加;
+            // 仅查询失败(网络/限流等)时保留旧缓存避免丢历史。
             foreach (var poolType in CardPoolTypeValues.All)
             {
                 IReadOnlyList<GachaRecord> records;
@@ -115,13 +115,11 @@ public sealed class GachaSyncService : IGachaSyncService
                 }
 
                 total += records.Count;
-                if (records.Count == 0)
-                {
-                    continue;
-                }
-
                 _store.DeletePlayerPool(request.PlayerId, poolType);
-                newRecords += _store.InsertRecords(request.PlayerId, records);
+                if (records.Count > 0)
+                {
+                    newRecords += _store.InsertRecords(request.PlayerId, records);
+                }
             }
 
             var stored = _store.GetRecords(request.PlayerId);
