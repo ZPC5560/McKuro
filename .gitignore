@@ -34,3 +34,6 @@ publish.log
 
 # DSH 工具目录(不入库)
 .dsh/
+
+# 构建产物(Inno Setup 安装包输出)
+artifacts/
