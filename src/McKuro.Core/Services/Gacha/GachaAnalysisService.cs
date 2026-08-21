@@ -21,8 +21,8 @@ public sealed class GachaAnalysisService
     {
         var sorted = allRecords
             .Where(r => string.IsNullOrEmpty(playerId) || r.PlayerId == playerId || string.IsNullOrEmpty(r.PlayerId))
+            // OrderBy 对相同时间保持输入顺序;输入来自 SQLite 的 id ASC,不能再按 ResourceId 改变十连内顺序。
             .OrderBy(r => r.Time)
-            .ThenBy(r => r.ResourceId)
             .ToList();
 
         var grouped = sorted.GroupBy(r => r.PoolType);
@@ -124,10 +124,13 @@ public sealed class GachaAnalysisService
         IReadOnlyDictionary<CardPoolType, HashSet<int>>? upIds)
     {
         var entries = new List<FiveStarEntry>();
+        var pullEntries = new List<GachaPullEntry>();
         int pityCount = 0;
         int index = 0;
         int fiveStarIndex = 0;
         int currentPity = 0;
+        int currentUpPity = 0;
+        bool hasUpStar = false;
         int fourStar = 0;
         int threeStar = 0;
         int upCount = 0;
@@ -158,15 +161,30 @@ public sealed class GachaAnalysisService
                     if (offBanner == false)
                     {
                         upCount++;
+                        hasUpStar = true;
+                        currentUpPity = 0;
                     }
                 }
+                if (hasUpStar && offBanner != false)
+                {
+                    currentUpPity++;
+                }
 
+                var pity = pityCount + 1; // 含本次出货的抽数
                 entries.Add(new FiveStarEntry
                 {
                     Record = record,
-                    Pity = pityCount + 1, // 含本次出货的抽数
+                    Pity = pity,
                     IsOffBanner = offBanner,
                     Index = fiveStarIndex,
+                });
+                pullEntries.Add(new GachaPullEntry
+                {
+                    Record = record,
+                    Index = index,
+                    Pity = pity,
+                    HasPreviousFiveStar = entries.Count > 0,
+                    IsOffBanner = offBanner,
                 });
                 currentPity = 0;
                 pityCount = 0;
@@ -175,6 +193,10 @@ public sealed class GachaAnalysisService
             {
                 pityCount++;
                 currentPity++;
+                if (hasUpStar)
+                {
+                    currentUpPity++;
+                }
                 if (record.QualityLevel == 4)
                 {
                     fourStar++;
@@ -183,6 +205,13 @@ public sealed class GachaAnalysisService
                 {
                     threeStar++;
                 }
+                pullEntries.Add(new GachaPullEntry
+                {
+                    Record = record,
+                    Index = index,
+                    Pity = null,
+                    IsOffBanner = null,
+                });
             }
         }
 
@@ -191,8 +220,10 @@ public sealed class GachaAnalysisService
             PoolType = poolType,
             TotalPulls = records.Count,
             FiveStarCount = entries.Count,
+            PullEntries = pullEntries,
             FiveStarEntries = entries,
             CurrentPity = currentPity,
+            CurrentUpPity = hasUpStar ? currentUpPity : 0,
             OffBannerRate = ComputeOffBannerRate(entries),
             FourStarCount = fourStar,
             ThreeStarCount = threeStar,

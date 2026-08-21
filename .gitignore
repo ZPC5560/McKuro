@@ -31,3 +31,6 @@ docs/
 device-id.txt
 
 publish.log
+
+# DSH 工具目录(不入库)
+.dsh/

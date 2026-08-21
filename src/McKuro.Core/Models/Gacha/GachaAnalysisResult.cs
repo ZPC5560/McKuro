@@ -1,5 +1,41 @@
 namespace McKuro.Core.Models.Gacha;
 
+/// <summary>单条抽卡分析记录(包含五星间隔与 UP 判定)。</summary>
+public sealed class GachaPullEntry
+{
+    public required GachaRecord Record { get; init; }
+
+    /// <summary>该条记录在当前卡池中的抽卡序号(1 起)。</summary>
+    public int Index { get; init; }
+
+    /// <summary>若该条是五星,则为含本次五星的间隔抽数,否则为空。</summary>
+    public int? Pity { get; init; }
+
+    /// <summary>该条之前是否已经出现过五星。</summary>
+    public bool HasPreviousFiveStar { get; init; }
+
+    /// <summary>若该条是五星且之前已有五星,则为两个五星之间的普通抽数。</summary>
+    public int? FiveStarGap => HasPreviousFiveStar && Pity.HasValue ? Pity.Value - 1 : null;
+
+    /// <summary>是否歪了(false=UP,true=歪,null=无法判定)。</summary>
+    public bool? IsOffBanner { get; init; }
+
+    public bool IsUp => IsOffBanner == false;
+
+    public string BannerText => IsOffBanner switch
+    {
+        false => "UP",
+        true => "歪",
+        _ => "",
+    };
+
+    public string PityText => Pity.HasValue ? $"{Pity.Value} 抽" : "";
+
+    public string FiveStarGapText => FiveStarGap.HasValue ? $"{FiveStarGap.Value} 抽" : "-";
+
+    public string IconUrl => IconCatalog.GetIconUrl(Record);
+}
+
 /// <summary>单条五星出货记录(含垫抽数)。</summary>
 public sealed class FiveStarEntry
 {
@@ -10,6 +46,11 @@ public sealed class FiveStarEntry
 
     /// <summary>是否歪了(false=UP,true=歪,null=无法判定)。</summary>
     public bool? IsOffBanner { get; init; }
+
+    /// <summary>含本次五星的间隔抽数减一,即两个五星之间的普通抽数。</summary>
+    public int FiveStarGap => Math.Max(0, Pity - 1);
+
+    public string FiveStarGapText => Index > 1 ? $"间隔 {FiveStarGap} 抽" : "首次五星";
 
     /// <summary>该五星在整个卡池中的序号(1 起)。</summary>
     public int Index { get; init; }
@@ -30,11 +71,20 @@ public sealed class PoolStats
     /// <summary>五星数量。</summary>
     public int FiveStarCount { get; init; }
 
+    /// <summary>所有抽卡记录的分析条目(旧→新)。</summary>
+    public IReadOnlyList<GachaPullEntry> PullEntries { get; init; } = [];
+
     /// <summary>五星出货列表(旧→新)。</summary>
     public IReadOnlyList<FiveStarEntry> FiveStarEntries { get; init; } = [];
 
     /// <summary>当前已垫抽数(最后一个五星之后)。</summary>
     public int CurrentPity { get; init; }
+
+    /// <summary>最近一次 UP 五星之后到现在的垫抽数;没有可判定 UP 时为 0。</summary>
+    public int CurrentUpPity { get; init; }
+
+    /// <summary>用于界面显示的最近一次 UP 垫抽文本。</summary>
+    public string CurrentUpPityText => UpCount > 0 ? $"UP 后垫抽: {CurrentUpPity} 抽" : "UP 后垫抽: -";
 
     /// <summary>距上次五星的平均抽数(若至少有 1 个五星)。</summary>
     public double? AveragePity => FiveStarEntries.Count > 0

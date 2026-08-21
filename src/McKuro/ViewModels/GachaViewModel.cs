@@ -133,7 +133,8 @@ public sealed partial class GachaViewModel : ViewModelBase
     [ObservableProperty]
     private int _tableTotalPages = 1;
 
-    public AvaloniaList<GachaRecord> TableRecords { get; } = [];
+    /// <summary>表格分析条目:与五星列表共用同一套 UP/垫抽解析结果。</summary>
+    public AvaloniaList<GachaPullEntry> TableRecords { get; } = [];
 
     public bool CanTablePrev => TableCurrentPage > 1;
     public bool CanTableNext => TableCurrentPage < TableTotalPages;
@@ -309,7 +310,14 @@ public sealed partial class GachaViewModel : ViewModelBase
             }
 
             PlayerIdText = result.Request?.PlayerId ?? "-";
-            if (result.Analysis is not null)
+            if (result.Request?.PlayerId is { Length: > 0 } syncedPlayerId)
+            {
+                // 云端同步的底层流水线没有 UP 配置参数,这里统一用最新 UP 集合重算,
+                // 让统计卡、五星列表和表格共享完全相同的判定结果。
+                var syncedRecords = AppServices.GachaStore.GetRecords(syncedPlayerId);
+                ApplyAnalysis(AppServices.GachaAnalysis.Analyze(syncedPlayerId, syncedRecords, _upIds));
+            }
+            else if (result.Analysis is not null)
             {
                 ApplyAnalysis(result.Analysis);
             }
@@ -642,27 +650,28 @@ public sealed partial class GachaViewModel : ViewModelBase
             return;
         }
         var poolType = TablePoolTypeOf(SelectedTablePool);
-        List<GachaRecord> all;
+        IEnumerable<GachaPullEntry> all;
         if (poolType is null)
         {
-            all = AppServices.GachaStore.GetAllRecords()
-                .Where(r => string.IsNullOrEmpty(_analysis.PlayerId) || r.PlayerId == _analysis.PlayerId)
-                .ToList();
+            all = _analysis.Pools
+                .SelectMany(p => p.PullEntries)
+                .OrderByDescending(e => e.Record.Time)
+                .ThenByDescending(e => e.Index);
         }
         else
         {
-            all = AppServices.GachaStore.GetRecords(_analysis.PlayerId, poolType.Value);
+            var pool = _analysis.Pools.FirstOrDefault(p => p.PoolType == poolType.Value);
+            all = pool?.PullEntries.AsEnumerable().Reverse() ?? [];
         }
-        TableTotalCount = all.Count;
+        var allList = all.ToList();
+        TableTotalCount = allList.Count;
         TableTotalPages = Math.Max(1, (int)Math.Ceiling(TableTotalCount / (double)TablePageSize));
         if (TableCurrentPage > TableTotalPages)
         {
             TableCurrentPage = TableTotalPages;
         }
         TableRecords.Clear();
-        var page = all
-            .AsEnumerable()
-            .Reverse() // 已按时间旧→新;反转后最新排最前,同时间保持最新插入优先
+        var page = allList
             .Skip((TableCurrentPage - 1) * TablePageSize)
             .Take(TablePageSize)
             .ToList();

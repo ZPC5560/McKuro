@@ -95,6 +95,7 @@
                                Foreground="{DynamicResource SemiColorText2}">
                         <Run Text="平均出货: " /><Run Text="{Binding StarAvgValue, StringFormat={}{0:0.#}}" /><Run Text=" 抽" />
                         <Run Text="  ·  当前垫 " /><Run Text="{Binding SelectedPool.CurrentPity}" />
+                        <Run Text="  ·  " /><Run Text="{Binding SelectedPool.CurrentUpPityText}" />
                     </TextBlock>
                     <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Hidden">
                         <ItemsControl ItemsSource="{Binding FiveStarEntries}">
@@ -132,7 +133,7 @@
                                                            HorizontalAlignment="Center"
                                                            Text="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagTextConverter.Instance}}" />
                                             </Border>
-                                            <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="8,2,0,0">
+                                            <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto,Auto" Margin="8,2,0,0">
                                                 <ProgressBar Minimum="0" Maximum="80"
                                                              Height="8"
                                                              CornerRadius="4"
@@ -143,6 +144,9 @@
                                                            FontSize="11"
                                                            Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}"
                                                            Text="{Binding Pity, StringFormat={}{0} 抽}" />
+                                                 <TextBlock Grid.Column="2" Margin="6,0,0,0" FontSize="10"
+                                                            Foreground="{DynamicResource SemiColorText3}"
+                                                            Text="{Binding FiveStarGapText}" />
                                             </Grid>
                                         </Grid>
                                     </Border>
@@ -420,6 +424,7 @@
                                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                                         <TextBlock Text="{Binding Record.Name}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="130" />
                                                         <TextBlock Text="{Binding Pity, StringFormat={}{0}抽}" FontSize="11" Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}" />
+                                                         <TextBlock Text="{Binding FiveStarGapText}" FontSize="10" Foreground="{DynamicResource SemiColorText3}" />
                                                         <Border CornerRadius="3" Padding="4,1"
                                                                 Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagConverter.Instance}}">
                                                             <TextBlock Text="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagTextConverter.Instance}}" FontSize="9" Foreground="White" />
@@ -462,6 +467,7 @@
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Spacing="2">
                                                         <TextBlock Text="{Binding Pity, StringFormat={}{0} 抽}" FontSize="12" FontWeight="Bold"
+                                                                    ToolTip.Tip="{Binding FiveStarGapText}"
                                                                    Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}" HorizontalAlignment="Right" />
                                                         <Border CornerRadius="3" Padding="5,1" Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagConverter.Instance}}">
                                                             <TextBlock Text="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagTextConverter.Instance}}" FontSize="9" Foreground="White" />
@@ -494,6 +500,7 @@
                             <TextBlock FontSize="12" Foreground="#FF8000"><Run Text="UP 数: " /><Run Text="{Binding SelectedPool.UpCount}" /></TextBlock>
                             <TextBlock FontSize="12" Foreground="#64B5F6"><Run Text="不歪率: " /><Run Text="{Binding SelectedPool.OffBannerRate, StringFormat={}{0:P1}}" /></TextBlock>
                             <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText3}"><Run Text="当前垫: " /><Run Text="{Binding SelectedPool.CurrentPity}" /><Run Text=" 抽" /></TextBlock>
+                             <TextBlock FontSize="12" Foreground="#64B5F6" Text="{Binding SelectedPool.CurrentUpPityText}" />
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -507,16 +514,18 @@
                         <ScrollViewer>
                             <ItemsControl ItemsSource="{Binding TableRecords}">
                                 <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="gacha:GachaRecord">
+                                    <DataTemplate x:DataType="gacha:GachaPullEntry">
                                         <Border Margin="0,2" Padding="6,4"
                                                 Background="{DynamicResource SemiColorBg3}" CornerRadius="4">
-                                            <Grid ColumnDefinitions="2*,80,80,1*,160">
-                                                <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{Binding QualityLevel, StringFormat={}{0}星}" FontSize="12"
-                                                           Foreground="{Binding QualityLevel, Converter={x:Static vm:QualityColorConverter.Instance}}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="2" Text="{Binding ResourceType}" FontSize="12" Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="3" Text="{Binding CardPoolType}" FontSize="12" Foreground="{DynamicResource SemiColorText2}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="4" Text="{Binding Time}" FontSize="11" Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+                                            <Grid ColumnDefinitions="2*,65,70,1*,55,65,160">
+                                                <TextBlock Text="{Binding Record.Name}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Record.QualityLevel, StringFormat={}{0}星}" FontSize="12"
+                                                           Foreground="{Binding Record.QualityLevel, Converter={x:Static vm:QualityColorConverter.Instance}}" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Record.ResourceType}" FontSize="12" Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="3" Text="{Binding Record.CardPoolType}" FontSize="12" Foreground="{DynamicResource SemiColorText2}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="4" Text="{Binding BannerText}" FontSize="11" Foreground="#FF8000" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="5" Text="{Binding FiveStarGapText}" FontSize="11" Foreground="#E57373" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="6" Text="{Binding Record.Time}" FontSize="11" Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
                                             </Grid>
                                         </Border>
                                     </DataTemplate>

@@ -71,6 +71,37 @@ public class GachaAnalysisServiceTests
     }
 
     [Fact]
+    public void Analyze_ProvidesFiveStarGapAndCurrentUpPity()
+    {
+        var records = new List<GachaRecord>
+        {
+            R(1, 900, 5, "UP", "2024-01-01 10:00:00"),
+            R(1, 101, 4, "A", "2024-01-01 10:01:00"),
+            R(1, 102, 4, "B", "2024-01-01 10:02:00"),
+            R(1, 103, 4, "C", "2024-01-01 10:03:00"),
+            R(1, 901, 5, "OFF", "2024-01-01 10:04:00"),
+            R(1, 104, 4, "D", "2024-01-01 10:05:00"),
+            R(1, 105, 4, "E", "2024-01-01 10:06:00"),
+        };
+        var upIds = new Dictionary<CardPoolType, HashSet<int>>
+        {
+            [CardPoolType.RoleActivity] = [900],
+        };
+
+        var pool = new GachaAnalysisService().Analyze("p1", records, upIds)[CardPoolType.RoleActivity];
+
+        Assert.NotNull(pool);
+        Assert.Equal(1, pool!.UpCount);
+        Assert.Equal(4, pool.FiveStarEntries[1].Pity);
+        Assert.Equal(3, pool.FiveStarEntries[1].FiveStarGap);
+        Assert.Equal("间隔 3 抽", pool.FiveStarEntries[1].FiveStarGapText);
+        Assert.Equal(6, pool.CurrentUpPity);
+        Assert.Equal(7, pool.PullEntries.Count);
+        Assert.Equal("OFF", pool.PullEntries[4].Record.Name);
+        Assert.Equal("歪", pool.PullEntries[4].BannerText);
+    }
+
+    [Fact]
     public void Analyze_NoUpData_OffBannerIsNull()
     {
         var records = new List<GachaRecord>
