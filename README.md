@@ -55,13 +55,15 @@ McKuro/
 
 ```bash
 dotnet restore                                    # 还原依赖
-dotnet build                                      # 构建
-dotnet run --project src/McKuro                    # 运行 (开发)
-dotnet test                                       # 运行测试
+dotnet build                                      # 构建(默认 Release 配置,见 Directory.Build.props)
+dotnet run --project src/McKuro                    # 运行(默认 Release;调试用 -c Debug)
+dotnet test                                       # 运行测试(默认 Release)
 dotnet publish src/McKuro -c Release -r win-x64 --self-contained   # AOT 发布 (Windows 上执行)
 dotnet publish src/McKuro -c Release -r osx-arm64 --self-contained # macOS 本地验证 AOT
 dotnet publish src/McKuro -c Release -r linux-x64 --self-contained # Linux 本地验证 AOT/UI
 ```
+
+> 默认构建配置为 **Release**(与 AOT 发布行为对齐,由 `Directory.Build.props` 生效);需要 Debug 调试时显式加 `-c Debug`。
 
 Windows 发布会按 RID 条件带上 `Endpne.LibMPV.Windows`(libmpv-2.dll),不要求用户另装 VLC。Linux 使用系统 `libmpv`;macOS 和 Linux 找不到可用媒体运行库时,启动器会保留官方静态首帧,不影响其他页面。
 

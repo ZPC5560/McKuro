@@ -1,0 +1,12 @@
+<Project>
+
+  <!--
+    统一默认使用 Release 配置构建/运行/测试:与 AOT 发布行为对齐,
+    避免 Debug/Release(优化、裁剪、诊断包)差异掩盖问题。
+    命令行显式传入 -c Debug / -c Release(MSBuild 全局属性)时不会被本文件覆盖。
+  -->
+  <PropertyGroup>
+    <Configuration>Release</Configuration>
+  </PropertyGroup>
+
+</Project>
