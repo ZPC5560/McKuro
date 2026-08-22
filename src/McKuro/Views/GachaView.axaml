@@ -378,7 +378,8 @@
                                 <TextBlock Text="每日抽数" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6" />
                                 <controls:TimeLineChart Grid.Row="1" Height="170" Margin="0,2,0,0"
                                                         Values="{Binding TimeLineCounts}"
-                                                        Labels="{Binding TimeLineLabels}" />
+                                                        Labels="{Binding TimeLineLabels}"
+                                                        Tips="{Binding TimeLineTips}" />
                             </Grid>
                         </Border>
                     </Grid>

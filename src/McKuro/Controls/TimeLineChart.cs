@@ -4,17 +4,20 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Globalization;
+using System.Text;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
+using McKuro.Core.Models.Gacha;
 
 namespace McKuro.Controls;
 
 /// <summary>
 /// 每日抽数平滑面积图(参考调用趋势图):Catmull-Rom 平滑曲线 + 渐变填充,
 /// 左侧整数单位刻度(0/3/6/9…自适应),横向网格线,底部稀疏日期标签。
-/// 自绘实现(AOT 安全,不依赖图表库)。
+/// 鼠标悬停显示日期/卡池/抽数悬浮卡。自绘实现(AOT 安全,不依赖图表库)。
 /// </summary>
 public sealed class TimeLineChart : Control
 {
@@ -23,6 +26,10 @@ public sealed class TimeLineChart : Control
 
     public static readonly StyledProperty<IReadOnlyList<string>?> LabelsProperty =
         AvaloniaProperty.Register<TimeLineChart, IReadOnlyList<string>?>(nameof(Labels));
+
+    /// <summary>悬浮提示文案(每点一个,多行用 '\n' 分隔;为空时按日期+抽数兜底)。</summary>
+    public static readonly StyledProperty<IReadOnlyList<string>?> TipsProperty =
+        AvaloniaProperty.Register<TimeLineChart, IReadOnlyList<string>?>(nameof(Tips));
 
     /// <summary>每日抽数(旧→新)。</summary>
     public IReadOnlyList<int>? Values
@@ -36,6 +43,36 @@ public sealed class TimeLineChart : Control
     {
         get => GetValue(LabelsProperty);
         set => SetValue(LabelsProperty, value);
+    }
+
+    /// <summary>悬浮提示文案(与 Values 一一对应,多行用 '\n' 分隔)。</summary>
+    public IReadOnlyList<string>? Tips
+    {
+        get => GetValue(TipsProperty);
+        set => SetValue(TipsProperty, value);
+    }
+
+    /// <summary>把某日抽数格式化为悬浮文案:第一行日期,之后每行一个卡池,多卡池时末尾汇总。</summary>
+    public static string BuildTip(DailyPull day)
+    {
+        var sb = new StringBuilder();
+        sb.Append(day.Date.ToString("yyyy-MM-dd"));
+        if (day.Pools.Count == 0)
+        {
+            sb.Append('\n').Append("共 ").Append(day.Count).Append(" 抽");
+        }
+        else
+        {
+            foreach (var p in day.Pools)
+            {
+                sb.Append('\n').Append(p.PoolName).Append(" ×").Append(p.Count);
+            }
+            if (day.Pools.Count > 1)
+            {
+                sb.Append('\n').Append("共 ").Append(day.Count).Append(" 抽");
+            }
+        }
+        return sb.ToString();
     }
 
     // ---- 配色(对齐抽卡页浅色底 + 品牌蓝) ----
@@ -96,16 +133,19 @@ public sealed class TimeLineChart : Control
 
     static TimeLineChart()
     {
-        AffectsRender<TimeLineChart>(ValuesProperty, LabelsProperty);
+        AffectsRender<TimeLineChart>(ValuesProperty, LabelsProperty, TipsProperty);
         ClipToBoundsProperty.OverrideDefaultValue<TimeLineChart>(true);
         ValuesProperty.Changed.AddClassHandler<TimeLineChart>((o, _) => o.OnDataChanged());
         LabelsProperty.Changed.AddClassHandler<TimeLineChart>((o, _) => o.OnDataChanged());
+        TipsProperty.Changed.AddClassHandler<TimeLineChart>((o, _) => o.OnDataChanged());
     }
 
     private void OnDataChanged()
     {
         Subscribe(Values);
         Subscribe(Labels);
+        Subscribe(Tips);
+        _hoverIndex = -1;
         Dispatcher.UIThread.Post(InvalidateVisual);
     }
 
@@ -119,8 +159,57 @@ public sealed class TimeLineChart : Control
 
     private static readonly Typeface LabelTypeface = new(FontFamily.Default);
 
-    private static FormattedText Text(string text, double fontSize, IBrush brush)
-        => new(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, LabelTypeface, fontSize, brush);
+    private static FormattedText Text(string text, double fontSize, IBrush brush, bool bold = false)
+    {
+        var typeface = bold
+            ? new Typeface(FontFamily.Default, FontStyle.Normal, FontWeight.SemiBold)
+            : LabelTypeface;
+        return new FormattedText(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, typeface, fontSize, brush);
+    }
+
+    // ---- 悬浮提示状态 ----
+    private static readonly IBrush TipBgBrush = new SolidColorBrush(Color.FromArgb(235, 24, 30, 42));
+    private static readonly IBrush TipTextBrush = Brushes.White;
+    private int _hoverIndex = -1;
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        var idx = IndexAt(e.GetPosition(this).X);
+        if (idx != _hoverIndex)
+        {
+            _hoverIndex = idx;
+            InvalidateVisual();
+        }
+    }
+
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        if (_hoverIndex != -1)
+        {
+            _hoverIndex = -1;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>按 X 坐标找最近的数据点索引(不在绘图区内返回 -1)。</summary>
+    private int IndexAt(double px)
+    {
+        var values = Values;
+        if (values is null || values.Count == 0 || px < 30 || px > Bounds.Width - 4)
+        {
+            return -1;
+        }
+        var n = values.Count;
+        if (n == 1)
+        {
+            return 0;
+        }
+        var plotWidth = Math.Max(1, Bounds.Width - 36 - 8);
+        var idx = (int)Math.Round((px - 36) / (plotWidth / (n - 1)));
+        return idx >= 0 && idx < n ? idx : -1;
+    }
 
     public override void Render(DrawingContext context)
     {
@@ -241,6 +330,52 @@ public sealed class TimeLineChart : Control
                 var label = Text(Labels[Math.Min(i, Labels.Count - 1)] ?? "", 10, AxisDateBrush);
                 var x = Math.Clamp(points[i].X - label.Width / 2, 0, width - label.Width);
                 context.DrawText(label, new Point(x, plotBottom + 8));
+            }
+        }
+
+        // 悬浮提示:标记点 + 日期/卡池/抽数卡片
+        if (_hoverIndex >= 0 && _hoverIndex < n)
+        {
+            var pt = points[_hoverIndex];
+            context.DrawEllipse(Brushes.White, new Pen(CurveBrush, 2), pt, 4.5, 4.5);
+
+            var tip = Tips is not null && _hoverIndex < Tips.Count
+                ? Tips[_hoverIndex]
+                : (Labels is not null && _hoverIndex < Labels.Count
+                    ? Labels[_hoverIndex] + "\n" + values[_hoverIndex] + " 抽"
+                    : null);
+            if (tip is not null)
+            {
+                var parts = tip.Split('\n');
+                var texts = new List<FormattedText>(parts.Length);
+                double maxW = 0, totalH = 0;
+                for (var li = 0; li < parts.Length; li++)
+                {
+                    var t = Text(parts[li], 11, TipTextBrush, bold: li == 0);
+                    texts.Add(t);
+                    maxW = Math.Max(maxW, t.Width);
+                    totalH += t.Height + 3;
+                }
+                totalH -= 3;
+                var boxW = maxW + 24;
+                var boxH = totalH + 14;
+                var bx = Math.Clamp(pt.X - boxW / 2, 6, Math.Max(6, width - boxW - 6));
+                var by = pt.Y - boxH - 12;
+                if (by < 6)
+                {
+                    by = pt.Y + 12;
+                    if (by > height - boxH - 6)
+                    {
+                        by = Math.Max(6, height - boxH - 6);
+                    }
+                }
+                context.FillRectangle(TipBgBrush, new Rect(bx, by, boxW, boxH), 6f);
+                var ty = by + 7;
+                foreach (var t in texts)
+                {
+                    context.DrawText(t, new Point(bx + 12, ty));
+                    ty += t.Height + 3;
+                }
             }
         }
     }

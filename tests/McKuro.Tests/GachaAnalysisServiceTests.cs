@@ -145,4 +145,37 @@ public class GachaAnalysisServiceTests
         var result = new GachaAnalysisService().Analyze("p1", records);
         Assert.InRange(result.Score, 0, 100);
     }
+
+    [Fact]
+    public void Analyze_DailyPulls_IncludePoolBreakdown()
+    {
+        // 2024-01-01: 角色活动 ×2 + 角色常驻 ×1;2024-01-02: 角色活动 ×1
+        var records = new List<GachaRecord>
+        {
+            R(1, 101, 4, "A", "2024-01-01 10:00:00"),
+            R(1, 102, 4, "B", "2024-01-01 10:01:00"),
+            R(3, 201, 4, "C", "2024-01-01 10:02:00"),
+            R(1, 103, 4, "D", "2024-01-02 10:00:00"),
+        };
+
+        var result = new GachaAnalysisService().Analyze("p1", records);
+        Assert.Equal(2, result.DailyPulls.Count);
+
+        var day1 = result.DailyPulls[0];
+        Assert.Equal(new DateOnly(2024, 1, 1), day1.Date);
+        Assert.Equal(3, day1.Count);
+        Assert.Equal(2, day1.Pools.Count);
+        Assert.Equal(CardPoolType.RoleActivity, day1.Pools[0].PoolType);
+        Assert.Equal("角色活动", day1.Pools[0].PoolName);
+        Assert.Equal(2, day1.Pools[0].Count);
+        Assert.Equal(CardPoolType.RoleResident, day1.Pools[1].PoolType);
+        Assert.Equal(1, day1.Pools[1].Count);
+        Assert.Equal(day1.Count, day1.Pools.Sum(p => p.Count));
+
+        var day2 = result.DailyPulls[1];
+        Assert.Equal(new DateOnly(2024, 1, 2), day2.Date);
+        Assert.Equal(1, day2.Count);
+        Assert.Single(day2.Pools);
+        Assert.Equal("角色活动", day2.Pools[0].PoolName);
+    }
 }

@@ -124,11 +124,25 @@ public sealed class PoolStats
     public const double ExpectedFiveStarPity = 80.0;
 }
 
+/// <summary>某日某卡池的抽数(时间线悬浮提示用)。</summary>
+public sealed class DailyPoolPull
+{
+    public required CardPoolType PoolType { get; init; }
+
+    /// <summary>卡池显示名(如"角色活动")。</summary>
+    public required string PoolName { get; init; }
+
+    public required int Count { get; init; }
+}
+
 /// <summary>每日抽数(用于时间线图)。</summary>
 public sealed class DailyPull
 {
     public required DateOnly Date { get; init; }
     public required int Count { get; init; }
+
+    /// <summary>当日各卡池抽数明细(按抽数降序,供悬浮提示)。</summary>
+    public IReadOnlyList<DailyPoolPull> Pools { get; init; } = [];
 }
 
 /// <summary>抽卡分析的整体结果。</summary>

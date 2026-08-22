@@ -94,13 +94,26 @@ public sealed class GachaAnalysisService
             .SelectMany(p => p.FiveStarEntries)
             .Count(e => e.IsOffBanner == true);
 
-        // 每日抽数(时间线)
+        // 每日抽数(时间线,含各卡池明细供悬浮提示)
         var dailyPulls = allPulls
             .Select(r => new { Date = TryParseTime(r.Time), Rec = r })
             .Where(x => x.Date.HasValue)
             .GroupBy(x => DateOnly.FromDateTime(x.Date!.Value.Date))
             .OrderBy(g => g.Key)
-            .Select(g => new DailyPull { Date = g.Key, Count = g.Count() })
+            .Select(g => new DailyPull
+            {
+                Date = g.Key,
+                Count = g.Count(),
+                Pools = g.GroupBy(x => x.Rec.PoolType)
+                    .Select(p => new DailyPoolPull
+                    {
+                        PoolType = p.Key,
+                        PoolName = CardPoolTypeValues.GetDisplayName(p.Key),
+                        Count = p.Count(),
+                    })
+                    .OrderByDescending(p => p.Count)
+                    .ToList(),
+            })
             .ToList();
 
         return new GachaAnalysisResult

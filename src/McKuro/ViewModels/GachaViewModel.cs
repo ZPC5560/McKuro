@@ -2,6 +2,7 @@ using Avalonia.Collections;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using McKuro.Controls;
 using McKuro.Core.Models.Gacha;
 using McKuro.Core.Services.Gacha;
 using McKuro.Services;
@@ -159,6 +160,9 @@ public sealed partial class GachaViewModel : ViewModelBase
     public AvaloniaList<int> TimeLineCounts { get; } = [];
 
     public AvaloniaList<string> TimeLineLabels { get; } = [];
+
+    /// <summary>每日悬浮提示(日期/卡池/抽数,由 TimeLineChart 渲染)。</summary>
+    public AvaloniaList<string> TimeLineTips { get; } = [];
 
     private GachaAnalysisResult? _analysis;
 
@@ -580,6 +584,8 @@ public sealed partial class GachaViewModel : ViewModelBase
         TimeLineCounts.AddRange(analysis.DailyPulls.Select(d => d.Count));
         TimeLineLabels.Clear();
         TimeLineLabels.AddRange(analysis.DailyPulls.Select(d => d.Date.ToString("MM-dd")));
+        TimeLineTips.Clear();
+        TimeLineTips.AddRange(analysis.DailyPulls.Select(TimeLineChart.BuildTip));
     }
 
     partial void OnSelectedPoolChanged(PoolStats? value) => RefreshDetail();

@@ -1,4 +1,5 @@
 using McKuro.Controls;
+using McKuro.Core.Models.Gacha;
 
 namespace McKuro.Tests;
 
@@ -46,5 +47,46 @@ public class TimeLineChartTests
         Assert.Equal(expected, ticks);
         Assert.True(ticks[^1] >= max, "刻度上限应 ≥ 数据最大值");
         Assert.True(ticks.Count <= 7, "刻度数量不宜过多");
+    }
+
+    [Fact]
+    public void BuildTip_ContainsDatePoolAndCount()
+    {
+        var tip = TimeLineChart.BuildTip(new DailyPull
+        {
+            Date = new DateOnly(2026, 5, 29),
+            Count = 3,
+            Pools =
+            [
+                new DailyPoolPull { PoolType = CardPoolType.RoleActivity, PoolName = "角色活动", Count = 2 },
+                new DailyPoolPull { PoolType = CardPoolType.RoleResident, PoolName = "角色常驻", Count = 1 },
+            ],
+        });
+
+        // 多卡池时:日期 + 每池一行 + 汇总
+        Assert.Equal("2026-05-29\n角色活动 ×2\n角色常驻 ×1\n共 3 抽", tip);
+    }
+
+    [Fact]
+    public void BuildTip_SinglePool_NoTotalLine()
+    {
+        var tip = TimeLineChart.BuildTip(new DailyPull
+        {
+            Date = new DateOnly(2026, 5, 29),
+            Count = 2,
+            Pools =
+            [
+                new DailyPoolPull { PoolType = CardPoolType.RoleActivity, PoolName = "角色活动", Count = 2 },
+            ],
+        });
+
+        Assert.Equal("2026-05-29\n角色活动 ×2", tip);
+    }
+
+    [Fact]
+    public void BuildTip_WithoutPools_FallsBackToTotal()
+    {
+        var tip = TimeLineChart.BuildTip(new DailyPull { Date = new DateOnly(2026, 5, 29), Count = 5 });
+        Assert.Equal("2026-05-29\n共 5 抽", tip);
     }
 }
