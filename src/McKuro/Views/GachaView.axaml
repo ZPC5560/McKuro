@@ -161,7 +161,8 @@
                                                     Grid.RowSpan="2"
                                                     CornerRadius="4"
                                                     Padding="8,3"
-                                                    Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagConverter.Instance}}">
+                                                    Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagConverter.Instance}}"
+                                                    IsVisible="{Binding IsOffBanner, Converter={x:Static vm:UpFlagVisibleConverter.Instance}}">
                                                 <TextBlock FontSize="11" Foreground="White"
                                                            HorizontalAlignment="Center"
                                                            Text="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagTextConverter.Instance}}" />
@@ -441,7 +442,8 @@
                                                         <TextBlock Text="{Binding Pity, StringFormat={}{0}抽}" FontSize="11" Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}"
                                                                     ToolTip.Tip="{Binding FiveStarGapText}" />
                                                         <Border CornerRadius="3" Padding="4,1"
-                                                                Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagConverter.Instance}}">
+                                                                Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagConverter.Instance}}"
+                                                                IsVisible="{Binding IsOffBanner, Converter={x:Static vm:UpFlagVisibleConverter.Instance}}">
                                                             <TextBlock Text="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagTextConverter.Instance}}" FontSize="9" Foreground="White" />
                                                         </Border>
                                                     </StackPanel>
@@ -498,7 +500,8 @@
                                                         <TextBlock Text="{Binding Pity}" FontSize="12" FontWeight="Bold"
                                                                     ToolTip.Tip="{Binding FiveStarGapText}"
                                                                    Foreground="{Binding Pity, Converter={x:Static vm:PityColorConverter.Instance}}" HorizontalAlignment="Right" />
-                                                        <Border CornerRadius="3" Padding="5,1" Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagConverter.Instance}}">
+                                                        <Border CornerRadius="3" Padding="5,1" Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagConverter.Instance}}"
+                                                                IsVisible="{Binding IsOffBanner, Converter={x:Static vm:UpFlagVisibleConverter.Instance}}">
                                                             <TextBlock Text="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagTextConverter.Instance}}" FontSize="9" Foreground="White" />
                                                         </Border>
                                                     </StackPanel>

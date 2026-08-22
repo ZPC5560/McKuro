@@ -850,6 +850,18 @@ public sealed class FiveStarFlagTextConverter : Avalonia.Data.Converters.IValueC
         => throw new NotSupportedException();
 }
 
+/// <summary>UP/歪 徽章可见性:仅当 IsOffBanner 非空(可判定 UP/歪)时显示;不可判定(常驻等)时不显示占位徽章。</summary>
+public sealed class UpFlagVisibleConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly UpFlagVisibleConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value is bool;
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>五星 UP/歪 标记背景:true→红,false→绿,null→灰。</summary>
 public sealed class FiveStarFlagConverter : Avalonia.Data.Converters.IValueConverter
 {
