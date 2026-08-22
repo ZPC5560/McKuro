@@ -10,7 +10,7 @@ using CardPoolTypeEnum = McKuro.Core.Models.Gacha.CardPoolType;
 /// </summary>
 public sealed class GachaRecord
 {
-    /// <summary>卡池名(gmserver-api 返回中文,如"角色精准调谐")。</summary>
+    /// <summary>卡池标识(gmserver-api 通常返回中文名,如"角色精准调谐";部分新卡池如联动/忆旅返回数字 ID 串,如 "10"/"12")。</summary>
     [JsonPropertyName("cardPoolType")]
     public string CardPoolType { get; set; } = "";
 
@@ -29,13 +29,18 @@ public sealed class GachaRecord
     /// <summary>归属玩家 ID(本地存储时写入)。</summary>
     [JsonIgnore] public string PlayerId { get; set; } = "";
 
-    /// <summary>卡池名 → 枚举(分析/存储用)。按名称包含关键词映射。</summary>
+    /// <summary>卡池标识 → 枚举(分析/存储用)。优先按数字 ID 解析,再按名称包含关键词映射。</summary>
     [JsonIgnore]
     public CardPoolTypeEnum PoolType
     {
         get
         {
             var name = CardPoolType ?? "";
+            // gmserver 对部分新卡池(联动/忆旅等)返回数字 ID 字符串(如 "10"/"12"),数值与枚举一致,直接映射。
+            if (int.TryParse(name, out var poolId) && Enum.IsDefined((CardPoolTypeEnum)poolId))
+            {
+                return (CardPoolTypeEnum)poolId;
+            }
             if (name.Contains("忆旅")) return name.Contains("武器") ? CardPoolTypeEnum.WeaponMemoryJourney : CardPoolTypeEnum.CharacterMemoryJourney;
             if (name.Contains("联动")) return name.Contains("武器") ? CardPoolTypeEnum.WeaponCollaboration : CardPoolTypeEnum.CharacterCollaboration;
             if (name.Contains("新手") && name.Contains("感恩")) return CardPoolTypeEnum.GratitudeOrientation;
