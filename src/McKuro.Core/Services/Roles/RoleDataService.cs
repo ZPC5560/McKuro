@@ -155,9 +155,25 @@ public sealed class RoleDataService : IRoleDataService
                 roles.AddRange(list);
             }
 
-            if (roles.Count > 0)
+            // 详情齐全(未被风控)才写缓存:不完整同步不得覆盖上次完整数据
+            if (IsCompleteSync(geeTestTriggered, roles))
             {
                 SaveCache(userId, roleId, roles);
+                return new RoleDataLoadResult { Source = RoleDataSource.Kujiequ, Roles = roles };
+            }
+
+            // 详情受限(极验风控等):优先展示上次同步成功的完整库街区数据(缓存),避免页面空有基础信息
+            var cached = LoadCompleteCacheOrNull(userId, roleId);
+            if (cached is not null)
+            {
+                return new RoleDataLoadResult
+                {
+                    Source = RoleDataSource.Kujiequ,
+                    Roles = cached,
+                    Message = geeTestTriggered
+                        ? "库街区详情接口受极验风控,已展示上次同步的完整数据,可稍后重试"
+                        : "详情数据不全,已展示上次同步的完整数据",
+                };
             }
 
             return new RoleDataLoadResult
@@ -202,23 +218,70 @@ public sealed class RoleDataService : IRoleDataService
         }
         try
         {
-            using var cmd = _db.Connection.CreateCommand();
-            cmd.CommandText = "SELECT json FROM role_cache WHERE account_id = $account AND player_id = $playerId";
-            cmd.Parameters.AddWithValue("$account", accountId ?? "");
-            cmd.Parameters.AddWithValue("$playerId", playerId);
-            var json = cmd.ExecuteScalar() as string;
-            if (string.IsNullOrEmpty(json))
+            var roles = ReadCacheRoles(accountId ?? "", playerId);
+            if (roles is not null)
             {
-                return new RoleDataLoadResult { Source = RoleDataSource.None, Message = "无缓存(或账号不一致)" };
+                // 当前账号缓存详情不完整(某次同步被风控写入)→ 回退旧版完整缓存
+                if (!roles.All(static r => r.IsDetailComplete))
+                {
+                    var legacy = ReadCompleteCacheRoles("", playerId);
+                    if (legacy is not null)
+                    {
+                        return new RoleDataLoadResult
+                        {
+                            Source = RoleDataSource.Local, Roles = legacy, Message = "来自本地完整缓存(旧版账号键)",
+                        };
+                    }
+                }
+                return new RoleDataLoadResult { Source = RoleDataSource.Local, Roles = roles, Message = "来自本地缓存" };
             }
 
-            var roles = JsonSerializer.Deserialize(json, RoleJsonContext.Default.ListRoleDetail) ?? [];
-            return new RoleDataLoadResult { Source = RoleDataSource.Local, Roles = roles, Message = "来自本地缓存" };
+            // 兼容旧版:早期账号登录态未持久化时缓存以空账号键保存,同一玩家数据仍有效
+            var legacyRow = ReadCompleteCacheRoles("", playerId);
+            if (legacyRow is not null)
+            {
+                return new RoleDataLoadResult
+                {
+                    Source = RoleDataSource.Local, Roles = legacyRow, Message = "来自本地完整缓存(旧版账号键)",
+                };
+            }
+            return new RoleDataLoadResult { Source = RoleDataSource.None, Message = "无缓存(或账号不一致)" };
         }
         catch (Exception)
         {
             return new RoleDataLoadResult { Source = RoleDataSource.None, Message = "缓存读取失败" };
         }
+    }
+
+    /// <summary>同步结果是否"详情齐全且未触发极验"——只有这样的结果才允许写缓存。</summary>
+    internal static bool IsCompleteSync(bool geeTestTriggered, IReadOnlyList<RoleDetail> roles)
+        => !geeTestTriggered && roles.Count > 0 && roles.All(static r => r.IsDetailComplete);
+
+    /// <summary>读缓存行(account_id, player_id);无记录返回 null。</summary>
+    private List<RoleDetail>? ReadCacheRoles(string accountId, string playerId)
+    {
+        using var cmd = _db.Connection.CreateCommand();
+        cmd.CommandText = "SELECT json FROM role_cache WHERE account_id = $account AND player_id = $playerId";
+        cmd.Parameters.AddWithValue("$account", accountId ?? "");
+        cmd.Parameters.AddWithValue("$playerId", playerId);
+        var json = cmd.ExecuteScalar() as string;
+        return string.IsNullOrEmpty(json)
+            ? null
+            : JsonSerializer.Deserialize(json, RoleJsonContext.Default.ListRoleDetail);
+    }
+
+    /// <summary>读缓存并校验详情齐全;缺失/不完整返回 null。</summary>
+    private List<RoleDetail>? ReadCompleteCacheRoles(string accountId, string playerId)
+    {
+        var roles = ReadCacheRoles(accountId, playerId);
+        return roles is { Count: > 0 } && roles.All(static r => r.IsDetailComplete) ? roles : null;
+    }
+
+    /// <summary>读取任意可用的完整缓存(当前账号行 → 旧版空账号键行);无则 null。</summary>
+    private List<RoleDetail>? LoadCompleteCacheOrNull(string accountId, string playerId)
+    {
+        return ReadCompleteCacheRoles(accountId, playerId)
+            ?? ReadCompleteCacheRoles("", playerId);
     }
 
     private void SaveCache(string accountId, string playerId, IReadOnlyList<RoleDetail> roles)

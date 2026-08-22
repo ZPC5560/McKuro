@@ -285,9 +285,7 @@ public sealed partial class RolesViewModel : ViewModelBase
             return;
         }
         // 详情已完整(getRoleDetail 未被风控)则跳过
-        if (role.WeaponData is not null
-            && role.Skills is { Count: > 0 }
-            && role.Attributes is { Count: > 0 })
+        if (role.IsDetailComplete)
         {
             return;
         }
@@ -447,7 +445,7 @@ public sealed partial class RolesViewModel : ViewModelBase
             if (result.IsSuccess)
             {
                 ApplyRoles(result);
-                StatusText = $"库街区同步成功: {result.Roles.Count} 个角色";
+                StatusText = result.Message ?? $"库街区同步成功: {result.Roles.Count} 个角色";
             }
             else
             {

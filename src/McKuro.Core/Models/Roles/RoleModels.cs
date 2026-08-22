@@ -242,6 +242,12 @@ public sealed class RoleDetail : INotifyPropertyChanged
 
     /// <summary>是否有属性面板数据。</summary>
     public bool HasAttributes => Attributes is { Count: > 0 };
+
+    /// <summary>
+    /// 详情区块是否完整(武器/技能/属性面板齐全)。
+    /// getRoleDetail 被极验风控时接口只返回基础信息(详情为 null),此处为 false。
+    /// </summary>
+    public bool IsDetailComplete => WeaponData is not null && Skills is { Count: > 0 } && Attributes is { Count: > 0 };
 }
 
 /// <summary>声骸数据(对齐 Haiyu getRoleDetail.phantomData → equipPhantomList)。</summary>
