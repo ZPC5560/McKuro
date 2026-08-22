@@ -87,4 +87,12 @@
     <None Include="Assets\HpatchzResource\NOTICE.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\HpatchzResource\LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- macOS 构建后自动打包 libmpv + 依赖到 libmpv/ 子目录(仅构建脚本存在时,不阻断构建) -->
+  <Target Name="BundleMpvMacOS" AfterTargets="AfterBuild"
+          Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <Exec Command="bash &quot;$(MSBuildProjectDirectory)/bundle-mpv-macos.sh&quot; &quot;$(TargetDir)&quot;"
+          Condition="Exists('$(MSBuildProjectDirectory)/bundle-mpv-macos.sh')"
+          ContinueOnError="WarnAndContinue" />
+  </Target>
 </Project>

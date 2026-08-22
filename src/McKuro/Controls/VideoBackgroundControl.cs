@@ -34,10 +34,11 @@ namespace McKuro.Controls;
 /// 注意<b>不要</b>调用 <see cref="MpvContextBase.ClientName"/>(库中唯一自定义 marshaler 入口,与 AOT 裁剪冲突)。
 /// </para>
 /// <para>
-/// native 库定位:Windows 由 <c>Endpne.LibMPV.Windows</c> 自动拷到输出 <c>libmpv\win-x64\libmpv-2.dll</c>
-/// (或 win-arm64)。libmpv 的 Windows resolver 只搜索 <see cref="MpvApi.RootPath"/>,因此首次创建
-/// <see cref="MpvContext"/> 前必须把 <see cref="MpvApi.RootPath"/> 指向含 <c>libmpv-2.dll</c> 的目录;
-/// macOS/Linux 走系统/Homebrew libmpv(resolver 内置搜索 + RootPath 兜底)。
+/// native 库定位:统一把 <see cref="MpvApi.RootPath"/> 指向软件目录内的 libmpv 副本。
+/// Windows 由 <c>Endpne.LibMPV.Windows</c> 自动拷到输出 <c>libmpv\win-x64\libmpv-2.dll</c>
+/// (或 win-arm64);macOS/Linux 由构建目标调用 <c>bundle-mpv-macos.sh</c> 把 libmpv 及其
+/// 完整依赖树打包进输出 <c>libmpv/</c> 子目录(全部改写为 @loader_path 相对加载路径,
+/// 自带播放环境,目标机器无需安装 Homebrew/mpv)。打包副本缺失时再回退系统/Homebrew 路径。
 /// </para>
 /// </summary>
 public sealed class VideoBackgroundControl : Grid
@@ -162,9 +163,29 @@ public sealed class VideoBackgroundControl : Grid
 
         try
         {
-            // 必须在 new MpvContext() 之前完成:libmpv Windows resolver 只在 MpvApi.RootPath 下找 libmpv-2.dll
+            // 必须在探测/创建 MpvContext 之前完成:libmpv resolver 只在 MpvApi.RootPath
+            // (默认 AppContext.BaseDirectory)下找库。Windows 由 Endpne.LibMPV.Windows 拷到
+            // libmpv\win-x64;macOS 由 bundle-mpv-macos.sh 打包到 libmpv/ 子目录。
             EnsureNativeRootPath();
+        }
+        catch (Exception)
+        {
+            // 设置 RootPath 失败不阻塞:探测与创建仍有系统路径兜底
+        }
 
+        // 平台无 libmpv 时直接回退静态图 —— 不能继续创建 MpvContext:
+        // 构造器抛 DllNotFoundException 后,部分构造的对象仍会被 GC 终结,
+        // 其 Finalize → StopRendering 再次解析 libmpv 函数指针,终结器内异常
+        // 无法被托管 try-catch 捕获,进程直接崩溃(实测 macOS Abort trap: 6)。
+        if (!IsLibMpvAvailable())
+        {
+            Debug.WriteLine("[libmpv] native 库不可用,回退静态图");
+            ShowFallback();
+            return;
+        }
+
+        try
+        {
             _mpv = new BackgroundMpvContext();
             _videoImage = new Image
             {
@@ -595,31 +616,119 @@ public sealed class VideoBackgroundControl : Grid
         }
     }
 
+    /// <summary>
+    /// 探测 libmpv native 库是否可用,决定是否尝试视频播放。
+    /// 顺序与 LibMpv resolver(<c>MacFunctionResolver</c>)的实际搜索一致:
+    /// ① 系统/Homebrew 路径(命中即返回,不加载软件目录打包版 —— 避免同一进程同时
+    ///    加载两套 dylib,ObjC 类重复注册告警/潜在崩溃);② 都没有时再探测
+    ///    <see cref="MpvApi.RootPath"/> 指向的软件目录打包副本(bundle-mpv-macos.sh
+    ///    生成,自包含依赖树,目标机器无需安装 Homebrew/mpv)。
+    /// dlopen 成功才能证明库真的可加载(文件存在但架构不符时会失败,此时回退静态图,
+    /// 避免构造 MpvContext 崩溃)。Windows:检查 RootPath 下 libmpv-2.dll
+    /// (Endpne.LibMPV.Windows 打包的副本,或手动放置)。
+    /// </summary>
+    private static bool IsLibMpvAvailable()
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                var root = MpvApi.RootPath ?? AppContext.BaseDirectory;
+                if (File.Exists(Path.Combine(root, "libmpv-2.dll")))
+                {
+                    return true;
+                }
+
+                // 兜底:Windows LoadLibrary 默认搜索路径(app 目录 / system32 / PATH)
+                if (NativeLibrary.TryLoad("libmpv-2", typeof(VideoBackgroundControl).Assembly, null, out var winHandle))
+                {
+                    NativeLibrary.Free(winHandle);
+                    return true;
+                }
+                return false;
+            }
+
+            // ① 系统/Homebrew 路径(MacFunctionResolver 的搜索顺序,先命中先使用)
+            var fileName = OperatingSystem.IsMacOS() ? "libmpv.2.dylib" : "libmpv.so.2";
+            string[] systemCandidates = OperatingSystem.IsMacOS()
+                ? new[] { "/usr/local/lib", "/opt/homebrew/lib", "/usr/lib" }
+                : new[] { "/usr/lib/x86_64-linux-gnu", "/lib64", "/usr/lib64", "/lib", "/usr/lib" };
+
+            foreach (var dir in systemCandidates)
+            {
+                if (NativeLibrary.TryLoad(Path.Combine(dir, fileName), out var handle))
+                {
+                    NativeLibrary.Free(handle);
+                    return true;
+                }
+            }
+
+            // ② 系统/Homebrew 都没有 → 探测软件目录打包副本(RootPath 已由 EnsureNativeRootPath 指向 libmpv/)
+            var rootPath = MpvApi.RootPath ?? AppContext.BaseDirectory;
+            string[] bundledCandidates =
+            {
+                rootPath,
+                Path.Combine(AppContext.BaseDirectory, "libmpv"),
+                AppContext.BaseDirectory,
+            };
+            foreach (var dir in bundledCandidates)
+            {
+                if (NativeLibrary.TryLoad(Path.Combine(dir, fileName), out var handle))
+                {
+                    NativeLibrary.Free(handle);
+                    return true;
+                }
+            }
+
+            // 兜底:标准 dlopen 搜索路径(DYLD_LIBRARY_PATH / LD_LIBRARY_PATH 等自定义路径)
+            var libName = OperatingSystem.IsMacOS() ? "libmpv.2" : "libmpv.so.2";
+            if (NativeLibrary.TryLoad(libName, typeof(VideoBackgroundControl).Assembly, null, out var sysHandle))
+            {
+                NativeLibrary.Free(sysHandle);
+                return true;
+            }
+            return false;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     private static void EnsureNativeRootPath()
     {
-        // libmpv 的 Windows resolver 只在 MpvApi.RootPath 下搜索 libmpv-2.dll(单一路径,无系统回退)。
-        // Endpne.LibMPV.Windows 会把 dll 拷到 libmpv\win-x64(AnyCPU→x64)或 libmpv\win-arm64;
-        // 探测到就把 RootPath 指过去;找不到则保持默认(AppContext.BaseDirectory,可能直接放 dll)。
-        // macOS/Linux resolver 自带系统路径,不需要改 RootPath。
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
+        // 所有平台统一:优先把 MpvApi.RootPath 指向软件目录内打包的 libmpv 副本。
+        // Windows:Endpne.LibMPV.Windows 会把 dll 拷到 libmpv\win-x64 / libmpv\win-arm64。
+        // macOS/Linux:bundle-mpv-macos.sh 构建后生成 libmpv/ 子目录(自包含依赖树,
+        // @loader_path 相对加载),MacFunctionResolver 的最后搜索路径就是 RootPath。
         var baseDir = AppContext.BaseDirectory;
-        string[] candidates =
-        {
-            Path.Combine(baseDir, "libmpv", "win-x64"),
-            Path.Combine(baseDir, "libmpv", "win-arm64"),
-            baseDir,
-        };
 
-        foreach (var dir in candidates)
+        if (OperatingSystem.IsWindows())
         {
-            if (Directory.Exists(dir) && File.Exists(Path.Combine(dir, "libmpv-2.dll")))
+            string[] candidates =
             {
-                MpvApi.RootPath = dir;
-                return;
+                Path.Combine(baseDir, "libmpv", "win-x64"),
+                Path.Combine(baseDir, "libmpv", "win-arm64"),
+                baseDir,
+            };
+
+            foreach (var dir in candidates)
+            {
+                if (Directory.Exists(dir) && File.Exists(Path.Combine(dir, "libmpv-2.dll")))
+                {
+                    MpvApi.RootPath = dir;
+                    return;
+                }
+            }
+        }
+        else
+        {
+            // macOS/Linux 打包副本(bundle-mpv-macos.sh 输出,与 Windows 同级布局)
+            var bundled = Path.Combine(baseDir, "libmpv");
+            var fileName = OperatingSystem.IsMacOS() ? "libmpv.2.dylib" : "libmpv.so.2";
+            if (Directory.Exists(bundled) && File.Exists(Path.Combine(bundled, fileName)))
+            {
+                MpvApi.RootPath = bundled;
             }
         }
     }
