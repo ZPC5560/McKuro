@@ -189,7 +189,7 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:DailyItem">
-                                        <Border Height="106" Margin="0,0,12,12" CornerRadius="12"
+                                        <Border MinHeight="106" Margin="0,0,12,12" CornerRadius="12"
                                                 Background="{DynamicResource McKuroGlassFill}" BorderBrush="{DynamicResource McKuroGlassStroke}" BorderThickness="1"
                                                 Padding="12,10" ClipToBounds="True">
                                             <StackPanel Spacing="5">
@@ -215,6 +215,10 @@
                                                 <ProgressBar Minimum="0" Maximum="100" Value="{Binding Percent}"
                                                              Height="5" CornerRadius="2.5"
                                                              IsVisible="{Binding HasTotal}" />
+                                                <!-- 恢复满倒计时(体力/结晶单质:体力未满时结晶单质不显示) -->
+                                                <TextBlock Text="{Binding CountdownText}" FontSize="11"
+                                                           Foreground="{DynamicResource McKuroAccent}"
+                                                           IsVisible="{Binding CountdownText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                                 <!-- 次要说明(电台 "经验: x/x")置于进度条下方 -->
                                                 <TextBlock Text="{Binding SubText}" FontSize="11"
                                                            Foreground="{DynamicResource McKuroTextMuted}" TextTrimming="CharacterEllipsis"
