@@ -266,7 +266,7 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:PieSliceViewModel">
-                                                    <Path Data="{Binding Data}" Fill="{Binding Brush}" Stretch="Fill" />
+                                                    <Path Data="{Binding Data}" Fill="{Binding Brush}" Stretch="None" />
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
@@ -308,7 +308,7 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:PieSliceViewModel">
-                                                    <Path Data="{Binding Data}" Fill="{Binding Brush}" Stretch="Fill" />
+                                                    <Path Data="{Binding Data}" Fill="{Binding Brush}" Stretch="None" />
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
@@ -350,7 +350,7 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:PieSliceViewModel">
-                                                    <Path Data="{Binding Data}" Fill="{Binding Brush}" Stretch="Fill" />
+                                                    <Path Data="{Binding Data}" Fill="{Binding Brush}" Stretch="None" />
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>

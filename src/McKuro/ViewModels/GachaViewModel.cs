@@ -747,7 +747,7 @@ public sealed partial class GachaViewModel : ViewModelBase
     }
 }
 
-/// <summary>自绘环形图扇区(ViewBox 0-100 坐标系,圆心 50,50;外径 46,内孔 28)。</summary>
+/// <summary>自绘环形图扇区(140 像素坐标系,圆心 70,70;外径 64.4,内孔 39.2;与画布 1:1,不使用 Stretch 缩放)。</summary>
 public sealed class PieSliceViewModel
 {
     public required string Data { get; init; }
@@ -755,7 +755,7 @@ public sealed class PieSliceViewModel
     public required string Name { get; init; }
     public required double Value { get; init; }
 
-    private const double CenterX = 50, CenterY = 50, OuterR = 46, InnerR = 28;
+    private const double CenterX = 70, CenterY = 70, OuterR = 64.4, InnerR = 39.2;
 
     /// <summary>生成从 startAngle 到 endAngle(度,顺时针,12 点钟为 0)的环形扇区 Path。</summary>
     public static string BuildSector(double startAngle, double endAngle)

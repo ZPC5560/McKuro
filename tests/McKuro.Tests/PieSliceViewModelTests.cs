@@ -18,10 +18,10 @@ public class PieSliceViewModelTests
         Assert.Equal(2, slices.Count);
         foreach (var slice in slices)
         {
-            // 环形:外弧(46) + 内弧(28),不再含圆心线段
-            Assert.Contains("A 46,46", slice.Data);
-            Assert.Contains("A 28,28", slice.Data);
-            Assert.DoesNotContain("50,50", slice.Data);
+            // 环形:外弧(64.4=140 画布 1:1,圆心 70,70) + 内弧(39.2),不再含圆心线段
+            Assert.Contains("A 64.4,64.4", slice.Data);
+            Assert.Contains("A 39.2,39.2", slice.Data);
+            Assert.DoesNotContain("70,70", slice.Data);
         }
     }
 
@@ -35,9 +35,9 @@ public class PieSliceViewModelTests
         var slice = Assert.Single(slices);
         // 整圈特例:内外两个圆(各用两段半圆弧),环形中空
         Assert.Equal(4, slice.Data.Split("A ").Length - 1);
-        Assert.Contains("A 46,46", slice.Data);
-        Assert.Contains("A 28,28", slice.Data);
-        Assert.DoesNotContain("50,50", slice.Data);
+        Assert.Contains("A 64.4,64.4", slice.Data);
+        Assert.Contains("A 39.2,39.2", slice.Data);
+        Assert.DoesNotContain("70,70", slice.Data);
     }
 
     [Theory]
