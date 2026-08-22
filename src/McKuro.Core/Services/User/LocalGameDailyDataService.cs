@@ -128,7 +128,10 @@ public sealed class LocalGameDailyDataService
                 }
                 role.ServerName = serverName;
 
-                return MapToDaily(role, player.RoleName ?? "", player.RoleId ?? "");
+                var daily = MapToDaily(role, player.RoleName ?? "", player.RoleId ?? "");
+                // 等级优先取 queryPlayerInfo,缺失时回退 queryRole 的 BaseData
+                daily.Level = player.Level > 0 ? player.Level : role?.Base?.Level ?? 0;
+                return daily;
             }
             return null;
         }
@@ -175,6 +178,8 @@ public sealed class LocalGameDailyDataService
             RoleId = roleId,
             RoleName = string.IsNullOrEmpty(roleName) ? b?.Name : roleName,
             ServerName = role?.ServerName,
+            ActiveDays = b?.ActiveDays ?? 0,
+            CreatTime = b?.CreatTime ?? 0,
             EnergyData = b is null ? null : new RoleDailyDetail
             {
                 Name = "体力",
@@ -271,6 +276,8 @@ public sealed class PcRoleBase
     [JsonPropertyName("WorldLevel")] public int WorldLevel { get; set; }
     [JsonPropertyName("RoleNum")] public int RoleNum { get; set; }
     [JsonPropertyName("WeeklyInstCount")] public int WeeklyInstCount { get; set; }
+    [JsonPropertyName("ActiveDays")] public int ActiveDays { get; set; }
+    [JsonPropertyName("CreatTime")] public long CreatTime { get; set; }
 }
 
 [JsonSerializable(typeof(List<LauncherCacheAccount>))]

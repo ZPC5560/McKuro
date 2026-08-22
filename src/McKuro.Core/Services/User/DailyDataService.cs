@@ -63,8 +63,32 @@ public sealed class DailyDataService
 
         try
         {
-            return await _api.GetRoleDailyDataAsync(
+            var daily = await _api.GetRoleDailyDataAsync(
                 accessToken, deviceId, roleId, account.UserId ?? "", "android", ct).ConfigureAwait(false);
+            if (daily is null)
+            {
+                return null;
+            }
+
+            // 合并账号资料(昵称/等级/头像,来自库街区 gamer 角色条目)
+            daily.RoleName = string.IsNullOrWhiteSpace(daily.RoleName) ? role.RoleName : daily.RoleName;
+            daily.Level = int.TryParse(role.GameLevel, out var gamerLevel) ? gamerLevel : 0;
+            daily.HeadUrl = string.IsNullOrWhiteSpace(role.HeadPhotoUrl) ? role.GameHeadUrl : role.HeadPhotoUrl;
+
+            // 合并数据中心基础资料(游玩天数/注册时间/周本图标;失败不影响每日数据展示)
+            var baseData = await _api.GetGamerBaseDataAsync(
+                accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
+            if (baseData is not null)
+            {
+                daily.ActiveDays = baseData.ActiveDays;
+                daily.CreatTime = baseData.CreatTime;
+                daily.WeeklyIconUrl = baseData.WeeklyInstIconUrl;
+                if (daily.Level == 0 && baseData.Level > 0)
+                {
+                    daily.Level = baseData.Level;
+                }
+            }
+            return daily;
         }
         catch (Exception ex)
         {

@@ -229,4 +229,60 @@ public class KujiequApiClientTests
             listener.Stop();
         }
     }
+
+    [Fact]
+    public async Task GetGamerBaseDataAsync_Parses_BaseData_And_Sends_Expected_Form()
+    {
+        var (baseUrl, listener, bodies) = StartServer(new Dictionary<string, string>
+        {
+            // baseData(数据中心)响应:data 为 JSON 字符串(对齐 Haiyu GamerBassString)
+            ["/aki/roleBox/akiBox/baseData"] =
+                """
+                {"code":200,"data":"{\"name\":\"以椿为鸣\",\"level\":80,\"activeDays\":818,\"creatTime\":1716441600000,\"weeklyInstCount\":1,\"weeklyInstCountLimit\":2,\"weeklyInstIconUrl\":\"https://prod-alicdn-gamestarter.kurogame.com/pcstarter/prod/game/aki/1002_3a76b8f59zPZz/weeklyInst.png\"}","msg":"成功","success":true}
+                """,
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var baseData = await client.GetGamerBaseDataAsync(Token, DeviceId, RoleId);
+            Assert.NotNull(baseData);
+            Assert.Equal("以椿为鸣", baseData.Name);
+            Assert.Equal(80, baseData.Level);
+            Assert.Equal(818, baseData.ActiveDays);
+            Assert.Equal(1716441600000, baseData.CreatTime);
+            Assert.Equal(1, baseData.WeeklyInstCount);
+            Assert.Equal(2, baseData.WeeklyInstCountLimit);
+            Assert.Contains("weeklyInst.png", baseData.WeeklyInstIconUrl);
+            var body = Assert.Single(bodies);
+            Assert.Contains("gameId=" + KujiequApiClient.ParamGameId, body);
+            Assert.Contains("roleId=" + RoleId, body);
+            Assert.Contains("serverId=" + KujiequApiClient.ParamServerId, body);
+            Assert.Contains("channelId=19", body);
+            Assert.Contains("countryCode=1", body);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task GetGamerBaseDataAsync_Returns_Null_On_Non200()
+    {
+        var (baseUrl, listener, _) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/baseData"] =
+                """{"code":500,"data":null,"msg":"查询失败","success":false}""",
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var baseData = await client.GetGamerBaseDataAsync(Token, DeviceId, RoleId);
+            Assert.Null(baseData);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
 }

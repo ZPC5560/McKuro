@@ -30,6 +30,7 @@ public sealed class KujiequApiClient
     public const string NewTowerUrl = BaseUrl + "/aki/roleBox/akiBox/newTowerDetail";
     public const string SlashUrl = BaseUrl + "/aki/roleBox/akiBox/slashDetail";
     public const string DailyDataUrl = BaseUrl + "/gamer/widget/game3/getData";
+    public const string BaseDataUrl = BaseUrl + "/aki/roleBox/akiBox/baseData";
 
     // 固定参数(对齐 WutheringWavesTool ApiConfig.PARAM_SERVER_ID / PARAM_GAME_ID)
     public const string ParamServerId = "76402e5b20be2c39f095a152090afddc";
@@ -76,6 +77,9 @@ public sealed class KujiequApiClient
 
     /// <summary>getData(每日数据)端点。</summary>
     public string DailyDataUrlValue => _baseUrl.TrimEnd('/') + "/gamer/widget/game3/getData";
+
+    /// <summary>baseData(数据中心玩家基础资料)端点。</summary>
+    public string BaseDataUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/akiBox/baseData";
 
     /// <summary>外层响应信封(data 类型随接口而异:字符串或布尔)。</summary>
     public sealed class KujiequEnvelope
@@ -318,6 +322,39 @@ public sealed class KujiequApiClient
             _logger.LogWarning(ex, "getData 反序列化失败: roleId={RoleId}", roleId);
             return null;
         }
+    }
+
+    /// <summary>
+    /// 获取数据中心玩家基础资料(akiBox/baseData,对齐 Haiyu GetGamerBassDataAsync):
+    /// 游玩天数/注册时间/等级/周本(战歌重奏)图标等;失败返回 null。
+    /// </summary>
+    public async Task<GamerBaseData?> GetGamerBaseDataAsync(
+        string accessToken,
+        string deviceId,
+        string roleId,
+        string? source = null,
+        CancellationToken ct = default)
+    {
+        var headers = BuildWebHeader(accessToken, deviceId);
+        var body = $"gameId={ParamGameId}&roleId={roleId}&serverId={ParamServerId}&channelId=19&countryCode=1";
+        KujiequEnvelope? env;
+        try
+        {
+            env = await SendEnvelopeAsync(BaseDataUrlValue, headers, body, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "baseData 请求异常: roleId={RoleId}", roleId);
+            return null;
+        }
+        var dataStr = GetDataString(env);
+        if (dataStr is null)
+        {
+            _logger.LogWarning("baseData 返回空 data: roleId={RoleId} code={Code} msg={Msg}",
+                roleId, env?.Code, env?.Msg);
+            return null;
+        }
+        return JsonSerializer.Deserialize(dataStr, UserJsonContext.Default.GamerBaseData);
     }
 
     /// <summary>

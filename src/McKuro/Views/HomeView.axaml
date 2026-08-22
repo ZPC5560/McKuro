@@ -79,9 +79,9 @@
                         <DoubleTransition Property="Opacity" Duration="0:0:0.9" />
                     </Transitions>
                 </Grid.Transitions>
-                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="56">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="48">
                     <!-- ─── 左:欢迎标题区(splash-left) ─── -->
-                    <StackPanel Grid.Column="0" MaxWidth="460" VerticalAlignment="Center" Spacing="0">
+                    <StackPanel Grid.Column="0" MaxWidth="420" VerticalAlignment="Center" Spacing="0">
                         <!-- 签名行 -->
                         <TextBlock Text="MCKURO · 鸣潮启动器" FontSize="12" FontWeight="Light"
                                    LetterSpacing="3" Foreground="{DynamicResource McKuroTextMuted}" />
@@ -126,21 +126,66 @@
                                    Text="{Binding StatusText}" TextWrapping="Wrap" />
                     </StackPanel>
 
-                    <!-- ─── 右:每日数据(半透明卡片) ─── -->
+                    <!-- ─── 右:角色资料卡 + 每日数据(参考 Java WutheringWavesTool 首页布局) ─── -->
                     <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Spacing="18">
+                        <StackPanel Spacing="16">
+                            <!-- 资料卡:头像/昵称/等级/开服玩家徽章/游玩天数 -->
+                            <Border CornerRadius="16" Background="{DynamicResource McKuroGlassFill}"
+                                    BorderBrush="{DynamicResource McKuroGlassStroke}" BorderThickness="1"
+                                    Padding="16,12" IsVisible="{Binding HasProfile}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                                    <!-- 头像(圆形裁切;加载失败时露出底层占位图标) -->
+                                    <Grid Grid.Column="0" Width="56" Height="56" VerticalAlignment="Center">
+                                        <Border CornerRadius="28" Background="{DynamicResource McKuroGlassFillStrong}">
+                                            <ic:FluentIcon Icon="Person" IconVariant="Regular" IconSize="Size24"
+                                                           Foreground="{DynamicResource McKuroTextMuted}"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <Border CornerRadius="28" ClipToBounds="True" BorderBrush="{DynamicResource McKuroGlassStroke}" BorderThickness="1">
+                                            <controls:AsyncImage ImageUrl="{Binding AvatarUrl}" Stretch="UniformToFill" />
+                                        </Border>
+                                    </Grid>
+                                    <!-- 昵称 + 等级/开服玩家徽章 -->
+                                    <StackPanel Grid.Column="1" Spacing="7" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding RoleNameText}" FontSize="16" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource McKuroTextOnWallpaper}"
+                                                   TextTrimming="CharacterEllipsis" MaxWidth="220" />
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Border CornerRadius="9" Background="{DynamicResource McKuroGlassFillStrong}"
+                                                    Padding="8,2" IsVisible="{Binding LevelText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+                                                <TextBlock Text="{Binding LevelText}" FontSize="12" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource McKuroAccent}" />
+                                            </Border>
+                                            <Border CornerRadius="9" Background="{DynamicResource McKuroAccent}"
+                                                    Padding="8,2" IsVisible="{Binding IsLaunchPlayer}"
+                                                    ToolTip.Tip="{Binding RegisterText}">
+                                                <TextBlock Text="开服玩家" FontSize="12" FontWeight="SemiBold" Foreground="White" />
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <!-- 游玩天数 + 注册时间 -->
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="3" HorizontalAlignment="Right">
+                                        <TextBlock Text="{Binding PlayDaysText}" FontSize="14" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource McKuroTextOnWallpaper}" HorizontalAlignment="Right" />
+                                        <TextBlock Text="{Binding RegisterText}" FontSize="11.5" FontWeight="Light"
+                                                   Foreground="{DynamicResource McKuroTextMuted}" HorizontalAlignment="Right"
+                                                   IsVisible="{Binding RegisterText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
                             <StackPanel Spacing="4">
                                 <TextBlock Text="今日数据" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource McKuroTextOnWallpaper}" />
                             </StackPanel>
                             <ItemsControl ItemsSource="{Binding DailyItems}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <WrapPanel />
+                                        <UniformGrid Columns="3" />
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:DailyItem">
-                                        <Border Width="160" Height="102" Margin="0,0,12,12" CornerRadius="12"
+                                        <Border Height="106" Margin="0,0,12,12" CornerRadius="12"
                                                 Background="{DynamicResource McKuroGlassFill}" BorderBrush="{DynamicResource McKuroGlassStroke}" BorderThickness="1"
                                                 Padding="12,10" ClipToBounds="True">
                                             <StackPanel Spacing="6">
@@ -162,6 +207,9 @@
                                                                Foreground="{DynamicResource McKuroTextMuted}" VerticalAlignment="Center" Margin="6,0,0,0"
                                                                IsVisible="{Binding HasTotal}" />
                                                 </Grid>
+                                                <TextBlock Text="{Binding SubText}" FontSize="11"
+                                                           Foreground="{DynamicResource McKuroTextMuted}" TextTrimming="CharacterEllipsis"
+                                                           IsVisible="{Binding SubText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                                 <ProgressBar Minimum="0" Maximum="100" Value="{Binding Percent}"
                                                              Height="5" CornerRadius="2.5"
                                                              IsVisible="{Binding HasTotal}" />
