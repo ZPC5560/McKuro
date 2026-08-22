@@ -371,45 +371,14 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- 每日抽数折线图 (自绘 Path) -->
+                        <!-- 每日抽数平滑面积图(自绘:平滑曲线 + 左侧单位刻度 + 网格线) -->
                         <Border Grid.Row="2" Grid.ColumnSpan="3" CornerRadius="10" Padding="12"
                                 Background="{DynamicResource SemiColorBg2}">
-                            <Grid RowDefinitions="Auto,*,Auto">
+                            <Grid RowDefinitions="Auto,*">
                                 <TextBlock Text="每日抽数" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                <Grid Grid.Row="1" Height="150" Margin="0,0,0,6">
-                                    <Path Data="{Binding TimeLinePathData}"
-                                          Stretch="Fill">
-                                        <Path.Fill>
-                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                                <GradientStop Offset="0" Color="#661677FF" />
-                                                <GradientStop Offset="1" Color="#051677FF" />
-                                            </LinearGradientBrush>
-                                        </Path.Fill>
-                                        <Path.Stroke>
-                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                                <GradientStop Offset="0" Color="#1677FF" />
-                                                <GradientStop Offset="1" Color="#69B1FF" />
-                                            </LinearGradientBrush>
-                                        </Path.Stroke>
-                                        <Path.StrokeThickness>2</Path.StrokeThickness>
-                                    </Path>
-                                </Grid>
-                                <!-- 日期标签 -->
-                                <ItemsControl Grid.Row="2" ItemsSource="{Binding TimeLineLabels}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <Grid ColumnDefinitions="*" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding}" FontSize="10"
-                                                       Foreground="{DynamicResource SemiColorText3}"
-                                                       HorizontalAlignment="Center"
-                                                       TextTrimming="CharacterEllipsis" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <controls:TimeLineChart Grid.Row="1" Height="170" Margin="0,2,0,0"
+                                                        Values="{Binding TimeLineCounts}"
+                                                        Labels="{Binding TimeLineLabels}" />
                             </Grid>
                         </Border>
                     </Grid>

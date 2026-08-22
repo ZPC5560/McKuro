@@ -155,9 +155,8 @@ public sealed partial class GachaViewModel : ViewModelBase
 
     public AvaloniaList<PieSliceViewModel> PoolSlices { get; } = [];
 
-    /// <summary>每日抽数折线图 Path 数据(面积图)。</summary>
-    [ObservableProperty]
-    private string _timeLinePathData = "";
+    /// <summary>每日抽数(旧→新,用于平滑面积图;由 TimeLineChart 自绘)。</summary>
+    public AvaloniaList<int> TimeLineCounts { get; } = [];
 
     public AvaloniaList<string> TimeLineLabels { get; } = [];
 
@@ -576,9 +575,9 @@ public sealed partial class GachaViewModel : ViewModelBase
             .Select(p => (p.DisplayName, (double)p.TotalPulls)).ToList();
         PoolSlices.AddRange(PieSliceViewModel.BuildPie(poolsWithPulls, Palette));
 
-        // 每日抽数折线图
-        var counts = analysis.DailyPulls.Select(d => (double)d.Count).ToList();
-        TimeLinePathData = counts.Count > 0 ? PieSliceViewModel.BuildAreaPath(counts) : "";
+        // 每日抽数平滑面积图(自绘,参照调用趋势图)
+        TimeLineCounts.Clear();
+        TimeLineCounts.AddRange(analysis.DailyPulls.Select(d => d.Count));
         TimeLineLabels.Clear();
         TimeLineLabels.AddRange(analysis.DailyPulls.Select(d => d.Date.ToString("MM-dd")));
     }
@@ -781,34 +780,6 @@ public sealed class PieSliceViewModel
         }
 
         return result;
-    }
-
-    /// <summary>生成折线/面积图 Path(0-100 x 0-40 坐标)。</summary>
-    public static string BuildAreaPath(IReadOnlyList<double> values, double width = 100, double height = 40)
-    {
-        if (values.Count == 0)
-        {
-            return "";
-        }
-
-        var max = values.Max();
-        if (max <= 0)
-        {
-            max = 1;
-        }
-
-        var step = width / (values.Count - 1);
-        var sb = new System.Text.StringBuilder();
-        for (var i = 0; i < values.Count; i++)
-        {
-            double x = i * step;
-            double y = height - (values[i] / max) * (height * 0.85) - height * 0.05;
-            sb.Append(i == 0 ? "M " : " L ").Append(x.ToString("0.###")).Append(',').Append(y.ToString("0.###"));
-        }
-
-        sb.Append(" L ").Append(width.ToString("0.###")).Append(',').Append(height.ToString("0.###"));
-        sb.Append(" L 0,").Append(height.ToString("0.###")).Append(" Z");
-        return sb.ToString();
     }
 }
 
