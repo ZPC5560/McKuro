@@ -192,7 +192,7 @@
                                         <Border Height="106" Margin="0,0,12,12" CornerRadius="12"
                                                 Background="{DynamicResource McKuroGlassFill}" BorderBrush="{DynamicResource McKuroGlassStroke}" BorderThickness="1"
                                                 Padding="12,10" ClipToBounds="True">
-                                            <StackPanel Spacing="6">
+                                            <StackPanel Spacing="5">
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <!-- 官方图标(有 URL 时优先显示),否则 Fluent 图标兜底 -->
                                                     <controls:AsyncImage ImageUrl="{Binding ImageUrl}"
@@ -211,12 +211,14 @@
                                                                Foreground="{DynamicResource McKuroTextMuted}" VerticalAlignment="Center" Margin="6,0,0,0"
                                                                IsVisible="{Binding HasTotal}" />
                                                 </Grid>
-                                                <TextBlock Text="{Binding SubText}" FontSize="11"
-                                                           Foreground="{DynamicResource McKuroTextMuted}" TextTrimming="CharacterEllipsis"
-                                                           IsVisible="{Binding SubText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                                <!-- 进度条:与所有卡片同高(5),保持可视化一致 -->
                                                 <ProgressBar Minimum="0" Maximum="100" Value="{Binding Percent}"
                                                              Height="5" CornerRadius="2.5"
                                                              IsVisible="{Binding HasTotal}" />
+                                                <!-- 次要说明(电台 "经验: x/x")置于进度条下方 -->
+                                                <TextBlock Text="{Binding SubText}" FontSize="11"
+                                                           Foreground="{DynamicResource McKuroTextMuted}" TextTrimming="CharacterEllipsis"
+                                                           IsVisible="{Binding SubText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                             </StackPanel>
                                         </Border>
                                     </DataTemplate>
