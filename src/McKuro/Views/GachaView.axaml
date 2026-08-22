@@ -466,7 +466,7 @@
                         <Grid RowDefinitions="Auto,*">
                             <!-- 竖列卡池切换按键(替代原下拉框;池名 + 抽数) -->
                             <ListBox Grid.Row="0" ItemsSource="{Binding PoolTabs}"
-                                     SelectedItem="{Binding SelectedPool, Mode=TwoWay}"
+                                     SelectedItem="{Binding SelectedDetailPool, Mode=TwoWay}"
                                      Margin="0,0,0,8" Background="Transparent" BorderThickness="0"
                                      MaxHeight="240" ScrollViewer.VerticalScrollBarVisibility="Auto">
                                 <ListBox.ItemTemplate>

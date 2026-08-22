@@ -29,7 +29,8 @@ public sealed class GachaRecord
     /// <summary>归属玩家 ID(本地存储时写入)。</summary>
     [JsonIgnore] public string PlayerId { get; set; } = "";
 
-    /// <summary>卡池标识 → 枚举(分析/存储用)。优先按数字 ID 解析,再按名称包含关键词映射。</summary>
+    /// <summary>卡池标识 → 枚举(分析/存储用)。优先按数字 ID 解析,再按名称包含关键词映射;
+    /// 常驻池为混合池(角色+武器),按资源类型拆分为角色常驻/武器常驻。</summary>
     [JsonIgnore]
     public CardPoolTypeEnum PoolType
     {
@@ -45,7 +46,7 @@ public sealed class GachaRecord
             if (name.Contains("联动")) return name.Contains("武器") ? CardPoolTypeEnum.WeaponCollaboration : CardPoolTypeEnum.CharacterCollaboration;
             if (name.Contains("新手") && name.Contains("感恩")) return CardPoolTypeEnum.GratitudeOrientation;
             if (name.Contains("新手")) return CardPoolTypeEnum.Beginner;
-            if (name.Contains("常驻")) return name.Contains("武器") ? CardPoolTypeEnum.WeaponsResident : CardPoolTypeEnum.RoleResident;
+            if (name.Contains("常驻")) return IsRole ? CardPoolTypeEnum.RoleResident : CardPoolTypeEnum.WeaponsResident;
             if (name.Contains("新旅")) return name.Contains("武器") ? CardPoolTypeEnum.WeaponNovice : CardPoolTypeEnum.CharacterNovice;
             if (name.Contains("角色")) return CardPoolTypeEnum.RoleActivity;
             if (name.Contains("武器")) return CardPoolTypeEnum.WeaponsActivity;

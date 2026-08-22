@@ -170,6 +170,10 @@ public sealed partial class GachaViewModel : ViewModelBase
     /// <summary>详细分析页竖列卡池按钮(仅含有记录的池,按抽数降序)。</summary>
     public AvaloniaList<PoolStats> PoolTabs { get; } = [];
 
+    /// <summary>详细分析页的卡池选中项(独立的池列表,避免与综合分析下拉框共用选中项导致空池被清空)。</summary>
+    [ObservableProperty]
+    private PoolStats? _selectedDetailPool;
+
     /// <summary>每日抽数(旧→新,用于平滑面积图;由 TimeLineChart 自绘)。</summary>
     public AvaloniaList<int> TimeLineCounts { get; } = [];
 
@@ -560,6 +564,11 @@ public sealed partial class GachaViewModel : ViewModelBase
         PoolTabs.AddRange(Pools.Where(p => p.TotalPulls > 0));
 
         SelectedPool = Pools.FirstOrDefault(p => p.FiveStarCount > 0) ?? Pools.FirstOrDefault();
+        // 详细分析页独立选中:旧选中已不在新列表时回落到第一个有记录的池。
+        if (SelectedDetailPool is null || !PoolTabs.Contains(SelectedDetailPool))
+        {
+            SelectedDetailPool = PoolTabs.FirstOrDefault();
+        }
         RefreshDetail();
         BuildCharts(analysis);
     }
@@ -606,7 +615,25 @@ public sealed partial class GachaViewModel : ViewModelBase
         TimeLineTips.AddRange(analysis.DailyPulls.Select(TimeLineChart.BuildTip));
     }
 
-    partial void OnSelectedPoolChanged(PoolStats? value) => RefreshDetail();
+    partial void OnSelectedPoolChanged(PoolStats? value)
+    {
+        // 详细分析页列表只含有记录的池;选中的空池不在其中时保持其原有选中,
+        // 避免无记录池在其他控件的两路选中被写成 null(下拉框数据变空)。
+        if (value is not null && SelectedDetailPool != value && PoolTabs.Contains(value))
+        {
+            SelectedDetailPool = value;
+        }
+        RefreshDetail();
+    }
+
+    partial void OnSelectedDetailPoolChanged(PoolStats? value)
+    {
+        // 详细分析页选择某个池时,同步综合分析下拉框与摘要。
+        if (value is not null)
+        {
+            SelectedPool = value;
+        }
+    }
 
     private void RefreshDetail()
     {

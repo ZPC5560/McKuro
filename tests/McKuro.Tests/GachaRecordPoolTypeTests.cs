@@ -7,8 +7,6 @@ public class GachaRecordPoolTypeTests
     [Theory]
     [InlineData("角色精准调谐", CardPoolType.RoleActivity)]
     [InlineData("武器精准调谐", CardPoolType.WeaponsActivity)]
-    [InlineData("角色调谐（常驻池）", CardPoolType.RoleResident)]
-    [InlineData("武器调谐（常驻池）", CardPoolType.WeaponsResident)]
     [InlineData("新手调谐", CardPoolType.Beginner)]
     [InlineData("新手自选唤取", CardPoolType.Beginner)]
     [InlineData("新手自选唤取（感恩定向唤取）", CardPoolType.GratitudeOrientation)]
@@ -41,6 +39,18 @@ public class GachaRecordPoolTypeTests
     public void PoolType_MapsNumericIds(string label, CardPoolType expected)
     {
         var record = new GachaRecord { CardPoolType = label };
+        Assert.Equal(expected, record.PoolType);
+    }
+
+    [Theory]
+    // 常驻池为混合池(角色+武器同池记录),按资源类型拆分为角色常驻/武器常驻。
+    [InlineData("角色调谐（常驻池）", "角色", CardPoolType.RoleResident)]
+    [InlineData("角色调谐（常驻池）", "武器", CardPoolType.WeaponsResident)]
+    [InlineData("武器调谐（常驻池）", "角色", CardPoolType.RoleResident)]
+    [InlineData("武器调谐（常驻池）", "武器", CardPoolType.WeaponsResident)]
+    public void PoolType_SplitsMixedResidentPoolByResourceType(string label, string resourceType, CardPoolType expected)
+    {
+        var record = new GachaRecord { CardPoolType = label, ResourceType = resourceType };
         Assert.Equal(expected, record.PoolType);
     }
 

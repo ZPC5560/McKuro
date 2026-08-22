@@ -156,7 +156,17 @@ public class GachaAnalysisServiceTests
         };
         var records = new List<GachaRecord>
         {
-            R(4, 21010015, 5, "ResidentWeapon", "2024-01-01 10:00:00"),
+            new()
+            {
+                PlayerId = "p1",
+                CardPoolType = "武器常驻",
+                ResourceId = 21010015,
+                QualityLevel = 5,
+                ResourceType = "武器",
+                Name = "ResidentWeapon",
+                Count = 1,
+                Time = "2024-01-01 10:00:00",
+            },
         };
 
         var result = new GachaAnalysisService().Analyze("p1", records, upIds);
