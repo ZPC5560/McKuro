@@ -150,7 +150,15 @@ public sealed class GachaAnalysisService
         string? firstTime = null;
         string? lastTime = null;
 
-        HashSet<int>? upSet = upIds is not null && upIds.TryGetValue(poolType, out var set) ? set : null;
+        // 仅当该池可判定 UP 且集合非空时才判定歪/UP:
+        //  - 空集合会导致全判歪(远程数据缺失的兜底);
+        //  - 常驻/新手等无 UP 概念的池(如武器常驻)本身就是常驻卡池,不应标记歪。
+        HashSet<int>? upSet = upIds is not null
+            && upIds.TryGetValue(poolType, out var set)
+            && set.Count > 0
+            && CanJudgeUp(poolType)
+            ? set
+            : null;
 
         foreach (var record in records)
         {
@@ -245,6 +253,17 @@ public sealed class GachaAnalysisService
             EndDate = lastTime is { Length: >= 10 } ? lastTime[..10] : "",
         };
     }
+
+    /// <summary>
+    /// 该卡池是否有 UP 概念(可判定歪/UP)。
+    /// 常驻池(角色/武器常驻)与新手类池本身就是常驻卡池,无 UP 五星,不做歪/UP 判定。
+    /// </summary>
+    private static bool CanJudgeUp(CardPoolType poolType) => poolType is not
+        (CardPoolType.RoleResident or
+         CardPoolType.WeaponsResident or
+         CardPoolType.Beginner or
+         CardPoolType.BeginnerChoice or
+         CardPoolType.GratitudeOrientation);
 
     /// <summary>
     /// 小保底歪率:按照保底规则,每个"小保底"五星若歪了则下一个必为大保底。

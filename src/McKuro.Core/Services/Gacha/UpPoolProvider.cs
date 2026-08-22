@@ -134,9 +134,8 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
         map[CardPoolType.WeaponCollaboration] = weaponIds;
         map[CardPoolType.CharacterMemoryJourney] = roleIds;
         map[CardPoolType.WeaponMemoryJourney] = weaponIds;
-        // 常驻池:用当期全部 UP(当期 UP 中出现的常驻角色判定;不在集合=歪)
-        map[CardPoolType.RoleResident] = all;
-        map[CardPoolType.WeaponsResident] = weaponIds;
+        // 常驻池(角色/武器常驻)无 UP 概念:不提供 UP 集合,五星一律不做歪/UP 判定,
+        // 由 GachaAnalysisService 完成最终守卫(常驻/新手类池不判歪)。
         return map;
     }
 

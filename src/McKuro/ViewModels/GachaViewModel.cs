@@ -132,7 +132,7 @@ public sealed partial class GachaViewModel : ViewModelBase
     private int _tableCurrentPage = 1;
 
     [ObservableProperty]
-    private int _tablePageSize = 20;
+    private int _tablePageSize = 10;
 
     /// <summary>表格每页条数选项。</summary>
     public AvaloniaList<int> PageSizeOptions { get; } = [10, 20, 50, 100];
@@ -155,6 +155,20 @@ public sealed partial class GachaViewModel : ViewModelBase
     public AvaloniaList<PieSliceViewModel> StarRatioSlices { get; } = [];
 
     public AvaloniaList<PieSliceViewModel> PoolSlices { get; } = [];
+
+    /// <summary>统计图下拉选项(三图合一的卡片内切换)。</summary>
+    public AvaloniaList<string> ChartOptions { get; } = ["保底状态", "出货占比", "各卡池抽数占比"];
+
+    [ObservableProperty]
+    private int _selectedChartIndex;
+
+    /// <summary>当前统计图标题(随下拉切换)。</summary>
+    public string ChartTitle => ChartOptions.Count > SelectedChartIndex ? ChartOptions[SelectedChartIndex] : "";
+
+    partial void OnSelectedChartIndexChanged(int value) => OnPropertyChanged(nameof(ChartTitle));
+
+    /// <summary>详细分析页竖列卡池按钮(仅含有记录的池,按抽数降序)。</summary>
+    public AvaloniaList<PoolStats> PoolTabs { get; } = [];
 
     /// <summary>每日抽数(旧→新,用于平滑面积图;由 TimeLineChart 自绘)。</summary>
     public AvaloniaList<int> TimeLineCounts { get; } = [];
@@ -541,6 +555,10 @@ public sealed partial class GachaViewModel : ViewModelBase
         }
         Pools.AddRange(filled.Values.OrderByDescending(p => p.TotalPulls));
 
+        // 详细分析竖列按钮:仅含有记录的卡池
+        PoolTabs.Clear();
+        PoolTabs.AddRange(Pools.Where(p => p.TotalPulls > 0));
+
         SelectedPool = Pools.FirstOrDefault(p => p.FiveStarCount > 0) ?? Pools.FirstOrDefault();
         RefreshDetail();
         BuildCharts(analysis);
@@ -651,7 +669,7 @@ public sealed partial class GachaViewModel : ViewModelBase
     {
         if (value <= 0)
         {
-            TablePageSize = 20;
+            TablePageSize = 10;
             return;
         }
         TableCurrentPage = 1;
@@ -729,7 +747,7 @@ public sealed partial class GachaViewModel : ViewModelBase
     }
 }
 
-/// <summary>自绘饼图扇形(ViewBox 0-100 坐标系,圆心 50,50)。</summary>
+/// <summary>自绘环形图扇区(ViewBox 0-100 坐标系,圆心 50,50;外径 46,内孔 28)。</summary>
 public sealed class PieSliceViewModel
 {
     public required string Data { get; init; }
@@ -737,18 +755,44 @@ public sealed class PieSliceViewModel
     public required string Name { get; init; }
     public required double Value { get; init; }
 
-    /// <summary>生成从 startAngle 到 endAngle(度,顺时针,12 点钟为 0)的扇形 Path。</summary>
+    private const double CenterX = 50, CenterY = 50, OuterR = 46, InnerR = 28;
+
+    /// <summary>生成从 startAngle 到 endAngle(度,顺时针,12 点钟为 0)的环形扇区 Path。</summary>
     public static string BuildSector(double startAngle, double endAngle)
     {
-        const double cx = 50, cy = 50, r = 46;
+        var sweep = endAngle - startAngle;
+        if (sweep >= 360 - 1e-6)
+        {
+            return BuildFullRing();
+        }
+
         var a1 = (startAngle - 90) * Math.PI / 180;
         var a2 = (endAngle - 90) * Math.PI / 180;
-        double x1 = cx + r * Math.Cos(a1);
-        double y1 = cy + r * Math.Sin(a1);
-        double x2 = cx + r * Math.Cos(a2);
-        double y2 = cy + r * Math.Sin(a2);
-        var large = endAngle - startAngle > 180 ? 1 : 0;
-        return $"M {cx:0.###},{cy:0.###} L {x1:0.###},{y1:0.###} A {r:0.###},{r:0.###} 0 {large} 1 {x2:0.###},{y2:0.###} Z";
+        double x1o = CenterX + OuterR * Math.Cos(a1);
+        double y1o = CenterY + OuterR * Math.Sin(a1);
+        double x2o = CenterX + OuterR * Math.Cos(a2);
+        double y2o = CenterY + OuterR * Math.Sin(a2);
+        double x1i = CenterX + InnerR * Math.Cos(a1);
+        double y1i = CenterY + InnerR * Math.Sin(a1);
+        double x2i = CenterX + InnerR * Math.Cos(a2);
+        double y2i = CenterY + InnerR * Math.Sin(a2);
+        var large = sweep > 180 ? 1 : 0;
+        // 外弧顺时针 → 内弧逆时针回绕,形成中空圆环扇区
+        return $"M {x1o:0.###},{y1o:0.###} A {OuterR:0.###},{OuterR:0.###} 0 {large} 1 {x2o:0.###},{y2o:0.###} " +
+               $"L {x2i:0.###},{y2i:0.###} A {InnerR:0.###},{InnerR:0.###} 0 {large} 0 {x1i:0.###},{y1i:0.###} Z";
+    }
+
+    /// <summary>整圈(唯一扇区占比 100%)时,两个半圆弧拼成完整圆环。</summary>
+    private static string BuildFullRing()
+    {
+        var top = CenterY - OuterR;
+        var bottom = CenterY + OuterR;
+        var topIn = CenterY - InnerR;
+        var bottomIn = CenterY + InnerR;
+        return $"M {CenterX},{top:0.###} A {OuterR:0.###},{OuterR:0.###} 0 1 1 {CenterX},{bottom:0.###} " +
+               $"A {OuterR:0.###},{OuterR:0.###} 0 1 1 {CenterX},{top:0.###} Z " +
+               $"M {CenterX},{topIn:0.###} A {InnerR:0.###},{InnerR:0.###} 0 1 0 {CenterX},{bottomIn:0.###} " +
+               $"A {InnerR:0.###},{InnerR:0.###} 0 1 0 {CenterX},{topIn:0.###} Z";
     }
 
     /// <summary>按值数组生成各片扇形路径(角度占比),返回 (Name, Data, Brush) 列表。</summary>
@@ -903,6 +947,18 @@ public sealed class FirstCharConverter : Avalonia.Data.Converters.IValueConverte
     public static readonly FirstCharConverter Instance = new();
     public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
         => value is string { Length: > 0 } s ? s[..1] : "?";
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>索引等于参数(如 SelectedChartIndex 与 0/1/2 比较,控制面板显隐)。</summary>
+public sealed class IndexEqualsConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly IndexEqualsConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value is int index && int.TryParse(parameter?.ToString(), out var expected) && index == expected;
+
     public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
         => throw new NotSupportedException();
 }

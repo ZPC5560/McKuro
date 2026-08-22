@@ -133,6 +133,16 @@ public sealed class UpPoolProviderTests
     }
 
     [Fact]
+    public async Task ResidentPools_HaveNoUpIds()
+    {
+        var upIds = await CreateProvider().GetUpIdsAsync();
+
+        // 常驻池无 UP 概念:不提供 UP 集合,五星不做歪/UP 判定(修复:武器常驻被误标"歪")
+        Assert.False(upIds.ContainsKey(CardPoolType.RoleResident), "角色常驻不应提供 UP 集合");
+        Assert.False(upIds.ContainsKey(CardPoolType.WeaponsResident), "武器常驻不应提供 UP 集合");
+    }
+
+    [Fact]
     public async Task Fallback_ToFiveMaps_When_PoolList_Absent()
     {
         // 只有 five_maps(全量目录)、无 pool_list 时,回退到全量目录(老行为,避免误判)

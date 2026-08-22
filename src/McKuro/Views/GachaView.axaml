@@ -240,135 +240,147 @@
                             </Grid>
                         </Border>
 
-                        <!-- 保底状态饼图 -->
-                        <Border Grid.Row="1" CornerRadius="10" Padding="12"
+                        <!-- 统计图(三图合一:下拉切换 保底状态/出货占比/各卡池占比,环形) -->
+                        <Border Grid.Row="1" Grid.ColumnSpan="3" CornerRadius="10" Padding="12"
                                 Background="{DynamicResource SemiColorBg2}">
-                            <StackPanel Spacing="6">
-                                <TextBlock Text="{Binding GuaranteeHeader}" FontSize="13" FontWeight="SemiBold" />
-                                <Grid Width="140" Height="140" HorizontalAlignment="Center">
+                            <Grid RowDefinitions="Auto,*">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0" Text="{Binding ChartTitle}" FontSize="13"
+                                               FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <ComboBox Grid.Column="1" Width="150" VerticalAlignment="Center"
+                                              ItemsSource="{Binding ChartOptions}"
+                                              SelectedIndex="{Binding SelectedChartIndex, Mode=TwoWay}" />
+                                </Grid>
+
+                                <!-- 面板0:保底状态 -->
+                                <StackPanel Grid.Row="1" Spacing="6" Margin="0,8,0,0"
+                                            IsVisible="{Binding SelectedChartIndex, Converter={x:Static vm:IndexEqualsConverter.Instance}, ConverterParameter=0}">
+                                    <TextBlock Text="{Binding GuaranteeHeader}" FontSize="11"
+                                               Foreground="{DynamicResource SemiColorText2}" />
+                                    <Grid Width="140" Height="140" HorizontalAlignment="Center">
+                                        <ItemsControl ItemsSource="{Binding GuaranteeSlices}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <Grid />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:PieSliceViewModel">
+                                                    <Path Data="{Binding Data}" Fill="{Binding Brush}" Stretch="Fill" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
+                                            <TextBlock Text="{Binding TotalFiveStars}" FontSize="18" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" />
+                                            <TextBlock Text="五星" FontSize="11" Foreground="{DynamicResource SemiColorText2}"
+                                                       HorizontalAlignment="Center" />
+                                        </StackPanel>
+                                    </Grid>
                                     <ItemsControl ItemsSource="{Binding GuaranteeSlices}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
-                                                <Grid />
+                                                <WrapPanel HorizontalAlignment="Center" />
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="vm:PieSliceViewModel">
-                                                <Path Data="{Binding Data}" Fill="{Binding Brush}" />
+                                                <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,2,10,2">
+                                                    <Ellipse Width="8" Height="8" Fill="{Binding Brush}" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding Value}" FontSize="12" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
+                                                </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
-                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
-                                        <TextBlock Text="{Binding TotalFiveStars}" FontSize="18" FontWeight="Bold"
-                                                   HorizontalAlignment="Center" />
-                                        <TextBlock Text="五星" FontSize="11" Foreground="{DynamicResource SemiColorText2}"
-                                                   HorizontalAlignment="Center" />
-                                    </StackPanel>
-                                </Grid>
-                                <!-- 图例 -->
-                                <ItemsControl ItemsSource="{Binding GuaranteeSlices}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel HorizontalAlignment="Center" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:PieSliceViewModel">
-                                            <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,2,10,2">
-                                                <Ellipse Width="8" Height="8" Fill="{Binding Brush}" VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding Value}" FontSize="12" FontWeight="SemiBold"
-                                                           Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </Border>
+                                </StackPanel>
 
-                        <!-- 出货占比饼图 -->
-                        <Border Grid.Row="1" Grid.Column="1" CornerRadius="10" Padding="12"
-                                Background="{DynamicResource SemiColorBg2}">
-                            <StackPanel Spacing="6">
-                                <TextBlock Text="出货占比" FontSize="13" FontWeight="SemiBold" />
-                                <Grid Width="140" Height="140" HorizontalAlignment="Center">
+                                <!-- 面板1:出货占比 -->
+                                <StackPanel Grid.Row="1" Spacing="6" Margin="0,8,0,0"
+                                            IsVisible="{Binding SelectedChartIndex, Converter={x:Static vm:IndexEqualsConverter.Instance}, ConverterParameter=1}">
+                                    <Grid Width="140" Height="140" HorizontalAlignment="Center">
+                                        <ItemsControl ItemsSource="{Binding StarRatioSlices}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <Grid />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:PieSliceViewModel">
+                                                    <Path Data="{Binding Data}" Fill="{Binding Brush}" Stretch="Fill" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
+                                            <TextBlock Text="{Binding TotalPulls}" FontSize="18" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" />
+                                            <TextBlock Text="总抽数" FontSize="11" Foreground="{DynamicResource SemiColorText2}"
+                                                       HorizontalAlignment="Center" />
+                                        </StackPanel>
+                                    </Grid>
                                     <ItemsControl ItemsSource="{Binding StarRatioSlices}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
-                                                <Grid />
+                                                <WrapPanel HorizontalAlignment="Center" />
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="vm:PieSliceViewModel">
-                                                <Path Data="{Binding Data}" Fill="{Binding Brush}" />
+                                                <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,2,10,2">
+                                                    <Ellipse Width="8" Height="8" Fill="{Binding Brush}" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding Value}" FontSize="12" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
+                                                </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
-                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
-                                        <TextBlock Text="{Binding TotalPulls}" FontSize="18" FontWeight="Bold"
-                                                   HorizontalAlignment="Center" />
-                                        <TextBlock Text="总抽数" FontSize="11" Foreground="{DynamicResource SemiColorText2}"
-                                                   HorizontalAlignment="Center" />
-                                    </StackPanel>
-                                </Grid>
-                                <ItemsControl ItemsSource="{Binding StarRatioSlices}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel HorizontalAlignment="Center" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:PieSliceViewModel">
-                                            <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,2,10,2">
-                                                <Ellipse Width="8" Height="8" Fill="{Binding Brush}" VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding Value}" FontSize="12" FontWeight="SemiBold"
-                                                           Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </Border>
+                                </StackPanel>
 
-                        <!-- 各卡池占比饼图 -->
-                        <Border Grid.Row="1" Grid.Column="2" CornerRadius="10" Padding="12"
-                                Background="{DynamicResource SemiColorBg2}">
-                            <StackPanel Spacing="6">
-                                <TextBlock Text="各卡池抽数占比" FontSize="13" FontWeight="SemiBold" />
-                                <Grid Width="140" Height="140" HorizontalAlignment="Center">
+                                <!-- 面板2:各卡池抽数占比 -->
+                                <StackPanel Grid.Row="1" Spacing="6" Margin="0,8,0,0"
+                                            IsVisible="{Binding SelectedChartIndex, Converter={x:Static vm:IndexEqualsConverter.Instance}, ConverterParameter=2}">
+                                    <Grid Width="140" Height="140" HorizontalAlignment="Center">
+                                        <ItemsControl ItemsSource="{Binding PoolSlices}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <Grid />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:PieSliceViewModel">
+                                                    <Path Data="{Binding Data}" Fill="{Binding Brush}" Stretch="Fill" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
+                                            <TextBlock Text="{Binding TotalPulls}" FontSize="18" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" />
+                                            <TextBlock Text="总抽数" FontSize="11" Foreground="{DynamicResource SemiColorText2}"
+                                                       HorizontalAlignment="Center" />
+                                        </StackPanel>
+                                    </Grid>
                                     <ItemsControl ItemsSource="{Binding PoolSlices}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
-                                                <Grid />
+                                                <WrapPanel HorizontalAlignment="Center" />
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="vm:PieSliceViewModel">
-                                                <Path Data="{Binding Data}" Fill="{Binding Brush}" />
+                                                <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,2,10,2">
+                                                    <Ellipse Width="8" Height="8" Fill="{Binding Brush}" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis" MaxWidth="70" />
+                                                    <TextBlock Text="{Binding Value}" FontSize="12" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
+                                                </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
-                                </Grid>
-                                <ItemsControl ItemsSource="{Binding PoolSlices}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel HorizontalAlignment="Center" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:PieSliceViewModel">
-                                            <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,2,10,2">
-                                                <Ellipse Width="8" Height="8" Fill="{Binding Brush}" VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center"
-                                                           TextTrimming="CharacterEllipsis" MaxWidth="70" />
-                                                <TextBlock Text="{Binding Value}" FontSize="12" FontWeight="SemiBold"
-                                                           Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
+                                </StackPanel>
+                            </Grid>
                         </Border>
 
                         <!-- 每日抽数平滑面积图(自绘:平滑曲线 + 左侧单位刻度 + 网格线) -->
@@ -415,7 +427,7 @@
                                             <Run Text="SSR: " /><Run Text="{Binding FiveStarCount}" /><Run Text="  SR: " /><Run Text="{Binding FourStarCount}" /><Run Text="  R: " /><Run Text="{Binding ThreeStarCount}" />
                                         </TextBlock>
                                         <TextBlock FontSize="12" Foreground="#FF8000" Text="{Binding UpCount, StringFormat=UP 数: {0}}" IsVisible="{Binding UpCount, Converter={x:Static vm:GreaterThanZeroConverter.Instance}}" />
-                                        <TextBlock FontSize="12" Foreground="#64B5F6" Text="{Binding OffBannerRate, StringFormat=不歪率: {0:P1}}" />
+                                        <TextBlock FontSize="12" Foreground="#64B5F6" Text="{Binding OffBannerRate, StringFormat=不歪率: {0:P1}}" IsVisible="{Binding CanJudgeUp}" />
                                         <Separator Height="1" Margin="0,2" />
                                         <TextBlock Text="五星列表" FontSize="11" Foreground="{DynamicResource SemiColorText3}" />
                                         <ItemsControl ItemsSource="{Binding FiveStarEntries}">
@@ -450,7 +462,21 @@
                     <Border Grid.Column="0" Margin="0,0,5,0" Padding="12" CornerRadius="10"
                             Background="{DynamicResource SemiColorBg2}">
                         <Grid RowDefinitions="Auto,*">
-                            <ComboBox ItemsSource="{Binding Pools}" SelectedItem="{Binding SelectedPool, Mode=TwoWay}" Margin="0,0,0,8" />
+                            <!-- 竖列卡池切换按键(替代原下拉框;池名 + 抽数) -->
+                            <ListBox Grid.Row="0" ItemsSource="{Binding PoolTabs}"
+                                     SelectedItem="{Binding SelectedPool, Mode=TwoWay}"
+                                     Margin="0,0,0,8" Background="Transparent" BorderThickness="0"
+                                     MaxHeight="240" VerticalScrollBarVisibility="Auto">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="gacha:PoolStats">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="13" FontWeight="SemiBold" />
+                                            <TextBlock Grid.Column="1" Text="{Binding TotalPulls, StringFormat={}{0} 抽}"
+                                                       FontSize="12" Foreground="{DynamicResource SemiColorText2}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                             <ScrollViewer Grid.Row="1">
                                 <ItemsControl ItemsSource="{Binding FiveStarEntries}">
                                     <ItemsControl.ItemTemplate>
@@ -501,7 +527,7 @@
                             <TextBlock Text="详细统计" FontSize="12" FontWeight="SemiBold" />
                             <TextBlock FontSize="12" Foreground="#E57373"><Run Text="五星平均: " /><Run Text="{Binding SelectedPool.AveragePity, StringFormat={}{0:0}}" /><Run Text=" 抽" /></TextBlock>
                             <TextBlock FontSize="12" Foreground="#FF8000"><Run Text="UP 数: " /><Run Text="{Binding SelectedPool.UpCount}" /></TextBlock>
-                            <TextBlock FontSize="12" Foreground="#64B5F6"><Run Text="不歪率: " /><Run Text="{Binding SelectedPool.OffBannerRate, StringFormat={}{0:P1}}" /></TextBlock>
+                            <TextBlock FontSize="12" Foreground="#64B5F6" IsVisible="{Binding SelectedPool.CanJudgeUp}"><Run Text="不歪率: " /><Run Text="{Binding SelectedPool.OffBannerRate, StringFormat={}{0:P1}}" /></TextBlock>
                             <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText3}"><Run Text="当前垫: " /><Run Text="{Binding SelectedPool.CurrentPity}" /><Run Text=" 抽" /></TextBlock>
                              <TextBlock FontSize="12" Foreground="#64B5F6" Text="{Binding SelectedPool.CurrentUpPityText}" />
                         </StackPanel>
@@ -518,17 +544,17 @@
                             <ItemsControl ItemsSource="{Binding TableRecords}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="gacha:GachaPullEntry">
-                                        <Border Margin="0,2" Padding="6,4"
-                                                Background="{DynamicResource SemiColorBg3}" CornerRadius="4">
+                                        <Border Margin="0,6" Padding="12,10"
+                                                Background="{DynamicResource SemiColorBg3}" CornerRadius="6">
                                             <Grid ColumnDefinitions="2*,65,70,1*,55,65,160">
-                                                <TextBlock Text="{Binding Record.Name}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{Binding Record.QualityLevel, StringFormat={}{0}星}" FontSize="12"
+                                                <TextBlock Text="{Binding Record.Name}" FontSize="14" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Record.QualityLevel, StringFormat={}{0}星}" FontSize="14"
                                                            Foreground="{Binding Record.QualityLevel, Converter={x:Static vm:QualityColorConverter.Instance}}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="2" Text="{Binding Record.ResourceType}" FontSize="12" Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="3" Text="{Binding Record.CardPoolType}" FontSize="12" Foreground="{DynamicResource SemiColorText2}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="4" Text="{Binding BannerText}" FontSize="11" Foreground="#FF8000" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="5" Text="{Binding FiveStarGapText}" FontSize="11" Foreground="#E57373" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="6" Text="{Binding Record.Time}" FontSize="11" Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Record.ResourceType}" FontSize="14" Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="3" Text="{Binding Record.CardPoolType}" FontSize="14" Foreground="{DynamicResource SemiColorText2}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="4" Text="{Binding BannerText}" FontSize="13" Foreground="#FF8000" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="5" Text="{Binding FiveStarGapText}" FontSize="13" Foreground="#E57373" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="6" Text="{Binding Record.Time}" FontSize="13" Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
                                             </Grid>
                                         </Border>
                                     </DataTemplate>

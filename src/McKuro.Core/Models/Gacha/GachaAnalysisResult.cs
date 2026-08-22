@@ -111,6 +111,9 @@ public sealed class PoolStats
         ? (double)UpCount / FiveStarCount
         : null;
 
+    /// <summary>是否有 UP/歪 判定可用(常驻/新手等无 UP 池为 false,界面据此隐藏"不歪率"等行)。</summary>
+    public bool CanJudgeUp => FiveStarEntries.Any(e => e.IsOffBanner.HasValue);
+
     /// <summary>记录起始日期(YYYY-MM-dd)。</summary>
     public string StartDate { get; init; } = "";
 

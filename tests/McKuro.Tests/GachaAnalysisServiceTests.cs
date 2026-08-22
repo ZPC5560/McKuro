@@ -147,6 +147,49 @@ public class GachaAnalysisServiceTests
     }
 
     [Fact]
+    public void Analyze_ResidentPool_NotJudged_AsOffBanner()
+    {
+        // 常驻池本身就是常驻卡池,即使 upIds 提供集合也不判定歪/UP(服务层守卫)
+        var upIds = new Dictionary<CardPoolType, HashSet<int>>
+        {
+            [CardPoolType.WeaponsResident] = [21050096],
+        };
+        var records = new List<GachaRecord>
+        {
+            R(4, 21010015, 5, "ResidentWeapon", "2024-01-01 10:00:00"),
+        };
+
+        var result = new GachaAnalysisService().Analyze("p1", records, upIds);
+        var pool = result[CardPoolType.WeaponsResident];
+        Assert.NotNull(pool);
+        var entry = Assert.Single(pool!.FiveStarEntries);
+        Assert.Null(entry.IsOffBanner);
+        Assert.Equal(0, pool.UpCount);
+        Assert.Null(pool.OffBannerRate);
+        Assert.False(pool.CanJudgeUp);
+    }
+
+    [Fact]
+    public void Analyze_EmptyUpSet_NotJudged_AsOffBanner()
+    {
+        // 空集合(远程数据缺失兜底)时应全部"不判定",避免所有五星误判为歪
+        var upIds = new Dictionary<CardPoolType, HashSet<int>>
+        {
+            [CardPoolType.RoleActivity] = [],
+        };
+        var records = new List<GachaRecord>
+        {
+            R(1, 900, 5, "SSR", "2024-01-01 10:00:00"),
+        };
+
+        var result = new GachaAnalysisService().Analyze("p1", records, upIds);
+        var pool = result[CardPoolType.RoleActivity];
+        Assert.NotNull(pool);
+        var entry = Assert.Single(pool!.FiveStarEntries);
+        Assert.Null(entry.IsOffBanner);
+    }
+
+    [Fact]
     public void Analyze_DailyPulls_IncludePoolBreakdown()
     {
         // 2024-01-01: 角色活动 ×2 + 角色常驻 ×1;2024-01-02: 角色活动 ×1
