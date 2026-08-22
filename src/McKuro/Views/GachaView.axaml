@@ -466,7 +466,7 @@
                             <ListBox Grid.Row="0" ItemsSource="{Binding PoolTabs}"
                                      SelectedItem="{Binding SelectedPool, Mode=TwoWay}"
                                      Margin="0,0,0,8" Background="Transparent" BorderThickness="0"
-                                     MaxHeight="240" VerticalScrollBarVisibility="Auto">
+                                     MaxHeight="240" ScrollViewer.VerticalScrollBarVisibility="Auto">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate x:DataType="gacha:PoolStats">
                                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
