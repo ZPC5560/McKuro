@@ -1,8 +1,11 @@
 <Project>
 
   <!--
-    统一默认使用 Release 配置构建/运行/测试:与 AOT 发布行为对齐,
-    避免 Debug/Release(优化、裁剪、诊断包)差异掩盖问题。
+    项目级构建默认使用 Release 配置(与 AOT 发布行为对齐,避免 Debug/Release 差异掩盖问题):
+    适用于 dotnet run --project src/McKuro 等直接构建项目文件的命令。
+    注意:解决方案级构建(dotnet build / dotnet test 不带项目路径)由 SDK 默认注入
+    Configuration=Debug,不受本文件影响——此类命令请显式加 -c Release
+    (McKuro.slnx 已声明 Release|AnyCPU 配置映射)。
     命令行显式传入 -c Debug / -c Release(MSBuild 全局属性)时不会被本文件覆盖。
   -->
   <PropertyGroup>

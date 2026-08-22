@@ -1,4 +1,9 @@
 <Solution>
+  <!-- 默认构建配置:Release 在首位,未显式传 -c 时解决方案构建默认 Release(与 Directory.Build.props 一致) -->
+  <Configurations>
+    <Configuration Name="Release|AnyCPU" />
+    <Configuration Name="Debug|AnyCPU" />
+  </Configurations>
   <Folder Name="/src/">
     <Project Path="src/McKuro.Core/McKuro.Core.csproj" />
     <Project Path="src/McKuro/McKuro.csproj" />
