@@ -145,11 +145,12 @@
                                             <controls:AsyncImage ImageUrl="{Binding AvatarUrl}" Stretch="UniformToFill" />
                                         </Border>
                                     </Grid>
-                                    <!-- 昵称 + 等级/开服玩家徽章 -->
+                                    <!-- 昵称 + 等级/开服玩家徽章(昵称靠左) -->
                                     <StackPanel Grid.Column="1" Spacing="7" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding RoleNameText}" FontSize="16" FontWeight="SemiBold"
                                                    Foreground="{DynamicResource McKuroTextOnWallpaper}"
-                                                   TextTrimming="CharacterEllipsis" MaxWidth="220" />
+                                                   TextTrimming="CharacterEllipsis" MaxWidth="220"
+                                                   HorizontalAlignment="Left" />
                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                             <Border CornerRadius="9" Background="{DynamicResource McKuroGlassFillStrong}"
                                                     Padding="8,2" IsVisible="{Binding LevelText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
@@ -163,8 +164,11 @@
                                             </Border>
                                         </StackPanel>
                                     </StackPanel>
-                                    <!-- 游玩天数 + 注册时间 -->
+                                    <!-- 角色 ID + 游玩天数 + 注册时间 -->
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="3" HorizontalAlignment="Right">
+                                        <TextBlock Text="{Binding RoleIdText}" FontSize="11.5" FontWeight="Light"
+                                                   Foreground="{DynamicResource McKuroTextMuted}" HorizontalAlignment="Right"
+                                                   IsVisible="{Binding RoleIdText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                         <TextBlock Text="{Binding PlayDaysText}" FontSize="14" FontWeight="SemiBold"
                                                    Foreground="{DynamicResource McKuroTextOnWallpaper}" HorizontalAlignment="Right" />
                                         <TextBlock Text="{Binding RegisterText}" FontSize="11.5" FontWeight="Light"

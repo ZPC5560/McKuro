@@ -31,6 +31,12 @@ public sealed class RoleDailyData
     /// <summary>周本(战歌重奏)官方图标 URL(数据中心 weeklyInstIconUrl)。</summary>
     public string? WeeklyIconUrl { get; set; }
 
+    /// <summary>活跃度上限(数据中心 livenessMaxCount,如 100);0 表示未知。</summary>
+    public int LivenessLimit { get; set; }
+
+    /// <summary>周本(战歌重奏)每周次数上限(数据中心 weeklyInstCountLimit,如 3);0 表示未知。</summary>
+    public int WeeklyLimit { get; set; }
+
     /// <summary>体力。</summary>
     [JsonPropertyName("energyData")] public RoleDailyDetail? EnergyData { get; set; }
 

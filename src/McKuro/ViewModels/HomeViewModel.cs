@@ -26,6 +26,13 @@ public sealed class DailyItem
     /// <summary>进度 0-100。</summary>
     public double Percent => Total > 0 ? Math.Clamp(Cur * 100.0 / Total, 0, 100) : 0;
     public string PercentText => $"{Percent:0}%";
+
+    /// <summary>
+    /// 计算展示/进度用总量:curOnly 时无总量(不显示进度条);
+    /// 否则优先接口 total,接口缺失(0)时回退默认上限(如活跃度 100、周本 3)。
+    /// </summary>
+    public static int ResolveTotal(bool curOnly, int detailTotal, int totalFallback)
+        => curOnly ? 0 : detailTotal > 0 ? detailTotal : totalFallback;
 }
 
 /// <summary>主页:InternalBeyond 风格欢迎页 + 角色每日数据(全量字段)。</summary>
@@ -85,6 +92,10 @@ public sealed partial class HomeViewModel : ViewModelBase
     /// <summary>注册时间文本(如 "注册于 2024-05-23"),用作开服玩家徽章提示。</summary>
     [ObservableProperty]
     private string _registerText = "";
+
+    /// <summary>角色 ID(资料卡右侧,如 "ID: 103242935");未知时为空。</summary>
+    [ObservableProperty]
+    private string _roleIdText = "";
 
     /// <summary>是否已有角色资料(控制首页资料卡显示)。</summary>
     [ObservableProperty]
@@ -199,6 +210,7 @@ public sealed partial class HomeViewModel : ViewModelBase
     {
         HasProfile = false;
         RoleNameText = "";
+        RoleIdText = "";
         LevelText = "";
         PlayDaysText = "";
         AvatarUrl = "";
@@ -213,8 +225,12 @@ public sealed partial class HomeViewModel : ViewModelBase
         ApplyProfile(data);
         AddItem(data.EnergyData, Icon.Flash, "体力", iconFile: "waveplates.png");
         AddItem(data.StoreEnergyData, Icon.Diamond, "结晶单质", iconFile: "wavesubstance.png");
-        AddItem(data.LivenessData, Icon.Fire, "活跃度", curOnly: true, iconFile: "activity.png");
-        AddItem(data.WeeklyData, Icon.Trophy, "周本", curOnly: true, iconFile: "weeklyInst.png", forcedUrl: data.WeeklyIconUrl);
+        // 活跃度满 100:接口无总量时回退 100(数据中心 livenessMaxCount)
+        AddItem(data.LivenessData, Icon.Fire, "活跃度", iconFile: "activity.png",
+            totalFallback: data.LivenessLimit > 0 ? data.LivenessLimit : 100);
+        // 周本每周 3 次:接口无总量时回退 3(数据中心 weeklyInstCountLimit)
+        AddItem(data.WeeklyData, Icon.Trophy, "周本", iconFile: "weeklyInst.png", forcedUrl: data.WeeklyIconUrl,
+            totalFallback: data.WeeklyLimit > 0 ? data.WeeklyLimit : 3);
         AddItem(data.NewTowerData, Icon.BuildingSkyscraper, "终焉矩阵");
         AddItem(data.SlashTowerData, Icon.Beach, "冥歌海墟");
         AddItem(data.RougeData, Icon.Door, "千道门扉", curOnly: true);
@@ -227,6 +243,7 @@ public sealed partial class HomeViewModel : ViewModelBase
     private void ApplyProfile(RoleDailyData data)
     {
         RoleNameText = string.IsNullOrWhiteSpace(data.RoleName) ? "" : data.RoleName!;
+        RoleIdText = string.IsNullOrWhiteSpace(data.RoleId) ? "" : $"ID: {data.RoleId}";
         LevelText = data.Level > 0 ? $"LV.{data.Level}" : "";
         PlayDaysText = data.ActiveDays > 0 ? $"已游玩 {data.ActiveDays} 天" : "";
         AvatarUrl = string.IsNullOrWhiteSpace(data.HeadUrl) ? DefaultAvatarUrl : data.HeadUrl!;
@@ -259,12 +276,13 @@ public sealed partial class HomeViewModel : ViewModelBase
     }
 
     private void AddItem(RoleDailyDetail? detail, Icon icon, string fallbackName, bool curOnly = false,
-        string? iconFile = null, string? forcedUrl = null)
+        string? iconFile = null, string? forcedUrl = null, int totalFallback = 0)
     {
         if (detail is null)
         {
             return;
         }
+        var total = DailyItem.ResolveTotal(curOnly, detail.Total, totalFallback);
         DailyItems.Add(new DailyItem
         {
             Icon = icon,
@@ -275,9 +293,9 @@ public sealed partial class HomeViewModel : ViewModelBase
                     ? GameIcon(iconFile)
                     : string.IsNullOrWhiteSpace(detail.Img) ? null : detail.Img,
             Name = string.IsNullOrWhiteSpace(detail.Name) ? fallbackName : detail.Name!,
-            ValueText = curOnly ? $"{detail.Cur}" : $"{detail.Cur}/{detail.Total}",
+            ValueText = total > 0 ? $"{detail.Cur}/{total}" : $"{detail.Cur}",
             Cur = detail.Cur,
-            Total = curOnly ? 0 : detail.Total,
+            Total = total,
         });
     }
 }

@@ -83,6 +83,8 @@ public sealed class DailyDataService
                 daily.ActiveDays = baseData.ActiveDays;
                 daily.CreatTime = baseData.CreatTime;
                 daily.WeeklyIconUrl = baseData.WeeklyInstIconUrl;
+                daily.LivenessLimit = baseData.LivenessMaxCount;
+                daily.WeeklyLimit = baseData.WeeklyInstCountLimit;
                 if (daily.Level == 0 && baseData.Level > 0)
                 {
                     daily.Level = baseData.Level;
