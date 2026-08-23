@@ -1,32 +1,49 @@
 using System.Collections.ObjectModel;
+using System.Net;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using McKuro.Core.Models.Game;
 using McKuro.Core.Models.Wiki;
+using McKuro.Core.Services.Game;
 using McKuro.Services;
 
 namespace McKuro.ViewModels;
 
-/// <summary>图鉴 banner 条目。</summary>
+/// <summary>封面主图条目(启动器轮播优先,wiki banner 兜底),可带跳转链接。</summary>
 public sealed class WikiBannerItem
 {
     public required string Url { get; init; }
-    public required string Title { get; init; }
+    public string Title { get; init; } = "";
+    public string JumpUrl { get; init; } = "";
+    public bool HasJump => !string.IsNullOrWhiteSpace(JumpUrl);
 }
 
-/// <summary>图鉴热点/公告条目。</summary>
-public sealed class WikiTextItem
+/// <summary>启动器公告组件(活动/公告/新闻)的文本条目,点击跳转网页。</summary>
+public sealed class LauncherNoticeItem
 {
     public required string Title { get; init; }
-    public string? Sub { get; init; }
-    public string? ImageUrl { get; init; }
+    public required string TimeText { get; init; }
+    public required string Url { get; init; }
+}
+
+/// <summary>库街区官方资讯卡片(封面 + 标题 + 日期),点击跳转帖子详情页。</summary>
+public sealed class OfficialEventCard
+{
+    public required string Title { get; init; }
+    public required string CoverUrl { get; init; }
+    public required string DateText { get; init; }
+    public required string Url { get; init; }
 }
 
 /// <summary>图鉴网页快捷入口。</summary>
 public sealed record WikiLinkItem(string Name, string Url, string Description);
 
 /// <summary>
-/// 图鉴页:库街区图鉴首页数据(鸣潮),展示 Banner 轮播、公告、热点内容与活动。
-/// 参考 Haiyu 的 WavesWikiPage。
+/// 图鉴页(重新设计):
+/// ① 封面主图轮播(官方启动器 slideshow 优先,wiki banner 兜底),点击跳转;
+/// ② 库街区官方资讯卡片(资讯/公告/活动三页签,/forum/companyEvent/findEventList,免登录),
+///    点击打开 https://www.kurobbs.com/mc/post/{postId} 详情页;
+/// ③ 启动器公告组件(活动/公告/新闻三页签,gamestarter information 接口,Haiyu 同源),点击跳转 jumpUrl。
 /// </summary>
 public sealed partial class WikiViewModel : ViewModelBase
 {
@@ -37,25 +54,39 @@ public sealed partial class WikiViewModel : ViewModelBase
     private bool _isBusy;
 
     [ObservableProperty]
-    private int _selectedGameIndex;
+    private int _selectedKurobbsTab;
 
+    [ObservableProperty]
+    private int _selectedLauncherTab;
+
+    /// <summary>封面主图轮播。</summary>
     public ObservableCollection<WikiBannerItem> Banners { get; } = [];
 
-    public ObservableCollection<WikiTextItem> Announcements { get; } = [];
+    /// <summary>库街区·资讯(eventType=2)。</summary>
+    public ObservableCollection<OfficialEventCard> KurobbsNews { get; } = [];
 
-    public ObservableCollection<WikiTextItem> HotContents { get; } = [];
+    /// <summary>库街区·公告(eventType=3)。</summary>
+    public ObservableCollection<OfficialEventCard> KurobbsAnnouncements { get; } = [];
 
-    public ObservableCollection<WikiTextItem> Events { get; } = [];
+    /// <summary>库街区·活动(eventType=1)。</summary>
+    public ObservableCollection<OfficialEventCard> KurobbsActivities { get; } = [];
 
-    public IReadOnlyList<string> Games { get; } = ["鸣潮"];
+    /// <summary>启动器公告·活动。</summary>
+    public ObservableCollection<LauncherNoticeItem> LauncherActivities { get; } = [];
 
-    /// <summary>网页快捷入口(参考 WutheringWavesTool HomeView 的图鉴菜单)。</summary>
+    /// <summary>启动器公告·公告。</summary>
+    public ObservableCollection<LauncherNoticeItem> LauncherNotices { get; } = [];
+
+    /// <summary>启动器公告·新闻。</summary>
+    public ObservableCollection<LauncherNoticeItem> LauncherNews { get; } = [];
+
+    /// <summary>网页快捷入口。</summary>
     public IReadOnlyList<WikiLinkItem> WebLinks { get; } =
     [
+        new("库街区官方页", "https://www.kurobbs.com/mc/official", "公告 / 资讯 / 活动官方发布"),
         new("库街区 Wiki", "https://wiki.kurobbs.com/mc/home", "官方角色/武器/声骸图鉴"),
         new("库街区地图", "https://www.kurobbs.com/mc/map/", "官方大地图 / 资源分布"),
         new("Gamekee Wiki", "https://www.gamekee.com/mc/", "第三方图鉴与攻略"),
-        new("彩墨地图", "https://map.caimogu.cc/ww/main.html", "第三方大地图"),
     ];
 
     public WikiViewModel()
@@ -64,14 +95,7 @@ public sealed partial class WikiViewModel : ViewModelBase
         _ = LoadAsync();
     }
 
-    private WikiType CurrentType => WikiType.Waves;
-
-    partial void OnSelectedGameIndexChanged(int value) => _ = LoadAsync();
-
-    [RelayCommand]
-    private Task LoadAsync() => LoadInternalAsync();
-
-    /// <summary>在默认浏览器中打开图鉴网页(参考 WutheringWavesTool 的 toWiki 系列)。</summary>
+    /// <summary>在默认浏览器中打开网页。</summary>
     [RelayCommand]
     private void OpenLink(string? url)
     {
@@ -93,6 +117,21 @@ public sealed partial class WikiViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    private Task LoadAsync() => LoadInternalAsync();
+
+    /// <summary>服务器渠道:与启动器页一致(设置优先,自动检测兜底)。</summary>
+    private static GameServerType ServerType
+    {
+        get
+        {
+            var configured = AppServices.Settings.Current.ServerType;
+            return configured == GameServerType.Unknown
+                ? AppServices.Paths.DetectServerType()
+                : configured;
+        }
+    }
+
     private async Task LoadInternalAsync()
     {
         if (IsBusy)
@@ -101,80 +140,26 @@ public sealed partial class WikiViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = "正在加载图鉴…";
+        StatusText = "正在加载图鉴与官方资讯…";
         try
         {
-            var type = CurrentType;
-            var home = await AppServices.Wiki.GetHomePageAsync(type);
-
             Banners.Clear();
-            Announcements.Clear();
-            HotContents.Clear();
-            Events.Clear();
+            KurobbsNews.Clear();
+            KurobbsAnnouncements.Clear();
+            KurobbsActivities.Clear();
+            LauncherActivities.Clear();
+            LauncherNotices.Clear();
+            LauncherNews.Clear();
 
-            if (home is not { Data.ContentJson: { } json })
-            {
-                StatusText = "图鉴数据加载失败";
-                return;
-            }
+            int banners = await LoadBannersAsync();
+            var (news, anns, acts) = await LoadKurobbsEventsAsync();
+            int notices = await LoadLauncherGuidanceAsync();
 
-            if (json.Banner is not null)
-            {
-                foreach (var banner in json.Banner.Where(b => !string.IsNullOrWhiteSpace(b.Url)))
-                {
-                    Banners.Add(new WikiBannerItem { Url = banner.Url!, Title = banner.Title ?? "" });
-                }
-            }
-
-            if (json.Announcement is not null)
-            {
-                foreach (var ann in json.Announcement)
-                {
-                    if (!string.IsNullOrWhiteSpace(ann.Content))
-                    {
-                        // 公告 content 是 HTML 富文本,剥离标签取纯文本作为说明
-                        Announcements.Add(new WikiTextItem
-                        {
-                            Title = string.IsNullOrWhiteSpace(ann.Name) ? "公告" : ann.Name!,
-                            Sub = StripHtml(ann.Content),
-                        });
-                    }
-                }
-            }
-
-            var hots = await AppServices.Wiki.GetEventDataAsync(type);
-            if (hots is not null)
-            {
-                foreach (var hot in hots.Where(h => !string.IsNullOrWhiteSpace(h.Title)))
-                {
-                    HotContents.Add(new WikiTextItem
-                    {
-                        Title = hot.Title!,
-                        // 热点内容:用活动时间区间作为说明(而非文件名)
-                        Sub = FormatDateRange(hot.CountDown?.DateRange),
-                    });
-                }
-            }
-
-            var events = await AppServices.Wiki.GetEventTabDataAsync(type);
-            if (events?.Tabs is not null)
-            {
-                foreach (var tab in events.Tabs.Where(t => !string.IsNullOrWhiteSpace(t.Name)))
-                {
-                    Events.Add(new WikiTextItem
-                    {
-                        Title = tab.Name!,
-                        Sub = tab.Description,
-                        ImageUrl = tab.Images?.FirstOrDefault()?.Image,
-                    });
-                }
-            }
-
-            StatusText = $"图鉴已加载 (Banner {Banners.Count} · 公告 {Announcements.Count} · 热点 {HotContents.Count} · 活动 {Events.Count})";
+            StatusText = $"已加载:封面 {banners} · 库街区 资讯{news}/公告{anns}/活动{acts} · 启动器公告 {notices} 条";
         }
         catch (Exception ex)
         {
-            StatusText = $"图鉴加载失败: {ex.Message}";
+            StatusText = $"加载失败: {ex.Message}";
         }
         finally
         {
@@ -182,31 +167,134 @@ public sealed partial class WikiViewModel : ViewModelBase
         }
     }
 
-    /// <summary>剥离 HTML 标签与多余空白,取纯文本(公告 content 是富文本)。</summary>
-    private static string StripHtml(string html)
+    /// <summary>封面主图:官方启动器轮播图优先(带跳转),失败回退 wiki 首页 banner。返回数量。</summary>
+    private async Task<int> LoadBannersAsync()
+    {
+        var info = await AppServices.LauncherInfo.GetLauncherInfoAsync(ServerType);
+        if (info?.Slideshow is { Count: > 0 })
+        {
+            foreach (var slide in info.Slideshow.Where(s => !string.IsNullOrWhiteSpace(s.Url)))
+            {
+                Banners.Add(new WikiBannerItem
+                {
+                    Url = slide.Url,
+                    Title = slide.CarouselNotes ?? "",
+                    JumpUrl = slide.JumpUrl ?? "",
+                });
+            }
+            return Banners.Count;
+        }
+
+        // 兜底:wiki 首页 banner
+        var home = await AppServices.Wiki.GetHomePageAsync(WikiType.Waves);
+        foreach (var banner in home?.Data?.ContentJson?.Banner ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(banner.Url))
+            {
+                Banners.Add(new WikiBannerItem { Url = banner.Url!, Title = banner.Title ?? "" });
+            }
+        }
+        return Banners.Count;
+    }
+
+    /// <summary>拉取库街区官方资讯三个分类。返回 (资讯数, 公告数, 活动数)。</summary>
+    private async Task<(int News, int Anns, int Acts)> LoadKurobbsEventsAsync()
+    {
+        var newsTask = AppServices.Wiki.GetOfficialEventsAsync(eventType: 2);
+        var annTask = AppServices.Wiki.GetOfficialEventsAsync(eventType: 3);
+        var actTask = AppServices.Wiki.GetOfficialEventsAsync(eventType: 1);
+        await Task.WhenAll(newsTask, annTask, actTask).ConfigureAwait(false);
+
+        int Fill(ObservableCollection<OfficialEventCard> target, List<OfficialEventItem>? items)
+        {
+            foreach (var item in items ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(item.PostTitle))
+                {
+                    continue;
+                }
+                target.Add(new OfficialEventCard
+                {
+                    Title = item.PostTitle!.Trim(),
+                    CoverUrl = item.CoverUrl ?? "",
+                    DateText = FormatDate(item.ShelveTime),
+                    Url = $"https://www.kurobbs.com/mc/post/{item.PostId}",
+                });
+            }
+            return target.Count;
+        }
+
+        // 回到 UI 线程再填充 ObservableCollection
+        var news = await newsTask.ConfigureAwait(true);
+        var anns = await annTask.ConfigureAwait(true);
+        var acts = await actTask.ConfigureAwait(true);
+        return (Fill(KurobbsNews, news), Fill(KurobbsAnnouncements, anns), Fill(KurobbsActivities, acts));
+    }
+
+    /// <summary>启动器公告组件(Haiyu 左下角同源数据):活动/公告/新闻三组。返回总条数。</summary>
+    private async Task<int> LoadLauncherGuidanceAsync()
+    {
+        var info = await AppServices.LauncherInfo.GetLauncherInfoAsync(ServerType);
+        var guidance = info?.Guidance;
+        if (guidance is null)
+        {
+            return 0;
+        }
+
+        void Fill(ObservableCollection<LauncherNoticeItem> target, AnnouncementGroup? group)
+        {
+            foreach (var item in group?.Contents ?? [])
+            {
+                var title = StripHtml(item.Content);
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    continue;
+                }
+                target.Add(new LauncherNoticeItem
+                {
+                    Title = title,
+                    TimeText = item.Time ?? "",
+                    Url = item.JumpUrl ?? "",
+                });
+            }
+        }
+
+        Fill(LauncherActivities, guidance.Activity);
+        Fill(LauncherNotices, guidance.Notice);
+        Fill(LauncherNews, guidance.News);
+        return LauncherActivities.Count + LauncherNotices.Count + LauncherNews.Count;
+    }
+
+    /// <summary>Unix 毫秒 → "yyyy-MM-dd"。</summary>
+    private static string FormatDate(long shelveTimeMs)
+    {
+        if (shelveTimeMs <= 0)
+        {
+            return "";
+        }
+        try
+        {
+            return DateTimeOffset.FromUnixTimeMilliseconds(shelveTimeMs).LocalDateTime.ToString("yyyy-MM-dd");
+        }
+        catch (Exception)
+        {
+            return "";
+        }
+    }
+
+    /// <summary>剥离 HTML 标签、解码实体并压缩空白,超长截断(公告 content 可能是富文本)。</summary>
+    private static string StripHtml(string? html)
     {
         if (string.IsNullOrWhiteSpace(html))
         {
             return "";
         }
-        var text = System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", " ");
+        if (html.Contains('<'))
+        {
+            html = System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", " ");
+        }
+        var text = WebUtility.HtmlDecode(html);
         text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
-        return text.Length > 120 ? text[..120] + "…" : text;
-    }
-
-    /// <summary>格式化活动时间区间(如 ["2026-07-10 11:00","2026-08-19 03:59"] → "07-10 ~ 08-19")。</summary>
-    private static string FormatDateRange(IReadOnlyList<string>? range)
-    {
-        if (range is not { Count: 2 } || string.IsNullOrWhiteSpace(range[0]) || string.IsNullOrWhiteSpace(range[1]))
-        {
-            return "";
-        }
-        static string Short(string s)
-        {
-            // "2026-07-10 11:00" → "07-10"
-            var parts = s.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            return parts.Length > 0 && parts[0].Length >= 10 ? parts[0][5..10] : s;
-        }
-        return $"{Short(range[0])} ~ {Short(range[1])}";
+        return text.Length > 60 ? text[..60] + "…" : text;
     }
 }

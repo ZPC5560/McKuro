@@ -201,4 +201,117 @@ public class PlayTimeServiceTests
             try { Directory.Delete(dir, recursive: true); } catch (Exception) { }
         }
     }
+
+    /// <summary>构造一份"每天晚间 19:00-21:00 玩 2 小时"的规整聚合数据(索引 6 = 今天)。</summary>
+    private static PlayTimeAnalysis BuildEveningAnalysis(int playedDayCount)
+    {
+        var a = new PlayTimeAnalysis();
+        var today = DateTime.Today;
+        for (int i = 0; i < 7; i++)
+        {
+            var day = today.AddDays(i - 6);
+            a.Last7DaysDates[i] = day.ToString("yyyy-MM-dd");
+            if (i >= 7 - playedDayCount)
+            {
+                a.Last7DaysSeconds[i] = 7200;
+                for (int h = 19; h < 21; h++)
+                {
+                    a.Last7DaysHourlyMinutes[i, h] = 60;
+                }
+                a.Last7DaysSessions[i] =
+                [
+                    new PlayTimeSession { Start = "19:00", End = "21:00", Minutes = 120 },
+                ];
+            }
+            else
+            {
+                a.Last7DaysSessions[i] = [];
+            }
+        }
+        return a;
+    }
+
+    [Fact]
+    public void BuildWeeklyReport_Detects_Evening_Habit_And_Streak()
+    {
+        // 连续 7 天每晚 19:00-21:00:夜猫型 + 很规律 + 长时沉浸 + 节奏稳定。
+        var report = PlayTimeService.BuildWeeklyReport(BuildEveningAnalysis(playedDayCount: 7));
+
+        Assert.True(report.HasData);
+        Assert.Equal("14h", report.TotalText);
+        Assert.Equal("2h", report.AvgPerDayText);
+        Assert.Equal("2h", report.LongestSessionText);
+        Assert.Equal("7 天", report.StreakText);
+        Assert.Equal("夜猫型", report.HabitTag);
+        Assert.Equal("很规律", report.RegularityTag);       // 每天开场都是 19:00,波动为 0
+        Assert.Equal("长时沉浸", report.StyleTag);           // 单次平均 120 分钟
+        Assert.Equal("节奏稳定", report.TrendTag);           // 前后两半等量
+        Assert.Contains("共 7 天有游玩", report.SummaryText);
+    }
+
+    [Fact]
+    public void BuildWeeklyReport_Streak_Counts_Only_Up_To_Today()
+    {
+        // 今天(索引 6)没玩:即使前 6 天都玩了,连续天数也应为 0。
+        var a = new PlayTimeAnalysis();
+        var today = DateTime.Today;
+        for (int i = 0; i < 7; i++)
+        {
+            a.Last7DaysDates[i] = today.AddDays(i - 6).ToString("yyyy-MM-dd");
+            a.Last7DaysSessions[i] = [];
+            if (i < 6)
+            {
+                a.Last7DaysSeconds[i] = 7200;
+                a.Last7DaysHourlyMinutes[i, 19] = 60;
+                a.Last7DaysHourlyMinutes[i, 20] = 60;
+                a.Last7DaysSessions[i] = [new PlayTimeSession { Start = "19:00", End = "21:00", Minutes = 120 }];
+            }
+        }
+
+        var report = PlayTimeService.BuildWeeklyReport(a);
+
+        Assert.True(report.HasData);
+        Assert.Equal("0 天", report.StreakText);
+        Assert.Contains("共 6 天有游玩", report.SummaryText);
+    }
+
+    [Fact]
+    public void BuildWeeklyReport_Trend_Rising_When_Second_Half_Heavier()
+    {
+        // 前 5 天没玩、最后 2 天各玩 1 小时 → 渐入状态/后程发力。
+        var a = new PlayTimeAnalysis();
+        var today = DateTime.Today;
+        for (int i = 0; i < 7; i++)
+        {
+            a.Last7DaysDates[i] = today.AddDays(i - 6).ToString("yyyy-MM-dd");
+            a.Last7DaysSessions[i] = [];
+            if (i >= 5)
+            {
+                a.Last7DaysSeconds[i] = 3600;
+                a.Last7DaysSessions[i] = [new PlayTimeSession { Start = "20:00", End = "21:00", Minutes = 60 }];
+            }
+        }
+
+        var report = PlayTimeService.BuildWeeklyReport(a);
+
+        Assert.True(report.HasData);
+        Assert.Equal("渐入状态", report.TrendTag); // 前半周为 0,走"渐入状态"分支
+        Assert.Equal("中度游玩", report.StyleTag); // 单次平均 60 分钟
+    }
+
+    [Fact]
+    public void BuildWeeklyReport_Empty_Analysis_Returns_Empty_Report()
+    {
+        var a = new PlayTimeAnalysis();
+        for (int i = 0; i < 7; i++)
+        {
+            a.Last7DaysDates[i] = DateTime.Today.AddDays(i - 6).ToString("yyyy-MM-dd");
+            a.Last7DaysSessions[i] = [];
+        }
+
+        var report = PlayTimeService.BuildWeeklyReport(a);
+
+        Assert.False(report.HasData);
+        Assert.Equal("--", report.AvgPerDayText);
+    }
 }

@@ -19,7 +19,6 @@
                                               IsVideoEnabled="{Binding VideoEnabled}"
                                               HorizontalAlignment="Stretch"
                                               VerticalAlignment="Stretch" />
-            <Border Background="#000000" Opacity="0.18" />
         </Grid>
 
         <Border Grid.Row="1" Grid.Column="0" ZIndex="2" HorizontalAlignment="Right" VerticalAlignment="Top"

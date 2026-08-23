@@ -102,15 +102,16 @@ public sealed partial class RolesViewModel : ViewModelBase
         GuideStatusText = AppServices.Guide.HasToken
             ? $"已登录攻略站 ({AppServices.Settings.Current.GuideCName})"
             : "未登录攻略站";
-        // 加载页面自动同步库街区(同步失败/未登录时自动兜底读本地缓存)
-        _ = LoadFromKujiequAsync();
+        // 默认加载本地缓存,不自动请求库街区(频繁访问易触发账号风控);
+        // 仅当用户点击「同步」按钮(或显式调用 LoadFromKujiequCommand)时才在线获取
+        LoadFromLocal();
 
-        // 登录/切号后自动同步:从设置重读 Token/RoleId 并拉取库街区角色数据
+        // 登录/切号后自动同步 → 改为仅读缓存:在线获取完全依赖用户点击「同步」
         _messenger.Register<RolesViewModel, RolesRefreshRequestedMessage>(this, static (recipient, message) =>
         {
             recipient.TokenText = AppServices.Settings.Current.KujiequToken;
             recipient.RoleIdText = AppServices.Settings.Current.RoleId;
-            _ = recipient.LoadFromKujiequAsync();
+            recipient.LoadFromLocal();
         });
     }
 
@@ -441,6 +442,7 @@ public sealed partial class RolesViewModel : ViewModelBase
         StatusText = "正在从库街区获取角色数据…";
         try
         {
+            // 触发极验风控时不再弹验证页(角色场景验证已实测无法解除),由服务返回提示并回退缓存
             var result = await AppServices.Roles.LoadFromKujiequAsync(TokenText, RoleIdText);
             if (result.IsSuccess)
             {
@@ -560,6 +562,18 @@ public sealed partial class RolesViewModel : ViewModelBase
             SelectedRole = FilteredRoles.FirstOrDefault();
         }
     }
+}
+
+/// <summary>布尔取反(用于 IsEnabled 反向绑定,如 IsBusy → 禁用)。</summary>
+public sealed class InverseBoolConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly InverseBoolConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value is not true;
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value is not true;
 }
 
 /// <summary>布尔 → 画刷转换(用于共鸣链解锁状态显示)。</summary>

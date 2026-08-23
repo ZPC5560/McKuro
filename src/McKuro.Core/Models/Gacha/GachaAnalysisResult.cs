@@ -123,6 +123,62 @@ public sealed class PoolStats
     /// <summary>是否有小保底机制(角色活动/角色联动池)。</summary>
     public bool HasPityMechanism => PoolType is CardPoolType.RoleActivity or CardPoolType.CharacterCollaboration;
 
+    // ---- "预计下一抽"模型(界面统计卡片用) ----
+
+    /// <summary>是否有 UP 目标;常驻/新手唤取/新手自选/感恩定向无 UP 概念,目标是任意 5★。</summary>
+    public bool HasUpTarget => PoolType is not
+        (CardPoolType.RoleResident or
+         CardPoolType.WeaponsResident or
+         CardPoolType.Beginner or
+         CardPoolType.BeginnerChoice or
+         CardPoolType.GratitudeOrientation);
+
+    /// <summary>是否有 50/50 小保底机制(角色 UP 池:活动/联动/忆旅/新旅;武器 UP 池不歪)。</summary>
+    public bool IsFiftyFifty => PoolType is
+        CardPoolType.RoleActivity or
+        CardPoolType.CharacterCollaboration or
+        CardPoolType.CharacterMemoryJourney or
+        CardPoolType.CharacterNovice;
+
+    /// <summary>是否处于大保底(上一个五星歪了,下一金必 UP;仅 50/50 池有意义)。</summary>
+    public bool IsGuaranteedUp => IsFiftyFifty && FiveStarEntries.LastOrDefault()?.IsOffBanner == true;
+
+    /// <summary>下一抽获得 5★ 的概率(0~1,按当前垫抽数估算)。</summary>
+    public double NextFiveStarRate => GachaRateModel.FiveStarRateAtPity(CurrentPity);
+
+    /// <summary>
+    /// 预计下一抽获得目标(UP 或常驻任意 5★)的概率(%)。
+    /// <para>50/50 角色池:小保底 50%、大保底 100%;武器池与常驻池:出金即目标(不歪);无 UP 池目标为任意 5★。</para>
+    /// </summary>
+    public double NextPullUpPercent
+    {
+        get
+        {
+            var rate = NextFiveStarRate * 100;
+            if (IsFiftyFifty && !IsGuaranteedUp)
+            {
+                return rate * 0.5;
+            }
+            return rate;
+        }
+    }
+
+    /// <summary>HERO 数字的标签:有 UP 池显示 UP 概率,无 UP 池显示 5★ 概率。</summary>
+    public string UpChanceCaption => HasUpTarget ? "预计下一抽 UP" : "预计下一抽 5★";
+
+    /// <summary>保底状态徽标文本(大保底/小保底/必UP/无UP)。</summary>
+    public string GuaranteeBadgeText => HasUpTarget
+        ? (IsFiftyFifty ? (IsGuaranteedUp ? "大保底" : "小保底") : "必UP")
+        : "无UP";
+
+    /// <summary>保底状态徽标语义色键(guaranteed/fifty/always/none),供配色转换器。</summary>
+    public string GuaranteeBadgeKind => HasUpTarget
+        ? (IsFiftyFifty ? (IsGuaranteedUp ? "guaranteed" : "fifty") : "always")
+        : "none";
+
+    /// <summary>保底进度条值(当前垫抽,封顶 80;进度条 Maximum 绑 <see cref="GachaRateModel.HardPity"/>)。</summary>
+    public double PityProgressValue => Math.Min(CurrentPity, GachaRateModel.HardPity);
+
     /// <summary>五星期望值(鸣潮硬保底 80,软保底机制按官方概率近似)。</summary>
     public const double ExpectedFiveStarPity = 80.0;
 }

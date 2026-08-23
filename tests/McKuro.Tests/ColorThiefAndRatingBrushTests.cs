@@ -62,6 +62,63 @@ public class ColorThiefHelperTests
             Marshal.FreeHGlobal(white);
         }
     }
+
+    [Fact]
+    public void PickVivid_Single_Candidate_Returns_It()
+    {
+        var c = Color.FromRgb(30, 120, 200);
+        Assert.Equal(c, ColorThiefHelper.PickVivid([c]));
+    }
+
+    [Fact]
+    public void PickVivid_Prefers_Vivid_Yellow_Over_Dominant_Gray()
+    {
+        // 模拟海报配色:大面积暗灰蓝背景(出现最多) + 小面积高饱和主题黄
+        var vivid = ColorThiefHelper.PickVivid(
+        [
+            Color.FromRgb(90, 105, 132),  // 灰蓝(第 1 名)
+            Color.FromRgb(244, 205, 80),  // 主题黄(鲜明,第 2 名)
+        ]);
+        Assert.True(vivid.R > 200, $"应选鲜明黄,实际={vivid}");
+        Assert.True(vivid.G > 150, $"应选鲜明黄,实际={vivid}");
+    }
+
+    [Fact]
+    public void PickVivid_Keeps_Dominant_When_It_Is_Already_Vivid()
+    {
+        // 大面积高饱和红仍应压过小面积亮黄
+        var vivid = ColorThiefHelper.PickVivid(
+        [
+            Color.FromRgb(200, 30, 30),   // 红(第 1 名,高饱和)
+            Color.FromRgb(244, 205, 80),  // 黄(第 2 名)
+        ]);
+        Assert.True(vivid.R > 180 && vivid.G < 100, $"应保留大面积红,实际={vivid}");
+    }
+
+    [Fact]
+    public void FromBgra_Then_PickVivid_Prefers_Yellow_Over_Gray_Background()
+    {
+        // 64×64 缓冲:3/4 灰蓝背景 + 1/4 黄色带 → vivid 应取黄
+        const int w = 64, h = 64;
+        var ptr = Marshal.AllocHGlobal(w * h * 4);
+        try
+        {
+            for (int i = 0; i < w * h; i++)
+            {
+                var color = i % w < 48 ? Color.FromRgb(90, 105, 132) : Color.FromRgb(244, 205, 80);
+                Marshal.WriteByte(ptr, i * 4 + 0, color.B);
+                Marshal.WriteByte(ptr, i * 4 + 1, color.G);
+                Marshal.WriteByte(ptr, i * 4 + 2, color.R);
+                Marshal.WriteByte(ptr, i * 4 + 3, 255);
+            }
+            var vivid = ColorThiefHelper.PickVivid(ColorThiefHelper.FromBgraBytes(ptr, w, h, w * 4, 5));
+            Assert.True(vivid.R > 200, $"应选鲜明黄,实际={vivid}");
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
+        }
+    }
 }
 
 /// <summary>主题自适应转换器测试(默认无 Avalonia Application → 按浅色主题返回深色版)。</summary>

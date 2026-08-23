@@ -118,7 +118,7 @@ public sealed partial class GachaViewModel : ViewModelBase
 
     public AvaloniaList<GachaRecord> AllRecords { get; } = [];
 
-    // ---- 视图切换(0=综合分析[默认] 1=统计卡片 2=详细分析 3=表格) ----
+    // ---- 视图切换(0=综合分析[默认] 1=统计卡片 2=表格) ----
     [ObservableProperty]
     private int _selectedViewIndex;
 
@@ -166,13 +166,6 @@ public sealed partial class GachaViewModel : ViewModelBase
     public string ChartTitle => ChartOptions.Count > SelectedChartIndex ? ChartOptions[SelectedChartIndex] : "";
 
     partial void OnSelectedChartIndexChanged(int value) => OnPropertyChanged(nameof(ChartTitle));
-
-    /// <summary>详细分析页竖列卡池按钮(仅含有记录的池,按抽数降序)。</summary>
-    public AvaloniaList<PoolStats> PoolTabs { get; } = [];
-
-    /// <summary>详细分析页的卡池选中项(独立的池列表,避免与综合分析下拉框共用选中项导致空池被清空)。</summary>
-    [ObservableProperty]
-    private PoolStats? _selectedDetailPool;
 
     /// <summary>每日抽数(旧→新,用于平滑面积图;由 TimeLineChart 自绘)。</summary>
     public AvaloniaList<int> TimeLineCounts { get; } = [];
@@ -559,16 +552,7 @@ public sealed partial class GachaViewModel : ViewModelBase
         }
         Pools.AddRange(filled.Values.OrderByDescending(p => p.TotalPulls));
 
-        // 详细分析竖列按钮:仅含有记录的卡池
-        PoolTabs.Clear();
-        PoolTabs.AddRange(Pools.Where(p => p.TotalPulls > 0));
-
         SelectedPool = Pools.FirstOrDefault(p => p.FiveStarCount > 0) ?? Pools.FirstOrDefault();
-        // 详细分析页独立选中:旧选中已不在新列表时回落到第一个有记录的池。
-        if (SelectedDetailPool is null || !PoolTabs.Contains(SelectedDetailPool))
-        {
-            SelectedDetailPool = PoolTabs.FirstOrDefault();
-        }
         RefreshDetail();
         BuildCharts(analysis);
     }
@@ -615,25 +599,7 @@ public sealed partial class GachaViewModel : ViewModelBase
         TimeLineTips.AddRange(analysis.DailyPulls.Select(TimeLineChart.BuildTip));
     }
 
-    partial void OnSelectedPoolChanged(PoolStats? value)
-    {
-        // 详细分析页列表只含有记录的池;选中的空池不在其中时保持其原有选中,
-        // 避免无记录池在其他控件的两路选中被写成 null(下拉框数据变空)。
-        if (value is not null && SelectedDetailPool != value && PoolTabs.Contains(value))
-        {
-            SelectedDetailPool = value;
-        }
-        RefreshDetail();
-    }
-
-    partial void OnSelectedDetailPoolChanged(PoolStats? value)
-    {
-        // 详细分析页选择某个池时,同步综合分析下拉框与摘要。
-        if (value is not null)
-        {
-            SelectedPool = value;
-        }
-    }
+    partial void OnSelectedPoolChanged(PoolStats? value) => RefreshDetail();
 
     private void RefreshDetail()
     {
@@ -964,6 +930,24 @@ public sealed class PityColorConverter : Avalonia.Data.Converters.IValueConverte
         => throw new NotSupportedException();
 }
 
+
+/// <summary>保底状态徽标背景色:guaranteed→蓝(必中),fifty→琥珀(50/50),always→绿(必UP),none→灰(无UP)。</summary>
+public sealed class GuaranteeBadgeBrushConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly GuaranteeBadgeBrushConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value switch
+        {
+            "guaranteed" => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#1677FF")),
+            "fifty" => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#FA8C16")),
+            "always" => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#52C41A")),
+            _ => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#8C8C8C")),
+        };
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
 
 /// <summary>星级颜色:5→金,4→紫,其他→灰。</summary>
 public sealed class QualityColorConverter : Avalonia.Data.Converters.IValueConverter

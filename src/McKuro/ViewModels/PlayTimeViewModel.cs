@@ -66,6 +66,10 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
     [ObservableProperty]
     private string _reportSummaryText = "";
 
+    /// <summary>最近 7 天游玩分析报告(关键指标 + 行为洞察 + 自动总结)。</summary>
+    [ObservableProperty]
+    private PlayTimeWeeklyReport _weeklyReport = PlayTimeWeeklyReport.Empty;
+
     public ObservableCollection<PlayDayItem> Last7Days { get; } = [];
 
     public ObservableCollection<PlayHourCell> HourlyCells { get; } = [];
@@ -170,6 +174,9 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
         ReportSummaryText = ReportRows.Count > 0
             ? $"最近 7 天共 {ReportRows.Count} 天有游玩"
             : "最近 7 天暂无游玩记录";
+
+        // 7 天分析报告:在逐日聚合之上二次计算(纯 Core 计算,便于测试)
+        WeeklyReport = PlayTimeService.BuildWeeklyReport(a);
 
         // 7×24 时段热力
         HourlyCells.Clear();

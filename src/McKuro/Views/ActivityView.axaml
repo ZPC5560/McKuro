@@ -200,10 +200,10 @@
                                                         <Grid>
                                                             <!-- 底层:整条(未进行/剩余部分,半透明) -->
                                                             <Border Background="{Binding BarBrush}" Opacity="0.35" />
-                                                            <!-- 进度层:已进行部分(宽度=ProgressPercent%,实色) -->
+                                                            <!-- 进度层:已进行部分(宽=条宽×进度,相对条自身绘制) -->
                                                             <Border Background="{Binding BarBrush}"
                                                                     HorizontalAlignment="Left"
-                                                                    Width="{Binding ProgressPercent, Converter={StaticResource GanttWidth}}" />
+                                                                    Width="{Binding ProgressWidthPercent, Converter={StaticResource GanttWidth}}" />
                                                             <!-- 进度百分比文本 -->
                                                             <TextBlock Text="{Binding ProgressPercent, StringFormat={}{0:0}%}"
                                                                        FontSize="9" Foreground="White"

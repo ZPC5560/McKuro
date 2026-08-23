@@ -148,13 +148,13 @@
                 </StackPanel>
             </Border>
 
-            <!-- 最近 7 天游玩时间范围报告(结构化) -->
+            <!-- 最近 7 天游玩分析报告(关键指标 + 行为洞察 + 自动总结 + 逐日明细) -->
             <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
-                <StackPanel Spacing="12">
+                <StackPanel Spacing="14">
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <ic:FluentIcon Icon="DocumentText" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                            <TextBlock Text="最近 7 天游玩时间范围报告" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Text="最近 7 天游玩分析报告" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
                         </StackPanel>
                         <Border Grid.Column="1" CornerRadius="10" Padding="10,3"
                                 Background="{DynamicResource SemiColorBg3}" VerticalAlignment="Center">
@@ -162,8 +162,102 @@
                                        Foreground="{DynamicResource SemiColorText2}" />
                         </Border>
                     </Grid>
-                    <TextBlock Text="每次开始玩到结束独立统计,相邻会话(≤60min)合并为同一时段" FontSize="11"
-                               Foreground="{DynamicResource SemiColorText3}" />
+
+                    <!-- 关键指标:日均 / 最长单次 / 连续游玩 / 最活跃日 -->
+                    <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="12">
+                        <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="日均时长" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{Binding WeeklyReport.AvgPerDayText}" FontSize="22" FontWeight="Bold"
+                                           Foreground="{DynamicResource SemiColorPrimary}" />
+                                <TextBlock Text="按有游玩的天平均" FontSize="10" Foreground="{DynamicResource SemiColorText3}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="1" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="最长单次" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{Binding WeeklyReport.LongestSessionText}" FontSize="22" FontWeight="Bold"
+                                           Foreground="{DynamicResource SemiColorPrimary}" />
+                                <TextBlock Text="{Binding WeeklyReport.LongestSessionDayText}" FontSize="10"
+                                           Foreground="{DynamicResource SemiColorText3}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="连续游玩" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{Binding WeeklyReport.StreakText}" FontSize="22" FontWeight="Bold"
+                                           Foreground="{DynamicResource SemiColorPrimary}" />
+                                <TextBlock Text="截至今天" FontSize="10" Foreground="{DynamicResource SemiColorText3}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="3" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="最活跃日" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{Binding WeeklyReport.PeakDayText}" FontSize="22" FontWeight="Bold"
+                                           Foreground="{DynamicResource SemiColorPrimary}" />
+                                <TextBlock Text="{Binding WeeklyReport.PeakDayDetail}" FontSize="10"
+                                           Foreground="{DynamicResource SemiColorText3}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- 行为洞察:时段偏好 / 作息规律 / 游玩方式 / 周内趋势 -->
+                    <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="12">
+                        <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="时段偏好" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{Binding WeeklyReport.HabitTag}" FontSize="17" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource SemiColorPrimary}" />
+                                <TextBlock Text="{Binding WeeklyReport.HabitDetail}" FontSize="11" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource SemiColorText3}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="1" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="作息规律" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{Binding WeeklyReport.RegularityTag}" FontSize="17" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource SemiColorPrimary}" />
+                                <TextBlock Text="{Binding WeeklyReport.RegularityDetail}" FontSize="11" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource SemiColorText3}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="游玩方式" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{Binding WeeklyReport.StyleTag}" FontSize="17" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource SemiColorPrimary}" />
+                                <TextBlock Text="{Binding WeeklyReport.StyleDetail}" FontSize="11" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource SemiColorText3}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="3" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="周内趋势" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{Binding WeeklyReport.TrendTag}" FontSize="17" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource SemiColorPrimary}" />
+                                <TextBlock Text="{Binding WeeklyReport.TrendDetail}" FontSize="11" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource SemiColorText3}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- 自动生成的本周总结 -->
+                    <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="16,12"
+                            BorderBrush="{DynamicResource SemiColorPrimary}" BorderThickness="3,0,0,0">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="本周总结" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource SemiColorPrimary}" />
+                            <TextBlock Text="{Binding WeeklyReport.SummaryText}" FontSize="13" TextWrapping="Wrap"
+                                       LineHeight="22" Foreground="{DynamicResource SemiColorText1}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 逐日明细 -->
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                        <TextBlock Text="逐日明细" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Text="每次开始玩到结束独立统计,相邻会话(≤60min)合并为同一时段" FontSize="11"
+                                   Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+                    </StackPanel>
                     <ItemsControl ItemsSource="{Binding ReportRows}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:PlayTimeReportRow">

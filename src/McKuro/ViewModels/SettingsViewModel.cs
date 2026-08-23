@@ -112,22 +112,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Save();
     }
 
-    // 动态壁纸与玻璃主题
-    [ObservableProperty]
-    private string _wallpaperPath = "";
-
-    [ObservableProperty]
-    private string _wallpaperStatusText = "";
-
-    [ObservableProperty]
-    private bool _hasWallpaper;
-
-    [ObservableProperty]
-    private bool _dynamicPaletteEnabled;
-
-    [ObservableProperty]
-    private int _glassQualityIndex;
-
     // 游戏修复:跳过校验文件(对齐 Haiyu SkipVerifyFiles)
     [ObservableProperty]
     private string _skipVerifyInput = "";
@@ -208,6 +192,21 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string PlatformCapabilityText => AppServices.Capabilities.GameSupportText;
 
+    /// <summary>平台徽标:是否为 Windows(四格窗格 Logo)。</summary>
+    public bool IsPlatformWindows => AppServices.Capabilities.IsWindows;
+
+    /// <summary>平台徽标:是否为 macOS(⌘ 命令符)。</summary>
+    public bool IsPlatformMacOS => AppServices.Capabilities.IsMacOS;
+
+    /// <summary>平台徽标:Linux 或其他平台(回退终端图标)。</summary>
+    public bool IsPlatformLinux => AppServices.Capabilities.IsLinux;
+
+    /// <summary>系统运行环境描述(如 Microsoft Windows 11 专业版 10.0.26100)。</summary>
+    public string PlatformRuntimeText => AppServices.Capabilities.RuntimeDescription;
+
+    /// <summary>平台支持状态徽标文本。</summary>
+    public string PlatformSupportBadgeText => AppServices.Capabilities.IsWindows ? "原生支持" : "部分支持";
+
     [RelayCommand]
     private void OpenLogDir()
     {
@@ -238,8 +237,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public ObservableCollection<string> Themes { get; } = ["跟随系统", "浅色", "深色"];
 
-    public ObservableCollection<string> GlassQualities { get; } = ["自动", "高质量", "低性能模式"];
-
     /// <summary>主题选择即时生效(对齐 Haiyu OnSelectThemeChanged):切换即应用并持久化,无需点保存。</summary>
     partial void OnThemeIndexChanged(int value)
     {
@@ -253,7 +250,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.Theme = theme;
         AppServices.Settings.Save();
         ApplyThemeVariant(theme);
-        _ = AppServices.ThemePalette.ApplyCurrentAsync();
     }
 
     /// <summary>把主题字符串应用到全局 RequestedThemeVariant(Semi 动态资源随之刷新:浅色/深色/跟随系统)。</summary>
@@ -290,16 +286,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _startGameExeName = s.StartGameExeName;
         _minimizeOnLaunch = s.MinimizeOnLaunch;
         _backgroundVideoEnabled = s.BackgroundVideoEnabled;
-        _wallpaperPath = AppServices.Wallpaper.CurrentWallpaperPath;
-        _hasWallpaper = AppServices.Wallpaper.HasWallpaper;
-        _dynamicPaletteEnabled = s.DynamicPaletteEnabled;
-        _glassQualityIndex = s.GlassQuality switch
-        {
-            "High" => 1,
-            "Low" => 2,
-            _ => 0,
-        };
-        _wallpaperStatusText = AppServices.Wallpaper.HasWallpaper ? "正在使用自定义壁纸" : "使用默认背景";
         _autoSkipVerifyDelete = s.AutoSkipVerifyDelete;
         foreach (var p in s.SkipVerifyFiles)
         {
@@ -345,95 +331,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private void UpdateServerTypeText()
     {
         ServerTypeText = ServerTypes[Math.Clamp(SelectedServerIndex, 0, ServerTypes.Count - 1)];
-    }
-
-    partial void OnDynamicPaletteEnabledChanged(bool value)
-    {
-        AppServices.Settings.Current.DynamicPaletteEnabled = value;
-        AppServices.Settings.Save();
-        _ = AppServices.ThemePalette.ApplyCurrentAsync();
-    }
-
-    partial void OnGlassQualityIndexChanged(int value)
-    {
-        AppServices.Settings.Current.GlassQuality = value switch
-        {
-            1 => "High",
-            2 => "Low",
-            _ => "Auto",
-        };
-        AppServices.Settings.Save();
-        _ = AppServices.ThemePalette.ApplyCurrentAsync();
-    }
-
-    [RelayCommand]
-    private async Task SelectWallpaperAsync()
-    {
-        var lifetime = Avalonia.Application.Current?.ApplicationLifetime
-            as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
-        var topLevel = lifetime?.MainWindow;
-        if (topLevel is null)
-        {
-            return;
-        }
-
-        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
-        {
-            Title = "选择主页壁纸",
-            AllowMultiple = false,
-            FileTypeFilter =
-            [
-                new Avalonia.Platform.Storage.FilePickerFileType("图片")
-                {
-                    Patterns = ["*.png", "*.jpg", "*.jpeg", "*.webp"],
-                    AppleUniformTypeIdentifiers = ["public.png", "public.jpeg", "org.webmproject.webp"],
-                    MimeTypes = ["image/png", "image/jpeg", "image/webp"],
-                },
-            ],
-        });
-        if (files.Count == 0)
-        {
-            return;
-        }
-
-        try
-        {
-            WallpaperStatusText = "正在处理壁纸…";
-            WallpaperPath = await AppServices.Wallpaper.SetWallpaperAsync(files[0].Path.LocalPath);
-            HasWallpaper = true;
-            await AppServices.ThemePalette.ApplyCurrentAsync();
-            WallpaperStatusText = "壁纸已应用，应用强调色已同步";
-        }
-        catch (Exception ex)
-        {
-            WallpaperStatusText = $"壁纸应用失败：{ex.Message}";
-        }
-    }
-
-    [RelayCommand]
-    private async Task ResetWallpaperAsync()
-    {
-        AppServices.Wallpaper.ClearWallpaper();
-        WallpaperPath = "";
-        HasWallpaper = false;
-        await AppServices.ThemePalette.ApplyCurrentAsync();
-        WallpaperStatusText = "已恢复默认背景";
-    }
-
-    /// <summary>打开壁纸存储目录(跨平台;macOS 用 open)。</summary>
-    [RelayCommand]
-    private void OpenWallpaperDir()
-    {
-        var dir = Path.Combine(AppServices.AppDataDir, "wallpapers");
-        if (!Directory.Exists(dir))
-        {
-            WallpaperStatusText = "壁纸目录不存在";
-            return;
-        }
-        if (!AppServices.OpenInFileManager(dir))
-        {
-            WallpaperStatusText = "打开壁纸目录失败";
-        }
     }
 
     [RelayCommand]
@@ -523,14 +420,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.StartGameExeName = StartGameExeName;
         s.MinimizeOnLaunch = MinimizeOnLaunch;
         s.BackgroundVideoEnabled = BackgroundVideoEnabled;
-        s.WallpaperPath = WallpaperPath;
-        s.DynamicPaletteEnabled = DynamicPaletteEnabled;
-        s.GlassQuality = GlassQualityIndex switch
-        {
-            1 => "High",
-            2 => "Low",
-            _ => "Auto",
-        };
         s.SkipVerifyFiles = [.. SkipVerifyFiles];
         s.AutoSkipVerifyDelete = AutoSkipVerifyDelete;
         s.Language = LanguageIndex == 1 ? "en-US" : "zh-Hans";

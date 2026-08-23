@@ -210,19 +210,42 @@ public class KujiequApiClientTests
     }
 
     [Fact]
-    public async Task RefreshDataAsync_Returns_True_On_200()
+    public async Task GetRoleDetailResultAsync_Flags_GeeTest_Too_When_Raw_Json()
     {
+        // 库街区风控真实响应:无 code/data,只有 {"geeTest":true} → 不抛异常,显式标记
         var (baseUrl, listener, _) = StartServer(new Dictionary<string, string>
         {
-            // refreshData 真实响应:data 为布尔值
-            ["/aki/roleBox/akiBox/refreshData"] =
-                """{"code":200,"data":true,"msg":"成功","success":true}""",
+            ["/aki/roleBox/akiBox/getRoleDetail"] = """{"geeTest":true}""",
         });
         try
         {
             var client = CreateApi(baseUrl);
-            var ok = await client.RefreshDataAsync("at-1", DeviceId, RoleId);
-            Assert.True(ok);
+            var result = await client.GetRoleDetailResultAsync("at-1", DeviceId, RoleId, 1304);
+            Assert.Null(result.Detail);
+            Assert.True(result.GeeTest);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task GetRoleDetailResultAsync_Parses_Normal_Detail_Without_GeeTest()
+    {
+        var (baseUrl, listener, _) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/getRoleDetail"] =
+                """
+                {"code":200,"data":"{\"role\":{\"roleId\":103242935,\"roleName\":\"漂泊者\",\"starLevel\":5,\"level\":80,\"breach\":6,\"attributeName\":\"衍射\"},\"weaponData\":{\"weapon\":{\"weaponName\":\"千古洑流\",\"weaponStarLevel\":5},\"level\":90,\"breach\":6,\"resonLevel\":5},\"skillList\":[{\"level\":10,\"skill\":{\"id\":100,\"name\":\"普攻\"}}],\"chainList\":[{\"order\":1,\"name\":\"一链\",\"unlocked\":true}],\"roleAttributeList\":[{\"attributeName\":\"攻击\",\"attributeValue\":\"1000\"}]}","msg":"成功","success":true}
+                """,
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var result = await client.GetRoleDetailResultAsync("at-1", DeviceId, RoleId, 1304);
+            Assert.False(result.GeeTest);
+            Assert.Equal("漂泊者", result.Detail?.RoleName);
         }
         finally
         {
@@ -279,6 +302,70 @@ public class KujiequApiClientTests
             var client = CreateApi(baseUrl);
             var baseData = await client.GetGamerBaseDataAsync(Token, DeviceId, RoleId);
             Assert.Null(baseData);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task BaseData_Sends_OfficialH5_WebView_Headers()
+    {
+        // 抓取数据中心请求的完整请求头,验证与官方 App H5(对齐 Haiyu GetWebHeader)一致:
+        // WebView UA + Origin + X-Requested-With + devCode(IP, UA) + b-at + token
+        var headers = new List<string>();
+        var listener = new HttpListener();
+        var prefix = $"http://127.0.0.1:{GetFreePort()}/";
+        listener.Prefixes.Add(prefix);
+        listener.Start();
+        _ = Task.Run(async () =>
+        {
+            while (listener.IsListening)
+            {
+                try
+                {
+                    var ctx = await listener.GetContextAsync();
+                    using var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8);
+                    _ = reader.ReadToEnd();
+                    foreach (var key in ctx.Request.Headers.AllKeys)
+                    {
+                        headers.Add($"{key}: {ctx.Request.Headers[key]}");
+                    }
+                    var body = """
+                        {"code":200,"data":"{\"name\":\"test\"}","msg":"成功","success":true}
+                        """;
+                    var bytes = Encoding.UTF8.GetBytes(body);
+                    ctx.Response.StatusCode = 200;
+                    ctx.Response.ContentLength64 = bytes.Length;
+                    await ctx.Response.OutputStream.WriteAsync(bytes);
+                    ctx.Response.Close();
+                }
+                catch
+                {
+                    break;
+                }
+            }
+        });
+        try
+        {
+            var client = CreateApi(prefix);
+            client.PublicIp = "203.0.113.7";
+            await client.GetGamerBaseDataAsync(Token, DeviceId, RoleId);
+            var text = string.Join("\n", headers);
+            Assert.Contains("Origin: https://web-static.kurobbs.com", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("X-Requested-With: com.kurogame.kjq", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("b-at: " + Token, text, StringComparison.OrdinalIgnoreCase);
+            // 实测:数据中心请求带 token 头会被服务端回 code=10000「参数错误」,必须禁止
+            Assert.DoesNotContain("token: " + Token, text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("did: " + DeviceId, text, StringComparison.OrdinalIgnoreCase);
+            var uaLine = headers.FirstOrDefault(h => h.StartsWith("User-Agent:", StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(uaLine);
+            Assert.Contains("Kuro/3.1.2 KuroGameBox/3.1.2", uaLine);
+            Assert.Contains("Mozilla/5.0 (Linux; Android 9; 2509FPN0BC", uaLine, StringComparison.Ordinal);
+            var devCodeLine = headers.FirstOrDefault(h => h.StartsWith("devcode:", StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(devCodeLine);
+            Assert.StartsWith("devcode: 203.0.113.7, Mozilla/5.0", devCodeLine, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

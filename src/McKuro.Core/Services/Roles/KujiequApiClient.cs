@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -22,13 +23,13 @@ public sealed class KujiequApiClient
 {
     public const string BaseUrl = "https://api.kurobbs.com";
 
-    // 端点(与 WutheringWavesTool ApiConfig 一致)
+    // 端点(与 WutheringWavesTool ApiConfig 一致;refreshData 已被服务端停用,不再定义)
     public const string RequestTokenUrl = BaseUrl + "/aki/roleBox/requestToken";
-    public const string RefreshDataUrl = BaseUrl + "/aki/roleBox/akiBox/refreshData";
     public const string RoleDataUrl = BaseUrl + "/aki/roleBox/akiBox/roleData";
     public const string RoleDetailUrl = BaseUrl + "/aki/roleBox/akiBox/getRoleDetail";
     public const string NewTowerUrl = BaseUrl + "/aki/roleBox/akiBox/newTowerDetail";
     public const string SlashUrl = BaseUrl + "/aki/roleBox/akiBox/slashDetail";
+    public const string TowerUrl = BaseUrl + "/aki/roleBox/akiBox/towerDataDetail";
     public const string DailyDataUrl = BaseUrl + "/gamer/widget/game3/getData";
     public const string BaseDataUrl = BaseUrl + "/aki/roleBox/akiBox/baseData";
 
@@ -36,11 +37,12 @@ public sealed class KujiequApiClient
     public const string ParamServerId = "76402e5b20be2c39f095a152090afddc";
     public const string ParamGameId = "3";
 
-    /// <summary>库街区 WebView 安卓 UA(对齐 WutheringWavesTool getBaseBuilder)。</summary>
-    private const string AndroidUa =
-        "Mozilla/5.0 (Linux; Android 9; 23116PN5BC Build/PQ3A.190605.02201427; wv) "
+    /// <summary>库街区 App WebView 安卓 UA(对齐 Haiyu KuroClient.GetWebHeader:
+    /// 数据中心接口实际由 App 内 H5 页面调用,须模拟 WebView 特征而非纯原生)。</summary>
+    private const string WebViewUa =
+        "Mozilla/5.0 (Linux; Android 9; 2509FPN0BC Build/PQ3B.190801.07131748; wv) "
         + "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 "
-        + "Chrome/124.0.6367.82 Mobile Safari/537.36 Kuro/2.5.0 KuroGameBox/2.5.0";
+        + "Chrome/91.0.4472.114 Safari/537.36 Kuro/3.1.2 KuroGameBox/3.1.2";
 
     private readonly HttpClient _http;
     private readonly string _baseUrl;
@@ -60,9 +62,6 @@ public sealed class KujiequApiClient
     /// <summary>requestToken 端点(对齐 Haiyu)。</summary>
     public string RequestTokenUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/requestToken";
 
-    /// <summary>refreshData 端点。</summary>
-    public string RefreshDataUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/akiBox/refreshData";
-
     /// <summary>roleData 端点。</summary>
     public string RoleDataUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/akiBox/roleData";
 
@@ -74,6 +73,9 @@ public sealed class KujiequApiClient
 
     /// <summary>slashDetail 端点。</summary>
     public string SlashUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/akiBox/slashDetail";
+
+    /// <summary>towerDataDetail(逆境深塔)端点。</summary>
+    public string TowerUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/akiBox/towerDataDetail";
 
     /// <summary>getData(每日数据)端点。</summary>
     public string DailyDataUrlValue => _baseUrl.TrimEnd('/') + "/gamer/widget/game3/getData";
@@ -88,6 +90,8 @@ public sealed class KujiequApiClient
         [JsonPropertyName("data")] public JsonElement? Data { get; set; }
         [JsonPropertyName("msg")] public string? Msg { get; set; }
         [JsonPropertyName("success")] public bool Success { get; set; }
+        /// <summary>极验风控标记:接口返回 {"geeTest":true} 时 true(原样透传,json 并无 code/data)。</summary>
+        [JsonPropertyName("geeTest")] public bool GeeTest { get; set; }
     }
 
     /// <summary>requestToken 响应(data 内层)。</summary>
@@ -141,12 +145,13 @@ public sealed class KujiequApiClient
             { "Accept", "application/json, text/plain, */*" },
             { "Accept-Encoding", "gzip, deflate" },
             { "Accept-Language", "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7" },
-            { "devCode", AndroidUa },
+            { "devCode", WebViewUa },
             { "did", deviceId },
             { "source", source },
             { "token", token },
+            { "Connection", "keep-alive" },
         };
-        var body = $"serverId={ParamServerId}&roleId={roleId}&userId={userId}";
+        var body = $"roleId={roleId}&serverId={ParamServerId}&userId={userId}";
         // 令牌换取失败不抛异常(静默返回 null,由上层给出友好提示)
         var env = await SendEnvelopeAsync(RequestTokenUrlValue, headers, body, ct, throwOnError: false).ConfigureAwait(false);
         var dataStr = GetDataString(env);
@@ -171,7 +176,8 @@ public sealed class KujiequApiClient
         CancellationToken ct = default)
     {
         var headers = BuildWebHeader(accessToken, deviceId);
-        var body = $"serverId={ParamServerId}&roleId={roleId}&gameId={ParamGameId}";
+        // body: 字段顺序精确对齐官方 App(Haiyu GetGamerRoleDataAsync):gameId→roleId→serverId→channelId→countryCode
+        var body = $"gameId={ParamGameId}&roleId={roleId}&serverId={ParamServerId}&channelId=19&countryCode=1";
         var env = await SendEnvelopeAsync(RoleDataUrlValue, headers, body, ct).ConfigureAwait(false);
         var dataStr = GetDataString(env);
         if (dataStr is null)
@@ -216,6 +222,57 @@ public sealed class KujiequApiClient
         return result;
     }
 
+    /// <summary>getRoleDetail 结果:Detail 为 null 且 GeeTest 为 true = 库街区极验风控。</summary>
+    public sealed record RoleDetailResult(RoleDetail? Detail, bool GeeTest);
+
+    /// <summary>
+    /// 获取单个角色完整养成详情(getRoleDetail 接口,对齐 WutheringWavesTool GameRoleDetailTask)。
+    /// <para>与 <see cref="GetRoleDetailAsync"/> 的区别:响应中显式识别极验风控
+    /// (<c>{"geeTest":true}</c>),请求异常/非 200 不抛,由上层决定是否触发人机验证重试。</para>
+    /// </summary>
+    /// <param name="accessToken">B-At 令牌。</param>
+    /// <param name="deviceId">设备 ID(did 头)。</param>
+    /// <param name="roleId">玩家角色条目 RoleId(body roleId)。</param>
+    /// <param name="targetRoleId">目标角色 ID(roleList 项 roleId,body id)。</param>
+    public async Task<RoleDetailResult> GetRoleDetailResultAsync(
+        string accessToken,
+        string deviceId,
+        string roleId,
+        int targetRoleId,
+        string? source = null,
+        CancellationToken ct = default)
+    {
+        var headers = BuildWebHeader(accessToken, deviceId);
+        // body: 字段顺序精确对齐官方 App(Haiyu GetGamerRoilDetily):gameId→roleId→serverId→channelId→countryCode→id。
+        // 服务端对 getRoleDetail 高频风控接口按官方请求指纹(含字段顺序)评估,顺序不一致会直接触发极验。
+        var body = $"gameId={ParamGameId}&roleId={roleId}&serverId={ParamServerId}&channelId=19&countryCode=1&id={targetRoleId}";
+        KujiequEnvelope? env;
+        try
+        {
+            env = await SendEnvelopeAsync(RoleDetailUrlValue, headers, body, ct, throwOnError: false).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "getRoleDetail 请求异常: roleId={RoleId} id={TargetRoleId}", roleId, targetRoleId);
+            return new RoleDetailResult(null, false);
+        }
+        if (env is { GeeTest: true })
+        {
+            _logger.LogWarning("getRoleDetail 触发极验风控(geeTest:true): roleId={RoleId} id={TargetRoleId}",
+                roleId, targetRoleId);
+            return new RoleDetailResult(null, true);
+        }
+        var dataStr = GetDataString(env);
+        if (dataStr is null)
+        {
+            _logger.LogWarning("getRoleDetail 返回空 data: roleId={RoleId} id={TargetRoleId} code={Code} msg={Msg}",
+                roleId, targetRoleId, env?.Code, env?.Msg);
+            return new RoleDetailResult(null, false);
+        }
+        var detail = JsonSerializer.Deserialize(dataStr, RoleJsonContext.Default.RoleDetail);
+        return new RoleDetailResult(detail, false);
+    }
+
     /// <summary>
     /// 获取单个角色完整养成详情(getRoleDetail 接口,对齐 WutheringWavesTool GameRoleDetailTask)。
     /// </summary>
@@ -231,18 +288,33 @@ public sealed class KujiequApiClient
         string? source = null,
         CancellationToken ct = default)
     {
+        var result = await GetRoleDetailResultAsync(
+            accessToken, deviceId, roleId, targetRoleId, source, ct).ConfigureAwait(false);
+        return result.Detail;
+    }
+
+    /// <summary>
+    /// 获取逆境深塔数据(towerDataDetail 接口,对齐 WutheringWavesTool TowerDataDetailTask)。
+    /// body 含 gameId(与 newTowerDetail 不同),对齐 Java 版 getBuilder + PARAM_GAME_ID。
+    /// </summary>
+    public async Task<TowerSeasonData?> GetTowerAsync(
+        string accessToken,
+        string deviceId,
+        string roleId,
+        string? source = null,
+        CancellationToken ct = default)
+    {
         var headers = BuildWebHeader(accessToken, deviceId);
-        // body: 固定 serverId/gameId + 条目 roleId + id=该角色在 roleList 中的 roleId(对齐 GameRoleDetailTask)
-        var body = $"serverId={ParamServerId}&roleId={roleId}&gameId={ParamGameId}&id={targetRoleId}&channelId=19&countryCode=1";
-        var env = await SendEnvelopeAsync(RoleDetailUrlValue, headers, body, ct).ConfigureAwait(false);
+        var body = $"serverId={ParamServerId}&roleId={roleId}&gameId={ParamGameId}";
+        var env = await SendEnvelopeAsync(TowerUrlValue, headers, body, ct).ConfigureAwait(false);
         var dataStr = GetDataString(env);
         if (dataStr is null)
         {
-            _logger.LogWarning("getRoleDetail 返回空 data: roleId={RoleId} id={TargetRoleId} code={Code} msg={Msg}",
-                roleId, targetRoleId, env?.Code, env?.Msg);
+            _logger.LogWarning("towerDataDetail 返回空 data: roleId={RoleId} code={Code} msg={Msg}",
+                roleId, env?.Code, env?.Msg);
             return null;
         }
-        return JsonSerializer.Deserialize(dataStr, RoleJsonContext.Default.RoleDetail);
+        return JsonSerializer.Deserialize(dataStr, TowerJsonContext.Default.TowerSeasonData);
     }
 
     /// <summary>
@@ -357,38 +429,29 @@ public sealed class KujiequApiClient
         return JsonSerializer.Deserialize(dataStr, UserJsonContext.Default.GamerBaseData);
     }
 
-    /// <summary>
-    /// 刷新服务器角色缓存(refreshData 接口,对齐 WutheringWavesTool ApiConfig.REFRESH_URL)。
-    /// </summary>
-    public async Task<bool> RefreshDataAsync(
-        string accessToken,
-        string deviceId,
-        string roleId,
-        string? source = null,
-        CancellationToken ct = default)
-    {
-        var headers = BuildWebHeader(accessToken, deviceId);
-        var body = $"serverId={ParamServerId}&roleId={roleId}&gameId={ParamGameId}";
-        var env = await SendEnvelopeAsync(RefreshDataUrlValue, headers, body, ct).ConfigureAwait(false);
-        return env is { Code: 200 };
-    }
-
-    /// <summary>构造数据中心请求头(对齐 WutheringWavesTool getBuilder:B-At + Devcode + Did + Source)。</summary>
+    /// <summary>构造数据中心请求头(对齐 Haiyu GetWebHeader:WebView UA + Origin +
+    /// X-Requested-With + devCode(公网IP + UA) + b-at,为官方 App H5 完整特征)。
+    /// <para>实测(2026-08):Origin/X-Requested-With 是风控钥匙——去掉任一即返回 {"geeTest":true}
+    /// 触发极验;相反<b>绝不能</b>附加 token 头,服务端对带 token 的数据中心请求直接回
+    /// code=10000「参数错误」(roleData/getRoleDetail 均实测复现)。
+    /// refreshData 接口已被服务端停用(任意头体组合 10000),勿再调用。</para></summary>
     private Dictionary<string, string> BuildWebHeader(string accessToken, string deviceId)
     {
-        // Devcode:公网 IP + ", " + UA(对齐 WutheringWavesTool getDevCode,含 IP 特征避免风控)
+        // Devcode:公网 IP + ", " + UA(对齐 Haiyu GetWebHeader)
         var devCode = string.IsNullOrWhiteSpace(PublicIp)
-            ? AndroidUa
-            : $"{PublicIp}, {AndroidUa}";
+            ? WebViewUa
+            : $"{PublicIp}, {WebViewUa}";
         return new Dictionary<string, string>
         {
             { "Accept", "application/json, text/plain, */*" },
             { "Accept-Encoding", "gzip, deflate" },
             { "Accept-Language", "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7" },
-            { "User-Agent", AndroidUa },
+            { "User-Agent", WebViewUa },
             { "did", deviceId },
             { "source", "android" },
             { "devCode", devCode },
+            { "Origin", "https://web-static.kurobbs.com" },
+            { "X-Requested-With", "com.kurogame.kjq" },
             { "b-at", accessToken },
         };
     }
@@ -416,7 +479,10 @@ public sealed class KujiequApiClient
         {
             request.Headers.TryAddWithoutValidation(key, value);
         }
-        request.Content = new StringContent(body, Encoding.UTF8, "application/x-www-form-urlencoded");
+        request.Content = new StringContent(body, Encoding.UTF8);
+        // Content-Type 精确为 application/x-www-form-urlencoded(不含 charset,对齐官方 App;StringContent 默认会附加 ; charset=utf-8)
+        request.Content.Headers.ContentType =
+            new MediaTypeHeaderValue("application/x-www-form-urlencoded");
 
         using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();

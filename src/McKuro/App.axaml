@@ -9,21 +9,64 @@
         <semi:SemiTheme Locale="zh-CN" />
     </Application.Styles>
 
-    <!-- McKuro 语义材质：启动时由 ThemePaletteService 根据壁纸与明暗模式替换。 -->
+    <!--
+      McKuro 语义材质：壁纸动态色板功能已移除，改为按明暗主题(跟随系统/浅色/深色)静态切换。
+      Dark/Light 两套资源通过 ThemeDictionaries 自动跟随 RequestedThemeVariant，
+      与 Semi 主题一致，设置页切换主题后即时生效，无需代码刷新。
+    -->
     <Application.Resources>
-        <SolidColorBrush x:Key="McKuroAccent" Color="#5A8DEE" />
-        <SolidColorBrush x:Key="McKuroAccentHover" Color="#77A4F2" />
-        <SolidColorBrush x:Key="McKuroBackdropBase" Color="#070C18" />
-        <SolidColorBrush x:Key="McKuroBackdropTint" Color="#9E050A18" />
-        <SolidColorBrush x:Key="McKuroGlassFill" Color="#94141D32" />
-        <SolidColorBrush x:Key="McKuroGlassFillStrong" Color="#C611192D" />
-        <SolidColorBrush x:Key="McKuroGlassStroke" Color="#70CDE0FA" />
-        <SolidColorBrush x:Key="McKuroTextOnWallpaper" Color="#F5F8FF" />
-        <SolidColorBrush x:Key="McKuroTextMuted" Color="#BFCCE2" />
-        <SolidColorBrush x:Key="McKuroAccentGlow" Color="#565A8DEE" />
-        <SolidColorBrush x:Key="McKuroNavFill" Color="#C611192D" />
-        <SolidColorBrush x:Key="McKuroContentTint" Color="#9E050A18" />
-        <SolidColorBrush x:Key="McKuroHomeScrim" Color="#48070C18" />
-        <BlurEffect x:Key="McKuroWallpaperBlurEffect" Radius="18" />
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="McKuroAccent" Color="#5A8DEE" />
+                    <SolidColorBrush x:Key="McKuroAccentHover" Color="#78A2F1" />
+                    <SolidColorBrush x:Key="McKuroBackdropBase" Color="#070C18" />
+                    <SolidColorBrush x:Key="McKuroBackdropTint" Color="#9E050A18" />
+                    <SolidColorBrush x:Key="McKuroGlassFill" Color="#94141D32" />
+                    <SolidColorBrush x:Key="McKuroGlassFillStrong" Color="#C611192D" />
+                    <SolidColorBrush x:Key="McKuroGlassStroke" Color="#70CDE0FA" />
+                    <SolidColorBrush x:Key="McKuroTextOnWallpaper" Color="#F5F8FF" />
+                    <SolidColorBrush x:Key="McKuroTextMuted" Color="#BFCCE2" />
+                    <SolidColorBrush x:Key="McKuroAccentGlow" Color="#565A8DEE" />
+                    <SolidColorBrush x:Key="McKuroNavFill" Color="#C611192D" />
+                    <SolidColorBrush x:Key="McKuroContentTint" Color="#9E050A18" />
+                    <SolidColorBrush x:Key="McKuroHomeScrim" Color="#48070C18" />
+                    <!-- 桥接 Semi 基础表面/主色，让业务页半透明玻璃与 McKuro 语义一致(对齐原 ThemePaletteService) -->
+                    <SolidColorBrush x:Key="SemiColorBg0" Color="#070C18" />
+                    <SolidColorBrush x:Key="SemiColorBg1" Color="#94141D32" />
+                    <SolidColorBrush x:Key="SemiColorBg2" Color="#94141D32" />
+                    <SolidColorBrush x:Key="SemiColorBg3" Color="#C611192D" />
+                    <SolidColorBrush x:Key="SemiColorText1" Color="#E6FFFFFF" />
+                    <SolidColorBrush x:Key="SemiColorText2" Color="#99FFFFFF" />
+                    <SolidColorBrush x:Key="SemiColorText3" Color="#66FFFFFF" />
+                    <SolidColorBrush x:Key="SemiColorPrimary" Color="#5A8DEE" />
+                    <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#78A2F1" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="McKuroAccent" Color="#5A8DEE" />
+                    <SolidColorBrush x:Key="McKuroAccentHover" Color="#4F7CD1" />
+                    <SolidColorBrush x:Key="McKuroBackdropBase" Color="#EEF3FA" />
+                    <SolidColorBrush x:Key="McKuroBackdropTint" Color="#94F6F9FD" />
+                    <SolidColorBrush x:Key="McKuroGlassFill" Color="#ACFFFFFF" />
+                    <SolidColorBrush x:Key="McKuroGlassFillStrong" Color="#DAFFFFFF" />
+                    <SolidColorBrush x:Key="McKuroGlassStroke" Color="#64627D" />
+                    <SolidColorBrush x:Key="McKuroTextOnWallpaper" Color="#19202E" />
+                    <SolidColorBrush x:Key="McKuroTextMuted" Color="#4E5B70" />
+                    <SolidColorBrush x:Key="McKuroAccentGlow" Color="#345A8DEE" />
+                    <SolidColorBrush x:Key="McKuroNavFill" Color="#DAFFFFFF" />
+                    <SolidColorBrush x:Key="McKuroContentTint" Color="#94F6F9FD" />
+                    <SolidColorBrush x:Key="McKuroHomeScrim" Color="#26EEF3FA" />
+                    <SolidColorBrush x:Key="SemiColorBg0" Color="#EEF3FA" />
+                    <SolidColorBrush x:Key="SemiColorBg1" Color="#ACFFFFFF" />
+                    <SolidColorBrush x:Key="SemiColorBg2" Color="#ACFFFFFF" />
+                    <SolidColorBrush x:Key="SemiColorBg3" Color="#DAFFFFFF" />
+                    <SolidColorBrush x:Key="SemiColorText1" Color="#E6000000" />
+                    <SolidColorBrush x:Key="SemiColorText2" Color="#99000000" />
+                    <SolidColorBrush x:Key="SemiColorText3" Color="#66000000" />
+                    <SolidColorBrush x:Key="SemiColorPrimary" Color="#5A8DEE" />
+                    <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#4F7CD1" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

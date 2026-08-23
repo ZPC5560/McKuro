@@ -138,6 +138,9 @@
             setStatus("未拿到校验结果,请重试", "err");
             return;
           }
+          // 对齐 Java 版 WutheringWavesTool geetest.html:补 captcha_id,
+          // 服务端二次校验(极验 v4 校验 API)依赖它定位场景密钥;缺字段票据无效
+          result.captcha_id = "3f7e2d848ce0cb7e7d019d621e556ce2";
           setStatus("验证通过,正在回传…", "ok");
           if (CALLBACK) {
             location.href = CALLBACK + "?data=" + encodeURIComponent(JSON.stringify(result));

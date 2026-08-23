@@ -51,6 +51,47 @@ public sealed class PlayTimeAnalysis
 }
 
 /// <summary>
+/// 最近 7 天游玩分析报告:在逐日数据之上做二次分析,
+/// 输出关键指标(日均/最长单次/连续天数/最活跃日)、行为洞察(时段偏好/作息规律/游玩方式/周内趋势)
+/// 与一段自动生成的总结文字。所有字段都是可直接绑定的展示文本。
+/// </summary>
+public sealed class PlayTimeWeeklyReport
+{
+    public bool HasData { get; init; }
+    /// <summary>最近 7 天累计时长(如 7.2h)。</summary>
+    public string TotalText { get; init; } = "--";
+    /// <summary>日均时长(按有游玩的天平均)。</summary>
+    public string AvgPerDayText { get; init; } = "--";
+    /// <summary>最长单次时长。</summary>
+    public string LongestSessionText { get; init; } = "--";
+    /// <summary>最长单次所在日期(MM/dd)。</summary>
+    public string LongestSessionDayText { get; init; } = "";
+    /// <summary>连续游玩天数(截至今天)。</summary>
+    public string StreakText { get; init; } = "--";
+    /// <summary>最活跃的一天(MM/dd)。</summary>
+    public string PeakDayText { get; init; } = "--";
+    /// <summary>最活跃一天的时长。</summary>
+    public string PeakDayDetail { get; init; } = "";
+    /// <summary>时段偏好标签(夜猫型/清晨型/午后型/深夜型)。</summary>
+    public string HabitTag { get; init; } = "--";
+    public string HabitDetail { get; init; } = "暂无时段分布数据";
+    /// <summary>作息规律度标签(很规律/较规律/随性,按每天首次开场时刻的波动)。</summary>
+    public string RegularityTag { get; init; } = "--";
+    public string RegularityDetail { get; init; } = "暂无开场数据";
+    /// <summary>游玩方式标签(碎片轻玩/中度游玩/长时沉浸,按单次会话平均长度)。</summary>
+    public string StyleTag { get; init; } = "--";
+    public string StyleDetail { get; init; } = "暂无会话数据";
+    /// <summary>周内趋势标签(后程发力/逐步收手/节奏稳定)。</summary>
+    public string TrendTag { get; init; } = "--";
+    public string TrendDetail { get; init; } = "暂无趋势数据";
+    /// <summary>自动生成的整段总结文字。</summary>
+    public string SummaryText { get; init; } = "";
+
+    /// <summary>空报告(无任何 7 天数据时使用)。</summary>
+    public static PlayTimeWeeklyReport Empty { get; } = new();
+}
+
+/// <summary>
 /// 游玩统计服务:解析鸣潮客户端日志(Client.log,已 XOR 加密)提取游玩会话,
 /// 计算总/今日时长与最近一周的时间区间分布。
 /// <para>只统计游玩时长,不统计操作数量(参照 WutheringWavesTool GameTime,按用户要求简化)。</para>
@@ -354,6 +395,202 @@ public sealed class PlayTimeService
             _logger.LogWarning(ex, "聚合游玩时长失败");
         }
         return analysis;
+    }
+
+    /// <summary>
+    /// 基于最近 7 天聚合数据生成分析报告(纯计算,便于单元测试):
+    /// 关键指标(日均/最长单次/连续天数/最活跃日) + 行为洞察(时段偏好/作息规律/游玩方式/周内趋势) + 自动总结。
+    /// </summary>
+    public static PlayTimeWeeklyReport BuildWeeklyReport(PlayTimeAnalysis a)
+    {
+        long total = a.Last7DaysSeconds.Sum();
+        int playedDays = a.Last7DaysSeconds.Count(s => s > 0);
+        if (total <= 0 || playedDays == 0)
+        {
+            return PlayTimeWeeklyReport.Empty;
+        }
+
+        var dates = new DateTime[7];
+        for (int i = 0; i < 7; i++)
+        {
+            dates[i] = DateTime.TryParse(a.Last7DaysDates[i], out var d) ? d : DateTime.MinValue;
+        }
+
+        // ── 关键指标:日均 / 最长单次 / 连续天数 / 最活跃日 ──
+        double avgMin = total / 60.0 / playedDays;
+
+        long longestMin = 0;
+        DateTime longestDay = DateTime.MinValue;
+        for (int i = 0; i < 7; i++)
+        {
+            foreach (var s in a.Last7DaysSessions[i] ?? [])
+            {
+                if (s.Minutes > longestMin)
+                {
+                    longestMin = s.Minutes;
+                    longestDay = dates[i];
+                }
+            }
+        }
+
+        int streak = 0;
+        for (int i = 6; i >= 0 && a.Last7DaysSeconds[i] > 0; i--)
+        {
+            streak++;
+        }
+
+        int peak = 0;
+        for (int i = 1; i < 7; i++)
+        {
+            if (a.Last7DaysSeconds[i] > a.Last7DaysSeconds[peak])
+            {
+                peak = i;
+            }
+        }
+
+        // ── 时段偏好:24 小时折成 4 个时段桶(凌晨/上午/午后/晚间),取占比最高者 ──
+        long[] buckets = new long[4];
+        for (int d = 0; d < 7; d++)
+        {
+            for (int h = 0; h < 24; h++)
+            {
+                buckets[h / 6] += a.Last7DaysHourlyMinutes[d, h];
+            }
+        }
+        int hb = 0;
+        for (int i = 1; i < 4; i++)
+        {
+            if (buckets[i] > buckets[hb])
+            {
+                hb = i;
+            }
+        }
+        string[] habitTags = ["深夜型", "清晨型", "午后型", "夜猫型"];
+        string[] bucketNames = ["凌晨 0-6 点", "上午 6-12 点", "午后 12-18 点", "晚间 18-24 点"];
+        long bucketSum = buckets.Sum();
+        string habitTag = "--";
+        string habitDetail = "暂无时段分布数据";
+        if (bucketSum > 0)
+        {
+            int share = (int)Math.Round(buckets[hb] * 100.0 / bucketSum);
+            habitTag = habitTags[hb];
+            habitDetail = $"时长占比最高的时段是{bucketNames[hb]},约 {share}%";
+        }
+
+        // ── 作息规律度:每天第一次开玩时刻的波动(标准差)──
+        var firstStartMin = new List<double>();
+        for (int i = 0; i < 7; i++)
+        {
+            var first = (a.Last7DaysSessions[i] ?? []).FirstOrDefault();
+            if (first is not null
+                && TimeSpan.TryParseExact(first.Start, @"hh\:mm", null, System.Globalization.TimeSpanStyles.None, out var t))
+            {
+                firstStartMin.Add(t.TotalMinutes);
+            }
+        }
+        string regTag = "--";
+        string regDetail = "暂无开场数据";
+        if (firstStartMin.Count >= 2)
+        {
+            double mean = firstStartMin.Average();
+            double sigma = Math.Sqrt(firstStartMin.Average(v => (v - mean) * (v - mean)));
+            var meanTime = DateTime.Today.AddMinutes(mean);
+            regTag = sigma switch { <= 45 => "很规律", <= 90 => "较规律", _ => "随性" };
+            regDetail = $"开场平均 {meanTime:HH:mm},日常波动约 ±{(int)Math.Round(sigma)} 分钟";
+        }
+
+        // ── 游玩方式:单次会话的平均长度 ──
+        var allSessions = a.Last7DaysSessions.SelectMany(x => x ?? []).ToList();
+        string styleTag = "--";
+        string styleDetail = "暂无会话数据";
+        if (allSessions.Count > 0)
+        {
+            double avgSession = allSessions.Average(s => (double)s.Minutes);
+            styleTag = avgSession switch { < 30 => "碎片轻玩", < 90 => "中度游玩", _ => "长时沉浸" };
+            styleDetail = $"共 {allSessions.Count} 次游玩,单次平均 {(int)Math.Round(avgSession)} 分钟";
+        }
+
+        // ── 周内趋势:前半周(前 3 天) vs 后半周(后 4 天),按日均对比消除天数不对等 ──
+        long firstHalf = a.Last7DaysSeconds.Take(3).Sum();
+        long secondHalf = a.Last7DaysSeconds.Skip(3).Sum();
+        string trendTag;
+        string trendDetail;
+        if (firstHalf <= 0 && secondHalf <= 0)
+        {
+            trendTag = "--";
+            trendDetail = "暂无趋势数据";
+        }
+        else if (firstHalf <= 0)
+        {
+            trendTag = "渐入状态";
+            trendDetail = "前半周未游玩,后半周开始活跃";
+        }
+        else
+        {
+            double pct = ((secondHalf / 4.0) - (firstHalf / 3.0)) * 100.0 / (firstHalf / 3.0);
+            trendTag = pct switch { >= 15 => "后程发力", <= -15 => "逐步收手", _ => "节奏稳定" };
+            trendDetail = $"后半周日均比前半周{(pct >= 0 ? "高" : "低")}{Math.Abs(pct):0}%";
+        }
+
+        // ── 自动总结 ──
+        var parts = new List<string>
+        {
+            $"最近 7 天共 {playedDays} 天有游玩,累计 {FormatDuration(total)},日均约 {FormatMinutes((long)Math.Round(avgMin))}",
+        };
+        if (bucketSum > 0)
+        {
+            parts.Add($"游玩主要集中在{bucketNames[hb]}({habitTag})");
+        }
+        if (firstStartMin.Count >= 2)
+        {
+            parts.Add($"开场时间{regTag}");
+        }
+        if (allSessions.Count > 0)
+        {
+            parts.Add($"{styleTag},单次平均 {(int)Math.Round(allSessions.Average(s => (double)s.Minutes))} 分钟");
+        }
+        if (trendTag != "--")
+        {
+            parts.Add($"整体{trendTag}");
+        }
+        string summary = string.Join(";", parts) + "。";
+
+        return new PlayTimeWeeklyReport
+        {
+            HasData = true,
+            TotalText = FormatDuration(total),
+            AvgPerDayText = FormatMinutes((long)Math.Round(avgMin)),
+            LongestSessionText = longestMin > 0 ? FormatMinutes(longestMin) : "--",
+            LongestSessionDayText = longestMin > 0 ? longestDay.ToString("MM/dd") : "",
+            StreakText = $"{streak} 天",
+            PeakDayText = dates[peak] == DateTime.MinValue ? "--" : dates[peak].ToString("MM/dd"),
+            PeakDayDetail = FormatDuration(a.Last7DaysSeconds[peak]),
+            HabitTag = habitTag,
+            HabitDetail = habitDetail,
+            RegularityTag = regTag,
+            RegularityDetail = regDetail,
+            StyleTag = styleTag,
+            StyleDetail = styleDetail,
+            TrendTag = trendTag,
+            TrendDetail = trendDetail,
+            SummaryText = summary,
+        };
+    }
+
+    /// <summary>秒 → "1.2h"/"38min" 展示文本。</summary>
+    private static string FormatDuration(long seconds)
+    {
+        if (seconds <= 0)
+        {
+            return "0min";
+        }
+        return seconds >= 3600 ? $"{seconds / 3600.0:0.#}h" : $"{seconds / 60}min";
+    }
+
+    /// <summary>分钟 → "1.2h"/"38min" 展示文本。</summary>
+    private static string FormatMinutes(long minutes)
+    {
+        return FormatDuration(minutes * 60);
     }
 
     /// <summary>把一天内相邻会话合并为时段(参考睡眠检测:间隔 ≤ 60 分钟视为同一时段)。</summary>

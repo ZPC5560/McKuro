@@ -253,6 +253,47 @@ public sealed class EventSideImage
     public string? Image { get; set; }
 }
 
+/// <summary>库街区官方资讯条目(/forum/companyEvent/findEventList,免登录)。</summary>
+public sealed class OfficialEventItem
+{
+    [JsonPropertyName("postId")]
+    public string PostId { get; set; } = "";
+
+    [JsonPropertyName("postTitle")]
+    public string? PostTitle { get; set; }
+
+    [JsonPropertyName("coverUrl")]
+    public string? CoverUrl { get; set; }
+
+    /// <summary>分类:1=活动 2=资讯 3=公告。</summary>
+    [JsonPropertyName("eventType")]
+    public int EventType { get; set; }
+
+    /// <summary>发布时间(Unix 毫秒时间戳)。</summary>
+    [JsonPropertyName("shelveTime")]
+    public long ShelveTime { get; set; }
+}
+
+/// <summary>findEventList 的 data 节。</summary>
+public sealed class OfficialEventData
+{
+    [JsonPropertyName("list")]
+    public List<OfficialEventItem>? List { get; set; }
+}
+
+/// <summary>findEventList 的响应信封。</summary>
+public sealed class OfficialEventEnvelope
+{
+    [JsonPropertyName("code")]
+    public int Code { get; set; }
+
+    [JsonPropertyName("msg")]
+    public string? Msg { get; set; }
+
+    [JsonPropertyName("data")]
+    public OfficialEventData? Data { get; set; }
+}
+
 [JsonSerializable(typeof(WikiHomeModel))]
 [JsonSerializable(typeof(WikiData))]
 [JsonSerializable(typeof(WikiContentJson))]
@@ -278,4 +319,8 @@ public sealed class EventSideImage
 [JsonSerializable(typeof(List<EventSideImage>))]
 [JsonSerializable(typeof(WikiBackground))]
 [JsonSerializable(typeof(WikiSideLinkConfig))]
+[JsonSerializable(typeof(OfficialEventItem))]
+[JsonSerializable(typeof(List<OfficialEventItem>))]
+[JsonSerializable(typeof(OfficialEventData))]
+[JsonSerializable(typeof(OfficialEventEnvelope))]
 public sealed partial class WikiJsonContext : JsonSerializerContext;

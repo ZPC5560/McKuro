@@ -39,10 +39,6 @@ public partial class App : Application
             _ => Avalonia.Styling.ThemeVariant.Default,
         };
 
-        // 先应用已保存壁纸的动态色板；换壁纸时由服务再次刷新语义材质。
-        _ = AppServices.ThemePalette.ApplyCurrentAsync();
-        AppServices.Wallpaper.WallpaperChanged += (_, _) => _ = AppServices.ThemePalette.ApplyCurrentAsync();
-
         // 每日自动签到调度(每天 8:00 + 启动后一次)
         _scheduler = new DailyTaskScheduler();
         _scheduler.Start();

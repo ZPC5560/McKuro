@@ -67,6 +67,46 @@ public static class ColorThiefHelper
     /// <param name="w">宽。</param>
     /// <param name="h">高。</param>
     /// <param name="stride">行字节数。</param>
+    /// <summary>
+    /// 从位图提取最鲜明的出现频次主色(甘特条/强调色用):
+    /// 取出现次数前 5 的候选,按「饱和度 × 亮度适中权重 − 名次惩罚」评分选最优,
+    /// 避免取到大面积暗灰背景而非图片的主题色。失败返回 null。
+    /// </summary>
+    public static Color? GetVividDominantColor(Bitmap bitmap)
+    {
+        var candidates = GetDominantColors(bitmap, 5);
+        return candidates.Count == 0 ? null : PickVivid(candidates);
+    }
+
+    /// <summary>
+    /// 从候选主色(已按出现次数降序)中选最鲜明的颜色:
+    /// score = HSV 饱和度 × 亮度权重 − 名次惩罚(每退后一名 −0.12)。
+    /// 亮度权重 = 1 − 0.35×|2×亮度−1|(对称轻微惩罚极端亮/暗,权重 0.65~1);
+    /// 饱和度是第一驱动:高饱和主题色可逆袭大面积暗灰背景色,同饱和时出现次数优先。
+    /// </summary>
+    public static Color PickVivid(IReadOnlyList<Color> candidates)
+    {
+        var best = candidates[0];
+        double bestScore = double.NegativeInfinity;
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            var c = candidates[i];
+            double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
+            double max = Math.Max(r, Math.Max(g, b));
+            double min = Math.Min(r, Math.Min(g, b));
+            double sat = max <= 0 ? 0 : (max - min) / max;
+            double lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            double lumWeight = 1.0 - 0.35 * Math.Abs(2 * lum - 1);
+            double score = sat * lumWeight - i * 0.12;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = c;
+            }
+        }
+        return best;
+    }
+
     public static List<Color> FromBgraBytes(IntPtr pixels, int w, int h, int stride, int count = 3)
     {
         if (pixels == IntPtr.Zero || w <= 0 || h <= 0 || count <= 0)

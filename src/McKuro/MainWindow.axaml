@@ -4,7 +4,6 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:McKuro.ViewModels"
         xmlns:views="using:McKuro.Views"
-        xmlns:controls="using:McKuro.Controls"
         xmlns:ic="using:FluentIcons.Avalonia"
         mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="720"
         x:Class="McKuro.MainWindow"
@@ -57,20 +56,9 @@
     </Window.DataTemplates>
 
     <Grid>
-        <!-- 全局壁纸宿主：普通页面只使用这一处模糊，保证性能和跨平台表现一致。 -->
+        <!-- 全局背景：固定纯色底座 + 轻量氛围遮罩(壁纸与动态色板功能已移除)。 -->
         <Grid IsHitTestVisible="False">
             <Border Background="{DynamicResource McKuroBackdropBase}" />
-            <controls:AsyncImage ImageUrl="{Binding WallpaperPath}"
-                                 IsVisible="{Binding HasWallpaper}"
-                                 Stretch="UniformToFill"
-                                 HorizontalAlignment="Stretch"
-                                 VerticalAlignment="Stretch" />
-            <controls:AsyncImage ImageUrl="{Binding WallpaperPath}"
-                                 IsVisible="{Binding IsWallpaperBlurred}"
-                                 Stretch="UniformToFill"
-                                 Effect="{DynamicResource McKuroWallpaperBlurEffect}"
-                                 HorizontalAlignment="Stretch"
-                                 VerticalAlignment="Stretch" />
             <Border Background="{DynamicResource McKuroBackdropTint}" />
         </Grid>
 

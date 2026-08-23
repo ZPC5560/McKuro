@@ -231,4 +231,168 @@ public class GachaAnalysisServiceTests
         Assert.Single(day2.Pools);
         Assert.Equal("角色活动", day2.Pools[0].PoolName);
     }
+
+    // ---- "预计下一抽"概率模型(统计卡片) ----
+
+    [Fact]
+    public void FiveStarRateModel_Curve()
+    {
+        Assert.Equal(0.018, GachaRateModel.FiveStarRateAtPity(0), 6);   // 刚出金
+        Assert.Equal(0.018, GachaRateModel.FiveStarRateAtPity(64), 6);  // 第 65 抽仍基础
+        Assert.Equal(0.058, GachaRateModel.FiveStarRateAtPity(65), 6);  // 第 66 抽软保底 +4%
+        Assert.Equal(0.578, GachaRateModel.FiveStarRateAtPity(78), 6);  // 第 79 抽
+        Assert.Equal(1.0, GachaRateModel.FiveStarRateAtPity(79), 6);    // 第 80 抽硬保底
+        Assert.Equal(1.0, GachaRateModel.FiveStarRateAtPity(120), 6);   // 超保底数据封顶
+    }
+
+    [Fact]
+    public void Analyze_NextPullUpChance_RolePool_SmallGuarantee()
+    {
+        // 上一金 UP(小保底状态),垫 2 抽:UP 概率 = 5★ 率 × 50%
+        var records = new List<GachaRecord>
+        {
+            R(1, 900, 5, "UP", "2024-01-01 10:00:00"),
+            R(1, 101, 4, "A", "2024-01-01 10:01:00"),
+            R(1, 102, 4, "B", "2024-01-01 10:02:00"),
+        };
+        var upIds = new Dictionary<CardPoolType, HashSet<int>> { [CardPoolType.RoleActivity] = [900] };
+
+        var pool = new GachaAnalysisService().Analyze("p1", records, upIds)[CardPoolType.RoleActivity];
+
+        Assert.NotNull(pool);
+        Assert.Equal(2, pool!.CurrentPity);
+        Assert.False(pool.IsGuaranteedUp);
+        Assert.True(pool.IsFiftyFifty);
+        Assert.Equal(0.9, pool.NextPullUpPercent, 6);           // 0.018*100*0.5
+        Assert.Equal("小保底", pool.GuaranteeBadgeText);
+        Assert.Equal("fifty", pool.GuaranteeBadgeKind);
+        Assert.Equal("预计下一抽 UP", pool.UpChanceCaption);
+    }
+
+    [Fact]
+    public void Analyze_NextPullUpChance_RolePool_GuaranteedUp()
+    {
+        // 上一金歪(大保底状态):下一金必 UP,概率 = 5★ 率 × 100%
+        var records = new List<GachaRecord>
+        {
+            R(1, 900, 5, "UP", "2024-01-01 10:00:00"),
+            R(1, 901, 5, "OFF", "2024-01-02 10:00:00"), // 歪了 → 大保底
+        };
+        var upIds = new Dictionary<CardPoolType, HashSet<int>> { [CardPoolType.RoleActivity] = [900] };
+
+        var pool = new GachaAnalysisService().Analyze("p1", records, upIds)[CardPoolType.RoleActivity];
+
+        Assert.NotNull(pool);
+        Assert.True(pool!.IsGuaranteedUp);
+        Assert.Equal(1.8, pool.NextPullUpPercent, 6); // 0.018*100
+        Assert.Equal("大保底", pool.GuaranteeBadgeText);
+        Assert.Equal("guaranteed", pool.GuaranteeBadgeKind);
+    }
+
+    [Fact]
+    public void Analyze_NextPullUpChance_WeaponPool_NeverOff()
+    {
+        // 武器活动池:不歪,出金即 UP;80 抽保底
+        var records = new List<GachaRecord>
+        {
+            R(2, 910, 5, "W-UP", "2024-01-01 10:00:00"),
+            R(2, 101, 4, "A", "2024-01-01 10:01:00"),
+            R(2, 102, 4, "B", "2024-01-01 10:02:00"),
+            R(2, 103, 4, "C", "2024-01-01 10:03:00"),
+        };
+        var upIds = new Dictionary<CardPoolType, HashSet<int>> { [CardPoolType.WeaponsActivity] = [910] };
+
+        var pool = new GachaAnalysisService().Analyze("p1", records, upIds)[CardPoolType.WeaponsActivity];
+
+        Assert.NotNull(pool);
+        Assert.Equal(3, pool!.CurrentPity);
+        Assert.False(pool.IsFiftyFifty);
+        Assert.Equal(1.8, pool.NextPullUpPercent, 6); // 0.018*100,不 ×50%
+        Assert.Equal("必UP", pool.GuaranteeBadgeText);
+        Assert.Equal("always", pool.GuaranteeBadgeKind);
+    }
+
+    [Fact]
+    public void Analyze_NextPullUpChance_Collaboration_SameAsRole()
+    {
+        // 联动池与当期 UP 池一样会歪(50/50 小保底)
+        var records = new List<GachaRecord>
+        {
+            R(10, 900, 5, "UP", "2024-01-01 10:00:00"),
+            R(10, 101, 4, "A", "2024-01-01 10:01:00"),
+        };
+        var upIds = new Dictionary<CardPoolType, HashSet<int>> { [CardPoolType.CharacterCollaboration] = [900] };
+
+        var pool = new GachaAnalysisService().Analyze("p1", records, upIds)[CardPoolType.CharacterCollaboration];
+
+        Assert.NotNull(pool);
+        Assert.True(pool!.IsFiftyFifty);
+        Assert.False(pool.IsGuaranteedUp);
+        Assert.Equal(0.9, pool.NextPullUpPercent, 6);
+    }
+
+    [Fact]
+    public void Analyze_NextPullUpChance_ResidentPool_NoUpTarget()
+    {
+        // 常驻池无 UP:目标为任意 5★,概率 = 5★ 率;徽标"无UP"
+        var records = new List<GachaRecord>
+        {
+            R(3, 300, 5, "ResidentSSR", "2024-01-01 10:00:00"),
+        };
+
+        var pool = new GachaAnalysisService().Analyze("p1", records)[CardPoolType.RoleResident];
+
+        Assert.NotNull(pool);
+        Assert.False(pool!.HasUpTarget);
+        Assert.False(pool.IsFiftyFifty);
+        Assert.Equal(1.8, pool.NextPullUpPercent, 6);
+        Assert.Equal("预计下一抽 5★", pool.UpChanceCaption);
+        Assert.Equal("无UP", pool.GuaranteeBadgeText);
+        Assert.Equal("none", pool.GuaranteeBadgeKind);
+    }
+
+    [Fact]
+    public void Analyze_NextPullUpChance_NearHardPity()
+    {
+        // 垫 79 抽(下一抽必为第 80 抽必出金):小保底时 UP 概率 = 100% × 50%
+        var records = new List<GachaRecord>
+        {
+            R(1, 900, 5, "UP", "2024-01-01 10:00:00"),
+        };
+        for (int i = 0; i < 79; i++)
+        {
+            records.Add(R(1, 101 + i, 4, $"A{i}", $"2024-01-{(i / 10) + 2:00} 10:00:00"));
+        }
+        var upIds = new Dictionary<CardPoolType, HashSet<int>> { [CardPoolType.RoleActivity] = [900] };
+
+        var pool = new GachaAnalysisService().Analyze("p1", records, upIds)[CardPoolType.RoleActivity];
+
+        Assert.NotNull(pool);
+        Assert.Equal(79, pool!.CurrentPity);
+        Assert.False(pool.IsGuaranteedUp);
+        Assert.Equal(50.0, pool.NextPullUpPercent, 6); // 必出金 × 小保底 50%
+        Assert.Equal(79.0, pool.PityProgressValue, 6);
+    }
+
+    [Fact]
+    public void Analyze_NextPullUpChance_OverHardPity_CapsProgress()
+    {
+        // 超保底垫抽(异常数据):进度封顶 80,概率仍按第 80 抽必出金计算
+        var records = new List<GachaRecord>
+        {
+            R(1, 900, 5, "UP", "2024-01-01 10:00:00"),
+        };
+        for (int i = 0; i < 82; i++)
+        {
+            records.Add(R(1, 101 + i, 4, $"A{i}", $"2024-01-{(i / 10) + 2:00} 10:00:00"));
+        }
+        var upIds = new Dictionary<CardPoolType, HashSet<int>> { [CardPoolType.RoleActivity] = [900] };
+
+        var pool = new GachaAnalysisService().Analyze("p1", records, upIds)[CardPoolType.RoleActivity];
+
+        Assert.NotNull(pool);
+        Assert.Equal(82, pool!.CurrentPity);
+        Assert.Equal(80.0, pool.PityProgressValue, 6); // 封顶 80
+        Assert.Equal(50.0, pool.NextPullUpPercent, 6);
+    }
 }

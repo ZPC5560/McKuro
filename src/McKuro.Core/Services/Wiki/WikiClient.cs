@@ -3,10 +3,13 @@ using McKuro.Core.Models.Wiki;
 
 namespace McKuro.Core.Services.Wiki;
 
-/// <summary>图鉴 (wiki) 客户端:拉取库街区图鉴首页数据。</summary>
+/// <summary>图鉴 (wiki) 客户端:拉取库街区图鉴首页数据与官方资讯。</summary>
 public sealed class WikiClient
 {
     private const string HomePageUrl = "https://api.kurobbs.com/wiki/core/homepage/getPage";
+
+    /// <summary>库街区官方资讯/公告/活动列表接口(免登录,与 www.kurobbs.com/mc/official 页面一致)。</summary>
+    public const string OfficialEventUrl = "https://api.kurobbs.com/forum/companyEvent/findEventList";
 
     private readonly HttpClient _http;
 
@@ -29,6 +32,34 @@ public sealed class WikiClient
             response.EnsureSuccessStatusCode();
             var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             return JsonSerializer.Deserialize(json, WikiJsonContext.Default.WikiHomeModel);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 获取库街区官方资讯列表(免登录;与 www.kurobbs.com/mc/official 页面同源)。
+    /// eventType:1=活动 2=资讯 3=公告;gameId:鸣潮=3。失败返回 null。
+    /// </summary>
+    public async Task<List<OfficialEventItem>?> GetOfficialEventsAsync(
+        int eventType, int gameId = 3, int pageSize = 12, CancellationToken ct = default)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, OfficialEventUrl);
+            request.Headers.TryAddWithoutValidation("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
+            request.Headers.TryAddWithoutValidation("source", "h5");
+            request.Content = new StringContent(
+                $"eventType={eventType}&gameId={gameId}&pageSize={pageSize}",
+                System.Text.Encoding.UTF8, "application/x-www-form-urlencoded");
+            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            var envelope = JsonSerializer.Deserialize(json, WikiJsonContext.Default.OfficialEventEnvelope);
+            return envelope is { Code: 200 } ? envelope.Data?.List : null;
         }
         catch (Exception)
         {

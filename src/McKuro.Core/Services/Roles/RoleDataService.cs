@@ -56,11 +56,17 @@ public sealed class RoleDataService : IRoleDataService
     }
 
     /// <inheritdoc/>
-    public async Task<RoleDataLoadResult> LoadFromKujiequAsync(
+    public Task<RoleDataLoadResult> LoadFromKujiequAsync(
         string token,
         string roleId,
-        bool refreshFirst = true,
         CancellationToken ct = default)
+        => LoadFromKujiequCoreAsync(token, roleId, ct);
+
+    /// <summary>同步主流程。</summary>
+    private async Task<RoleDataLoadResult> LoadFromKujiequCoreAsync(
+        string token,
+        string roleId,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -73,7 +79,19 @@ public sealed class RoleDataService : IRoleDataService
 
         try
         {
-            // Devcode 头需要公网 IP(对齐 WutheringWavesTool getDevCode:IP + ", " + UA)
+            // Devcode 头需要公网 IP(对齐 WutheringWavesTool getDevCode:IP + ", " + UA);
+            // IP 未就绪时主动拉取一次(否则 devCode 缺失 IP 特征易触发风控)
+            if (string.IsNullOrWhiteSpace(_kuro.Ip))
+            {
+                try
+                {
+                    await _kuro.InitAsync(ct).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "获取公网 IP 失败,devCode 将仅含 UA");
+                }
+            }
             _api.PublicIp = _kuro.Ip;
             // 1. 通过角色列表接口确认角色条目存在,并取库街区 userId(requestToken 需要)
             //    (对齐 WutheringWavesTool: serverId/gameId 用固定官方值,只需条目 roleId + userId)
@@ -118,11 +136,8 @@ public sealed class RoleDataService : IRoleDataService
                 };
             }
 
-            // 3. 刷新服务器缓存(可选)
-            if (refreshFirst)
-            {
-                await _api.RefreshDataAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
-            }
+            // 3. refreshData(刷新服务器缓存)已被服务端停用:2026-08 实测任意头/体组合返回
+            //    code=10000「参数错误」,不再调用(与 Haiyu 一致:requestToken 后直接拉角色列表)。
 
             // 4. 角色列表(roleData) → 每个角色完整详情(getRoleDetail,串行节流;id 传 roleList 项 roleId)
             //    串行 + 小延时:并发批量 getRoleDetail 会触发库街区极验风控(返回 {"geeTest":true})
@@ -134,15 +149,15 @@ public sealed class RoleDataService : IRoleDataService
             foreach (var r in list)
             {
                 ct.ThrowIfCancellationRequested();
-                var detail = await _api.GetRoleDetailAsync(
-                    accessToken, deviceId, roleId, r.Role?.RoleId ?? 0, "android", ct).ConfigureAwait(false);
-                if (detail is not null)
+                var detailResult = await _api.GetRoleDetailResultAsync(
+                    accessToken, deviceId, roleId, r.Role?.RoleId ?? 0, "android", ct: ct).ConfigureAwait(false);
+                if (detailResult.Detail is not null)
                 {
-                    roles.Add(detail);
+                    roles.Add(detailResult.Detail);
                 }
                 else
                 {
-                    // 若已触发极验(接口返回 {"geeTest":true}),停止后续请求避免进一步风控
+                    // 详情为 null(极验风控 geeTest:true / 其他异常):停止后续请求避免进一步风控
                     geeTestTriggered = true;
                     break;
                 }
@@ -162,30 +177,9 @@ public sealed class RoleDataService : IRoleDataService
                 return new RoleDataLoadResult { Source = RoleDataSource.Kujiequ, Roles = roles };
             }
 
-            // 详情受限(极验风控等):优先展示上次同步成功的完整库街区数据(缓存),避免页面空有基础信息
-            var cached = LoadCompleteCacheOrNull(userId, roleId);
-            if (cached is not null)
-            {
-                return new RoleDataLoadResult
-                {
-                    Source = RoleDataSource.Kujiequ,
-                    Roles = cached,
-                    Message = geeTestTriggered
-                        ? "库街区详情接口受极验风控,已展示上次同步的完整数据,可稍后重试"
-                        : "详情数据不全,已展示上次同步的完整数据",
-                };
-            }
-
-            return new RoleDataLoadResult
-            {
-                Source = RoleDataSource.Kujiequ,
-                Roles = roles,
-                Message = roles.Count == 0
-                    ? "接口返回空数据"
-                    : geeTestTriggered
-                        ? "部分角色详情受极验风控,仅显示基础信息"
-                        : null,
-            };
+            // 详情受限(极验风控等):库街区角色详情风控无法通过客户端验证解除,
+            // 不再弹验证页;直接回退上次同步成功的完整缓存,提示用户稍后重试。
+            return FallbackToCompleteCacheOrHint(userId, roleId, roles, geeTestTriggered);
         }
         catch (Exception ex)
         {
@@ -196,6 +190,36 @@ public sealed class RoleDataService : IRoleDataService
                 Message = $"库街区请求失败: {ex.Message}",
             };
         }
+    }
+
+    /// <summary>详情受限(极验风控等)时的缓存回退:优先展示上次同步成功的完整缓存,否则仅展示基础列表。</summary>
+    private RoleDataLoadResult FallbackToCompleteCacheOrHint(
+        string userId, string roleId, IReadOnlyList<RoleDetail> roles,
+        bool geeTestTriggered)
+    {
+        var cached = LoadCompleteCacheOrNull(userId, roleId);
+        if (cached is not null)
+        {
+            return new RoleDataLoadResult
+            {
+                Source = RoleDataSource.Kujiequ,
+                Roles = cached,
+                Message = geeTestTriggered
+                    ? "库街区触发了人机验证风控,本次同步未完成;已展示上次同步的完整数据,可稍后重试"
+                    : "详情数据不全,已展示上次同步的完整数据",
+            };
+        }
+
+        return new RoleDataLoadResult
+        {
+            Source = RoleDataSource.Kujiequ,
+            Roles = roles,
+            Message = roles.Count == 0
+                ? "接口返回空数据"
+                : geeTestTriggered
+                    ? "库街区触发了人机验证风控,角色详情同步未完成,仅显示基础信息"
+                    : null,
+        };
     }
 
     /// <inheritdoc/>

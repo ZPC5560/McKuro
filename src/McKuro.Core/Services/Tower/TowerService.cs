@@ -9,8 +9,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace McKuro.Core.Services.Tower;
 
 /// <summary>
-/// 深塔/海墟数据服务:用库街区 accessToken 拉取终焉矩阵与再生海域数据。
-/// (对齐 WutheringWavesTool NewTowerDataDetailTask / SlashDataDetailTask)
+/// 深塔/海墟数据服务:用库街区 accessToken 拉取逆境深塔、终焉矩阵与再生海域数据。
+/// (对齐 WutheringWavesTool TowerDataDetailTask / NewTowerDataDetailTask / SlashDataDetailTask)
 /// </summary>
 public sealed class TowerService
 {
@@ -32,12 +32,12 @@ public sealed class TowerService
     }
 
     /// <summary>拉取深塔与海墟数据;返回 null 表示失败(未登录/无 accessToken/接口异常)。</summary>
-    public async Task<(NewTowerData? Tower, SlashData? Slash, string Error)> GetTowerDataAsync(CancellationToken ct = default)
+    public async Task<(TowerSeasonData? Tower, NewTowerData? NewTower, SlashData? Slash, string Error)> GetTowerDataAsync(CancellationToken ct = default)
     {
         var account = _accounts.Current;
         if (account is null)
         {
-            return (null, null, "请先登录库街区账号");
+            return (null, null, null, "请先登录库街区账号");
         }
 
         // 复用角色数据服务的 accessToken 换取流程
@@ -45,13 +45,13 @@ public sealed class TowerService
         var gamer = await _kuro.GetGamerAsync(account, (int)KuroGameType.Waves, ct).ConfigureAwait(false);
         if (gamer is not { Code: 200, Data: not null } || gamer.Data.Count == 0)
         {
-            return (null, null, "获取角色列表失败");
+            return (null, null, null, "获取角色列表失败");
         }
         var role = gamer.Data[0];
         var roleId = role.RoleId ?? "";
         if (string.IsNullOrEmpty(roleId))
         {
-            return (null, null, "角色 ID 为空");
+            return (null, null, null, "角色 ID 为空");
         }
 
         _api.PublicIp = _kuro.Ip;
@@ -59,18 +59,27 @@ public sealed class TowerService
             account.Token, deviceId, roleId, account.UserId ?? "", "android", ct).ConfigureAwait(false);
         if (string.IsNullOrEmpty(accessToken))
         {
-            return (null, null, "获取访问令牌失败(Token 可能已失效)");
+            return (null, null, null, "获取访问令牌失败(Token 可能已失效)");
         }
 
-        NewTowerData? tower = null;
+        TowerSeasonData? tower = null;
+        NewTowerData? newTower = null;
         SlashData? slash = null;
         try
         {
-            tower = await _api.GetNewTowerAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
+            tower = await _api.GetTowerAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "拉取深塔数据失败");
+            _logger.LogWarning(ex, "拉取逆境深塔数据失败");
+        }
+        try
+        {
+            newTower = await _api.GetNewTowerAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "拉取终焉矩阵数据失败");
         }
         try
         {
@@ -81,10 +90,10 @@ public sealed class TowerService
             _logger.LogWarning(ex, "拉取海墟数据失败");
         }
 
-        if (tower is null && slash is null)
+        if (tower is null && newTower is null && slash is null)
         {
-            return (null, null, "接口返回空数据(可能受风控)");
+            return (null, null, null, "接口返回空数据(可能受风控)");
         }
-        return (tower, slash, "");
+        return (tower, newTower, slash, "");
     }
 }

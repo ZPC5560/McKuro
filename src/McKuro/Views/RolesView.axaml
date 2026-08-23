@@ -12,6 +12,7 @@
              x:DataType="vm:RolesViewModel">
     <UserControl.Resources>
         <vm:BoolToBrushConverter x:Key="BoolToBrush" />
+        <vm:InverseBoolConverter x:Key="InverseBool" />
         <vm:BoolToOpacityConverter x:Key="BoolToOpacity" />
         <vm:WeaponStarBrushConverter x:Key="WeaponStarBrush" />
         <vm:GreaterThanZeroConverter x:Key="GreaterThanZero" />
@@ -44,7 +45,8 @@
                 </StackPanel>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <Button Content="读取本地缓存" Command="{Binding LoadFromLocalCommand}" />
+                <Button Content="同步" Command="{Binding LoadFromKujiequCommand}"
+                        IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
             </StackPanel>
         </Grid>
 
@@ -58,7 +60,7 @@
                       SelectedItem="{Binding SelectedSort, Mode=TwoWay}" />
             <TextBlock Grid.Column="3" VerticalAlignment="Center" FontSize="12"
                        Foreground="{DynamicResource SemiColorText3}"
-                       Text="进入页面自动同步;未登录/异常时可点「读取本地缓存」" />
+                       Text="默认显示本地缓存;点击右上角「同步」才会向库街区拉取最新数据" />
         </Grid>
 
         <!-- 内容:角色列表 + 详情 -->

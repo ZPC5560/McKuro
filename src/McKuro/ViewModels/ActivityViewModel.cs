@@ -23,6 +23,8 @@ public sealed class ActivityGanttItem
     public required Avalonia.Media.IBrush BarBrush { get; init; }
     /// <summary>当前进度(0-100):now 在 [Start,End] 区间的位置;未开始=0,已结束=100。</summary>
     public required double ProgressPercent { get; init; }
+    /// <summary>进度层宽度(占时间轴宽度百分比)= 条宽 × 进度,让进度层相对条自身绘制。</summary>
+    public required double ProgressWidthPercent { get; init; }
     /// <summary>活动图 URL(甘特图左列 logo)。</summary>
     public string? ImageUrl { get; init; }
 }
@@ -97,17 +99,9 @@ public sealed partial class ActivityViewModel : ViewModelBase
             PoolActivities.Clear();
 
             var now = DateTime.Now;
-            // 甘特图时间轴窗口:最近 14 天前 ~ 14 天后
-            GanttStart = now.AddDays(-14).Date;
-            GanttEnd = now.AddDays(14).Date;
-            OnPropertyChanged(nameof(GanttStartText));
-            OnPropertyChanged(nameof(GanttEndText));
-            var windowSpan = (GanttEnd - GanttStart).TotalSeconds;
-            // 今天在时间轴的位置(当前日期竖线)
-            GanttTodayPercent = Math.Clamp((now - GanttStart).TotalSeconds / windowSpan * 100, 0, 100);
-            OnPropertyChanged(nameof(GanttTodayPercent));
-            GanttTodayLabel = $"今天 {now:MM-dd}";
-            OnPropertyChanged(nameof(GanttTodayLabel));
+            // 版本活动先收集到本地:甘特图时间轴由活动数据驱动(起点=最早活动开始=新版开服,终点=最晚活动结束),
+            // 需先知道全部活动的起止范围,才能计算每条甘特条的定位。
+            var rawHots = new List<(string Title, DateTime Start, DateTime End, Avalonia.Media.IBrush Brush, bool IsOngoing, double Progress, string? ImageUrl)>();
 
             // 1. 版本活动(hot-content-side)
             var hots = await AppServices.Wiki.GetEventDataAsync(WikiType.Waves);
@@ -129,23 +123,57 @@ public sealed partial class ActivityViewModel : ViewModelBase
                     // 当前进度:now 在 [Start,End] 区间的位置(未开始=0,已结束=100)
                     double progress = now <= start ? 0 : now >= end ? 100
                         : (now - start).TotalSeconds / (end - start).TotalSeconds * 100;
-                    // 甘特条定位:左端=start 位置,右端=end 位置(同一结束时间右端对齐)
-                    var leftPos = Math.Clamp((start - GanttStart).TotalSeconds / windowSpan * 100, 0, 100);
-                    var rightPos = Math.Clamp((end - GanttStart).TotalSeconds / windowSpan * 100, 0, 100);
-                    VersionActivities.Add(new ActivityGanttItem
-                    {
-                        Title = hot.Title ?? "活动",
-                        TimeRangeText = $"{start:MM-dd} ~ {end:MM-dd}",
-                        Start = start,
-                        End = end,
-                        LeftPercent = leftPos,
-                        WidthPercent = Math.Max(0.5, rightPos - leftPos),
-                        IsOngoing = end >= now,
-                        BarBrush = brush,
-                        ProgressPercent = progress,
-                        ImageUrl = hot.ContentUrl,
-                    });
+                    rawHots.Add((hot.Title ?? "活动", start, end, brush, end >= now, progress, hot.ContentUrl));
                 }
+            }
+
+            // 甘特图时间轴:数据驱动 —— 起点=当前版本最早活动开始(新版开服日),终点=最晚活动结束。
+            if (rawHots.Count > 0)
+            {
+                GanttStart = rawHots.Min(a => a.Start).Date;
+                GanttEnd = rawHots.Max(a => a.End).Date;
+                if (GanttEnd <= GanttStart)
+                {
+                    // 所有活动集中在同一天:至少保留一天窗口,防止除零/退化
+                    GanttEnd = GanttStart.AddDays(1);
+                }
+            }
+            else
+            {
+                // 无活动数据:回退最近 14 天 ~ 14 天后
+                GanttStart = now.AddDays(-14).Date;
+                GanttEnd = now.AddDays(14).Date;
+            }
+            OnPropertyChanged(nameof(GanttStartText));
+            OnPropertyChanged(nameof(GanttEndText));
+            var windowSpan = Math.Max(1, (GanttEnd - GanttStart).TotalSeconds);
+            // 今天在时间轴的位置(当前日期竖线)
+            GanttTodayPercent = Math.Clamp((now - GanttStart).TotalSeconds / windowSpan * 100, 0, 100);
+            OnPropertyChanged(nameof(GanttTodayPercent));
+            GanttTodayLabel = $"今天 {now:MM-dd}";
+            OnPropertyChanged(nameof(GanttTodayLabel));
+
+            foreach (var item in rawHots)
+            {
+                // 甘特条定位:左端=start 位置,右端=end 位置
+                var leftPos = Math.Clamp((item.Start - GanttStart).TotalSeconds / windowSpan * 100, 0, 100);
+                var rightPos = Math.Clamp((item.End - GanttStart).TotalSeconds / windowSpan * 100, 0, 100);
+                var widthPct = Math.Max(0.5, rightPos - leftPos);
+                VersionActivities.Add(new ActivityGanttItem
+                {
+                    Title = item.Title,
+                    TimeRangeText = $"{item.Start:MM-dd} ~ {item.End:MM-dd}",
+                    Start = item.Start,
+                    End = item.End,
+                    LeftPercent = leftPos,
+                    WidthPercent = widthPct,
+                    IsOngoing = item.IsOngoing,
+                    BarBrush = item.Brush,
+                    ProgressPercent = item.Progress,
+                    // 进度层相对条自身宽度绘制(条宽×进度)
+                    ProgressWidthPercent = widthPct * item.Progress / 100,
+                    ImageUrl = item.ImageUrl,
+                });
             }
 
             // 2. 换取活动(events-side:角色池 / 武器池,每个 events-side 一个池)
@@ -203,6 +231,7 @@ public sealed partial class ActivityViewModel : ViewModelBase
     }
 
     /// <summary>下载活动图并提取主色(甘特条颜色);失败回退主题强调色(#f8f05c)。
+    /// 取出现次数前 5 候选色中「最鲜明」的颜色(高饱和主题色优先,避免大面积暗灰背景色)。
     /// 注意:Avalonia Brush 必须在 UI 线程创建,否则渲染时跨线程访问崩溃。</summary>
     private async Task<Avalonia.Media.IBrush> LoadActivityColorAsync(string? url)
     {
@@ -220,10 +249,10 @@ public sealed partial class ActivityViewModel : ViewModelBase
                 {
                     using var ms = new System.IO.MemoryStream(bytes, writable: false);
                     var bmp = new Avalonia.Media.Imaging.Bitmap(ms);
-                    var colors = McKuro.Services.ColorThiefHelper.GetDominantColors(bmp, 1);
-                    if (colors.Count > 0)
+                    var vivid = McKuro.Services.ColorThiefHelper.GetVividDominantColor(bmp);
+                    if (vivid is { } color)
                     {
-                        fallbackColor = colors[0];
+                        fallbackColor = color;
                     }
                 }
             }

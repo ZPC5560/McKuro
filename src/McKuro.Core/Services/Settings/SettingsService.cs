@@ -51,20 +51,6 @@ public sealed class AppSettings
     /// <summary>背景封面视频(默认开启;无 LibVLC native 库时自动回退首帧图)。</summary>
     public bool BackgroundVideoEnabled { get; set; } = true;
 
-    // ---------- 动态壁纸与玻璃主题 ----------
-
-    /// <summary>用户选择的壁纸托管路径。空值表示使用应用默认背景。</summary>
-    public string WallpaperPath { get; set; } = "";
-
-    /// <summary>是否从壁纸自动提取应用强调色。</summary>
-    public bool DynamicPaletteEnabled { get; set; } = true;
-
-    /// <summary>玻璃效果质量：Auto / High / Low。</summary>
-    public string GlassQuality { get; set; } = "Auto";
-
-    /// <summary>壁纸铺放方式：UniformToFill / Uniform / Fill。</summary>
-    public string WallpaperStretch { get; set; } = "UniformToFill";
-
     // ---------- 游戏修复(对齐 Haiyu 的跳过校验文件) ----------
 
     /// <summary>修复游戏时跳过的文件相对路径列表(如 Client/Saved/Logs/Client.log)。</summary>
