@@ -143,7 +143,8 @@ public sealed class VideoBackgroundControl : Grid
             ? "MCKURO-VIDEO noChild"
             : $"MCKURO-VIDEO self=[{Bounds.Width:F0}x{Bounds.Height:F0}] " +
               $"child=[{child.Bounds.Width:F0}x{child.Bounds.Height:F0}] f={(child.Bounds == Bounds)} " +
-              $"src={(_videoImage is not null && _videoImage.Source is not null)} vis={child.IsEffectivelyVisible}";
+              $"src={(_videoImage is not null && _videoImage.Source is not null)} vis={child.IsEffectivelyVisible} " +
+              $"vid=({_videoWidth}x{_videoHeight})";
         if (sample != _diagPrev)
         {
             _diagPrev = sample;
