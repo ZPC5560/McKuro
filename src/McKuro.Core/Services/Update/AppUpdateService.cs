@@ -15,6 +15,7 @@ public sealed class AppUpdateInfo
 /// <summary>
 /// 应用自更新服务(对齐 Haiyu 的 IUpdateService + UpdateAppViewModel):
 /// 检查 GitHub Releases 最新版、下载安装包;版本比较复用 GameUpdater.IsVersionOlder 语义。
+/// 资产规则:优先 zip 绿色包(McKuro-win-x64-*.zip,解压替换),其次 exe 安装包(管理员启动)。
 /// </summary>
 public sealed class AppUpdateService
 {
@@ -57,9 +58,12 @@ public sealed class AppUpdateService
                 return null;
             }
 
-            var asset = release.Assets?.FirstOrDefault(a =>
-                !string.IsNullOrWhiteSpace(a.Name) &&
-                a.Name!.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+            var asset = release.Assets?
+                .Where(a => !string.IsNullOrWhiteSpace(a.Name) &&
+                            (a.Name!.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                             a.Name!.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(a => a.Name!.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault();
             if (asset is null || string.IsNullOrWhiteSpace(asset.BrowserDownloadUrl))
             {
                 return null;

@@ -39,7 +39,7 @@
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <ic:FluentIcon Icon="TicketDiagonal" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                                <TextBlock Text="换取活动 (卡池)" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <TextBlock Text="换取活动 (卡池)" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" />
                             </StackPanel>
                             <TextBlock Text="带倒计时,独立于版本活动" FontSize="11"
                                        Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
@@ -62,7 +62,7 @@
                                                                          Width="44" Height="44" Stretch="UniformToFill" />
                                                 </Border>
                                                 <StackPanel Spacing="2" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                                                    <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Bold"
                                                                TextTrimming="CharacterEllipsis" MaxWidth="180" />
                                                     <Border CornerRadius="4" Padding="5,1"
                                                             Background="{DynamicResource SemiColorPrimary}"
@@ -113,7 +113,7 @@
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <ic:FluentIcon Icon="CalendarStar" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                                <TextBlock Text="版本活动 (甘特图)" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <TextBlock Text="版本活动 (甘特图)" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" />
                             </StackPanel>
                             <TextBlock Text="已过期的自动剔除" FontSize="11"
                                        Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
@@ -141,7 +141,7 @@
                                                                              Width="40" Height="40" Stretch="UniformToFill" />
                                                     </Border>
                                                     <StackPanel Spacing="2" VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
+                                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Bold"
                                                                    TextTrimming="CharacterEllipsis" MaxWidth="170" />
                                                         <TextBlock Text="{Binding TimeRangeText}" FontSize="11"
                                                                    Foreground="{DynamicResource SemiColorText3}" />

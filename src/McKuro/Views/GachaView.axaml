@@ -17,7 +17,7 @@
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                     <ic:FluentIcon Icon="Cloud" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                    <TextBlock Text="云鸣潮" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <TextBlock Text="云鸣潮" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
                 </StackPanel>
                 <!-- 未登录:手机号 + 验证码 + 登录 -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
@@ -33,7 +33,7 @@
                 <!-- 已登录:账号名 + 退出 -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
                             IsVisible="{Binding IsCloudLoggedIn}">
-                    <TextBlock Text="{Binding CloudAccountText}" FontSize="12" FontWeight="SemiBold"
+                    <TextBlock Text="{Binding CloudAccountText}" FontSize="12" FontWeight="Bold"
                                VerticalAlignment="Center" Foreground="{DynamicResource SemiColorPrimary}" />
                     <TextBlock Text="已登录 · 同步优先" FontSize="11" VerticalAlignment="Center"
                                Foreground="{DynamicResource SemiColorText3}" />
@@ -115,7 +115,7 @@
                                                 Orientation="Horizontal"
                                                 Spacing="6"
                                                 VerticalAlignment="Center">
-                                        <TextBlock Text="已垫" FontSize="13" FontWeight="SemiBold" />
+                                        <TextBlock Text="已垫" FontSize="13" FontWeight="Bold" />
                                         <TextBlock Text="{Binding SelectedPool.CurrentPity}"
                                                    FontSize="13"
                                                    FontWeight="Bold"
@@ -154,7 +154,7 @@
                                             <TextBlock Grid.Column="1"
                                                        Margin="8,0,0,0"
                                                        FontSize="13"
-                                                       FontWeight="SemiBold"
+                                                       FontWeight="Bold"
                                                        Text="{Binding Record.Name}"
                                                        TextTrimming="CharacterEllipsis" />
                                             <Border Grid.Column="2"
@@ -247,7 +247,7 @@
                             <Grid RowDefinitions="Auto,*">
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                                     <TextBlock Grid.Column="0" Text="{Binding ChartTitle}" FontSize="13"
-                                               FontWeight="SemiBold" VerticalAlignment="Center" />
+                                               FontWeight="Bold" VerticalAlignment="Center" />
                                     <ComboBox Grid.Column="1" Width="150" VerticalAlignment="Center"
                                               ItemsSource="{Binding ChartOptions}"
                                               SelectedIndex="{Binding SelectedChartIndex, Mode=TwoWay}" />
@@ -289,7 +289,7 @@
                                                 <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,2,10,2">
                                                     <Ellipse Width="8" Height="8" Fill="{Binding Brush}" VerticalAlignment="Center" />
                                                     <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center" />
-                                                    <TextBlock Text="{Binding Value}" FontSize="12" FontWeight="SemiBold"
+                                                    <TextBlock Text="{Binding Value}" FontSize="12" FontWeight="Bold"
                                                                Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </DataTemplate>
@@ -331,7 +331,7 @@
                                                 <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,2,10,2">
                                                     <Ellipse Width="8" Height="8" Fill="{Binding Brush}" VerticalAlignment="Center" />
                                                     <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center" />
-                                                    <TextBlock Text="{Binding Value}" FontSize="12" FontWeight="SemiBold"
+                                                    <TextBlock Text="{Binding Value}" FontSize="12" FontWeight="Bold"
                                                                Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </DataTemplate>
@@ -374,7 +374,7 @@
                                                     <Ellipse Width="8" Height="8" Fill="{Binding Brush}" VerticalAlignment="Center" />
                                                     <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center"
                                                                TextTrimming="CharacterEllipsis" MaxWidth="70" />
-                                                    <TextBlock Text="{Binding Value}" FontSize="12" FontWeight="SemiBold"
+                                                    <TextBlock Text="{Binding Value}" FontSize="12" FontWeight="Bold"
                                                                Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </DataTemplate>
@@ -388,7 +388,7 @@
                         <Border Grid.Row="1" Grid.Column="1" CornerRadius="10" Padding="12"
                                 Background="{DynamicResource SemiColorBg2}">
                             <Grid RowDefinitions="Auto,*">
-                                <TextBlock Text="每日抽数" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Text="每日抽数" FontSize="13" FontWeight="Bold" Margin="0,0,0,6" />
                                 <controls:TimeLineChart Grid.Row="1" Height="262" Margin="0,2,0,0"
                                                         Values="{Binding TimeLineCounts}"
                                                         Labels="{Binding TimeLineLabels}"
@@ -421,7 +421,7 @@
                                                 <TextBlock Text="{Binding DisplayName}" FontSize="16" FontWeight="Bold" />
                                                 <Border CornerRadius="4" Padding="6,2"
                                                         Background="{Binding GuaranteeBadgeKind, Converter={x:Static vm:GuaranteeBadgeBrushConverter.Instance}}">
-                                                    <TextBlock Text="{Binding GuaranteeBadgeText}" FontSize="10" FontWeight="SemiBold" Foreground="White" />
+                                                    <TextBlock Text="{Binding GuaranteeBadgeText}" FontSize="10" FontWeight="Bold" Foreground="White" />
                                                 </Border>
                                             </StackPanel>
                                             <TextBlock Grid.Column="1" Text="{Binding TotalPulls, StringFormat=总抽 {0}}"
@@ -440,7 +440,7 @@
                                                     <TextBlock Text="{Binding NextPullUpPercent, StringFormat={}{0:0.#}}"
                                                                FontSize="30" FontWeight="ExtraBold"
                                                                Foreground="{DynamicResource SemiColorPrimary}" />
-                                                    <TextBlock Text="%" FontSize="16" FontWeight="SemiBold"
+                                                    <TextBlock Text="%" FontSize="16" FontWeight="Bold"
                                                                Foreground="{DynamicResource SemiColorPrimary}" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </StackPanel>
@@ -460,7 +460,7 @@
                                               RowSpacing="14" ColumnSpacing="10" Margin="0,16,0,0">
                                             <StackPanel Grid.Row="0" Grid.Column="0" Spacing="1">
                                                 <StackPanel Orientation="Horizontal" Spacing="3">
-                                                    <TextBlock Text="{Binding CurrentPity}" FontSize="16" FontWeight="SemiBold" Foreground="#4CAF50" />
+                                                    <TextBlock Text="{Binding CurrentPity}" FontSize="16" FontWeight="Bold" Foreground="#4CAF50" />
                                                     <TextBlock Text="抽" FontSize="12" Foreground="#4CAF50" Margin="0,0,0,1" />
                                                 </StackPanel>
                                                 <TextBlock Text="SSR 垫抽" FontSize="11" Foreground="{DynamicResource SemiColorText3}" />
@@ -468,7 +468,7 @@
                                             <StackPanel Grid.Row="0" Grid.Column="1" Spacing="1">
                                                 <StackPanel Orientation="Horizontal" Spacing="3">
                                                     <TextBlock Text="{Binding AveragePity, StringFormat={}{0:0}, TargetNullValue=—}"
-                                                               FontSize="16" FontWeight="SemiBold" Foreground="#E57373" />
+                                                               FontSize="16" FontWeight="Bold" Foreground="#E57373" />
                                                     <TextBlock Text="抽" FontSize="12" Foreground="#E57373" Margin="0,0,0,1"
                                                                IsVisible="{Binding AveragePity}" />
                                                 </StackPanel>
@@ -476,7 +476,7 @@
                                             </StackPanel>
                                             <StackPanel Grid.Row="1" Grid.Column="0" Spacing="1" IsVisible="{Binding CanJudgeUp}">
                                                 <StackPanel Orientation="Horizontal" Spacing="3">
-                                                    <TextBlock Text="{Binding UpCount}" FontSize="16" FontWeight="SemiBold" Foreground="#FF8000" />
+                                                    <TextBlock Text="{Binding UpCount}" FontSize="16" FontWeight="Bold" Foreground="#FF8000" />
                                                     <TextBlock Text="UP" FontSize="12" Foreground="#FF8000" Margin="0,0,0,1" />
                                                 </StackPanel>
                                                 <TextBlock Text="UP 数" FontSize="11" Foreground="{DynamicResource SemiColorText3}" />
@@ -484,7 +484,7 @@
                                             <StackPanel Grid.Row="1" Grid.Column="1" Spacing="1" IsVisible="{Binding CanJudgeUp}">
                                                 <StackPanel Orientation="Horizontal" Spacing="3">
                                                     <TextBlock Text="{Binding OffBannerRate, StringFormat={}{0:P1}, TargetNullValue=—}"
-                                                               FontSize="16" FontWeight="SemiBold" Foreground="#64B5F6" />
+                                                               FontSize="16" FontWeight="Bold" Foreground="#64B5F6" />
                                                     <TextBlock Text="%" FontSize="12" Foreground="#64B5F6" Margin="0,0,0,1"
                                                                IsVisible="{Binding OffBannerRate}" />
                                                 </StackPanel>

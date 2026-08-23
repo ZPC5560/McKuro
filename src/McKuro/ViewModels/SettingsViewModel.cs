@@ -553,7 +553,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
     }
 
-    /// <summary>下载并安装应用更新(下载到临时目录后以管理员启动安装包)。</summary>
+    /// <summary>下载并安装应用更新(zip 绿色包解压替换;exe 安装包以管理员启动)。</summary>
     [RelayCommand]
     private async Task DownloadAppUpdateAsync()
     {
@@ -573,6 +573,18 @@ public sealed partial class SettingsViewModel : ViewModelBase
             if (localPath is null)
             {
                 AppUpdateStatusText = "下载失败,请检查网络";
+                return;
+            }
+
+            var fileName = Path.GetFileName(localPath);
+            if (fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                // zip 绿色包:解压到 updates\&lt;版本&gt;\ 后延迟替换当前安装目录并重启(本进程退出后再执行)
+                AppUpdateStatusText = "下载完成,正在准备替换…";
+                if (!TryApplyZipUpdate(localPath, destDir))
+                {
+                    AppUpdateStatusText = "替换失败(请关闭程序后手动解压 zip 到安装目录覆盖)";
+                }
                 return;
             }
 
@@ -597,6 +609,53 @@ public sealed partial class SettingsViewModel : ViewModelBase
         finally
         {
             AppUpdateDownloading = false;
+        }
+    }
+
+    /// <summary>解压 zip 绿色包并生成延迟替换脚本(等待本进程退出后 xcopy 替换安装目录并重启)。</summary>
+    private bool TryApplyZipUpdate(string zipPath, string destDir)
+    {
+        try
+        {
+            var version = string.IsNullOrWhiteSpace(_pendingUpdate?.Version) ? "new" : _pendingUpdate.Version;
+            var extractDir = Path.Combine(destDir, version);
+            if (Directory.Exists(extractDir))
+            {
+                Directory.Delete(extractDir, true);
+            }
+            Directory.CreateDirectory(extractDir);
+            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractDir);
+
+            var appDir = Path.GetDirectoryName(Environment.ProcessPath) ?? ".";
+            var script = Path.Combine(destDir, "update.cmd");
+            File.WriteAllText(script, $"""
+                @echo off
+                chcp 65001 >nul
+                timeout /t 2 /nobreak >nul
+                taskkill /im McKuro.exe /f >nul 2>&1
+                timeout /t 1 /nobreak >nul
+                xcopy /e /y /q "{extractDir}\*" "{appDir}\"
+                start "" "{Path.Combine(appDir, "McKuro.exe")}"
+                """, System.Text.Encoding.UTF8);
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = script,
+                UseShellExecute = true,
+                WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
+            });
+            // 主程序退出,等待脚本完成替换后重新打开
+            if (Avalonia.Application.Current?.ApplicationLifetime
+                is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                desktop.Shutdown();
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppUpdateStatusText = $"替换失败: {ex.Message}";
+            return false;
         }
     }
 

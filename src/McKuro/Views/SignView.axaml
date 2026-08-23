@@ -63,7 +63,7 @@
                 <!-- 已登录:账号信息 + 开关 -->
                 <StackPanel Grid.Row="0" Spacing="8" IsVisible="{Binding IsLoggedIn}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Text="{Binding AccountText}" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding AccountText}" FontSize="15" FontWeight="Bold" />
                         <Button Content="刷新角色" Command="{Binding RefreshRolesCommand}"
                                 FontSize="12" Padding="8,2" />
                     </StackPanel>
@@ -85,7 +85,7 @@
                     <StackPanel Orientation="Horizontal" Spacing="12">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <ic:FluentIcon Icon="Gift" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                            <TextBlock Text="签到奖励" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Text="签到奖励" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                         </StackPanel>
                         <TextBlock Text="{Binding TodaySignText}" FontSize="12"
                                    Foreground="{DynamicResource SemiColorPrimary}"
@@ -119,7 +119,7 @@
                                         </Border>
                                         <!-- 数量 -->
                                         <TextBlock Grid.Row="2" HorizontalAlignment="Center" Margin="0,0,0,4"
-                                                   FontSize="11" FontWeight="SemiBold"
+                                                   FontSize="11" FontWeight="Bold"
                                                    Foreground="{DynamicResource SemiColorText2}">
                                             <Run Text="×" /><Run Text="{Binding GoodsNum}" />
                                         </TextBlock>
@@ -143,7 +143,7 @@
                     <Grid RowDefinitions="Auto,*">
                         <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
                             <ic:FluentIcon Icon="DataLine" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                            <TextBlock Text="签到统计" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Text="签到统计" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" />
                         </StackPanel>
                         <ListBox Grid.Row="1" ItemsSource="{Binding SignHistory}"
                                  Background="Transparent" BorderThickness="0">
@@ -157,7 +157,7 @@
                                         </Border>
                                         <TextBlock Grid.Column="1" FontSize="12" VerticalAlignment="Center"
                                                    Text="{Binding GoodsName}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Grid.Column="2" FontSize="12" FontWeight="SemiBold"
+                                        <TextBlock Grid.Column="2" FontSize="12" FontWeight="Bold"
                                                    VerticalAlignment="Center">
                                             <Run Text="×" /><Run Text="{Binding GoodsNum}" />
                                         </TextBlock>
@@ -182,7 +182,7 @@
                                         Background="{DynamicResource SemiColorBg3}" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <TextBlock Text="{Binding RoleName}" FontSize="15" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding RoleName}" FontSize="15" FontWeight="Bold" />
                                         <Border CornerRadius="6" Background="{DynamicResource SemiColorPrimary}"
                                                 Padding="6,1">
                                             <TextBlock Text="{Binding GameName}" FontSize="10"

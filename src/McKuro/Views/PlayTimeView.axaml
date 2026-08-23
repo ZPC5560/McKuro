@@ -56,7 +56,7 @@
             <!-- 最近 7 天每日时长柱状 -->
             <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                 <StackPanel Spacing="12">
-                    <TextBlock Text="最近 7 天每日游玩时长" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock Text="最近 7 天每日游玩时长" FontSize="15" FontWeight="Bold" />
                     <ItemsControl ItemsSource="{Binding Last7Days}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -74,7 +74,7 @@
                                                 Background="{DynamicResource SemiColorPrimary}"
                                                 VerticalAlignment="Bottom" />
                                     </Border>
-                                    <TextBlock Text="{Binding HoursText}" FontSize="12" FontWeight="SemiBold"
+                                    <TextBlock Text="{Binding HoursText}" FontSize="12" FontWeight="Bold"
                                                HorizontalAlignment="Center" />
                                     <TextBlock Text="{Binding Label}" FontSize="11"
                                                Foreground="{DynamicResource SemiColorText2}"
@@ -98,7 +98,7 @@
             <!-- 最近 7 天时段热力图(7 行 × 24 小时) -->
             <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                 <StackPanel Spacing="8">
-                    <TextBlock Text="最近 7 天游玩时间区间(7×24 小时热力)" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock Text="最近 7 天游玩时间区间(7×24 小时热力)" FontSize="15" FontWeight="Bold" />
                     <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
                         <!-- 行标签(最近 7 天日期) -->
                         <StackPanel Grid.Row="0" Grid.Column="0" Spacing="3" Margin="0,0,8,0">
@@ -154,7 +154,7 @@
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <ic:FluentIcon Icon="DocumentText" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                            <TextBlock Text="最近 7 天游玩分析报告" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Text="最近 7 天游玩分析报告" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                         </StackPanel>
                         <Border Grid.Column="1" CornerRadius="10" Padding="10,3"
                                 Background="{DynamicResource SemiColorBg3}" VerticalAlignment="Center">
@@ -206,7 +206,7 @@
                         <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
                             <StackPanel Spacing="4">
                                 <TextBlock Text="时段偏好" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
-                                <TextBlock Text="{Binding WeeklyReport.HabitTag}" FontSize="17" FontWeight="SemiBold"
+                                <TextBlock Text="{Binding WeeklyReport.HabitTag}" FontSize="17" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorPrimary}" />
                                 <TextBlock Text="{Binding WeeklyReport.HabitDetail}" FontSize="11" TextWrapping="Wrap"
                                            Foreground="{DynamicResource SemiColorText3}" />
@@ -215,7 +215,7 @@
                         <Border Grid.Column="1" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
                             <StackPanel Spacing="4">
                                 <TextBlock Text="作息规律" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
-                                <TextBlock Text="{Binding WeeklyReport.RegularityTag}" FontSize="17" FontWeight="SemiBold"
+                                <TextBlock Text="{Binding WeeklyReport.RegularityTag}" FontSize="17" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorPrimary}" />
                                 <TextBlock Text="{Binding WeeklyReport.RegularityDetail}" FontSize="11" TextWrapping="Wrap"
                                            Foreground="{DynamicResource SemiColorText3}" />
@@ -224,7 +224,7 @@
                         <Border Grid.Column="2" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
                             <StackPanel Spacing="4">
                                 <TextBlock Text="游玩方式" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
-                                <TextBlock Text="{Binding WeeklyReport.StyleTag}" FontSize="17" FontWeight="SemiBold"
+                                <TextBlock Text="{Binding WeeklyReport.StyleTag}" FontSize="17" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorPrimary}" />
                                 <TextBlock Text="{Binding WeeklyReport.StyleDetail}" FontSize="11" TextWrapping="Wrap"
                                            Foreground="{DynamicResource SemiColorText3}" />
@@ -233,7 +233,7 @@
                         <Border Grid.Column="3" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
                             <StackPanel Spacing="4">
                                 <TextBlock Text="周内趋势" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
-                                <TextBlock Text="{Binding WeeklyReport.TrendTag}" FontSize="17" FontWeight="SemiBold"
+                                <TextBlock Text="{Binding WeeklyReport.TrendTag}" FontSize="17" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorPrimary}" />
                                 <TextBlock Text="{Binding WeeklyReport.TrendDetail}" FontSize="11" TextWrapping="Wrap"
                                            Foreground="{DynamicResource SemiColorText3}" />
@@ -245,7 +245,7 @@
                     <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="16,12"
                             BorderBrush="{DynamicResource SemiColorPrimary}" BorderThickness="3,0,0,0">
                         <StackPanel Spacing="6">
-                            <TextBlock Text="本周总结" FontSize="12" FontWeight="SemiBold"
+                            <TextBlock Text="本周总结" FontSize="12" FontWeight="Bold"
                                        Foreground="{DynamicResource SemiColorPrimary}" />
                             <TextBlock Text="{Binding WeeklyReport.SummaryText}" FontSize="13" TextWrapping="Wrap"
                                        LineHeight="22" Foreground="{DynamicResource SemiColorText1}" />
@@ -254,7 +254,7 @@
 
                     <!-- 逐日明细 -->
                     <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                        <TextBlock Text="逐日明细" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Text="逐日明细" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" />
                         <TextBlock Text="每次开始玩到结束独立统计,相邻会话(≤60min)合并为同一时段" FontSize="11"
                                    Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
                     </StackPanel>
@@ -267,7 +267,7 @@
                                         <!-- 日期 + 星期 + 今天/昨天 -->
                                         <StackPanel Grid.Column="0" Spacing="2" Width="76">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <TextBlock Text="{Binding Label}" FontSize="13" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Label}" FontSize="13" FontWeight="Bold" />
                                                 <TextBlock Text="{Binding Weekday}" FontSize="11"
                                                            Foreground="{DynamicResource SemiColorText2}" />
                                             </StackPanel>

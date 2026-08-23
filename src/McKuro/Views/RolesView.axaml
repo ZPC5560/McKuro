@@ -104,12 +104,12 @@
                                             Padding="4,1" Margin="1"
                                             HorizontalAlignment="Right" VerticalAlignment="Top" Opacity="0.9"
                                             IsVisible="{Binding ChainCount, Converter={StaticResource GreaterThanZero}}">
-                                        <TextBlock FontSize="9" Foreground="{Binding Converter={StaticResource EmphasisBrush}}" FontWeight="SemiBold">
+                                        <TextBlock FontSize="9" Foreground="{Binding Converter={StaticResource EmphasisBrush}}" FontWeight="Bold">
                                             <Run Text="{Binding UnlockedChainCount}" /><Run Text="链" />
                                         </TextBlock>
                                     </Border>
                                 </Grid>
-                                <TextBlock Text="{Binding RoleName}" FontSize="12" FontWeight="SemiBold"
+                                <TextBlock Text="{Binding RoleName}" FontSize="12" FontWeight="Bold"
                                            HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
                                            MaxWidth="88" />
                                 <TextBlock Text="{Binding LevelText}" FontSize="11" HorizontalAlignment="Center"
@@ -165,7 +165,7 @@
                                         </TextBlock>
                                         <TextBlock Text="{Binding SelectedRole.StarLevel, StringFormat={}{0}★}"
                                                    FontSize="16" Foreground="{Binding Converter={StaticResource EmphasisBrush}}"
-                                                   VerticalAlignment="Bottom" FontWeight="SemiBold" />
+                                                   VerticalAlignment="Bottom" FontWeight="Bold" />
                                         <Border Background="{DynamicResource SemiColorBg1}" CornerRadius="4"
                                                 Padding="3" Opacity="0.9" VerticalAlignment="Center"
                                                 IsVisible="{Binding SelectedRole.Role.AttributeId, Converter={StaticResource GreaterThanZero}}">
@@ -194,7 +194,7 @@
                                         </Border>
                                         <StackPanel VerticalAlignment="Center" Spacing="2">
                                             <TextBlock Text="{Binding SelectedRole.WeaponData.DisplayName}" FontSize="15"
-                                                       FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="140" />
+                                                       FontWeight="Bold" TextTrimming="CharacterEllipsis" MaxWidth="140" />
                                             <TextBlock FontSize="12"
                                                        Foreground="{DynamicResource SemiColorText2}">
                                                 <Run Text="Lv." /><Run Text="{Binding SelectedRole.WeaponData.Level}" />
@@ -220,7 +220,7 @@
                                                     </Border>
                                                     <TextBlock Text="{Binding SkillLevel, StringFormat=Lv.{0}}"
                                                                FontSize="11" HorizontalAlignment="Center"
-                                                               FontWeight="SemiBold"
+                                                               FontWeight="Bold"
                                                                Foreground="{DynamicResource SemiColorText2}" />
                                                 </StackPanel>
                                             </DataTemplate>
@@ -235,7 +235,7 @@
                                 Background="{DynamicResource SemiColorBg3}"
                                 IsVisible="{Binding SelectedRole.HasAttributes}">
                             <StackPanel Spacing="8">
-                                <TextBlock Text="属性" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Text="属性" FontSize="13" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorText2}" />
                                 <ItemsControl ItemsSource="{Binding SelectedRole.Attributes}">
                                     <ItemsControl.ItemsPanel>
@@ -273,9 +273,9 @@
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <ic:FluentIcon Icon="Link" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                                        <TextBlock Text="共鸣链" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        <TextBlock Text="共鸣链" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
                                     </StackPanel>
-                                    <TextBlock FontSize="13" FontWeight="SemiBold"
+                                    <TextBlock FontSize="13" FontWeight="Bold"
                                                Foreground="{DynamicResource SemiColorPrimary}">
                                         <Run Text="{Binding SelectedRole.UnlockedChainCount}" />
                                         <Run Text="/" />
@@ -283,7 +283,7 @@
                                     </TextBlock>
                                     <!-- 6 链全解锁:显示称号 -->
                                     <TextBlock Text="{Binding SelectedRole.FullChainTitle}"
-                                               FontSize="13" FontWeight="SemiBold"
+                                               FontSize="13" FontWeight="Bold"
                                                Foreground="{Binding Converter={StaticResource EmphasisBrush}}"
                                                IsVisible="{Binding SelectedRole.IsFullChain}"
                                                TextTrimming="CharacterEllipsis" MaxWidth="220" />
@@ -319,7 +319,7 @@
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <ic:FluentIcon Icon="ChatBubblesQuestion" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                                        <TextBlock Text="mcguide 官方达成度" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        <TextBlock Text="mcguide 官方达成度" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
                                     </StackPanel>
                                     <TextBlock Text="{Binding GuideStatusText}" FontSize="12"
                                                Foreground="{DynamicResource SemiColorText2}"
@@ -368,7 +368,7 @@
                                                 <Border CornerRadius="6" Background="{DynamicResource SemiColorBg1}"
                                                         Padding="8,4" Margin="0,0,8,8">
                                                     <StackPanel Spacing="2">
-                                                        <TextBlock FontSize="12" FontWeight="SemiBold">
+                                                        <TextBlock FontSize="12" FontWeight="Bold">
                                                             <Run Text="{Binding Name}" />
                                                             <Run Text="{Binding IsFinished, StringFormat=' {0}'}"
                                                                  Foreground="{Binding IsFinished, Converter={StaticResource BoolToOkBrush}}" />
@@ -389,7 +389,7 @@
 
                         <!-- ④ 声骸 (WutheringWavesTool Phantom 风格) -->
                         <StackPanel Spacing="6" IsVisible="{Binding SelectedRole.HasPhantoms}">
-                            <TextBlock Text="声骸" FontSize="13" FontWeight="SemiBold"
+                            <TextBlock Text="声骸" FontSize="13" FontWeight="Bold"
                                        Foreground="{DynamicResource SemiColorText2}" />
                             <ItemsControl ItemsSource="{Binding SelectedRole.PhantomData.Phantoms}">
                                 <ItemsControl.ItemsPanel>
@@ -413,7 +413,7 @@
                                                     </Border>
                                                     <StackPanel Spacing="3" VerticalAlignment="Center">
                                                         <TextBlock Text="{Binding PhantomName}" FontSize="14"
-                                                                   FontWeight="SemiBold"
+                                                                   FontWeight="Bold"
                                                                    TextTrimming="CharacterEllipsis" MaxWidth="160" />
                                                         <!-- 词条评级徽章(参照 WutheringWavesTool PhantomItem top:ACE红/SSS黄/S紫/N灰) -->
                                                         <StackPanel Orientation="Horizontal" Spacing="8">
@@ -444,7 +444,7 @@
                                                         <DataTemplate x:DataType="roles:EchoProp">
                                                             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                                                                 <TextBlock Grid.Column="0" FontSize="15"
-                                                                           FontWeight="SemiBold"
+                                                                           FontWeight="Bold"
                                                                            Text="{Binding AttributeName}" />
                                                                 <TextBlock Grid.Column="1" FontSize="15"
                                                                            FontWeight="Bold"

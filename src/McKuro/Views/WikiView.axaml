@@ -22,7 +22,7 @@
 
     <UserControl.Resources>
         <DataTemplate x:Key="ImagePlaceholder" x:DataType="controls:AsyncImage">
-            <Border IsVisible="{Binding !IsLoaded}" Classes="placeholder-pulse">
+            <Border IsVisible="{Binding !ImageLoaded}" Classes="placeholder-pulse">
                 <Border.Background>
                     <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
                         <GradientStop Color="#1FFFFFFF" Offset="0" />
@@ -44,12 +44,12 @@
                 <StackPanel>
                     <Border Height="169" Background="{DynamicResource SemiColorBg3}" ClipToBounds="True">
                         <Grid>
-                            <controls:AsyncImage x:Name="img" ImageUrl="{Binding CoverUrl}" Stretch="UniformToFill" />
+                            <controls:AsyncImage x:Name="img" ImageUrl="{Binding CoverUrl}" Stretch="Uniform" />
                             <ContentControl Content="{Binding #img}" ContentTemplate="{StaticResource ImagePlaceholder}" />
                         </Grid>
                     </Border>
                     <StackPanel Margin="12,10" Spacing="4">
-                        <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="SemiBold"
+                        <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="Bold"
                                    TextWrapping="Wrap" MaxLines="2" MinHeight="38"
                                    TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="{Binding DateText}" FontSize="11"
@@ -67,12 +67,12 @@
                 <StackPanel>
                     <Border Height="169" Background="{DynamicResource SemiColorBg3}" ClipToBounds="True">
                         <Grid>
-                            <controls:AsyncImage x:Name="img" ImageUrl="{Binding CoverUrl}" Stretch="UniformToFill" />
+                            <controls:AsyncImage x:Name="img" ImageUrl="{Binding CoverUrl}" Stretch="Uniform" />
                             <ContentControl Content="{Binding #img}" ContentTemplate="{StaticResource ImagePlaceholder}" />
                         </Grid>
                     </Border>
                     <StackPanel Margin="12,10" Spacing="4">
-                        <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="SemiBold"
+                        <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="Bold"
                                    TextWrapping="Wrap" MaxLines="2" MinHeight="38"
                                    TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="{Binding TimeText}" FontSize="11"
@@ -118,7 +118,7 @@
                                     CommandParameter="{Binding Url}">
                                 <Grid>
                                     <StackPanel Spacing="1" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                                        <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="Bold"
                                                    TextTrimming="CharacterEllipsis" />
                                         <TextBlock Text="{Binding Description}" FontSize="9.5"
                                                    Foreground="{DynamicResource SemiColorText3}"
@@ -180,16 +180,16 @@
                 <!-- 游戏公告(启动器同源:活动/公告/新闻 三页签,封面卡片,内部滚动) -->
                 <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                     <StackPanel Spacing="12">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <ic:FluentIcon Icon="Megaphone" IconVariant="Regular" IconSize="Size20" VerticalAlignment="Center" />
-                            <TextBlock Text="游戏公告" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" />
-                            <TextBlock Text="官方启动器同源数据 · 点击跳转原文" FontSize="11"
-                                       Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
-                        </StackPanel>
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <ic:FluentIcon Grid.Column="0" Icon="Megaphone" IconVariant="Regular" IconSize="Size20" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Margin="8,0,0,0" Text="游戏公告" FontSize="17" FontWeight="Bold" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Margin="8,0,0,0" Text="官方启动器同源数据 · 点击跳转原文" FontSize="11"
+                                       Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                        </Grid>
                         <TabControl SelectedIndex="{Binding SelectedLauncherTab}" Background="Transparent"
                                     Padding="0" Margin="0">
                             <TabItem Header="活动">
-                                <ScrollViewer Height="506" VerticalScrollBarVisibility="Auto">
                                     <ItemsControl ItemsSource="{Binding LauncherActivities}"
                                                   ItemTemplate="{StaticResource LauncherCard}">
                                         <ItemsControl.ItemsPanel>
@@ -198,10 +198,8 @@
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
-                                </ScrollViewer>
-                            </TabItem>
-                            <TabItem Header="公告">
-                                <ScrollViewer Height="506" VerticalScrollBarVisibility="Auto">
+                                </TabItem>
+                                <TabItem Header="公告">
                                     <ItemsControl ItemsSource="{Binding LauncherNotices}"
                                                   ItemTemplate="{StaticResource LauncherCard}">
                                         <ItemsControl.ItemsPanel>
@@ -210,10 +208,8 @@
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
-                                </ScrollViewer>
-                            </TabItem>
-                            <TabItem Header="新闻">
-                                <ScrollViewer Height="506" VerticalScrollBarVisibility="Auto">
+                                </TabItem>
+                                <TabItem Header="新闻">
                                     <ItemsControl ItemsSource="{Binding LauncherNews}"
                                                   ItemTemplate="{StaticResource LauncherCard}">
                                         <ItemsControl.ItemsPanel>
@@ -222,21 +218,21 @@
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
-                                </ScrollViewer>
-                            </TabItem>
-                        </TabControl>
+                                </TabItem>
+                            </TabControl>
                     </StackPanel>
                 </Border>
 
                 <!-- 库街区官方资讯(资讯/公告/活动 三页签,封面卡片,内部滚动默认两行) -->
                 <Border Grid.Column="1" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                     <StackPanel Spacing="12">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <ic:FluentIcon Icon="News" IconVariant="Regular" IconSize="Size20" VerticalAlignment="Center" />
-                            <TextBlock Text="库街区官方资讯" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" />
-                            <TextBlock Text="来自 kurobbs.com/mc/official · 点击卡片打开详情页" FontSize="11"
-                                       Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
-                        </StackPanel>
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <ic:FluentIcon Grid.Column="0" Icon="News" IconVariant="Regular" IconSize="Size20" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Margin="8,0,0,0" Text="库街区官方资讯" FontSize="17" FontWeight="Bold" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Margin="8,0,0,0" Text="来自 kurobbs.com/mc/official · 点击卡片打开详情页" FontSize="11"
+                                       Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                        </Grid>
                         <TabControl SelectedIndex="{Binding SelectedKurobbsTab}" Background="Transparent"
                                     Padding="0" Margin="0">
                             <TabItem Header="资讯">

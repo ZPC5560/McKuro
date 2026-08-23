@@ -134,7 +134,7 @@ public sealed class AppSettings
     // ---------- 应用自更新(对齐 Haiyu UpdateAppViewModel) ----------
 
     /// <summary>GitHub 仓库("owner/repo",空 = 禁用应用自更新)。</summary>
-    public string AppUpdateRepo { get; set; } = "";
+    public string AppUpdateRepo { get; set; } = "ZPC5560/McKuro";
 
     /// <summary>跳过的应用版本(不再提示该版本更新)。</summary>
     public string SkipAppVersion { get; set; } = "";

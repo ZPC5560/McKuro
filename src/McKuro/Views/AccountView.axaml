@@ -22,7 +22,7 @@
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-                        <TextBlock Text="角色 ID (playerId)" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="角色 ID (playerId)" FontSize="15" FontWeight="Bold" />
                         <TextBlock Text="游戏内账号的角色 ID,用于拉取角色养成数据" FontSize="12"
                                    Foreground="{DynamicResource SemiColorText2}" />
                     </StackPanel>
@@ -41,7 +41,7 @@
                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-                            <TextBlock Text="库街区账号" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="库街区账号" FontSize="15" FontWeight="Bold" />
                             <TextBlock Text="支持保存多个账号并切换当前账号;登录在「签到」页完成,Token 不会在界面显示" FontSize="12"
                                        Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
                         </StackPanel>
@@ -69,7 +69,7 @@
                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-                            <TextBlock Text="官方养成评级" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="官方养成评级" FontSize="15" FontWeight="Bold" />
                             <TextBlock Text="登录 mcguide 攻略站后,角色页显示官方养成达成度(grade/属性/声骸/技能/共鸣链/武器)" FontSize="12"
                                        Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
                         </StackPanel>

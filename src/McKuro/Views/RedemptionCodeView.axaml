@@ -39,7 +39,7 @@
                 <Grid RowDefinitions="Auto,*">
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
                         <ic:FluentIcon Icon="Home" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                        <TextBlock Text="国服" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Text="国服" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
                     <ListBox Grid.Row="1" ItemsSource="{Binding MainlandCodes}"
                              SelectedItem="{Binding SelectedMainland, Mode=TwoWay}"
@@ -62,7 +62,7 @@
                                             </StackPanel>
                                             <!-- 说明(如 3.6前瞻),有值才显示 -->
                                             <TextBlock Text="{Binding Description}" FontSize="12"
-                                                       FontWeight="SemiBold"
+                                                       FontWeight="Bold"
                                                        Foreground="{DynamicResource SemiColorPrimary}"
                                                        TextTrimming="CharacterEllipsis" MaxWidth="360"
                                                        IsVisible="{Binding Description, Converter={StaticResource StringNotEmpty}}" />
@@ -92,7 +92,7 @@
                 <Grid RowDefinitions="Auto,*">
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
                         <ic:FluentIcon Icon="Globe" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                        <TextBlock Text="国际服" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Text="国际服" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
                     <ListBox Grid.Row="1" ItemsSource="{Binding GlobalCodes}"
                              SelectedItem="{Binding SelectedGlobal, Mode=TwoWay}"
@@ -115,7 +115,7 @@
                                             </StackPanel>
                                             <!-- 说明(如 3.6前瞻),有值才显示 -->
                                             <TextBlock Text="{Binding Description}" FontSize="12"
-                                                       FontWeight="SemiBold"
+                                                       FontWeight="Bold"
                                                        Foreground="{DynamicResource SemiColorPrimary}"
                                                        TextTrimming="CharacterEllipsis" MaxWidth="360"
                                                        IsVisible="{Binding Description, Converter={StaticResource StringNotEmpty}}" />

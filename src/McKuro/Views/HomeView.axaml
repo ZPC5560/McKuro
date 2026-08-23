@@ -58,7 +58,7 @@
                 CornerRadius="18" Background="{DynamicResource McKuroGlassFill}"
                 BorderBrush="{DynamicResource McKuroGlassStroke}" BorderThickness="1" Padding="18,7">
             <StackPanel Orientation="Horizontal" Spacing="14">
-                <TextBlock Text="{Binding AccountText}" FontSize="13.5" FontWeight="SemiBold"
+                <TextBlock Text="{Binding AccountText}" FontSize="13.5" FontWeight="Bold"
                            Foreground="{DynamicResource McKuroTextOnWallpaper}" VerticalAlignment="Center" />
                 <Button Command="{Binding RefreshDailyCommand}"
                         IsEnabled="{Binding !IsBusy}" Classes="splashBtn"
@@ -104,7 +104,7 @@
                         <TextBlock Margin="0,30,0,0" FontSize="15.5" LineHeight="2" Foreground="{DynamicResource McKuroTextMuted}"
                                    TextWrapping="Wrap">
                             <Run Text="潮起潮落，回声常在。" />
-                            <Run Text="管理你的冒险、角色与数据。" Foreground="{DynamicResource McKuroTextOnWallpaper}" FontWeight="SemiBold" />
+                            <Run Text="管理你的冒险、角色与数据。" Foreground="{DynamicResource McKuroTextOnWallpaper}" FontWeight="Bold" />
                         </TextBlock>
                         <!-- 次要描述(细体、浅色) -->
                         <TextBlock Margin="0,8,0,0" FontSize="13" FontWeight="Light" Foreground="{DynamicResource McKuroTextMuted}"
@@ -147,20 +147,20 @@
                                     </Grid>
                                     <!-- 昵称 + 等级/开服玩家徽章(昵称靠左) -->
                                     <StackPanel Grid.Column="1" Spacing="7" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding RoleNameText}" FontSize="16" FontWeight="SemiBold"
+                                        <TextBlock Text="{Binding RoleNameText}" FontSize="16" FontWeight="Bold"
                                                    Foreground="{DynamicResource McKuroTextOnWallpaper}"
                                                    TextTrimming="CharacterEllipsis" MaxWidth="220"
                                                    HorizontalAlignment="Left" />
                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                             <Border CornerRadius="9" Background="{DynamicResource McKuroGlassFillStrong}"
                                                     Padding="8,2" IsVisible="{Binding LevelText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
-                                                <TextBlock Text="{Binding LevelText}" FontSize="12" FontWeight="SemiBold"
+                                                <TextBlock Text="{Binding LevelText}" FontSize="12" FontWeight="Bold"
                                                            Foreground="{DynamicResource McKuroAccent}" />
                                             </Border>
                                             <Border CornerRadius="9" Background="{DynamicResource McKuroAccent}"
                                                     Padding="8,2" IsVisible="{Binding IsLaunchPlayer}"
                                                     ToolTip.Tip="{Binding RegisterText}">
-                                                <TextBlock Text="开服玩家" FontSize="12" FontWeight="SemiBold" Foreground="White" />
+                                                <TextBlock Text="开服玩家" FontSize="12" FontWeight="Bold" Foreground="White" />
                                             </Border>
                                         </StackPanel>
                                     </StackPanel>
@@ -169,7 +169,7 @@
                                         <TextBlock Text="{Binding RoleIdText}" FontSize="11.5" FontWeight="Light"
                                                    Foreground="{DynamicResource McKuroTextMuted}" HorizontalAlignment="Right"
                                                    IsVisible="{Binding RoleIdText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                                        <TextBlock Text="{Binding PlayDaysText}" FontSize="14" FontWeight="SemiBold"
+                                        <TextBlock Text="{Binding PlayDaysText}" FontSize="14" FontWeight="Bold"
                                                    Foreground="{DynamicResource McKuroTextOnWallpaper}" HorizontalAlignment="Right" />
                                         <TextBlock Text="{Binding RegisterText}" FontSize="11.5" FontWeight="Light"
                                                    Foreground="{DynamicResource McKuroTextMuted}" HorizontalAlignment="Right"
@@ -179,7 +179,7 @@
                             </Border>
 
                             <StackPanel Spacing="4">
-                                <TextBlock Text="今日数据" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                <TextBlock Text="今日数据" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource McKuroTextOnWallpaper}" />
                             </StackPanel>
                             <ItemsControl ItemsSource="{Binding DailyItems}">
                                 <ItemsControl.ItemsPanel>
@@ -201,7 +201,7 @@
                                                                          IsVisible="{Binding ImageUrl, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                                     <ic:FluentIcon Icon="{Binding Icon}" IconVariant="Regular" IconSize="Size20"
                                                                    IsVisible="{Binding ImageUrl, Converter={x:Static conv:StringConverters.IsNullOrEmpty}}" />
-                                                    <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
+                                                    <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="Bold"
                                                                Foreground="{DynamicResource McKuroTextOnWallpaper}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                                 </StackPanel>
                                                 <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0">

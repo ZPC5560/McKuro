@@ -57,15 +57,16 @@ public sealed class AsyncImage : Avalonia.Controls.Image
         set => SetValue(ImageUrlProperty, value);
     }
 
-    /// <summary>图片是否已成功解码显示(加载中/失败/空 URL 均为 false,供占位层绑定)。</summary>
-    public static readonly StyledProperty<bool> IsLoadedProperty =
-        AvaloniaProperty.Register<AsyncImage, bool>(nameof(IsLoaded));
+    /// <summary>图片是否已成功解码显示(加载中/失败/空 URL 均为 false,供占位层绑定)。
+    /// 命名为 ImageLoaded 以避免与基类 Control.IsLoaded(可视树加载状态)隐藏冲突。</summary>
+    public static readonly StyledProperty<bool> ImageLoadedProperty =
+        AvaloniaProperty.Register<AsyncImage, bool>(nameof(ImageLoaded));
 
     /// <summary>图片是否已成功解码显示。</summary>
-    public bool IsLoaded
+    public bool ImageLoaded
     {
-        get => GetValue(IsLoadedProperty);
-        set => SetValue(IsLoadedProperty, value);
+        get => GetValue(ImageLoadedProperty);
+        set => SetValue(ImageLoadedProperty, value);
     }
 
     static AsyncImage()
@@ -74,7 +75,7 @@ public sealed class AsyncImage : Avalonia.Controls.Image
         SourceProperty.Changed.AddClassHandler<AsyncImage>((image, _) =>
         {
             // 任意路径(含外部直设 Source)都同步加载状态,占位层据此显隐
-            image.IsLoaded = image.Source is not null;
+            image.ImageLoaded = image.Source is not null;
         });
     }
 
@@ -82,7 +83,7 @@ public sealed class AsyncImage : Avalonia.Controls.Image
     {
         if (string.IsNullOrWhiteSpace(url))
         {
-            IsLoaded = false;
+            ImageLoaded = false;
             Source = null;
             return;
         }
@@ -93,7 +94,7 @@ public sealed class AsyncImage : Avalonia.Controls.Image
             return;
         }
 
-        IsLoaded = false;
+        ImageLoaded = false;
         Source = null;
         _ = LoadAsync(url);
     }
