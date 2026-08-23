@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform;
+using McKuro.Services;
 
 namespace McKuro;
 
@@ -125,9 +126,24 @@ public partial class MainWindow : Window
 
     private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
+        if (e.Property != WindowStateProperty || e.NewValue is not WindowState state)
+        {
+            return;
+        }
+
+        // 最小化位置=系统托盘 且游戏会话进行中(启动中/游戏中):点击最小化 → 隐藏到托盘,
+        // 从托盘恢复后再最小化仍回托盘;游戏进程结束(会话空闲)后恢复为常规任务栏最小化。
+        if (state == WindowState.Minimized
+            && AppServices.Settings.Current.MinimizeLocationOnLaunch == "Tray"
+            && AppServices.GameMonitor.State != GameSessionState.Idle)
+        {
+            HideToTray();
+            return;
+        }
+
         // 从最大化/最小化切回普通状态时,系统已恢复之前的窗口矩形;
         // 跳过紧随其后的尺寸纠正,避免把"还原尺寸"错误地按屏幕尺寸改写。
-        if (e.Property == WindowStateProperty && e.NewValue is WindowState state && state == WindowState.Normal)
+        if (state == WindowState.Normal)
         {
             _deferAspectAdjust = true;
         }
