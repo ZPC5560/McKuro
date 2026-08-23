@@ -22,6 +22,10 @@
                     <SolidColorBrush x:Key="McKuroAccentHover" Color="#78A2F1" />
                     <SolidColorBrush x:Key="McKuroBackdropBase" Color="#070C18" />
                     <SolidColorBrush x:Key="McKuroBackdropTint" Color="#9E050A18" />
+                    <!-- 系统材质模式(Mica/Acrylic/毛玻璃):涂抹层弱化,露出 OS 原生背景 -->
+                    <SolidColorBrush x:Key="McKuroBackdropTintMaterial" Color="#6E050A18" />
+                    <SolidColorBrush x:Key="McKuroNavFillMaterial" Color="#3D141D32" />
+                    <SolidColorBrush x:Key="McKuroContentTintMaterial" Color="#59050A18" />
                     <SolidColorBrush x:Key="McKuroGlassFill" Color="#94141D32" />
                     <SolidColorBrush x:Key="McKuroGlassFillStrong" Color="#C611192D" />
                     <SolidColorBrush x:Key="McKuroGlassStroke" Color="#70CDE0FA" />
@@ -47,6 +51,10 @@
                     <SolidColorBrush x:Key="McKuroAccentHover" Color="#4F7CD1" />
                     <SolidColorBrush x:Key="McKuroBackdropBase" Color="#EEF3FA" />
                     <SolidColorBrush x:Key="McKuroBackdropTint" Color="#94F6F9FD" />
+                    <!-- 系统材质模式(Mica/Acrylic/毛玻璃):涂抹层弱化,露出 OS 原生背景 -->
+                    <SolidColorBrush x:Key="McKuroBackdropTintMaterial" Color="#73EEF3FA" />
+                    <SolidColorBrush x:Key="McKuroNavFillMaterial" Color="#45FFFFFF" />
+                    <SolidColorBrush x:Key="McKuroContentTintMaterial" Color="#8CF6F9FD" />
                     <SolidColorBrush x:Key="McKuroGlassFill" Color="#ACFFFFFF" />
                     <SolidColorBrush x:Key="McKuroGlassFillStrong" Color="#DAFFFFFF" />
                     <SolidColorBrush x:Key="McKuroGlassStroke" Color="#64627D" />

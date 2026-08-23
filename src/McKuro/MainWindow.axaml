@@ -55,16 +55,34 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid>
+    <Window.Styles>
+        <!-- 系统材质模式(Mica/Acrylic/毛玻璃,由 SystemMaterialService 在代码侧加 os-material 类):
+             纯色底座让位给 OS 原生背景,背景涂抹层改为弱化染色以露出系统材质。
+             若实际透明级别未启用(如远程桌面),代码侧会移除 os-material 类回退到现有纯色设计。 -->
+        <Style Selector="Grid.os-material #BackdropBase" x:SetterTargetType="Border">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Grid.os-material #BackdropTint" x:SetterTargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource McKuroBackdropTintMaterial}" />
+        </Style>
+        <Style Selector="Grid.os-material #NavRail" x:SetterTargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource McKuroNavFillMaterial}" />
+        </Style>
+        <Style Selector="Grid.os-material #ContentHost" x:SetterTargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource McKuroContentTintMaterial}" />
+        </Style>
+    </Window.Styles>
+
+    <Grid x:Name="RootShell">
         <!-- 全局背景：固定纯色底座 + 轻量氛围遮罩(壁纸与动态色板功能已移除)。 -->
         <Grid IsHitTestVisible="False">
-            <Border Background="{DynamicResource McKuroBackdropBase}" />
-            <Border Background="{DynamicResource McKuroBackdropTint}" />
+            <Border x:Name="BackdropBase" Background="{DynamicResource McKuroBackdropBase}" />
+            <Border x:Name="BackdropTint" Background="{DynamicResource McKuroBackdropTint}" />
         </Grid>
 
         <Grid ColumnDefinitions="76,*">
         <!-- 左侧 76px 图标导航 (参照 Java 项目:顶部圆形应用 Logo + 导航项图标) -->
-        <Border Grid.Column="0"
+        <Border x:Name="NavRail" Grid.Column="0"
                 Background="{DynamicResource McKuroNavFill}"
                 BorderBrush="{DynamicResource McKuroGlassStroke}"
                 BorderThickness="0,0,1,0">
@@ -132,7 +150,7 @@
         </Border>
 
         <!-- 内容区 -->
-        <Border Grid.Column="1" Background="{DynamicResource McKuroContentTint}">
+        <Border x:Name="ContentHost" Grid.Column="1" Background="{DynamicResource McKuroContentTint}">
             <ContentControl Content="{Binding CurrentPage}" />
         </Border>
         </Grid>

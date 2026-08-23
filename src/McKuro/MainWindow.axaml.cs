@@ -30,6 +30,33 @@ public partial class MainWindow : Window
         SizeChanged += OnWindowSizeChanged;
         PropertyChanged += OnWindowPropertyChanged;
         InitTrayIcon();
+        InitSystemMaterial();
+    }
+
+    /// <summary>
+    /// 跟随系统桌面材质:Win11 Mica / Win10 Acrylic / macOS 毛玻璃(26 液态玻璃由系统渲染)/
+    /// Linux 透明+染色。启用 OS 材质时隐藏纯色底座、弱化涂抹层(os-material 样式类);
+    /// 若平台实际未启用透明级别(如远程桌面/旧系统),回退到现有纯色设计。
+    /// </summary>
+    private void InitSystemMaterial()
+    {
+        TransparencyLevelHint = SystemMaterialService.TransparencyLevelHint;
+        if (!SystemMaterialService.IsOsBackdropActive)
+        {
+            return;
+        }
+        RootShell.Classes.Add("os-material");
+        Opened += (_, _) =>
+        {
+            // 诊断日志(仅一行,供排查材质是否被平台实际启用;GUI 进程无控制台时无输出)
+            System.Console.Error.WriteLine(
+                $"MCKURO-MATERIAL kind={SystemMaterialService.Kind} actual={ActualTransparencyLevel} " +
+                $"osMaterialClass={RootShell.Classes.Contains("os-material")}");
+            if (ActualTransparencyLevel == WindowTransparencyLevel.None)
+            {
+                RootShell.Classes.Remove("os-material");
+            }
+        };
     }
 
     /// <summary>
