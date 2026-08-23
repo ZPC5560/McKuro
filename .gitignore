@@ -37,3 +37,6 @@ publish.log
 
 # 构建产物(Inno Setup 安装包输出)
 artifacts/
+
+# 本地接口探测脚本(含实时库街区凭据,严禁入库)
+scripts/

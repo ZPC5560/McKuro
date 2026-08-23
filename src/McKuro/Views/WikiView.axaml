@@ -8,6 +8,81 @@
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="900"
              x:Class="McKuro.Views.WikiView"
              x:DataType="vm:WikiViewModel">
+    <UserControl.Styles>
+        <!-- 图片占位:呼吸闪烁 -->
+        <Style Selector="Border.placeholder-pulse">
+            <Style.Animations>
+                <Animation Duration="0:0:1.6" IterationCount="Infinite" PlaybackDirection="Alternate">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0.45" /></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </UserControl.Styles>
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="ImagePlaceholder" x:DataType="controls:AsyncImage">
+            <Border IsVisible="{Binding !IsLoaded}" Classes="placeholder-pulse">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                        <GradientStop Color="#1FFFFFFF" Offset="0" />
+                        <GradientStop Color="#0F000000" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Viewbox Width="40" MaxWidth="40" MaxHeight="40" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <ic:FluentIcon Icon="Image" IconVariant="Regular"
+                                   Foreground="{DynamicResource SemiColorText3}" />
+                </Viewbox>
+            </Border>
+        </DataTemplate>
+
+        <!-- 库街区官方资讯卡片:封面 + 标题 + 日期 -->
+        <DataTemplate x:Key="KurobbsCard" x:DataType="vm:OfficialEventCard">
+            <Button Margin="6,0,6,12" Padding="0" CornerRadius="10" ClipToBounds="True"
+                    Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
+                    CommandParameter="{Binding Url}">
+                <StackPanel>
+                    <Border Height="169" Background="{DynamicResource SemiColorBg3}" ClipToBounds="True">
+                        <Grid>
+                            <controls:AsyncImage x:Name="img" ImageUrl="{Binding CoverUrl}" Stretch="UniformToFill" />
+                            <ContentControl Content="{Binding #img}" ContentTemplate="{StaticResource ImagePlaceholder}" />
+                        </Grid>
+                    </Border>
+                    <StackPanel Margin="12,10" Spacing="4">
+                        <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" MaxLines="2" MinHeight="38"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding DateText}" FontSize="11"
+                                   Foreground="{DynamicResource SemiColorText3}" />
+                    </StackPanel>
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+
+        <!-- 启动器游戏公告卡片:封面 + 标题 + 日期(同款) -->
+        <DataTemplate x:Key="LauncherCard" x:DataType="vm:LauncherNoticeItem">
+            <Button Margin="6,0,6,12" Padding="0" CornerRadius="10" ClipToBounds="True"
+                    Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
+                    CommandParameter="{Binding Url}">
+                <StackPanel>
+                    <Border Height="169" Background="{DynamicResource SemiColorBg3}" ClipToBounds="True">
+                        <Grid>
+                            <controls:AsyncImage x:Name="img" ImageUrl="{Binding CoverUrl}" Stretch="UniformToFill" />
+                            <ContentControl Content="{Binding #img}" ContentTemplate="{StaticResource ImagePlaceholder}" />
+                        </Grid>
+                    </Border>
+                    <StackPanel Margin="12,10" Spacing="4">
+                        <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" MaxLines="2" MinHeight="38"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding TimeText}" FontSize="11"
+                                   Foreground="{DynamicResource SemiColorText3}" />
+                    </StackPanel>
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <ScrollViewer>
         <StackPanel Margin="20,16,20,16" Spacing="14">
             <!-- 标题 -->
@@ -24,259 +99,186 @@
                         IsEnabled="{Binding !IsBusy}" VerticalAlignment="Center" />
             </Grid>
 
-            <!-- 封面主图轮播(点击跳转) -->
-            <Border CornerRadius="14" ClipToBounds="True" Height="220">
-                <Carousel ItemsSource="{Binding Banners}">
-                    <Carousel.ItemTemplate>
-                        <DataTemplate x:DataType="vm:WikiBannerItem">
-                            <Button Padding="0" CornerRadius="0" HorizontalContentAlignment="Stretch"
-                                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+            <!-- 快捷入口按键(2x2) | 封面主图轮播 -->
+            <Grid ColumnDefinitions="1*,3*" ColumnSpacing="14">
+                <ItemsControl ItemsSource="{Binding WebLinks}" HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="2" Columns="2" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:WikiLinkItem">
+                            <Button Margin="4,0,4,8" Padding="10,7" CornerRadius="10"
+                                    Background="{DynamicResource SemiColorBg2}"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                    VerticalAlignment="Stretch" VerticalContentAlignment="Center"
                                     Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
-                                    CommandParameter="{Binding JumpUrl}">
-                                <Button.Styles>
-                                    <Style Selector="Button">
-                                        <Setter Property="Background" Value="Transparent" />
-                                    </Style>
-                                    <Style Selector="Button:pointerover /template/ ContentPresenter">
-                                        <Setter Property="Background" Value="Transparent" />
-                                    </Style>
-                                    <Style Selector="Button:pressed /template/ ContentPresenter">
-                                        <Setter Property="Background" Value="Transparent" />
-                                    </Style>
-                                </Button.Styles>
-                                <Panel>
-                                    <controls:AsyncImage ImageUrl="{Binding Url}" Stretch="UniformToFill" />
-                                    <!-- 底部渐隐遮罩 + 标题(有标题时显示) -->
-                                    <Border IsVisible="{Binding Title.Length}" VerticalAlignment="Bottom"
-                                            Background="#80000000" Padding="14,8">
-                                        <TextBlock Text="{Binding Title}" FontSize="14" Foreground="White"
+                                    CommandParameter="{Binding Url}">
+                                <Grid>
+                                    <StackPanel Spacing="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
                                                    TextTrimming="CharacterEllipsis" />
-                                    </Border>
-                                    <!-- 可跳转角标 -->
-                                    <Border IsVisible="{Binding HasJump}" HorizontalAlignment="Right"
-                                            VerticalAlignment="Top" Margin="10"
-                                            CornerRadius="8" Background="#66000000" Padding="8,3">
-                                        <TextBlock Text="查看详情 ↗" FontSize="11" Foreground="White" />
-                                    </Border>
-                                </Panel>
+                                        <TextBlock Text="{Binding Description}" FontSize="9.5"
+                                                   Foreground="{DynamicResource SemiColorText3}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <TextBlock Text="↗" FontSize="12" HorizontalAlignment="Right"
+                                               VerticalAlignment="Top" Foreground="{DynamicResource SemiColorText2}" />
+                                </Grid>
                             </Button>
                         </DataTemplate>
-                    </Carousel.ItemTemplate>
-                </Carousel>
-            </Border>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
-            <!-- 库街区官方资讯(资讯/公告/活动 三页签,封面卡片) -->
-            <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
-                <StackPanel Spacing="12">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <ic:FluentIcon Icon="News" IconVariant="Regular" IconSize="Size20" VerticalAlignment="Center" />
-                        <TextBlock Text="库街区官方资讯" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        <TextBlock Text="来自 kurobbs.com/mc/official · 点击卡片打开详情页" FontSize="11"
-                                   Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+                <!-- 封面主图轮播(点击跳转) -->
+                <Border Grid.Column="1" CornerRadius="14" ClipToBounds="True" Height="220">
+                    <Carousel ItemsSource="{Binding Banners}">
+                        <Carousel.ItemTemplate>
+                            <DataTemplate x:DataType="vm:WikiBannerItem">
+                                <Button Padding="0" CornerRadius="0" HorizontalContentAlignment="Stretch"
+                                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                        Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
+                                        CommandParameter="{Binding JumpUrl}">
+                                    <Button.Styles>
+                                        <Style Selector="Button">
+                                            <Setter Property="Background" Value="Transparent" />
+                                        </Style>
+                                        <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                            <Setter Property="Background" Value="Transparent" />
+                                        </Style>
+                                        <Style Selector="Button:pressed /template/ ContentPresenter">
+                                            <Setter Property="Background" Value="Transparent" />
+                                        </Style>
+                                    </Button.Styles>
+                                    <Grid>
+                                        <controls:AsyncImage x:Name="img" ImageUrl="{Binding Url}" Stretch="UniformToFill" />
+                                        <ContentControl Content="{Binding #img}" ContentTemplate="{StaticResource ImagePlaceholder}" />
+                                        <!-- 底部渐隐遮罩 + 标题(有标题时显示) -->
+                                        <Border IsVisible="{Binding Title.Length}" VerticalAlignment="Bottom"
+                                                Background="#80000000" Padding="14,8">
+                                            <TextBlock Text="{Binding Title}" FontSize="14" Foreground="White"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </Border>
+                                        <!-- 可跳转角标 -->
+                                        <Border IsVisible="{Binding HasJump}" HorizontalAlignment="Right"
+                                                VerticalAlignment="Top" Margin="10"
+                                                CornerRadius="8" Background="#66000000" Padding="8,3">
+                                            <TextBlock Text="查看详情 ↗" FontSize="11" Foreground="White" />
+                                        </Border>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </Carousel.ItemTemplate>
+                    </Carousel>
+                </Border>
+            </Grid>
+
+            <!-- 游戏公告(左) | 库街区官方资讯(右):4 个一行,卡片区内部滚动,默认两行 -->
+            <Grid ColumnDefinitions="1*,3*" ColumnSpacing="14">
+                <!-- 游戏公告(启动器同源:活动/公告/新闻 三页签,封面卡片,内部滚动) -->
+                <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ic:FluentIcon Icon="Megaphone" IconVariant="Regular" IconSize="Size20" VerticalAlignment="Center" />
+                            <TextBlock Text="游戏公告" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Text="官方启动器同源数据 · 点击跳转原文" FontSize="11"
+                                       Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TabControl SelectedIndex="{Binding SelectedLauncherTab}" Background="Transparent"
+                                    Padding="0" Margin="0">
+                            <TabItem Header="活动">
+                                <ScrollViewer Height="506" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding LauncherActivities}"
+                                                  ItemTemplate="{StaticResource LauncherCard}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <UniformGrid Columns="1" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </TabItem>
+                            <TabItem Header="公告">
+                                <ScrollViewer Height="506" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding LauncherNotices}"
+                                                  ItemTemplate="{StaticResource LauncherCard}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <UniformGrid Columns="1" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </TabItem>
+                            <TabItem Header="新闻">
+                                <ScrollViewer Height="506" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding LauncherNews}"
+                                                  ItemTemplate="{StaticResource LauncherCard}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <UniformGrid Columns="1" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </TabItem>
+                        </TabControl>
                     </StackPanel>
-                    <TabControl SelectedIndex="{Binding SelectedKurobbsTab}" Background="Transparent"
-                                Padding="0" Margin="0">
-                        <TabItem Header="资讯">
-                            <ItemsControl ItemsSource="{Binding KurobbsNews}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:OfficialEventCard">
-                                        <Button Margin="0,0,12,12" Padding="0" CornerRadius="10"
-                                                ClipToBounds="True" Width="300"
-                                                Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
-                                                CommandParameter="{Binding Url}">
-                                            <StackPanel>
-                                                <Border Height="169" Background="{DynamicResource SemiColorBg3}"
-                                                        ClipToBounds="True">
-                                                    <controls:AsyncImage ImageUrl="{Binding CoverUrl}" Stretch="UniformToFill" />
-                                                </Border>
-                                                <StackPanel Margin="12,10" Spacing="4">
-                                                    <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="SemiBold"
-                                                               TextWrapping="Wrap" MaxLines="2" MinHeight="38"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Text="{Binding DateText}" FontSize="11"
-                                                               Foreground="{DynamicResource SemiColorText3}" />
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </TabItem>
-                        <TabItem Header="公告">
-                            <ItemsControl ItemsSource="{Binding KurobbsAnnouncements}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:OfficialEventCard">
-                                        <Button Margin="0,0,12,12" Padding="0" CornerRadius="10"
-                                                ClipToBounds="True" Width="300"
-                                                Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
-                                                CommandParameter="{Binding Url}">
-                                            <StackPanel>
-                                                <Border Height="169" Background="{DynamicResource SemiColorBg3}"
-                                                        ClipToBounds="True">
-                                                    <controls:AsyncImage ImageUrl="{Binding CoverUrl}" Stretch="UniformToFill" />
-                                                </Border>
-                                                <StackPanel Margin="12,10" Spacing="4">
-                                                    <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="SemiBold"
-                                                               TextWrapping="Wrap" MaxLines="2" MinHeight="38"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Text="{Binding DateText}" FontSize="11"
-                                                               Foreground="{DynamicResource SemiColorText3}" />
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </TabItem>
-                        <TabItem Header="活动">
-                            <ItemsControl ItemsSource="{Binding KurobbsActivities}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:OfficialEventCard">
-                                        <Button Margin="0,0,12,12" Padding="0" CornerRadius="10"
-                                                ClipToBounds="True" Width="300"
-                                                Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
-                                                CommandParameter="{Binding Url}">
-                                            <StackPanel>
-                                                <Border Height="169" Background="{DynamicResource SemiColorBg3}"
-                                                        ClipToBounds="True">
-                                                    <controls:AsyncImage ImageUrl="{Binding CoverUrl}" Stretch="UniformToFill" />
-                                                </Border>
-                                                <StackPanel Margin="12,10" Spacing="4">
-                                                    <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="SemiBold"
-                                                               TextWrapping="Wrap" MaxLines="2" MinHeight="38"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Text="{Binding DateText}" FontSize="11"
-                                                               Foreground="{DynamicResource SemiColorText3}" />
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </TabItem>
-                    </TabControl>
-                </StackPanel>
-            </Border>
+                </Border>
 
-            <!-- 启动器公告组件(Haiyu 同源:活动/公告/新闻 三页签文本列表) -->
-            <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
-                <StackPanel Spacing="12">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <ic:FluentIcon Icon="Megaphone" IconVariant="Regular" IconSize="Size20" VerticalAlignment="Center" />
-                        <TextBlock Text="游戏公告" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        <TextBlock Text="官方启动器同源数据 · 点击跳转原文" FontSize="11"
-                                   Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+                <!-- 库街区官方资讯(资讯/公告/活动 三页签,封面卡片,内部滚动默认两行) -->
+                <Border Grid.Column="1" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ic:FluentIcon Icon="News" IconVariant="Regular" IconSize="Size20" VerticalAlignment="Center" />
+                            <TextBlock Text="库街区官方资讯" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Text="来自 kurobbs.com/mc/official · 点击卡片打开详情页" FontSize="11"
+                                       Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TabControl SelectedIndex="{Binding SelectedKurobbsTab}" Background="Transparent"
+                                    Padding="0" Margin="0">
+                            <TabItem Header="资讯">
+                                <ScrollViewer Height="506" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding KurobbsNews}"
+                                                  ItemTemplate="{StaticResource KurobbsCard}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <UniformGrid Columns="3" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </TabItem>
+                            <TabItem Header="公告">
+                                <ScrollViewer Height="506" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding KurobbsAnnouncements}"
+                                                  ItemTemplate="{StaticResource KurobbsCard}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <UniformGrid Columns="3" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </TabItem>
+                            <TabItem Header="活动">
+                                <ScrollViewer Height="506" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding KurobbsActivities}"
+                                                  ItemTemplate="{StaticResource KurobbsCard}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <UniformGrid Columns="3" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </TabItem>
+                        </TabControl>
                     </StackPanel>
-                    <TabControl SelectedIndex="{Binding SelectedLauncherTab}" Background="Transparent"
-                                Padding="0" Margin="0">
-                        <TabItem Header="活动">
-                            <ItemsControl ItemsSource="{Binding LauncherActivities}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:LauncherNoticeItem">
-                                        <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                                Padding="12,9" CornerRadius="8" Margin="0,0,0,6"
-                                                Background="{DynamicResource SemiColorBg3}"
-                                                Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
-                                                CommandParameter="{Binding Url}">
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                                                <TextBlock Text="{Binding Title}" FontSize="13"
-                                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{Binding TimeText}" FontSize="11"
-                                                           Foreground="{DynamicResource SemiColorText3}"
-                                                           VerticalAlignment="Center" />
-                                            </Grid>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </TabItem>
-                        <TabItem Header="公告">
-                            <ItemsControl ItemsSource="{Binding LauncherNotices}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:LauncherNoticeItem">
-                                        <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                                Padding="12,9" CornerRadius="8" Margin="0,0,0,6"
-                                                Background="{DynamicResource SemiColorBg3}"
-                                                Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
-                                                CommandParameter="{Binding Url}">
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                                                <TextBlock Text="{Binding Title}" FontSize="13"
-                                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{Binding TimeText}" FontSize="11"
-                                                           Foreground="{DynamicResource SemiColorText3}"
-                                                           VerticalAlignment="Center" />
-                                            </Grid>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </TabItem>
-                        <TabItem Header="新闻">
-                            <ItemsControl ItemsSource="{Binding LauncherNews}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:LauncherNoticeItem">
-                                        <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                                Padding="12,9" CornerRadius="8" Margin="0,0,0,6"
-                                                Background="{DynamicResource SemiColorBg3}"
-                                                Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
-                                                CommandParameter="{Binding Url}">
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                                                <TextBlock Text="{Binding Title}" FontSize="13"
-                                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{Binding TimeText}" FontSize="11"
-                                                           Foreground="{DynamicResource SemiColorText3}"
-                                                           VerticalAlignment="Center" />
-                                            </Grid>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </TabItem>
-                    </TabControl>
-                </StackPanel>
-            </Border>
-
-            <!-- 快捷入口 -->
-            <ItemsControl ItemsSource="{Binding WebLinks}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapPanel />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:WikiLinkItem">
-                        <Button Margin="0,0,8,6" Padding="12,7" CornerRadius="8"
-                                Background="{DynamicResource SemiColorBg2}"
-                                Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
-                                CommandParameter="{Binding Url}">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <StackPanel Spacing="1">
-                                    <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" />
-                                    <TextBlock Text="{Binding Description}" FontSize="10"
-                                               Foreground="{DynamicResource SemiColorText3}" />
-                                </StackPanel>
-                                <TextBlock Text="↗" FontSize="13" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource SemiColorText2}" />
-                            </StackPanel>
-                        </Button>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </Border>
+            </Grid>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

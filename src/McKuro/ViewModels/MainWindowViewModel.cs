@@ -67,7 +67,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             new NavigationItem { Title = "角色数据",    Icon = Icon.Person,             Key = NavigationKeys.Roles,    ViewModel = roles },
             new NavigationItem { Title = "签到",        Icon = Icon.CalendarCheckmark,  Key = NavigationKeys.Sign,     ViewModel = sign },
             new NavigationItem { Title = "活动",        Icon = Icon.CalendarStar,       Key = NavigationKeys.Activity, ViewModel = activity },
-            new NavigationItem { Title = "图鉴",        Icon = Icon.BookOpen,           Key = NavigationKeys.Wiki,     ViewModel = wiki },
+            new NavigationItem { Title = "资讯",        Icon = Icon.BookOpen,           Key = NavigationKeys.Wiki,     ViewModel = wiki },
             new NavigationItem { Title = "兑换码",      Icon = Icon.TicketDiagonal,     Key = NavigationKeys.RedeemCodes, ViewModel = redeem },
             new NavigationItem { Title = "游玩统计",    Icon = Icon.Timer,              Key = NavigationKeys.PlayTime,  ViewModel = playTime },
             new NavigationItem { Title = "深塔海墟",    Icon = Icon.BuildingSkyscraper, Key = NavigationKeys.Tower,     ViewModel = tower },

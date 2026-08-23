@@ -18,12 +18,15 @@ public sealed class WikiBannerItem
     public bool HasJump => !string.IsNullOrWhiteSpace(JumpUrl);
 }
 
-/// <summary>启动器公告组件(活动/公告/新闻)的文本条目,点击跳转网页。</summary>
+/// <summary>启动器公告组件(活动/公告/新闻)的条目(封面 + 标题 + 日期),点击跳转网页。</summary>
 public sealed class LauncherNoticeItem
 {
     public required string Title { get; init; }
     public required string TimeText { get; init; }
     public required string Url { get; init; }
+
+    /// <summary>封面主图(从公告富文本 content 中提取的首张图片;无图时为空,显示占位)。</summary>
+    public string CoverUrl { get; init; } = "";
 }
 
 /// <summary>库街区官方资讯卡片(封面 + 标题 + 日期),点击跳转帖子详情页。</summary>
@@ -255,6 +258,7 @@ public sealed partial class WikiViewModel : ViewModelBase
                     Title = title,
                     TimeText = item.Time ?? "",
                     Url = item.JumpUrl ?? "",
+                    CoverUrl = ExtractFirstImage(item.Content),
                 });
             }
         }
@@ -280,6 +284,22 @@ public sealed partial class WikiViewModel : ViewModelBase
         {
             return "";
         }
+    }
+
+    /// <summary>提取公告富文本 content 中的首张图片(http 绝对地址才采用,否则回退占位图)。</summary>
+    private static string ExtractFirstImage(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return "";
+        }
+        var m = System.Text.RegularExpressions.Regex.Match(
+            html, "<img[^>]+?src=[\"']([^\"']+)[\"']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var url = m.Success ? m.Groups[1].Value.Trim() : "";
+        return url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+               || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            ? url
+            : "";
     }
 
     /// <summary>剥离 HTML 标签、解码实体并压缩空白,超长截断(公告 content 可能是富文本)。</summary>
