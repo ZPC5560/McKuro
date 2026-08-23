@@ -62,7 +62,6 @@ public sealed class VideoBackgroundControl : Grid
     private GCHandle _bufferHandle;
     private IntPtr _bufferPtr;
     private volatile bool _renderThreadRunning;
-    private bool _uiFramePending;
 
     // 从 mpv video-params 读取的实际视频尺寸(首帧到达后解析一次);
     // 位图按视频原生分辨率创建,交给 Image 的 UniformToFill 做封面缩放 —— 与原 LibVLC 行为一致。
@@ -73,6 +72,12 @@ public sealed class VideoBackgroundControl : Grid
 
     // 播放启动看门狗:规定时间内没有首帧(网络卡死/解码失败无事件)则回退静态图。
     private CancellationTokenSource? _timeoutCts;
+
+    /// <summary>播放会话代号:每次 TryStartVideo 自增,异步回调只对当前会话生效(防旧会话串台)。</summary>
+    private long _imageGeneration;
+
+    /// <summary>已入队的 UI 重绘请求所属会话。</summary>
+    private long _postedGeneration;
 
     public static readonly StyledProperty<string> VideoUrlProperty =
         AvaloniaProperty.Register<VideoBackgroundControl, string>(nameof(VideoUrl));
@@ -154,6 +159,7 @@ public sealed class VideoBackgroundControl : Grid
     {
         DisposePlayer();
         _disposed = false;
+        _imageGeneration = Interlocked.Increment(ref _imageGeneration);
 
         if (!IsVideoEnabled || string.IsNullOrWhiteSpace(VideoUrl))
         {
@@ -263,7 +269,6 @@ public sealed class VideoBackgroundControl : Grid
 
             if (!File.Exists(localPath) || new FileInfo(localPath).Length == 0)
             {
-                Debug.WriteLine($"[libmpv] 下载视频到本地: {url}");
                 using var http = new HttpClient();
                 var bytes = await http.GetByteArrayAsync(url, token).ConfigureAwait(false);
                 if (bytes.Length == 0)
@@ -273,6 +278,10 @@ public sealed class VideoBackgroundControl : Grid
                     return;
                 }
                 await File.WriteAllBytesAsync(localPath, bytes, token).ConfigureAwait(false);
+            }
+            else
+            {
+                // 缓存命中,直接使用本地文件
             }
 
             if (token.IsCancellationRequested || _disposed)
@@ -409,7 +418,7 @@ public sealed class VideoBackgroundControl : Grid
         {
             _pendingVideoPath = null;
         }
-        _uiFramePending = false;
+        _postedGeneration = 0;
     }
 
     /// <summary>
@@ -460,6 +469,16 @@ public sealed class VideoBackgroundControl : Grid
                     continue;
                 }
 
+                // 渲染前处理 mpv render context 的挂起队列(标准调用序列;advanced_control=0 时为空操作)
+                try
+                {
+                    _mpv.RenderContextUpdate();
+                }
+                catch
+                {
+                    // 忽略
+                }
+
                 if (!_sizeResolved && !TryResolveVideoSize())
                 {
                     continue;
@@ -479,15 +498,15 @@ public sealed class VideoBackgroundControl : Grid
                     if (_bufferPtr != IntPtr.Zero)
                     {
                         _mpv.SoftwareRender(_videoWidth, _videoHeight, _bufferPtr, "bgra");
+
+                        // 帧拷贝在渲染线程完成(WriteableBitmap 是无视觉树的数据对象,Lock/拷贝线程安全)。
+                        // 画面推进不再依赖 UI 线程调度:启动页首屏布局/网络卡顿不再让视频"只播一秒就冻住"。
+                        CopyFrameToBitmap();
                     }
                 }
 
-                // 只排一个 UI 拷贝任务；任务执行时会复制当前最新帧。
-                if (!_uiFramePending)
-                {
-                    _uiFramePending = true;
-                    Dispatcher.UIThread.Post(FlushFrameToBitmap);
-                }
+                // UI 线程只剩一个轻量"重绘"动作;重绘内容始终是位图里的最新帧,迟执行也不会卡死画面。
+                PostInvalidateImage();
             }
             catch (Exception ex)
             {
@@ -521,65 +540,71 @@ public sealed class VideoBackgroundControl : Grid
         _bufferPtr = IntPtr.Zero;
     }
 
-    /// <summary>UI 线程:把渲染缓冲拷贝到 WriteableBitmap(纯拷贝,不参与解码)。</summary>
-    private void FlushFrameToBitmap()
+    /// <summary>渲染线程:把渲染缓冲拷进 WriteableBitmap(纯内存拷贝,不参与解码;不依赖 UI 线程)。</summary>
+    private void CopyFrameToBitmap()
     {
-        _uiFramePending = false;
-        if (_disposed || _mpv is null || _renderBuffer is null)
+        if (_bitmap is null
+            || _bitmap.PixelSize.Width != _videoWidth
+            || _bitmap.PixelSize.Height != _videoHeight)
         {
-            return;
+            _bitmap?.Dispose();
+            _bitmap = new WriteableBitmap(
+                new PixelSize(_videoWidth, _videoHeight),
+                new Vector(96, 96),
+                PixelFormats.Bgra8888,
+                AlphaFormat.Opaque);
         }
 
-        try
+        // 纯内存拷贝到锁定位图缓冲(stride = width*4,与 Bgra8888 对齐)
+        using (var fb = _bitmap.Lock())
         {
-            lock (_sync)
-            {
-                if (_mpv is null || _renderBuffer is null)
-                {
-                    return;
-                }
-
-                if (_bitmap is null
-                    || _bitmap.PixelSize.Width != _videoWidth
-                    || _bitmap.PixelSize.Height != _videoHeight)
-                {
-                    _bitmap?.Dispose();
-                    _bitmap = new WriteableBitmap(
-                        new PixelSize(_videoWidth, _videoHeight),
-                        new Vector(96, 96),
-                        PixelFormats.Bgra8888,
-                        AlphaFormat.Opaque);
-                    if (_videoImage is not null)
-                    {
-                        _videoImage.Source = _bitmap;
-                    }
-                }
-
-                // 纯内存拷贝到锁定位图缓冲(stride = width*4,与 Bgra8888 对齐)
-                using (var fb = _bitmap.Lock())
-                {
-                    Marshal.Copy(_renderBuffer, 0, fb.Address, _renderBuffer.Length);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"libmpv 拷贝帧失败: {ex.Message}");
-        }
-
-        // 首个真实帧到达后才显示视频(此前保持透明,让静态图可见)
-        if (!_firstFrameShown)
-        {
-            _firstFrameShown = true;
-            _timeoutCts?.Cancel();
-            if (_videoImage is not null)
-            {
-                _videoImage.Opacity = 1;
-            }
+            Marshal.Copy(_renderBuffer!, 0, fb.Address, _renderBuffer!.Length);
         }
     }
 
-    /// <summary>从 mpv video-params 读取实际视频分辨率(超过上限按比例缩小,防止 4K/8K 源撑爆软件缓冲)。</summary>
+    /// <summary>
+    /// 渲染线程:请求 UI 重绘当前位图(合成/合并同帧重复请求)。
+    /// 只发一个轻量动作;位图内容已由渲染线程写就,UI 稍晚执行也只是晚重绘,
+    /// 不会让画面永久冻结;会话代际不匹配的旧动作直接丢弃。
+    /// </summary>
+    private void PostInvalidateImage()
+    {
+        var gen = Interlocked.Read(ref _imageGeneration);
+        if (Interlocked.Read(ref _postedGeneration) == gen)
+        {
+            return;
+        }
+        Interlocked.Exchange(ref _postedGeneration, gen);
+        Dispatcher.UIThread.Post(() =>
+        {
+            Interlocked.Exchange(ref _postedGeneration, 0);
+            if (Interlocked.Read(ref _imageGeneration) != gen || _disposed)
+            {
+                return;
+            }
+
+            // 首个真实帧到达后才显示视频(此前保持透明,让静态图可见)
+            if (!_firstFrameShown)
+            {
+                _firstFrameShown = true;
+                _timeoutCts?.Cancel();
+                if (_videoImage is not null)
+                {
+                    _videoImage.Opacity = 1;
+                }
+            }
+
+            // 位图在渲染线程重建,Source 绑定只能在 UI 线程更新
+            if (_videoImage is not null && _videoImage.Source != _bitmap)
+            {
+                _videoImage.Source = _bitmap;
+            }
+
+            _videoImage?.InvalidateVisual();
+        });
+    }
+
+    /// <summary>从 mpv video-params 读取实际视频分辨率(按视频原始分辨率渲染,保持画质)。</summary>
     private bool TryResolveVideoSize()
     {
         if (_mpv is null)
@@ -596,9 +621,9 @@ public sealed class VideoBackgroundControl : Grid
                 return false;
             }
 
-            // 上限保护:软件渲染缓冲过大(>HD 宽)时按比例降采样,背景装饰无需原分辨率。
-            // 1280 宽即可满足满屏背景观感,显著降低软件解码+UI 拷贝负载(参考 Haiyu 用系统硬解)。
-            const int maxWidth = 1280;
+            // 使用视频原始分辨率(软件渲染缓冲按源分辨率分配,背景画质最佳)。
+            // 仅在极端尺寸(>4K 宽)时按比例限制,防止异常源撑爆内存。
+            const int maxWidth = 4096;
             if (w > maxWidth)
             {
                 h = (int)((long)h * maxWidth / w);
