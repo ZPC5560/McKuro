@@ -8,7 +8,7 @@
         mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="720"
         x:Class="McKuro.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Width="1180" Height="740"
+        Width="2012" Height="1182"
         MinWidth="900" MinHeight="509"
         CanResize="True"
         WindowStartupLocation="CenterScreen"
