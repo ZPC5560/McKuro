@@ -83,6 +83,12 @@ public sealed partial class WikiViewModel : ViewModelBase
     /// <summary>启动器公告·新闻。</summary>
     public ObservableCollection<LauncherNoticeItem> LauncherNews { get; } = [];
 
+    /// <summary>封面反查表(postId → 封面):来自 findEventList 全量,供启动器公告组件匹配封面。</summary>
+    private readonly Dictionary<string, string> _coverByPostId = new();
+
+    /// <summary>封面反查表(标题 → 封面,精确匹配兜底)。</summary>
+    private readonly Dictionary<string, string> _coverByTitle = new();
+
     /// <summary>网页快捷入口。</summary>
     public IReadOnlyList<WikiLinkItem> WebLinks { get; } =
     [
@@ -153,6 +159,8 @@ public sealed partial class WikiViewModel : ViewModelBase
             LauncherActivities.Clear();
             LauncherNotices.Clear();
             LauncherNews.Clear();
+            _coverByPostId.Clear();
+            _coverByTitle.Clear();
 
             int banners = await LoadBannersAsync();
             var (news, anns, acts) = await LoadKurobbsEventsAsync();
@@ -203,14 +211,15 @@ public sealed partial class WikiViewModel : ViewModelBase
     /// <summary>拉取库街区官方资讯三个分类。返回 (资讯数, 公告数, 活动数)。</summary>
     private async Task<(int News, int Anns, int Acts)> LoadKurobbsEventsAsync()
     {
-        var newsTask = AppServices.Wiki.GetOfficialEventsAsync(eventType: 2);
-        var annTask = AppServices.Wiki.GetOfficialEventsAsync(eventType: 3);
-        var actTask = AppServices.Wiki.GetOfficialEventsAsync(eventType: 1);
+        // 拉全量(50)用于启动器公告封面反查,卡片展示取前 12
+        var newsTask = AppServices.Wiki.GetOfficialEventsAsync(eventType: 2, pageSize: 50);
+        var annTask = AppServices.Wiki.GetOfficialEventsAsync(eventType: 3, pageSize: 50);
+        var actTask = AppServices.Wiki.GetOfficialEventsAsync(eventType: 1, pageSize: 50);
         await Task.WhenAll(newsTask, annTask, actTask).ConfigureAwait(false);
 
         int Fill(ObservableCollection<OfficialEventCard> target, List<OfficialEventItem>? items)
         {
-            foreach (var item in items ?? [])
+            foreach (var item in (items ?? []).Take(12))
             {
                 if (string.IsNullOrWhiteSpace(item.PostTitle))
                 {
@@ -227,10 +236,32 @@ public sealed partial class WikiViewModel : ViewModelBase
             return target.Count;
         }
 
+        void IndexCover(List<OfficialEventItem>? items)
+        {
+            foreach (var item in items ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(item.CoverUrl))
+                {
+                    continue;
+                }
+                if (!string.IsNullOrWhiteSpace(item.PostTitle))
+                {
+                    _coverByTitle[item.PostTitle.Trim()] = item.CoverUrl!;
+                }
+                if (!string.IsNullOrWhiteSpace(item.PostId))
+                {
+                    _coverByPostId[item.PostId] = item.CoverUrl!;
+                }
+            }
+        }
+
         // 回到 UI 线程再填充 ObservableCollection
         var news = await newsTask.ConfigureAwait(true);
         var anns = await annTask.ConfigureAwait(true);
         var acts = await actTask.ConfigureAwait(true);
+        IndexCover(news);
+        IndexCover(anns);
+        IndexCover(acts);
         return (Fill(KurobbsNews, news), Fill(KurobbsAnnouncements, anns), Fill(KurobbsActivities, acts));
     }
 
@@ -253,12 +284,19 @@ public sealed partial class WikiViewModel : ViewModelBase
                 {
                     continue;
                 }
+                // 封面:优先按 jumpUrl 的 postId 反查库街区官方资讯,其次按标题精确匹配,最后回退 content 首图
+                var postId = ExtractPostId(item.JumpUrl);
+                var cover = postId.Length > 0 && _coverByPostId.TryGetValue(postId, out var c1)
+                    ? c1
+                    : _coverByTitle.TryGetValue(title, out var c2)
+                        ? c2
+                        : ExtractFirstImage(item.Content);
                 target.Add(new LauncherNoticeItem
                 {
                     Title = title,
                     TimeText = item.Time ?? "",
                     Url = item.JumpUrl ?? "",
-                    CoverUrl = ExtractFirstImage(item.Content),
+                    CoverUrl = cover,
                 });
             }
         }
@@ -284,6 +322,17 @@ public sealed partial class WikiViewModel : ViewModelBase
         {
             return "";
         }
+    }
+
+    /// <summary>提取帖子 URL 中的 postId(https://www.kurobbs.com/mc/post/{id})。</summary>
+    private static string ExtractPostId(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return "";
+        }
+        var m = System.Text.RegularExpressions.Regex.Match(url, @"mc/post/(\d+)");
+        return m.Success ? m.Groups[1].Value : "";
     }
 
     /// <summary>提取公告富文本 content 中的首张图片(http 绝对地址才采用,否则回退占位图)。</summary>
