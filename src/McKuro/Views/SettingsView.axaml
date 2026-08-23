@@ -11,8 +11,8 @@
       设置页设计语言:
       - 顶部:标题 + "改动自动保存" 徽标
       - 平台 hero:强调色圆底徽标(Windows 窗格 Logo / macOS ⌘ / Linux 终端) + 平台名 + 能力说明 + 系统描述 + 状态徽章
-      - 主体:按 Win11 设置样式分组 —— 圆角分区容器内逐行排列(行间 hairline 分隔),
-        每行 = 图标块 + 标题/说明 + 右侧控件
+      - 主体:按 Win11 设置样式分组 —— 圆角分区容器内逐行排列(行间无隔离线),
+        每行 = 图标块 + 标题/说明 + 右侧控件;相似设置合并同卡,卡片间加大间距
     -->
     <UserControl.Styles>
         <!-- 分区容器 -->
@@ -21,14 +21,9 @@
             <Setter Property="Background" Value="{DynamicResource SemiColorBg2}" />
             <Setter Property="ClipToBounds" Value="True" />
         </Style>
-        <!-- 分区内每一行:底部 hairline(最后一行去除) -->
+        <!-- 分区内每一行(仅内边距,取消行间隔离线,靠卡片背景区分层级) -->
         <Style Selector="Border.row">
             <Setter Property="Padding" Value="16,12" />
-            <Setter Property="BorderBrush" Value="{DynamicResource McKuroGlassStroke}" />
-            <Setter Property="BorderThickness" Value="0,0,0,1" />
-        </Style>
-        <Style Selector="Border.row:last-child">
-            <Setter Property="BorderThickness" Value="0" />
         </Style>
         <!-- 行首图标块 -->
         <Style Selector="Border.tile">
@@ -120,11 +115,11 @@
                 </Grid>
             </Border>
 
-            <!-- ============ 游戏 ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,18,0,8">
+            <!-- ============ 游戏目录 ============ -->
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
                         VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="游戏" VerticalAlignment="Center" />
+                <TextBlock Classes="sectionTitle" Text="游戏目录" VerticalAlignment="Center" />
             </StackPanel>
             <Border Classes="section">
                 <StackPanel>
@@ -167,7 +162,17 @@
                                       SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}" />
                         </Grid>
                     </Border>
+                </StackPanel>
+            </Border>
 
+            <!-- ============ 游戏修复 ============ -->
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
+                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
+                        VerticalAlignment="Center" />
+                <TextBlock Classes="sectionTitle" Text="游戏修复" VerticalAlignment="Center" />
+            </StackPanel>
+            <Border Classes="section">
+                <StackPanel>
                     <!-- 游戏修复:跳过校验文件(对齐 Haiyu SkipVerifyFiles) -->
                     <Border Classes="row">
                         <StackPanel Spacing="10">
@@ -213,7 +218,17 @@
                                        IsVisible="{Binding !SkipVerifyFiles.Count}" />
                         </StackPanel>
                     </Border>
+                </StackPanel>
+            </Border>
 
+            <!-- ============ 游戏启动 ============ -->
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
+                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
+                        VerticalAlignment="Center" />
+                <TextBlock Classes="sectionTitle" Text="游戏启动" VerticalAlignment="Center" />
+            </StackPanel>
+            <Border Classes="section">
+                <StackPanel>
                     <!-- 游戏启动参数(对齐 Haiyu StartGameOption) -->
                     <Border Classes="row">
                         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
@@ -305,7 +320,7 @@
             </Border>
 
             <!-- ============ 下载 ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,18,0,8">
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
                         VerticalAlignment="Center" />
                 <TextBlock Classes="sectionTitle" Text="下载" VerticalAlignment="Center" />
@@ -348,7 +363,7 @@
             </Border>
 
             <!-- ============ 外观与界面 ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,18,0,8">
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
                         VerticalAlignment="Center" />
                 <TextBlock Classes="sectionTitle" Text="外观与界面" VerticalAlignment="Center" />
@@ -407,7 +422,7 @@
             </Border>
 
             <!-- ============ 签到与更新 ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,18,0,8">
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
                         VerticalAlignment="Center" />
                 <TextBlock Classes="sectionTitle" Text="签到与更新" VerticalAlignment="Center" />
@@ -473,7 +488,7 @@
             </Border>
 
             <!-- ============ 关于 ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,18,0,8">
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
                         VerticalAlignment="Center" />
                 <TextBlock Classes="sectionTitle" Text="关于" VerticalAlignment="Center" />
