@@ -115,6 +115,14 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>无更新时显示「启动游戏」按钮;有更新时由「安装更新」按钮占据同一位置。</summary>
     public bool ShowLaunchButton => NativeGameManagementSupported && IsInstalled && !HasUpdate;
 
+    /// <summary>启动按钮文案:启动游戏 / 启动中 / 游戏中(由 GameProcessMonitor 状态驱动,对齐 Haiyu 启动按钮状态)。</summary>
+    [ObservableProperty]
+    private string _launchButtonText = "启动游戏";
+
+    /// <summary>启动按钮可用:游戏中/启动中禁用,防止重复启动。</summary>
+    [ObservableProperty]
+    private bool _launchButtonEnabled = true;
+
     /// <summary>操作区是否显示修复按钮。</summary>
     public bool ShowRepairButton => NativeGameManagementSupported;
 
@@ -125,6 +133,14 @@ public sealed partial class LauncherViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowInstallUpdate));
         OnPropertyChanged(nameof(ShowLaunchButton));
         OnPropertyChanged(nameof(ShowInstallButton));
+        UpdateLaunchButtonEnabled();
+    }
+
+    /// <summary>启动按钮可用性:已安装且无正在进行的游戏会话。</summary>
+    private void UpdateLaunchButtonEnabled()
+    {
+        LaunchButtonEnabled = IsInstalled
+            && AppServices.GameMonitor.State == GameSessionState.Idle;
     }
 
     partial void OnHasUpdateChanged(bool value)
@@ -244,6 +260,11 @@ public sealed partial class LauncherViewModel : ViewModelBase
         VideoEnabled = AppServices.Settings.Current.BackgroundVideoEnabled;
         _lastLoadedVideoSetting = AppServices.Settings.Current.BackgroundVideoEnabled;
         _ = LoadLauncherInfoAsync();
+
+        // 游戏进程监控:状态驱动启动按钮文案(启动中→游戏中→启动游戏)与游戏结束动作
+        AppServices.GameMonitor.StateChanged += OnGameSessionStateChanged;
+        AppServices.GameMonitor.SessionEnded += OnGameSessionEnded;
+        UpdateLaunchButtonEnabled();
 
         // 订阅游戏目录变更(设置页选择目录后) → 自动识别加载
         WeakReferenceMessenger.Default.Register<LauncherViewModel, GameDirectoryChangedMessage>(this, static (r, m) =>
@@ -751,17 +772,103 @@ public sealed partial class LauncherViewModel : ViewModelBase
             return;
         }
         var ok = AppServices.GameUpdater.LaunchGame(out var error);
-        StatusText = ok ? "游戏已启动" : $"启动失败: {error}";
-
-        // 对齐 Haiyu 的"启动后可关闭主界面":可选最小化主窗口
-        if (ok && AppServices.Settings.Current.MinimizeOnLaunch)
+        if (!ok)
         {
-            var lifetime = Avalonia.Application.Current?.ApplicationLifetime
-                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
-            if (lifetime?.MainWindow is { WindowState: not Avalonia.Controls.WindowState.Minimized } w)
+            StatusText = $"启动失败: {error}";
+            return;
+        }
+
+        // 进程监控:点击启动 → 「启动中」;进程持续存活满 20 秒 → 「游戏中」;进程消失回「启动游戏」
+        AppServices.GameMonitor.BeginLaunch(BuildGameProcessNames());
+        StatusText = "游戏已启动,等待游戏进程稳定(20 秒)…";
+
+        // 对齐 Haiyu 的"启动后可关闭主界面":可选最小化主窗口(任务栏 / 系统托盘)
+        if (AppServices.Settings.Current.MinimizeOnLaunch
+            && Avalonia.Application.Current?.ApplicationLifetime
+                is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime
+                { MainWindow: MainWindow w })
+        {
+            if (AppServices.Settings.Current.MinimizeLocationOnLaunch == "Tray")
+            {
+                w.HideToTray();
+            }
+            else if (w.WindowState != Avalonia.Controls.WindowState.Minimized)
             {
                 w.WindowState = Avalonia.Controls.WindowState.Minimized;
             }
+        }
+    }
+
+    /// <summary>进程监控候选名:实际启动 exe + 根 exe + 客户端 exe(兼容启动器 exe 转交客户端进程的情况)。</summary>
+    private static IReadOnlyList<string> BuildGameProcessNames()
+    {
+        var names = new List<string>();
+        var launched = AppServices.GameUpdater.ResolveLaunchExePath();
+        if (!string.IsNullOrWhiteSpace(launched))
+        {
+            names.Add(Path.GetFileNameWithoutExtension(launched));
+        }
+        names.Add(Path.GetFileNameWithoutExtension(GamePathResolver.ExeRootName));
+        names.Add(Path.GetFileNameWithoutExtension(GamePathResolver.ExeClientRelative));
+        return names;
+    }
+
+    /// <summary>游戏会话状态变化:驱动启动按钮文案与状态文本。</summary>
+    private void OnGameSessionStateChanged(GameSessionState state)
+    {
+        LaunchButtonText = state switch
+        {
+            GameSessionState.Launching => "启动中",
+            GameSessionState.InGame => "游戏中",
+            _ => "启动游戏",
+        };
+        UpdateLaunchButtonEnabled();
+        StatusText = state switch
+        {
+            GameSessionState.Launching => "游戏启动中…",
+            GameSessionState.InGame => $"游戏运行中({GameProcessMonitor.DefaultInGameWindow.TotalSeconds:0} 秒稳定窗口)…",
+            _ => StatusText, // 空闲文案由 SessionEnded 设置
+        };
+    }
+
+    /// <summary>
+    /// 游戏会话结束:提前退出视为启动失败(恢复主窗口便于查看原因);
+    /// 正常结束按「游戏结束后软件窗口状态」设置处理(保持原样/显示主窗口/自动退出)。
+    /// </summary>
+    private void OnGameSessionEnded(GameSessionEndReason reason)
+    {
+        if (reason == GameSessionEndReason.Failed)
+        {
+            StatusText = "游戏启动失败:进程未持续运行(请检查启动文件/游戏目录)";
+            ShowMainWindowFromHidden();
+            return;
+        }
+
+        StatusText = "游戏已退出";
+        switch (AppServices.Settings.Current.AfterGameExitAction)
+        {
+            case "ExitApp":
+                AppServices.Settings.Save();
+                if (Avalonia.Application.Current?.ApplicationLifetime
+                    is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+                {
+                    desktop.Shutdown();
+                }
+                break;
+            case "ShowMainWindow":
+                ShowMainWindowFromHidden();
+                break;
+        }
+    }
+
+    /// <summary>从托盘/最小化状态恢复主窗口(窗口未隐藏/未最小化时为无副作用操作)。</summary>
+    private static void ShowMainWindowFromHidden()
+    {
+        if (Avalonia.Application.Current?.ApplicationLifetime
+            is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime
+            { MainWindow: MainWindow w })
+        {
+            w.RestoreFromHidden();
         }
     }
 

@@ -81,6 +81,12 @@ public static class AppServices
     public static PlatformCapabilities Capabilities => Services.GetRequiredService<PlatformCapabilities>();
 
     /// <summary>
+    /// 游戏进程监控(启动中 → 20 秒稳定 → 游戏中 → 退出回空闲)。
+    /// 全局单例:LauncherViewModel 订阅状态驱动启动按钮文案,游戏结束动作(保持原样/显示主窗口/退出)也由该事件驱动。
+    /// </summary>
+    public static GameProcessMonitor GameMonitor { get; } = new();
+
+    /// <summary>
     /// 稳定的设备 ID(持久化到 device-id.txt,跨启动不变)。
     /// 库街区 did 头需用稳定设备码,否则每次启动新 did + 持久 token 会触发极验风控。
     /// </summary>

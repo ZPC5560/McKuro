@@ -888,6 +888,18 @@ public sealed class GameUpdater : IGameUpdater
         return File.Exists(clientExe) ? clientExe : null;
     }
 
+    /// <inheritdoc/>
+    public string? ResolveLaunchExePath()
+    {
+        var root = _paths.GameRootDir;
+        if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+        {
+            return null;
+        }
+        var exeName = _settings?.Current.StartGameExeName;
+        return ResolveLaunchExe(root, string.IsNullOrWhiteSpace(exeName) ? null : exeName);
+    }
+
     /// <summary>本地 DLSS/XeSS 组件版本(对齐 Haiyu GetLocalDLSSAsync / GetLocalXeSSGenerateAsync)。</summary>
     public IReadOnlyList<LocalFileVersion> GetLocalGraphicsComponentVersions()
     {

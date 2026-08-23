@@ -261,10 +261,44 @@
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                 <TextBlock Classes="rowTitle" Text="启动游戏后最小化主窗口" />
                                 <TextBlock Classes="rowDesc"
-                                           Text="启动游戏后自动最小化到任务栏(对齐 Haiyu 启动后可关闭主界面)" />
+                                           Text="启动游戏后自动最小化主窗口(下方可选任务栏/系统托盘;对齐 Haiyu 启动后可关闭主界面)" />
                             </StackPanel>
                             <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
                                           IsChecked="{Binding MinimizeOnLaunch, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+                    <!-- 最小化位置(仅启用「启动后最小化」时显示) -->
+                    <Border Classes="row" IsVisible="{Binding ShowMinimizeLocationSetting}">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="DesktopArrowDown" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="最小化位置" />
+                                <TextBlock Classes="rowDesc"
+                                           Text="任务栏或系统托盘(macOS 对应 Dock / 菜单栏状态项)" />
+                            </StackPanel>
+                            <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                                      ItemsSource="{Binding MinimizeLocations}"
+                                      SelectedIndex="{Binding MinimizeLocationIndex, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+                    <!-- 游戏结束后窗口状态 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="Stop" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="游戏结束后窗口状态" />
+                                <TextBlock Classes="rowDesc"
+                                           Text="游戏进程退出后主窗口的处置:保持原样 / 显示主窗口 / 自动退出软件" />
+                            </StackPanel>
+                            <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                                      ItemsSource="{Binding AfterGameExitActions}"
+                                      SelectedIndex="{Binding AfterGameExitIndex, Mode=TwoWay}" />
                         </Grid>
                     </Border>
                 </StackPanel>

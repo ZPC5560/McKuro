@@ -31,6 +31,12 @@ public interface IGameUpdater
 
     bool LaunchGame(out string? error);
 
+    /// <summary>
+    /// 解析实际用于启动的游戏 exe 完整路径(用户指定 → 根 exe → 客户端 exe,找不到返回 null)。
+    /// 供进程监控按进程名探测游戏运行状态。
+    /// </summary>
+    string? ResolveLaunchExePath();
+
     /// <summary>本地 DLSS/XeSS 图形组件版本(对齐 Haiyu GetLocalDLSSAsync)。</summary>
     IReadOnlyList<LocalFileVersion> GetLocalGraphicsComponentVersions();
 }

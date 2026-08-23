@@ -100,6 +100,46 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         AppServices.Settings.Current.MinimizeOnLaunch = value;
         AppServices.Settings.Save();
+        OnPropertyChanged(nameof(ShowMinimizeLocationSetting));
+    }
+
+    // ---------- 启动后最小化位置 / 游戏结束后窗口状态 ----------
+
+    /// <summary>启动后最小化位置选项(任务栏 / 系统托盘;macOS 对应 Dock / 菜单栏)。</summary>
+    public ObservableCollection<string> MinimizeLocations { get; } = ["任务栏", "系统托盘"];
+
+    /// <summary>游戏结束后软件窗口状态选项(保持原样 / 显示主窗口 / 自动退出软件)。</summary>
+    public ObservableCollection<string> AfterGameExitActions { get; } =
+        ["保持原样", "显示主窗口", "自动退出软件"];
+
+    /// <summary>最小化位置行是否显示:仅启用「启动游戏后最小化主窗口」时显示。</summary>
+    public bool ShowMinimizeLocationSetting => MinimizeOnLaunch;
+
+    /// <summary>最小化位置:0=任务栏,1=系统托盘。</summary>
+    [ObservableProperty]
+    private int _minimizeLocationIndex;
+
+    /// <summary>最小化位置即时保存(无需点保存)。</summary>
+    partial void OnMinimizeLocationIndexChanged(int value)
+    {
+        AppServices.Settings.Current.MinimizeLocationOnLaunch = value == 1 ? "Tray" : "Taskbar";
+        AppServices.Settings.Save();
+    }
+
+    /// <summary>游戏结束后窗口状态:0=保持原样,1=显示主窗口,2=自动退出软件。</summary>
+    [ObservableProperty]
+    private int _afterGameExitIndex;
+
+    /// <summary>游戏结束后窗口状态即时保存(无需点保存)。</summary>
+    partial void OnAfterGameExitIndexChanged(int value)
+    {
+        AppServices.Settings.Current.AfterGameExitAction = value switch
+        {
+            1 => "ShowMainWindow",
+            2 => "ExitApp",
+            _ => "KeepCurrent",
+        };
+        AppServices.Settings.Save();
     }
 
     [ObservableProperty]
@@ -285,6 +325,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _startGameArguments = s.StartGameArguments;
         _startGameExeName = s.StartGameExeName;
         _minimizeOnLaunch = s.MinimizeOnLaunch;
+        _minimizeLocationIndex = s.MinimizeLocationOnLaunch == "Tray" ? 1 : 0;
+        _afterGameExitIndex = s.AfterGameExitAction switch
+        {
+            "ShowMainWindow" => 1,
+            "ExitApp" => 2,
+            _ => 0,
+        };
         _backgroundVideoEnabled = s.BackgroundVideoEnabled;
         _autoSkipVerifyDelete = s.AutoSkipVerifyDelete;
         foreach (var p in s.SkipVerifyFiles)
@@ -419,6 +466,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.StartGameArguments = StartGameArguments;
         s.StartGameExeName = StartGameExeName;
         s.MinimizeOnLaunch = MinimizeOnLaunch;
+        s.MinimizeLocationOnLaunch = MinimizeLocationIndex == 1 ? "Tray" : "Taskbar";
+        s.AfterGameExitAction = AfterGameExitIndex switch
+        {
+            1 => "ShowMainWindow",
+            2 => "ExitApp",
+            _ => "KeepCurrent",
+        };
         s.BackgroundVideoEnabled = BackgroundVideoEnabled;
         s.SkipVerifyFiles = [.. SkipVerifyFiles];
         s.AutoSkipVerifyDelete = AutoSkipVerifyDelete;

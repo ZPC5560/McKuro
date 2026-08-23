@@ -45,6 +45,17 @@ public sealed class AppSettings
     /// <summary>启动游戏后最小化主窗口。</summary>
     public bool MinimizeOnLaunch { get; set; }
 
+    /// <summary>
+    /// 启动后最小化位置:Taskbar(任务栏,默认)/ Tray(系统托盘;macOS 对应 Dock/菜单栏)。
+    /// 仅在 <see cref="MinimizeOnLaunch"/> 启用时生效。
+    /// </summary>
+    public string MinimizeLocationOnLaunch { get; set; } = "Taskbar";
+
+    /// <summary>
+    /// 游戏结束后软件窗口状态:KeepCurrent(保持原样,默认)/ ShowMainWindow(显示主窗口)/ ExitApp(自动退出软件)。
+    /// </summary>
+    public string AfterGameExitAction { get; set; } = "KeepCurrent";
+
     /// <summary>主题(light/dark)。</summary>
     public string Theme { get; set; } = "Default";
 

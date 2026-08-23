@@ -267,7 +267,7 @@
                             BorderThickness="0"
                             CornerRadius="18"
                             Command="{Binding LaunchCommand}"
-                            IsEnabled="{Binding IsInstalled}"
+                            IsEnabled="{Binding LaunchButtonEnabled}"
                             IsVisible="{Binding ShowLaunchButton}"
                             HorizontalAlignment="Stretch">
                         <Button.Styles>
@@ -281,7 +281,7 @@
                             </Style>
                         </Button.Styles>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" VerticalAlignment="Center">
-                            <TextBlock Text="启动游戏" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding LaunchButtonText}" FontSize="15" FontWeight="SemiBold" />
                             <TextBlock Text="{Binding ServerVersionText}" FontSize="11" />
                         </StackPanel>
                     </Button>

@@ -2,6 +2,8 @@ using System;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.Platform;
 
 namespace McKuro;
 
@@ -17,12 +19,108 @@ public partial class MainWindow : Window
 
     private IntPtr _hwnd;
 
+    /// <summary>系统托盘图标(隐藏到托盘时显示;从托盘恢复后隐藏)。</summary>
+    private TrayIcon? _trayIcon;
+
     public MainWindow()
     {
         InitializeComponent();
         // 窗口可缩放但保持固定比例(1150:650)
         SizeChanged += OnWindowSizeChanged;
         PropertyChanged += OnWindowPropertyChanged;
+        InitTrayIcon();
+    }
+
+    /// <summary>
+    /// 系统托盘:仅在窗口隐藏到托盘时显示图标,右键菜单「显示软件 / 退出」。
+    /// Avalonia 12 中 TrayIcon 挂在 Application(TrayIcon.SetIcons)上;macOS 上
+    /// TrayIcon 自动渲染为菜单栏状态项,任务栏/Dock 最小化走 WindowState.Minimized。
+    /// </summary>
+    private void InitTrayIcon()
+    {
+        var icon = new TrayIcon
+        {
+            ToolTipText = "McKuro · 鸣潮启动器",
+            IsVisible = false,
+        };
+        try
+        {
+            // 流由 WindowIcon 持有(平台实现构造时拷贝,HICON/NSImage),应用生命周期内保留
+            icon.Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://McKuro/Assets/app.ico")));
+        }
+        catch (Exception)
+        {
+            // 图标资源异常时托盘仍可用(无图标)
+        }
+
+        var menu = new NativeMenu();
+        var showItem = new NativeMenuItem { Header = "显示软件" };
+        showItem.Click += OnTrayShowClicked;
+        var exitItem = new NativeMenuItem { Header = "退出" };
+        exitItem.Click += OnTrayExitClicked;
+        menu.Items.Add(showItem);
+        menu.Items.Add(exitItem);
+        icon.Menu = menu;
+        icon.Clicked += (_, _) => RestoreFromHidden();
+        _trayIcon = icon;
+
+        if (Application.Current is { } app)
+        {
+            var icons = TrayIcon.GetIcons(app) ?? [];
+            icons.Add(icon);
+            TrayIcon.SetIcons(app, icons);
+        }
+    }
+
+    /// <summary>
+    /// 最小化到系统托盘:显示托盘图标并隐藏主窗口
+    /// (macOS 对应:窗口隐藏,托盘图标渲染为菜单栏状态项)。
+    /// </summary>
+    public void HideToTray()
+    {
+        SetTrayIconVisible(true);
+        Hide();
+    }
+
+    /// <summary>
+    /// 从托盘/最小化恢复主窗口(显示软件)。
+    /// </summary>
+    public void RestoreFromHidden()
+    {
+        if (!IsVisible)
+        {
+            Show();
+        }
+        if (WindowState != WindowState.Normal)
+        {
+            WindowState = WindowState.Normal;
+        }
+        Activate();
+        SetTrayIconVisible(false);
+    }
+
+    /// <summary>托盘图标单击:显示主窗口。</summary>
+    private void OnTrayIconClicked(object? sender, EventArgs e) => RestoreFromHidden();
+
+    /// <summary>托盘菜单「显示软件」。</summary>
+    private void OnTrayShowClicked(object? sender, EventArgs e) => RestoreFromHidden();
+
+    /// <summary>托盘菜单「退出」。</summary>
+    private void OnTrayExitClicked(object? sender, EventArgs e)
+    {
+        if (Application.Current?.ApplicationLifetime
+            is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            desktop.Shutdown();
+        }
+    }
+
+    private void SetTrayIconVisible(bool visible)
+    {
+        if (_trayIcon is { } icon)
+        {
+            icon.IsVisible = visible;
+        }
     }
 
     private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)

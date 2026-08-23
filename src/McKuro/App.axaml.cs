@@ -51,12 +51,16 @@ public partial class App : Application
                 DataContext = vm,
             };
 
-            // 自测模式:自动导航到抽卡分析页,4 秒后退出(验证 AOT 下图表页渲染)
+            // 自测模式:自动导航(默认抽卡分析页,验证 AOT 下图表页渲染),4 秒后退出
+            // McKuro_SMOKE_NAV 可指到其他页(如 Settings/Launcher)用于页面级验证
             if (Environment.GetEnvironmentVariable("McKuro_SMOKE") == "1")
             {
                 Dispatcher.UIThread.Post(() =>
                 {
-                    vm.NavigateTo(vm.NavigationItems[2]);
+                    var target = Environment.GetEnvironmentVariable("McKuro_SMOKE_NAV") is { Length: > 0 } navKey
+                        ? vm.NavigationItems.FirstOrDefault(n => n.Key == navKey) ?? vm.NavigationItems[2]
+                        : vm.NavigationItems[2];
+                    vm.NavigateTo(target);
                     DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(4));
                 });
             }
