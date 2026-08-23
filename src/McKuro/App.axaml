@@ -29,6 +29,7 @@
                     <SolidColorBrush x:Key="McKuroGlassFill" Color="#94141D32" />
                     <SolidColorBrush x:Key="McKuroGlassFillStrong" Color="#C611192D" />
                     <SolidColorBrush x:Key="McKuroGlassStroke" Color="#70CDE0FA" />
+                    <SolidColorBrush x:Key="McKuroNavDivider" Color="#26FFFFFF" />
                     <SolidColorBrush x:Key="McKuroTextOnWallpaper" Color="#F5F8FF" />
                     <SolidColorBrush x:Key="McKuroTextMuted" Color="#BFCCE2" />
                     <SolidColorBrush x:Key="McKuroAccentGlow" Color="#565A8DEE" />
@@ -58,6 +59,7 @@
                     <SolidColorBrush x:Key="McKuroGlassFill" Color="#ACFFFFFF" />
                     <SolidColorBrush x:Key="McKuroGlassFillStrong" Color="#DAFFFFFF" />
                     <SolidColorBrush x:Key="McKuroGlassStroke" Color="#64627D" />
+                    <SolidColorBrush x:Key="McKuroNavDivider" Color="#29000000" />
                     <SolidColorBrush x:Key="McKuroTextOnWallpaper" Color="#19202E" />
                     <SolidColorBrush x:Key="McKuroTextMuted" Color="#4E5B70" />
                     <SolidColorBrush x:Key="McKuroAccentGlow" Color="#345A8DEE" />

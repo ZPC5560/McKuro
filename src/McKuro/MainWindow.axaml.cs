@@ -56,7 +56,37 @@ public partial class MainWindow : Window
             {
                 RootShell.Classes.Remove("os-material");
             }
+            // 导航栏布局诊断:等待一次布局提交后打印真实尺寸(配对 MCKURO-NAV 行解析)
+            LayoutUpdated += OnNavLayoutDiagnostics;
         };
+    }
+
+    private bool _navDiagLogged;
+    private string? _navDiagPrev;
+
+    private void OnNavLayoutDiagnostics(object? sender, EventArgs e)
+    {
+        if (_navDiagLogged || NavList.Bounds.Height <= 0 || ClientSize.Height <= 0)
+        {
+            return;
+        }
+        var panel = NavList.ItemsPanelRoot as Panel;
+        var c0 = NavList.ContainerFromIndex(0) as Control;
+        var c1 = NavList.ContainerFromIndex(1) as Control;
+        var c11 = NavList.ContainerFromIndex(11) as Control;
+        var sample =
+            $"MCKURO-NAV count={NavList.ItemCount} panel={panel?.GetType().Name} panelDesiredH={(panel?.DesiredSize.Height ?? 0):F0} " +
+            $"listH={NavList.Bounds.Height:F0} c0={(c0?.Bounds.Height ?? 0):F0} c1={(c1?.Bounds.Height ?? 0):F0} " +
+            $"c11Y={(c11?.Bounds.Y ?? 0):F0} c11H={(c11?.Bounds.Height ?? 0):F0} " +
+            $"clientH={ClientSize.Height:F0} winH={Height:F0} scale={RenderScaling:F2}";
+        if (sample == _navDiagPrev)
+        {
+            // 连续两次布局采样一致 → 布局已稳定,输出一次即止
+            _navDiagLogged = true;
+            LayoutUpdated -= OnNavLayoutDiagnostics;
+            System.Console.Error.WriteLine(sample);
+        }
+        _navDiagPrev = sample;
     }
 
     /// <summary>
