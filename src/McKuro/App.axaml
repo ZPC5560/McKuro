@@ -36,6 +36,8 @@
                     <SolidColorBrush x:Key="SemiColorBg1" Color="#94141D32" />
                     <SolidColorBrush x:Key="SemiColorBg2" Color="#94141D32" />
                     <SolidColorBrush x:Key="SemiColorBg3" Color="#C611192D" />
+                    <!-- 不透明卡片(SemiColorBg2 去掉透明度,用于启动页操作卡) -->
+                    <SolidColorBrush x:Key="SemiColorCardSolid" Color="#141D32" />
                     <SolidColorBrush x:Key="SemiColorText1" Color="#E6FFFFFF" />
                     <SolidColorBrush x:Key="SemiColorText2" Color="#99FFFFFF" />
                     <SolidColorBrush x:Key="SemiColorText3" Color="#66FFFFFF" />
@@ -60,6 +62,8 @@
                     <SolidColorBrush x:Key="SemiColorBg1" Color="#ACFFFFFF" />
                     <SolidColorBrush x:Key="SemiColorBg2" Color="#ACFFFFFF" />
                     <SolidColorBrush x:Key="SemiColorBg3" Color="#DAFFFFFF" />
+                    <!-- 不透明卡片(SemiColorBg2 去掉透明度,用于启动页操作卡) -->
+                    <SolidColorBrush x:Key="SemiColorCardSolid" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="SemiColorText1" Color="#E6000000" />
                     <SolidColorBrush x:Key="SemiColorText2" Color="#99000000" />
                     <SolidColorBrush x:Key="SemiColorText3" Color="#66000000" />
