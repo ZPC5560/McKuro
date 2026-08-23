@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform;
+using Avalonia.Threading;
 using McKuro.Services;
 
 namespace McKuro;
@@ -18,6 +19,13 @@ public partial class MainWindow : Window
     /// <summary>状态切换(最大化/最小化/还原)后的首次尺寸事件交由平台处理,不强制比例。</summary>
     private bool _deferAspectAdjust;
 
+    /// <summary>尺寸纠正防抖:拖拽中只重置计时器,停止 120ms 后纠正一次,
+    /// 避免每个 WM_SIZE 都反向 SetWindowPos/系统争抢窗口矩形导致边框持续闪烁。</summary>
+    private readonly DispatcherTimer _aspectTimer = new() { Interval = TimeSpan.FromMilliseconds(120) };
+
+    /// <summary>标记正在执行纠正(其引发的 SizeChanged 不得再次调度纠正)。</summary>
+    private bool _applyingAspect;
+
     private IntPtr _hwnd;
 
     /// <summary>系统托盘图标(隐藏到托盘时显示;从托盘恢复后隐藏)。</summary>
@@ -28,6 +36,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         // 窗口可缩放但保持固定比例(1180:650)
         SizeChanged += OnWindowSizeChanged;
+        _aspectTimer.Tick += (_, _) => ApplyAspectCorrection();
         PropertyChanged += OnWindowPropertyChanged;
         InitTrayIcon();
         InitSystemMaterial();
@@ -208,7 +217,7 @@ public partial class MainWindow : Window
 
     private void OnWindowSizeChanged(object? sender, SizeChangedEventArgs e)
     {
-        if (_resizing)
+        if (_resizing || _applyingAspect)
         {
             return;
         }
@@ -235,6 +244,34 @@ public partial class MainWindow : Window
             {
                 return;
             }
+            // 拖动缩放时每个 WM_SIZE 都触发本回调;若立即按比例反向改
+            // Width/Height,会与系统争抢窗口矩形(SetWindowPos 与拖动帧交替),
+            // 表现为缩放过程中边框持续闪烁。改防抖:仅重置计时器,拖动停止
+            // 120ms 后按当前尺寸纠正一次,期间窗口跟随拖动,松开后归位比例。
+            _aspectTimer.Stop();
+            _aspectTimer.Start();
+        }
+        finally
+        {
+            _resizing = false;
+        }
+    }
+
+    /// <summary>防抖到期:按当前客户端尺寸纠正到固定比例(仅普通状态)。</summary>
+    private void ApplyAspectCorrection()
+    {
+        if (IsSystemMaximized() || WindowState != WindowState.Normal)
+        {
+            return;
+        }
+        _applyingAspect = true;
+        try
+        {
+            var size = ClientSize;
+            if (size.Width <= 0 || size.Height <= 0)
+            {
+                return;
+            }
             // 保持固定比例:按当前宽高比调整到最近的合法尺寸
             var w = size.Width;
             var h = w / AspectRatio;
@@ -252,7 +289,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            _resizing = false;
+            _applyingAspect = false;
         }
     }
 

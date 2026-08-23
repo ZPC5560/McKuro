@@ -121,7 +121,7 @@
                             <Viewbox Stretch="Uniform" StretchDirection="DownOnly"
                                      HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                      Margin="0,2">
-                                <StackPanel Width="68" Spacing="5" VerticalAlignment="Center">
+                                <StackPanel Width="68" Spacing="3" VerticalAlignment="Center">
                                     <Viewbox Width="24" Height="24" Stretch="Uniform"
                                              HorizontalAlignment="Center">
                                         <ic:FluentIcon Icon="{Binding Icon}"
@@ -130,7 +130,7 @@
                                                        HorizontalAlignment="Center" />
                                     </Viewbox>
                                     <TextBlock Text="{Binding Title}"
-                                               FontSize="12"
+                                               FontSize="11"
                                                HorizontalAlignment="Center"
                                                Foreground="{DynamicResource SemiColorText2}" />
                                 </StackPanel>
@@ -139,7 +139,7 @@
                     </ListBox.ItemTemplate>
                     <ListBox.Styles>
                         <Style Selector="ListBoxItem">
-                            <Setter Property="Padding" Value="0,6" />
+                            <Setter Property="Padding" Value="0,3" />
                             <Setter Property="Margin" Value="4,2" />
                             <Setter Property="HorizontalContentAlignment" Value="Center" />
                             <Setter Property="Background" Value="Transparent" />
