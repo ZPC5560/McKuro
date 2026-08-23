@@ -36,8 +36,9 @@
             <!-- 上半区:启动器主内容(标题/版本/操作) -->
             <Grid Grid.Row="0" ColumnDefinitions="*,3*" VerticalAlignment="Top">
                 <StackPanel Spacing="10">
-                    <!-- 启动器标题 毛玻璃卡片 -->
-                    <Border CornerRadius="12" ClipToBounds="True" VerticalAlignment="Top">
+                    <!-- 启动器标题卡 毛玻璃:版本一致(无更新)时整体不显示,与版本信息一致 -->
+                    <Border CornerRadius="12" ClipToBounds="True" VerticalAlignment="Top"
+                            IsVisible="{Binding HasUpdate}">
                         <Grid>
                             <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.75" CornerRadius="12" />
                             <Border Background="{DynamicResource SemiColorBg2}"
@@ -58,9 +59,8 @@
                                                        Foreground="{DynamicResource SemiColorText2}" />
                                         </StackPanel>
                                     </Grid>
-                                    <!-- 版本信息(本地/服务端):无更新(版本一致)时隐藏,操作卡自然上移;有更新时恢复显示 -->
-                                    <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="12"
-                                          IsVisible="{Binding HasUpdate}">
+                                    <!-- 版本信息(本地/服务端):整卡由 HasUpdate 控制显隐 -->
+                                    <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="12">
                                         <StackPanel Spacing="1">
                                             <TextBlock Text="服务端版本" FontSize="9"
                                                        Foreground="{DynamicResource SemiColorText2}" />
@@ -78,9 +78,8 @@
                             </Border>
                         </Grid>
                     </Border>
-                    <!-- 操作 卡片(不透明背景,仅按钮保留半透明玻璃) -->
-                    <Border CornerRadius="10" Padding="10" Margin="0,6,0,0"
-                            Background="{DynamicResource SemiColorCardSolid}">
+                    <!-- 操作 卡片(背景全透明,仅按钮本身为半透明玻璃) -->
+                    <Border CornerRadius="10" Padding="10" Margin="0,6,0,0">
                         <StackPanel Spacing="6">
                             <TextBlock Text="操作" FontSize="11" FontWeight="SemiBold"
                                        Foreground="{DynamicResource McKuroTextOnWallpaper}" />
