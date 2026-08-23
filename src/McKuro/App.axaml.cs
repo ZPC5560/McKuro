@@ -61,7 +61,11 @@ public partial class App : Application
                         ? vm.NavigationItems.FirstOrDefault(n => n.Key == navKey) ?? vm.NavigationItems[2]
                         : vm.NavigationItems[2];
                     vm.NavigateTo(target);
-                    DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(4));
+                    // 冒烟时长默认 4s,可用 McKuro_SMOKE_SECONDS 覆盖(验证视频背景等慢加载 UI 用)
+                    var seconds = double.TryParse(Environment.GetEnvironmentVariable("McKuro_SMOKE_SECONDS"), out var s) && s > 0
+                        ? s
+                        : 4;
+                    DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(seconds));
                 });
             }
         }

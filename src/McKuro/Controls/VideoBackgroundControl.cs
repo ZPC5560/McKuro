@@ -123,6 +123,33 @@ public sealed class VideoBackgroundControl : Grid
         IsVideoEnabledProperty.Changed.AddClassHandler<VideoBackgroundControl>((o, e) => o.OnUrlChanged());
 
         DetachedFromVisualTree += OnDetached;
+        LayoutUpdated += OnLayoutDiag;
+    }
+
+    /// <summary>背景覆盖诊断:视频位图的实际 Bounds 是否与父控件一致(不一致=裁剪错误)。
+    /// 布局变化去重打印,最多 5 条(init 状态与 resize 后状态各一条可对比)。</summary>
+    private int _diagCnt;
+    private string? _diagPrev;
+
+    private void OnLayoutDiag(object? sender, EventArgs e)
+    {
+        if (_diagCnt >= 5)
+        {
+            LayoutUpdated -= OnLayoutDiag;
+            return;
+        }
+        var child = _videoImage ?? (_fallback as Avalonia.Controls.Control);
+        var sample = child is null
+            ? "MCKURO-VIDEO noChild"
+            : $"MCKURO-VIDEO self=[{Bounds.Width:F0}x{Bounds.Height:F0}] " +
+              $"child=[{child.Bounds.Width:F0}x{child.Bounds.Height:F0}] f={(child.Bounds == Bounds)} " +
+              $"src={(_videoImage is not null && _videoImage.Source is not null)} vis={child.IsEffectivelyVisible}";
+        if (sample != _diagPrev)
+        {
+            _diagPrev = sample;
+            _diagCnt++;
+            System.Console.Error.WriteLine(sample);
+        }
     }
 
     private void OnUrlChanged()

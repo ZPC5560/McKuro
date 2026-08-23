@@ -10,8 +10,8 @@ namespace McKuro;
 
 public partial class MainWindow : Window
 {
-    /// <summary>固定宽高比(1150:650),缩放时保持比例。</summary>
-    private const double AspectRatio = 1150.0 / 650.0;
+    /// <summary>固定宽高比(1180:650),缩放时保持比例。</summary>
+    private const double AspectRatio = 1180.0 / 650.0;
 
     private bool _resizing;
 
@@ -26,7 +26,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        // 窗口可缩放但保持固定比例(1150:650)
+        // 窗口可缩放但保持固定比例(1180:650)
         SizeChanged += OnWindowSizeChanged;
         PropertyChanged += OnWindowPropertyChanged;
         InitTrayIcon();
