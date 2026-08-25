@@ -142,93 +142,176 @@
                 </Grid>
             </TabItem>
 
-            <!-- 终焉矩阵 -->
+            <!-- 终焉矩阵(主从布局,对齐 WutheringWavesTool NewTowerView:左栏模式/历史,右栏详情) -->
             <TabItem Header="终焉矩阵">
-                <Grid RowDefinitions="Auto,*" Margin="8,8,8,8">
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8"
-                                IsVisible="{Binding !NewTowerUnlocked}">
-                        <TextBlock Text="终焉矩阵尚未解锁" FontSize="16" FontWeight="Bold"
-                                   HorizontalAlignment="Center" />
-                        <TextBlock Text="请先在游戏中挑战终焉矩阵,再回到本页刷新"
-                                   FontSize="12" Foreground="{DynamicResource SemiColorText2}"
-                                   HorizontalAlignment="Center" />
-                    </StackPanel>
-                    <ScrollViewer Grid.Row="0" IsVisible="{Binding NewTowerUnlocked}">
-                        <ItemsControl ItemsSource="{Binding TowerModes}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel ItemSpacing="14" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:TowerModeItem">
-                                    <Border CornerRadius="12" Background="{DynamicResource SemiColorBg3}"
-                                            Padding="16,14" Width="620">
-                                        <StackPanel Spacing="10">
-                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
-                                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding ModeName}" FontSize="17" FontWeight="Bold" />
-                                                    <TextBlock FontSize="12.5" Foreground="{DynamicResource SemiColorText2}">
-                                                        <Run Text="进度 " /><Run Text="{Binding ProgressText}" FontWeight="Bold" />
-                                                    </TextBlock>
-                                                </StackPanel>
-                                                <StackPanel Grid.Column="1" Spacing="0" VerticalAlignment="Center"
-                                                            HorizontalAlignment="Right">
-                                                    <TextBlock Text="{Binding ScoreText}" FontSize="26" FontWeight="Bold"
-                                                               HorizontalAlignment="Right" />
-                                                    <TextBlock Text="分数" FontSize="11"
-                                                               Foreground="{DynamicResource SemiColorText3}"
-                                                               HorizontalAlignment="Right" />
-                                                </StackPanel>
-                                                <Border Grid.Column="2" CornerRadius="8" Padding="12,6"
-                                                        Background="{Binding RankColor}" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding RankText}" FontSize="15" FontWeight="Bold"
+                <Grid Margin="8,8,8,8" ColumnDefinitions="264,*" ColumnSpacing="14">
+                    <!-- 左栏:挑战模式 + 往期历史 -->
+                    <Border Grid.Column="0" CornerRadius="12" Background="{DynamicResource SemiColorBg3}" Padding="14">
+                        <Grid RowDefinitions="Auto,Auto,*,Auto,Auto,*,Auto">
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="2,0,0,8">
+                                <ic:FluentIcon Icon="BookOpen" IconVariant="Regular" IconSize="Size16"
+                                               VerticalAlignment="Center" />
+                                <TextBlock Text="挑战模式" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <ListBox Grid.Row="1" ItemsSource="{Binding TowerModes}"
+                                     SelectedItem="{Binding SelectedTowerMode}"
+                                     Background="Transparent" BorderThickness="0" Padding="0"
+                                     MaxHeight="220">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:TowerModeItem">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="2,4">
+                                            <TextBlock Text="{Binding ModeName}" FontSize="14" FontWeight="Bold"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                                                        VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding ScoreText}" FontSize="14" FontWeight="Bold"
+                                                           Foreground="{DynamicResource SemiColorPrimary}" />
+                                                <Border CornerRadius="6" Padding="7,2" Background="{Binding RankColor}">
+                                                    <TextBlock Text="{Binding RankText}" FontSize="11.5" FontWeight="Bold"
                                                                Foreground="Black" />
                                                 </Border>
-                                            </Grid>
-                                            <!-- 配队角色 -->
-                                            <ItemsControl ItemsSource="{Binding Roles}">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate>
-                                                        <StackPanel Orientation="Horizontal" Spacing="8" />
-                                                    </ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate x:DataType="tower:NewTowerRole">
-                                                        <Border Width="44" Height="44" CornerRadius="9"
-                                                                ClipToBounds="True"
-                                                                Background="{DynamicResource SemiColorBg2}"
-                                                                BorderBrush="{DynamicResource SemiColorText3}"
-                                                                BorderThickness="1">
-                                                            <controls:AsyncImage ImageUrl="{Binding IconUrl}"
-                                                                                 Width="44" Height="44"
-                                                                                 Stretch="UniformToFill" />
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                            <!-- 增益 -->
-                                            <ItemsControl ItemsSource="{Binding Buffs}"
-                                                          ItemTemplate="{StaticResource BuffTemplate}">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate>
-                                                        <WrapPanel ItemSpacing="8" />
-                                                    </ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                            </ItemsControl>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <Border Grid.Row="2" Height="1" Background="{DynamicResource SemiColorBg2}" Margin="0,12,0,0" />
+                            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" Margin="2,12,0,8">
+                                <ic:FluentIcon Icon="History" IconVariant="Regular" IconSize="Size16"
+                                               VerticalAlignment="Center" />
+                                <TextBlock Text="往期历史" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <ListBox Grid.Row="4" ItemsSource="{Binding NewTowerHistory}"
+                                     SelectedItem="{Binding SelectedNewTowerHistory}"
+                                     Background="Transparent" BorderThickness="0" Padding="0">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:NewTowerHistoryItem">
+                                        <TextBlock Text="{Binding Label}" FontSize="13.5" Margin="2,6"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource SemiColorText2}" />
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <TextBlock Grid.Row="5" Text="暂无往期记录" FontSize="12.5" Margin="2,10,0,0"
+                                       Foreground="{DynamicResource SemiColorText3}"
+                                       IsVisible="{Binding !HasNewTowerHistory}" />
+                            <TextBlock Grid.Row="6" Text="" />
+                        </Grid>
+                    </Border>
+
+                    <!-- 右栏:模式详情 / 历史详情 / 等待开放空态 -->
+                    <Grid Grid.Column="1">
+                        <!-- 空态:本期无记录且未查看历史 -->
+                        <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Spacing="8" Margin="0,48,0,0"
+                                    IsVisible="{Binding NewTowerShowWaiting}">
+                            <TextBlock Text="当前版本等待开放中" FontSize="18" FontWeight="Bold"
+                                       HorizontalAlignment="Center" />
+                            <TextBlock Text="本期暂无终焉矩阵挑战记录,开放后回到本页刷新即可同步"
+                                       FontSize="12.5" Foreground="{DynamicResource SemiColorText2}"
+                                       HorizontalAlignment="Center" />
+                        </StackPanel>
+
+                        <!-- 详情卡(当前模式或历史) -->
+                        <ScrollViewer IsVisible="{Binding NewTowerDetail, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <StackPanel Spacing="10" Margin="0,0,8,0">
+                                <TextBlock Text="{Binding NewTowerDetailTitle}" FontSize="15" FontWeight="Bold"
+                                           Foreground="{DynamicResource SemiColorText2}"
+                                           IsVisible="{Binding NewTowerDetailTitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                <Border CornerRadius="12" Background="{DynamicResource SemiColorBg3}"
+                                        Padding="18,16">
+                                    <StackPanel Spacing="10">
+                                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding NewTowerDetail.ModeName}" FontSize="17" FontWeight="Bold" />
+                                                <TextBlock FontSize="12.5" Foreground="{DynamicResource SemiColorText2}">
+                                                    <Run Text="进度 " /><Run Text="{Binding NewTowerDetail.ProgressText}" FontWeight="Bold" />
+                                                </TextBlock>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Spacing="0" VerticalAlignment="Center"
+                                                        HorizontalAlignment="Right">
+                                                <TextBlock Text="{Binding NewTowerDetail.ScoreText}" FontSize="26" FontWeight="Bold"
+                                                           HorizontalAlignment="Right" />
+                                                <TextBlock Text="分数" FontSize="11"
+                                                           Foreground="{DynamicResource SemiColorText3}"
+                                                           HorizontalAlignment="Right" />
+                                            </StackPanel>
+                                            <Border Grid.Column="2" CornerRadius="8" Padding="12,6"
+                                                    Background="{Binding NewTowerDetail.RankColor}" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding NewTowerDetail.RankText}" FontSize="15" FontWeight="Bold"
+                                                           Foreground="Black" />
+                                            </Border>
+                                        </Grid>
+                                        <!-- 配队角色 -->
+                                        <ItemsControl ItemsSource="{Binding NewTowerDetail.Roles}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" Spacing="8" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="tower:NewTowerRole">
+                                                    <Border Width="44" Height="44" CornerRadius="9"
+                                                            ClipToBounds="True"
+                                                            Background="{DynamicResource SemiColorBg2}"
+                                                            BorderBrush="{DynamicResource SemiColorText3}"
+                                                            BorderThickness="1">
+                                                        <controls:AsyncImage ImageUrl="{Binding IconUrl}"
+                                                                             Width="44" Height="44"
+                                                                             Stretch="UniformToFill" />
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <!-- 增益 -->
+                                        <ItemsControl ItemsSource="{Binding NewTowerDetail.Buffs}"
+                                                      ItemTemplate="{StaticResource BuffTemplate}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel ItemSpacing="8" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
                 </Grid>
             </TabItem>
 
             <!-- 海墟 -->
             <TabItem Header="海墟">
-                <Grid Margin="8,8,8,8">
-                    <ScrollViewer>
+                <Grid RowDefinitions="Auto,*" Margin="8,8,8,8">
+                    <!-- 本期总积分 / 刷新倒计时(对齐 WutheringWavesTool score01/score02/endTime) -->
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12" Margin="0,0,0,10"
+                                IsVisible="{Binding SlashHasRecord}">
+                        <TextBlock Text="本期总积分" FontSize="12" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                        <TextBlock Text="{Binding SlashTotalScoreText}" FontSize="17" FontWeight="Bold"
+                                   VerticalAlignment="Center" IsVisible="{Binding SlashTotalScoreText,
+                                   Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        <Border CornerRadius="7" Padding="10,4" Background="{DynamicResource SemiColorBg2}"
+                                VerticalAlignment="Center" IsVisible="{Binding SlashHasTurbidScore}">
+                            <TextBlock Text="{Binding SlashTurbidScoreText}" FontSize="13" FontWeight="Bold"
+                                       Foreground="#f8c94c" />
+                        </Border>
+                        <TextBlock Text="{Binding SlashSeasonEndText}" FontSize="12" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SemiColorText2}" IsVisible="{Binding SlashSeasonEndText,
+                                   Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </StackPanel>
+
+                    <!-- 本期无挑战记录提示 -->
+                    <StackPanel Grid.Row="0" Grid.RowSpan="2" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Spacing="8" IsVisible="{Binding !SlashHasRecord}">
+                        <TextBlock Text="本期暂无海墟挑战记录" FontSize="16" FontWeight="Bold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="请先在游戏中挑战再生海域,再回到本页刷新"
+                                   FontSize="12" Foreground="{DynamicResource SemiColorText2}"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <ScrollViewer Grid.Row="1" IsVisible="{Binding SlashHasRecord}">
                         <ItemsControl ItemsSource="{Binding SlashChallenges}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>

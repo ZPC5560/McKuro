@@ -94,13 +94,22 @@ public class RoleCacheFallbackTests : IDisposable
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(false, false)]
-    public void IsCompleteSync_Rejects_GeeTest_And_Incomplete(bool geeTest, bool rolesComplete)
+    public void MergeMissingSections_Fills_Cached_Detail_Into_Fresh_List_Item(bool cachedComplete, bool freshComplete)
     {
-        var roles = rolesComplete
-            ? new List<RoleDetail> { CompleteRole("秧秧") }
-            : new List<RoleDetail> { BaseOnlyRole("秧秧") };
-        Assert.Equal(!geeTest && rolesComplete, RoleDataService.IsCompleteSync(geeTest, roles));
-        Assert.False(RoleDataService.IsCompleteSync(geeTest, []));
+        var fresh = new RoleDetail { Role = new RoleInfo { RoleId = 1304, RoleName = "秧秧", Level = 90 } };
+        if (freshComplete)
+        {
+            fresh.WeaponData = new WeaponData { Weapon = new WeaponInfo { WeaponName = "晨光" } };
+            fresh.Skills = [new SkillInfo { SkillLevel = 1, Skill = new SkillBase { SkillName = "剑心" } }];
+            fresh.Attributes = [new RoleAttribute { AttributeName = "攻击", AttributeValue = "123" }];
+        }
+        var cached = cachedComplete ? CompleteRole("秧秧") : BaseOnlyRole("秧秧");
+
+        RoleDataService.MergeMissingSections(fresh, cached);
+
+        // 列表项保留基础信息(等级以列表为准),缺失的详情区块由缓存补全
+        Assert.Equal(90, fresh.Role!.Level);
+        Assert.Equal(cachedComplete || freshComplete, fresh.IsDetailComplete);
     }
 
     [Fact]

@@ -21,6 +21,8 @@ public sealed class IconDiskCacheService
     public const string CategoryEcho = "echo";
     public const string CategoryChain = "chain";
     public const string CategoryAttr = "attr";
+    /// <summary>玩家头像(首页资料卡;参照 Java WutheringWavesTool:接口取 URL → 落盘 assets/header,UI 只加载本地文件)。</summary>
+    public const string CategoryAvatar = "avatar";
 
     private readonly string _cacheDir;
     private readonly string _indexPath;
@@ -98,6 +100,33 @@ public sealed class IconDiskCacheService
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// 缓存任意 http 图片 URL 到磁盘(对齐 Java WutheringWavesTool <c>LocalResourcesManager.imageBuffer</c>:
+    /// 已有本地文件直接复用,未命中才下载落盘)。用于玩家头像等按稳定 key(如 userId)缓存的图片。
+    /// 非 http 地址/已缓存/下载失败均静默跳过;统一存为 .png(库街区头像素材均为 png)。
+    /// </summary>
+    public async Task CacheUrlAsync(string category, string name, string url, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !IsHttpUrl(url) || GetCachedIconPath(category, name) is not null)
+        {
+            return;
+        }
+        try
+        {
+            var bytes = await _download(url, ct).ConfigureAwait(false);
+            if (bytes is null || bytes.Length == 0)
+            {
+                return;
+            }
+            Store(category, name, bytes);
+            SaveIndex();
+        }
+        catch (Exception)
+        {
+            // 单图下载失败静默,不影响主流程
+        }
     }
 
     /// <summary>解析图标:有缓存→本地路径;否则→fallbackUrl(如保留 mcguide 的 B 域名 URL)。</summary>

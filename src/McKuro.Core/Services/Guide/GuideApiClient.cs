@@ -9,8 +9,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace McKuro.Core.Services.Guide;
 
-/// <summary>mcguide 攻略站 API 异常。</summary>
-public sealed class GuideApiException(string message) : Exception(message);
+/// <summary>mcguide 攻略站 API 异常。<see cref="Code"/> 为服务端业务码(如 1001=登录过期)。</summary>
+public sealed class GuideApiException(string message, int? code = null) : Exception(message)
+{
+    /// <summary>服务端业务码(信封 code 字段);未知时为 null。</summary>
+    public int? Code { get; } = code;
+
+    /// <summary>mcguide 会话过期业务码(信封 {"message":"登录过期","code":1001})。</summary>
+    public const int SessionExpiredCode = 1001;
+}
 
 /// <summary>
 /// mcguide 攻略站(guide-server.aki-game.com) API 客户端。
@@ -48,7 +55,12 @@ public sealed class GuideApiClient
         var payload = new GuideLoginSdkRequest { CUid = cUid, CName = cName, AccessToken = accessToken };
         var json = await PostJsonAsync("/user/login/sdk", JsonSerializer.Serialize(payload, GuideJsonContext.Default.GuideLoginSdkRequest), ct).ConfigureAwait(false);
         var env = JsonSerializer.Deserialize(json, GuideJsonContext.Default.GuideEnvelopeGuideLoginToken);
-        return env?.Data?.Token;
+        if (env is not { Code: 200 })
+        {
+            // 登录链路失败必须显式暴露(原先静默返回 null,上层只提示"未返回 x-token",无法定位真实原因)
+            throw new GuideApiException($"guide sdk 登录失败: {env?.Message ?? $"code={env?.Code}"}", env?.Code);
+        }
+        return env.Data?.Token;
     }
 
     /// <summary>玩家列表。</summary>
@@ -60,7 +72,7 @@ public sealed class GuideApiClient
         {
             return env.Data;
         }
-        throw new GuideApiException($"获取玩家列表失败: {env?.Message ?? $"code={env?.Code}"}");
+        throw new GuideApiException($"获取玩家列表失败: {env?.Message ?? $"code={env?.Code}"}", env?.Code);
     }
 
     /// <summary>选择玩家。</summary>
@@ -77,7 +89,7 @@ public sealed class GuideApiClient
         {
             return env.Data;
         }
-        throw new GuideApiException($"选择玩家失败: {env?.Message ?? $"code={env?.Code}"}");
+        throw new GuideApiException($"选择玩家失败: {env?.Message ?? $"code={env?.Code}"}", env?.Code);
     }
 
     /// <summary>角色攻略列表(按点赞数降序;取第一篇为默认攻略)。</summary>
@@ -92,7 +104,7 @@ public sealed class GuideApiClient
                 .OrderByDescending(i => i.LikeCount)
                 .ToList();
         }
-        throw new GuideApiException($"获取攻略列表失败: {env?.Message ?? $"code={env?.Code}"}");
+        throw new GuideApiException($"获取攻略列表失败: {env?.Message ?? $"code={env?.Code}"}", env?.Code);
     }
 
     /// <summary>攻略详情(养成达成度)。</summary>
@@ -105,7 +117,7 @@ public sealed class GuideApiClient
         {
             return env.Data;
         }
-        throw new GuideApiException($"获取攻略详情失败: {env?.Message ?? $"code={env?.Code}"}");
+        throw new GuideApiException($"获取攻略详情失败: {env?.Message ?? $"code={env?.Code}"}", env?.Code);
     }
 
     /// <summary>反序列化信封;失败时抛出带原始 JSON 的异常(便于定位椿/珂莱塔这类特殊响应)。</summary>

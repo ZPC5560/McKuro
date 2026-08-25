@@ -25,6 +25,13 @@ public sealed class UpdateCheckResult
     /// <summary>是否有预下载。</summary>
     public bool HasPredownload { get; init; }
 
+    /// <summary>
+    /// 服务端预告的预载版本本地已完整下载(predownload.json 标记完成)。
+    /// 此时 UI 应禁用预下载按钮并显示「预下载完成」,
+    /// 对齐上游 1.6 修复:避免下载完成后按钮仍可点、重复触发无响应的预下载。
+    /// </summary>
+    public bool PredownloadCompleted { get; init; }
+
     public string? PredownloadVersion { get; init; }
 
     /// <summary>需要下载的文件。</summary>
@@ -182,13 +189,22 @@ public sealed class GameUpdater : IGameUpdater
             hasUpdate = IsVersionOlder(installedVersion, manifest.Version);
         }
 
+        // 预载版本已完整下载到本地时,不再把 HasPredownload 置真(按钮显示「预下载完成」并禁用)。
+        // 服务器存在 predownload 节点本身不代表还需要下载。
+        var predownloadCompleted = false;
+        if (load.HasPredownload && !string.IsNullOrWhiteSpace(load.Predownload?.Version))
+        {
+            predownloadCompleted = FindStaging(load.Predownload.Version, serverType, installedVersion) is not null;
+        }
+
         return new UpdateCheckResult
         {
             Success = true,
             ServerVersion = manifest.Version,
             InstalledVersion = installedVersion,
             HasUpdate = hasUpdate,
-            HasPredownload = load.HasPredownload,
+            HasPredownload = load.HasPredownload && !predownloadCompleted,
+            PredownloadCompleted = predownloadCompleted,
             PredownloadVersion = load.PredownloadVersion,
             FilesToDownload = [],
             NotInstalled = notInstalled,

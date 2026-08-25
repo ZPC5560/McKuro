@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.Messaging.Messages;
+using McKuro.Services;
 
 namespace McKuro.ViewModels;
 
@@ -50,6 +51,18 @@ public sealed class GameDirectoryChangedMessage : ValueChangedMessage<string>
 public sealed class RolesRefreshRequestedMessage : ValueChangedMessage<string>
 {
     public RolesRefreshRequestedMessage(string userId) : base(userId)
+    {
+    }
+}
+
+/// <summary>
+/// 游戏会话结束消息(启动页 GameProcessMonitor 检测到游戏进程退出后发送,
+/// 主页接收后重拉今日数据、游玩统计页接收后重新解析日志刷新今日游玩时间)。
+/// 携带结束原因(仅 Finished 时各页面才需要刷新,Failed 表示游戏从未真正运行)。
+/// </summary>
+public sealed class GameSessionEndedMessage : ValueChangedMessage<GameSessionEndReason>
+{
+    public GameSessionEndedMessage(GameSessionEndReason reason) : base(reason)
     {
     }
 }

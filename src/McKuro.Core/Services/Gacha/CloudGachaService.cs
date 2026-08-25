@@ -76,10 +76,11 @@ public sealed class CloudGachaService
             var msg = login?.Msg;
             return (false, $"登录失败: {msg}");
         }
-        // 持久化登录数据 + 账号名
+        // 持久化登录数据 + 账号名 + 手机号(账号页表单复用与同账号判定)
         var s = _settings.Current;
         s.CloudLoginDataJson = JsonSerializer.Serialize(login.Data, CloudGameJsonContext.Default.CloudGameLoginData);
         s.CloudLoginName = login.Data.Username ?? login.Data.Phone ?? "";
+        s.CloudLoginPhone = phone.Trim();
         _settings.Save();
         return (true, $"已登录云鸣潮: {s.CloudLoginName}");
     }
@@ -90,7 +91,39 @@ public sealed class CloudGachaService
         var s = _settings.Current;
         s.CloudLoginDataJson = "";
         s.CloudLoginName = "";
+        s.CloudLoginPhone = "";
         _settings.Save();
+    }
+
+    /// <summary>
+    /// 校验云鸣潮会话是否仍可静默续期(账号页加载时调用,不做抽卡同步)。
+    /// 返回 status: NotLoggedIn=未登录, Success=会话有效, LoginFailed=已失效, FetchFailed=网络等临时失败(不判定过期)。
+    /// </summary>
+    public async Task<(CloudGachaStatus Status, string? Message)> ValidateSessionAsync(CancellationToken ct = default)
+    {
+        var json = _settings.Current.CloudLoginDataJson;
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return (CloudGachaStatus.NotLoggedIn, "未登录云鸣潮");
+        }
+        try
+        {
+            var data = JsonSerializer.Deserialize(json, CloudGameJsonContext.Default.CloudGameLoginData);
+            if (data is null)
+            {
+                return (CloudGachaStatus.LoginFailed, "云鸣潮登录数据无效,请重新登录");
+            }
+            // 静默续期一次:成功即证明会话仍有效(与同步走同一条续期链路)
+            var session = await _cloud.BuildSessionAsync(data, ct).ConfigureAwait(false);
+            return session is null
+                ? (CloudGachaStatus.LoginFailed, "云鸣潮会话已失效,请重新登录")
+                : (CloudGachaStatus.Success, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "云鸣潮会话校验失败(不判定过期)");
+            return (CloudGachaStatus.FetchFailed, $"会话校验失败: {ex.Message}");
+        }
     }
 
     /// <summary>拉取云鸣潮抽卡记录并同步;未登录/失败返回对应状态。</summary>

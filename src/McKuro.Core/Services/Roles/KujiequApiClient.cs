@@ -37,6 +37,12 @@ public sealed class KujiequApiClient
     public const string ParamServerId = "76402e5b20be2c39f095a152090afddc";
     public const string ParamGameId = "3";
 
+    /// <summary>
+    /// 深塔/矩阵/海墟接口的软成功码:10902(本期无记录/未开放)时响应仍带可解析 data,
+    /// 对齐 WutheringWavesTool「code==200 || code==10902 即解析」的处理(勿当错误丢弃)。
+    /// </summary>
+    private static readonly IReadOnlySet<int> KujiequSoftSuccessCodes = new HashSet<int> { 10902 };
+
     /// <summary>库街区 App WebView 安卓 UA(对齐 Haiyu KuroClient.GetWebHeader:
     /// 数据中心接口实际由 App 内 H5 页面调用,须模拟 WebView 特征而非纯原生)。</summary>
     private const string WebViewUa =
@@ -306,7 +312,7 @@ public sealed class KujiequApiClient
     {
         var headers = BuildWebHeader(accessToken, deviceId);
         var body = $"serverId={ParamServerId}&roleId={roleId}&gameId={ParamGameId}";
-        var env = await SendEnvelopeAsync(TowerUrlValue, headers, body, ct).ConfigureAwait(false);
+        var env = await SendEnvelopeAsync(TowerUrlValue, headers, body, ct, extraSuccessCodes: KujiequSoftSuccessCodes).ConfigureAwait(false);
         var dataStr = GetDataString(env);
         if (dataStr is null)
         {
@@ -329,7 +335,7 @@ public sealed class KujiequApiClient
     {
         var headers = BuildWebHeader(accessToken, deviceId);
         var body = $"serverId={ParamServerId}&roleId={roleId}";
-        var env = await SendEnvelopeAsync(NewTowerUrlValue, headers, body, ct).ConfigureAwait(false);
+        var env = await SendEnvelopeAsync(NewTowerUrlValue, headers, body, ct, extraSuccessCodes: KujiequSoftSuccessCodes).ConfigureAwait(false);
         var dataStr = GetDataString(env);
         if (dataStr is null)
         {
@@ -342,6 +348,7 @@ public sealed class KujiequApiClient
 
     /// <summary>
     /// 获取海墟(再生海域)数据(slashDetail 接口,对齐 WutheringWavesTool SlashDataDetailTask)。
+    /// 参数获取方式与终焉矩阵(newTowerDetail)一致:urlencoded body 携带 gameId/serverId/roleId。
     /// </summary>
     public async Task<SlashData?> GetSlashAsync(
         string accessToken,
@@ -351,9 +358,9 @@ public sealed class KujiequApiClient
         CancellationToken ct = default)
     {
         var headers = BuildWebHeader(accessToken, deviceId);
-        // 海墟参数在 query(无 body),对齐 WutheringWavesTool SlashDataDetailTask
-        var query = $"gameId={ParamGameId}&serverId={ParamServerId}&roleId={roleId}";
-        var env = await SendEnvelopeAsync(SlashUrlValue + "?" + query, headers, "", ct).ConfigureAwait(false);
+        // 对齐矩阵接口的 body 形态(原 query+空体形态已废弃)
+        var body = $"gameId={ParamGameId}&serverId={ParamServerId}&roleId={roleId}";
+        var env = await SendEnvelopeAsync(SlashUrlValue, headers, body, ct, extraSuccessCodes: KujiequSoftSuccessCodes).ConfigureAwait(false);
         var dataStr = GetDataString(env);
         if (dataStr is null)
         {
@@ -466,13 +473,18 @@ public sealed class KujiequApiClient
         return data.GetString();
     }
 
-    /// <summary>发送 POST 并解析外层信封;throwOnError 且 code != 200 时抛 <see cref="KujiequApiException"/>。</summary>
+    /// <summary>
+    /// 发送 POST 并解析外层信封;throwOnError 且 code 不在成功集合时抛 <see cref="KujiequApiException"/>。
+    /// 深塔/矩阵/海墟接口对齐 WutheringWavesTool:code==10902(本期无记录等软状态)也携带可解析的
+    /// data,必须放行(原实现非 200 一律抛异常,导致矩阵页签被误判为「尚未解锁」)。
+    /// </summary>
     private async Task<KujiequEnvelope?> SendEnvelopeAsync(
         string url,
         Dictionary<string, string> headers,
         string body,
         CancellationToken ct,
-        bool throwOnError = true)
+        bool throwOnError = true,
+        IReadOnlySet<int>? extraSuccessCodes = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, url);
         foreach (var (key, value) in headers)
@@ -490,7 +502,9 @@ public sealed class KujiequApiClient
         _logger.LogInformation("库街区数据中心请求: url={Url} body={Body} 响应前300={Resp}", url, body, Truncate(json, 300));
 
         var env = JsonSerializer.Deserialize(json, KujiequJsonContext.Default.KujiequEnvelope);
-        if (throwOnError && env is not null && env.Code != 200)
+        if (throwOnError && env is not null
+            && env.Code != 200
+            && extraSuccessCodes?.Contains(env.Code) != true)
         {
             throw new KujiequApiException($"库街区接口返回错误: {env.Msg}");
         }

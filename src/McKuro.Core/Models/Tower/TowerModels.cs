@@ -6,7 +6,10 @@ namespace McKuro.Core.Models.Tower;
 /// <summary>深塔(终焉矩阵)数据(对齐 WutheringWavesTool NewTowerData)。</summary>
 public sealed class NewTowerData
 {
-    [JsonPropertyName("endTime")] public string? EndTime { get; set; }
+    /// <summary>本期刷新剩余毫秒(对齐 WutheringWavesTool getEndTime:long 参与倒计时运算)。</summary>
+    [JsonPropertyName("endTime")]
+    [JsonConverter(typeof(FlexibleLongConverter))]
+    public long? EndTime { get; set; }
     [JsonPropertyName("isUnlock")] public bool IsUnlock { get; set; }
     /// <summary>未解锁时接口以数字 0 占位(而非列表),经 RewardListConverter 归一化为 null。</summary>
     [JsonPropertyName("reward")]
@@ -235,6 +238,7 @@ public sealed class FlexibleLongConverter : JsonConverter<long?>
 [JsonSerializable(typeof(NewTowerData))]
 [JsonSerializable(typeof(List<NewTowerRewardItem>))]
 [JsonSerializable(typeof(NewTowerModeDetail))]
+[JsonSerializable(typeof(List<NewTowerModeDetail>))]
 [JsonSerializable(typeof(NewTowerTeam))]
 [JsonSerializable(typeof(NewTowerBuff))]
 [JsonSerializable(typeof(NewTowerRole))]

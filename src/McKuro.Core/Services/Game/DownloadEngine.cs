@@ -14,6 +14,12 @@ public sealed class DownloadProgress
     public required long BytesTotal { get; init; }
     public required double SpeedBps { get; init; }
 
+    /// <summary>
+    /// 非下载阶段文本(差分合成/解压/安装等,对齐上游 1.6 修复:安装阶段不再卡「下载中」文案)。
+    /// 非空时 UI 应显示该文本且不改动进度条百分比(此时字节字段无意义)。
+    /// </summary>
+    public string? StageText { get; init; }
+
     public double Percent => BytesTotal > 0 ? Math.Clamp((double)BytesDownloaded / BytesTotal, 0, 1) : 0;
 }
 

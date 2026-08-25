@@ -34,34 +34,24 @@
                         IsEnabled="{Binding !IsBusy}" />
                 <Button Content="库街区每日任务" Command="{Binding ExecuteDailyCommand}"
                         IsEnabled="{Binding !IsBusy}" />
-                <Button Content="退出" Command="{Binding LogoutCommand}" />
             </StackPanel>
         </Grid>
 
-        <!-- 登录区 / 账号信息 -->
+        <!-- 账号信息(登录在「账号」页完成) -->
         <Border Grid.Row="1" Margin="20,0,20,10" Padding="16" CornerRadius="12"
                 Background="{DynamicResource SemiColorBg2}">
             <Grid RowDefinitions="Auto,Auto">
-                <!-- 未登录:登录表单 -->
-                <StackPanel Grid.Row="0" Spacing="10" IsVisible="{Binding !IsLoggedIn}">
-                    <TextBlock Text="登录库街区账号(用于游戏签到 / 每日任务 / 云游戏)" FontSize="13"
+                <!-- 未登录:引导去账号页 -->
+                <StackPanel Grid.Row="0" Spacing="8" IsVisible="{Binding !IsLoggedIn}">
+                    <TextBlock Text="库街区账号未登录。登录入口已统一迁移到「账号」页。" FontSize="13"
                                Foreground="{DynamicResource SemiColorText2}" />
-
-                    <!-- 手机号登录 -->
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBox PlaceholderText="手机号" Text="{Binding MobileInput}" Width="140" />
-                        <TextBox PlaceholderText="验证码" Text="{Binding VerifyCodeInput}" Width="120" />
-                        <Button Content="{Binding SmsButtonText}" Command="{Binding SendSmsCommand}"
-                                IsEnabled="{Binding CanSendSms}" />
-                        <Button Content="手机号登录" Command="{Binding LoginWithSmsCommand}"
-                                IsEnabled="{Binding !IsBusy}" />
-                        <TextBlock Text="{Binding SmsStatusText}" FontSize="12" VerticalAlignment="Center"
-                                   Foreground="{DynamicResource SemiColorText3}" />
-                    </StackPanel>
+                    <Button Content="前往「账号」页登录" Classes="primary"
+                            Command="{Binding GoAccountCommand}"
+                            HorizontalAlignment="Left" />
                 </StackPanel>
 
                 <!-- 已登录:账号信息 + 开关 -->
-                <StackPanel Grid.Row="0" Spacing="8" IsVisible="{Binding IsLoggedIn}">
+                <StackPanel Grid.Row="1" Spacing="8" IsVisible="{Binding IsLoggedIn}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <TextBlock Text="{Binding AccountText}" FontSize="15" FontWeight="Bold" />
                         <Button Content="刷新角色" Command="{Binding RefreshRolesCommand}"
@@ -207,7 +197,7 @@
         <!-- 未登录空状态 -->
         <StackPanel Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
                     IsVisible="{Binding !IsLoggedIn}">
-            <TextBlock Text="登录后即可一键签到鸣潮全部角色" FontSize="16"
+            <TextBlock Text="登录后即可一键签到鸣潮全部角色(登录入口在「账号」页)" FontSize="16"
                        Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
         </StackPanel>
     </Grid>

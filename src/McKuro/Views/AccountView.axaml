@@ -4,15 +4,63 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:McKuro.ViewModels"
              xmlns:ic="using:FluentIcons.Avalonia"
+             xmlns:conv="using:Avalonia.Data.Converters"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.AccountView"
              x:DataType="vm:AccountViewModel">
     <ScrollViewer>
-        <StackPanel Margin="25" Spacing="12" MaxWidth="760" HorizontalAlignment="Left">
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+        <StackPanel Margin="25" Spacing="12" MaxWidth="820" HorizontalAlignment="Left">
+            <!-- 标题 -->
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
                 <ic:FluentIcon Icon="Person" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
                 <TextBlock Text="账号" FontSize="24" FontWeight="Bold" VerticalAlignment="Center" />
+                <TextBlock Text="所有接口账号在此登录与管理" FontSize="12"
+                           Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
             </StackPanel>
+
+            <!-- 同一账号判定:自动,仅提醒不强制登出 -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="16,12">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Width="40" Height="40" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                        <ic:FluentIcon Icon="Checkmark" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="同一账号自动判定" FontSize="14" FontWeight="Bold" />
+                        <TextBlock Text="依据各接口登录手机号自动判断;不同账号仅提醒,不会强制登出" FontSize="11"
+                                   Foreground="{DynamicResource SemiColorText3}" />
+                    </StackPanel>
+                    <!-- 判定徽标(自动,无需手动) -->
+                    <Grid Grid.Column="2" VerticalAlignment="Center">
+                        <!-- 同一账号(强调色) -->
+                        <Border CornerRadius="8" Padding="10,4" Background="#D9481F" IsVisible="{Binding SameAccountIsSame}">
+                            <TextBlock Text="{Binding SameAccountStatus}" FontSize="12" Foreground="White"
+                                       TextWrapping="Wrap" MaxWidth="240" />
+                        </Border>
+                        <!-- 不同账号(警示色) -->
+                        <Border CornerRadius="8" Padding="10,4" Background="#B98900" IsVisible="{Binding SameAccountIsDifferent}">
+                            <TextBlock Text="{Binding SameAccountStatus}" FontSize="12" Foreground="White"
+                                       TextWrapping="Wrap" MaxWidth="240" />
+                        </Border>
+                        <!-- 信息不足(中性) -->
+                        <Border CornerRadius="8" Padding="10,4" Background="{DynamicResource SemiColorBg3}"
+                                IsVisible="{Binding SameAccountIsUnknown}">
+                            <TextBlock Text="{Binding SameAccountStatus}" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText2}"
+                                       TextWrapping="Wrap" MaxWidth="240" />
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Border>
+            <!-- 判定明细(自动生成,可读信息) -->
+            <ItemsControl ItemsSource="{Binding IdentityCheckLines}" IsVisible="{Binding HasIdentityDetails}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <TextBlock Text="{Binding}" FontSize="11" Margin="4,0,0,1"
+                                   Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
             <!-- 角色 ID -->
             <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
@@ -23,7 +71,7 @@
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
                         <TextBlock Text="角色 ID (playerId)" FontSize="15" FontWeight="Bold" />
-                        <TextBlock Text="游戏内账号的角色 ID,用于拉取角色养成数据" FontSize="12"
+                        <TextBlock Text="游戏内账号的角色 ID,用于拉取角色养成数据(登录后自动同步)" FontSize="12"
                                    Foreground="{DynamicResource SemiColorText2}" />
                     </StackPanel>
                     <TextBox Grid.Column="2" Width="320" VerticalAlignment="Center"
@@ -32,7 +80,7 @@
                 </Grid>
             </Border>
 
-            <!-- 库街区账号(多账号) -->
+            <!-- 库街区账号(多账号切换 + 登录) -->
             <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
                 <StackPanel Spacing="12">
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
@@ -42,25 +90,106 @@
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
                             <TextBlock Text="库街区账号" FontSize="15" FontWeight="Bold" />
-                            <TextBlock Text="支持保存多个账号并切换当前账号;登录在「签到」页完成,Token 不会在界面显示" FontSize="12"
+                            <TextBlock Text="支持保存多个账号并切换当前账号;短信验证码 + 极验登录均在本页完成" FontSize="12"
                                        Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
                         </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <Button Content="＋ 添加账号" Classes="primary" Command="{Binding GoAddAccountCommand}" />
-                            <Button Content="移除" Command="{Binding RemoveAccountCommand}" />
+                            <Button Content="＋ 登录 / 添加账号" Classes="primary" Command="{Binding ToggleKuroLoginCommand}" />
+                            <Button Content="退出登录" Command="{Binding LogoutCommand}" IsVisible="{Binding HasKuroLogin}" />
                         </StackPanel>
                     </Grid>
-                    <StackPanel Orientation="Horizontal" Spacing="12">
+
+                    <!-- 多账号切换(无已保存账号时隐藏,避免出现空下拉) -->
+                    <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding HasKuroAccounts}">
                         <TextBlock Text="当前账号:" FontSize="13" Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding AccountText}" FontSize="13" Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center" />
-                        <ComboBox Width="240"
+                        <ComboBox Width="320"
                                   ItemsSource="{Binding AccountOptions}"
-                                  SelectedIndex="{Binding SelectedAccountIndex, Mode=TwoWay}" />
+                                  SelectedIndex="{Binding SelectedAccountIndex, Mode=TwoWay}"
+                                  ToolTip.Tip="选择要切换到的库街区账号" />
                     </StackPanel>
+
+                    <!-- 登录表单(标签 + 两列字段,避免拥挤单行;参考 Vercel 登录设计) -->
+                    <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="20,18"
+                            IsVisible="{Binding IsKuroLoginOpen}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="登录 / 添加新账号(已保存账号的手机号会自动复用)" FontSize="12.5"
+                                       Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                                <StackPanel Spacing="7">
+                                    <TextBlock Text="手机号" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                        <TextBox PlaceholderText="请输入手机号" Text="{Binding MobileInput}" />
+                                        <Button Grid.Column="1" Content="{Binding SmsButtonText}" Command="{Binding SendSmsCommand}"
+                                                IsEnabled="{Binding CanSendSms}" VerticalAlignment="Center" />
+                                    </Grid>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="7">
+                                    <TextBlock Text="短信验证码" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                                    <TextBox PlaceholderText="请输入短信验证码" Text="{Binding VerifyCodeInput}" />
+                                </StackPanel>
+                            </Grid>
+                            <Button Content="手机号登录" Classes="primary" Command="{Binding LoginWithSmsCommand}"
+                                    HorizontalAlignment="Stretch" />
+                            <TextBlock Text="{Binding SmsStatusText}" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
 
-            <!-- 官方养成评级(mcguide 登录) -->
+            <!-- 云鸣潮登录(自抽卡分析页迁移;与库街区同款:头部按键 + 可折叠表单) -->
+            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
+                <StackPanel Spacing="12">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                            <ic:FluentIcon Icon="Cloud" IconVariant="Regular" IconSize="Size20"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                            <TextBlock Text="云鸣潮账号" FontSize="15" FontWeight="Bold" />
+                            <TextBlock Text="登录后「抽卡分析」页优先走云鸣潮接口同步抽卡记录" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding CloudAccountText}" FontSize="12" Margin="0,0,4,0"
+                                       Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center" />
+                            <Button Content="＋ 登录" Classes="primary" Command="{Binding ToggleCloudLoginCommand}"
+                                    IsVisible="{Binding !IsCloudLoggedIn}" />
+                            <Button Content="退出登录" Command="{Binding CloudLogoutCommand}"
+                                    IsVisible="{Binding IsCloudLoggedIn}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 登录表单(标签 + 两列字段;可折叠,未登录时自动展开) -->
+                    <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="20,18"
+                            IsVisible="{Binding IsCloudLoginOpen}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="登录云鸣潮账号(仅需手机号 + 验证码)" FontSize="12.5"
+                                       Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                                <StackPanel Spacing="7">
+                                    <TextBlock Text="手机号" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                        <TextBox PlaceholderText="请输入手机号" Text="{Binding CloudMobile}" />
+                                        <Button Grid.Column="1" Content="{Binding CloudSmsButtonText}" Command="{Binding SendCloudSmsCommand}"
+                                                IsEnabled="{Binding CanSendCloudSms}" VerticalAlignment="Center" />
+                                    </Grid>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="7">
+                                    <TextBlock Text="短信验证码" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                                    <TextBox PlaceholderText="请输入短信验证码" Text="{Binding CloudCode}" />
+                                </StackPanel>
+                            </Grid>
+                            <Button Content="手机号登录" Classes="primary" Command="{Binding CloudLoginCommand}"
+                                    HorizontalAlignment="Stretch" />
+                            <TextBlock Text="{Binding CloudStatusText}" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- 官方养成评级(mcguide;与库街区同款:头部按键 + 可折叠表单) -->
             <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
                 <StackPanel Spacing="12">
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
@@ -73,49 +202,51 @@
                             <TextBlock Text="登录 mcguide 攻略站后,角色页显示官方养成达成度(grade/属性/声骸/技能/共鸣链/武器)" FontSize="12"
                                        Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
                         </StackPanel>
-                        <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="12"
-                                   Foreground="{DynamicResource SemiColorPrimary}"
-                                   Text="{Binding GuideStatusText}" />
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding GuideStatusText}" FontSize="12" Margin="0,0,4,0" MaxWidth="260"
+                                       Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center"
+                                       TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+                            <Button Content="＋ 登录" Classes="primary" Command="{Binding ToggleGuideLoginCommand}"
+                                    IsVisible="{Binding !GuideLoggedIn}" />
+                            <Button Content="退出登录" Command="{Binding GuideLogoutCommand}"
+                                    IsVisible="{Binding GuideLoggedIn}" />
+                        </StackPanel>
                     </Grid>
 
-                    <!-- 未登录:登录表单 -->
-                    <StackPanel Spacing="8" IsVisible="{Binding !GuideLoggedIn}">
-                        <TextBlock Text="未登录时角色页将隐藏「官方养成评级」区;登录后自动显示。" FontSize="12"
-                                   Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
-                        <Grid ColumnDefinitions="2*,3*,Auto" ColumnSpacing="8">
-                            <TextBox PlaceholderText="手机号"
-                                     Text="{Binding GuideMobile, Mode=TwoWay}" />
-                            <TextBox Grid.Column="1" PlaceholderText="验证码"
-                                     Text="{Binding GuideCode, Mode=TwoWay}" />
-                            <Button Grid.Column="2" Content="{Binding GuideSmsButtonText}"
-                                    Command="{Binding SendGuideSmsCommand}"
-                                    IsEnabled="{Binding CanSendGuideSms}" />
-                        </Grid>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Content="登录" Classes="primary"
-                                    Command="{Binding GuideLoginCommand}" />
+                    <!-- 登录表单(标签 + 两列字段;可折叠,未登录时自动展开) -->
+                    <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="20,18"
+                            IsVisible="{Binding IsGuideLoginOpen}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="登录 mcguide 攻略站(仅需手机号 + 验证码)" FontSize="12.5"
+                                       Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                                <StackPanel Spacing="7">
+                                    <TextBlock Text="手机号" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                        <TextBox PlaceholderText="请输入手机号" Text="{Binding GuideMobile}" />
+                                        <Button Grid.Column="1" Content="{Binding GuideSmsButtonText}"
+                                                Command="{Binding SendGuideSmsCommand}"
+                                                IsEnabled="{Binding CanSendGuideSms}" VerticalAlignment="Center" />
+                                    </Grid>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="7">
+                                    <TextBlock Text="短信验证码" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                                    <TextBox PlaceholderText="请输入短信验证码" Text="{Binding GuideCode}" />
+                                </StackPanel>
+                            </Grid>
+                            <Button Content="手机号登录" Classes="primary" Command="{Binding GuideLoginCommand}"
+                                    HorizontalAlignment="Stretch" />
                             <TextBlock Text="{Binding GuideSmsText}" FontSize="12"
-                                       Foreground="{DynamicResource SemiColorText2}"
-                                       VerticalAlignment="Center" />
+                                       Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
                         </StackPanel>
-                    </StackPanel>
-
-                    <!-- 已登录:提示去角色页查看 -->
-                    <StackPanel Spacing="4" IsVisible="{Binding GuideLoggedIn}">
-                        <TextBlock Text="已登录。前往「角色数据」页即可查看官方养成评级。" FontSize="12"
-                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
-                    </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
 
-            <!-- 保存 -->
-            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
-                <Button Content="保存设置" Classes="primary"
-                        Command="{Binding SaveCommand}" />
-                <TextBlock Text="{Binding StatusText}" FontSize="13"
-                           Foreground="{DynamicResource SemiColorPrimary}"
-                           VerticalAlignment="Center" />
-            </StackPanel>
+            <!-- 操作状态(切换/登录/退出的结果提示) -->
+            <TextBlock Text="{Binding StatusText}" FontSize="12" Margin="4,0,0,0"
+                       Foreground="{DynamicResource SemiColorText3}"
+                       TextWrapping="Wrap" IsVisible="{Binding StatusText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

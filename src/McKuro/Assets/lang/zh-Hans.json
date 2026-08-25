@@ -23,7 +23,7 @@
   "Settings.BackgroundVideo": "背景视频封面",
   "Settings.BackgroundVideoDesc": "游戏页播放官方宣传视频;未安装 VLC 时自动回退为静态封面图",
   "Settings.Account": "库街区账号",
-  "Settings.AccountDesc": "在「签到」页登录;此处可切换 / 移除已保存账号",
+  "Settings.AccountDesc": "所有接口账号登录已统一在「账号」页;此处可切换 / 移除已保存账号",
   "Settings.Language": "界面语言",
   "Settings.LanguageDesc": "重启后生效",
   "Settings.Save": "保存设置",

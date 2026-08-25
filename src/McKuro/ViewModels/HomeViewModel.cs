@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using FluentIcons.Common;
+using McKuro.Core.Models.Kuro;
 using McKuro.Core.Models.User;
 using McKuro.Core.Services.Game;
 using McKuro.Services;
@@ -146,6 +147,9 @@ public sealed partial class HomeViewModel : ViewModelBase
     /// <summary>默认头像(对齐 Haiyu GameRoilDataWrapper:库街区未绑定头像时的官方默认图)。</summary>
     private const string DefaultAvatarUrl = "https://mc.kurogames.com/cloud/assets/avatar-cb06ab22.png";
 
+    /// <summary>头像磁盘缓存分类(icon_cache/avatar,按 userId 索引;对齐 Java WutheringWavesTool assets/header 本地化)。</summary>
+    private const string AvatarCacheCategory = "avatar";
+
     /// <summary>角色名(游戏内昵称)。</summary>
     [ObservableProperty]
     private string _roleNameText = "";
@@ -189,6 +193,15 @@ public sealed partial class HomeViewModel : ViewModelBase
     {
         _countdownTimer.Tick += (_, _) => TickCountdowns();
         _countdownTimer.Start();
+        // 游戏进程正常退出后重拉今日数据(体力/活跃度等在游玩期间会变化)
+        WeakReferenceMessenger.Default.Register<HomeViewModel, GameSessionEndedMessage>(this,
+            static (recipient, message) =>
+            {
+                if (message.Value == GameSessionEndReason.Finished)
+                {
+                    _ = recipient.RefreshDailyAsync();
+                }
+            });
         RefreshState();
         _ = RefreshDailyAsync();
         _ = RevealAsync();
@@ -260,11 +273,16 @@ public sealed partial class HomeViewModel : ViewModelBase
         StatusText = "正在拉取每日数据…";
         try
         {
+            // 先用本地缓存头像占位(离线/慢网也立即显示,参照 Java 版 assets/header 本地文件优先)
+            PrefillAvatarFromCache();
+
             // ① 优先本地游戏缓存 + PC 启动器 SDK(不依赖库街区登录)
             var local = await AppServices.LocalDaily.GetDailyDataAsync();
             if (local is not null)
             {
                 ApplyDailyData(local, "本地启动器");
+                // 本地 SDK 数据不含头像 URL:从库街区 gamer 接口补齐并落盘缓存
+                await ResolveAvatarAsync(local.HeadUrl, local.RoleId);
                 return;
             }
 
@@ -285,6 +303,8 @@ public sealed partial class HomeViewModel : ViewModelBase
                 return;
             }
             ApplyDailyData(data, "库街区");
+            // 库街区路径 HeadUrl 已含头像:只需确保落盘缓存并切换为本地路径
+            await ResolveAvatarAsync(data.HeadUrl, data.RoleId);
         }
         catch (Exception ex)
         {
@@ -346,6 +366,69 @@ public sealed partial class HomeViewModel : ViewModelBase
             : "";
         IsLaunchPlayer = UserProfile.IsLaunchPlayer(data.CreatTime);
         HasProfile = !string.IsNullOrWhiteSpace(data.RoleName) || data.Level > 0;
+    }
+
+    /// <summary>
+    /// 刷新前先用本地磁盘缓存头像占位(按当前账号 userId 命中 icon_cache/avatar),
+    /// 离线或接口失败时也能显示真实头像;无缓存时保持现状(默认头像/占位图标)。
+    /// </summary>
+    private void PrefillAvatarFromCache()
+    {
+        var account = AppServices.KuroAccounts.Current;
+        if (account is null || string.IsNullOrEmpty(account.UserId))
+        {
+            return;
+        }
+        var cached = AppServices.IconCache.GetCachedIconPath(AvatarCacheCategory, account.UserId);
+        if (cached is not null)
+        {
+            AvatarUrl = cached;
+        }
+    }
+
+    /// <summary>
+    /// 解析玩家真实头像(对齐 Java WutheringWavesTool:接口取 URL → 本地磁盘缓存 → UI 只加载本地文件):
+    /// 已知 URL 直接落盘缓存;URL 缺失(本地启动器 SDK 数据不带头像)时从库街区 gamer/role/list 的
+    /// headPhotoUrl 补齐。成功后把 <see cref="AvatarUrl"/> 切换为本地文件路径(未命中缓存则用远程 URL 兜底)。
+    /// 任何失败静默保留现有头像,不影响每日数据主流程。
+    /// </summary>
+    private async Task ResolveAvatarAsync(string? headUrl, string? roleId)
+    {
+        try
+        {
+            var url = headUrl;
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                var account = AppServices.KuroAccounts.Current;
+                if (account is null)
+                {
+                    return;
+                }
+                var gamer = await AppServices.Kuro.GetGamerAsync(account, (int)KuroGameType.Waves);
+                var role = gamer is { Code: 200, Data: not null } && gamer.Data.Count > 0 ? gamer.Data[0] : null;
+                if (role is null)
+                {
+                    return;
+                }
+                url = !string.IsNullOrWhiteSpace(role.HeadPhotoUrl) ? role.HeadPhotoUrl : role.GameHeadUrl;
+            }
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                return;
+            }
+
+            // 缓存 key 用 userId(头像属于库街区账号,跨角色稳定);缺失时退化为 URL 文件名
+            var current = AppServices.KuroAccounts.Current;
+            var key = IconDiskCacheService.Safe(
+                !string.IsNullOrEmpty(current?.UserId) ? current.UserId : url);
+            await AppServices.IconCache.CacheUrlAsync(AvatarCacheCategory, key, url);
+            var local = AppServices.IconCache.GetCachedIconPath(AvatarCacheCategory, key);
+            AvatarUrl = local ?? url;
+        }
+        catch (Exception)
+        {
+            // 头像解析/下载失败:保留默认或已显示的头像
+        }
     }
 
     /// <summary>电台(战令):第 1 个元素 cur=等级,第 2 个 cur/total=经验进度(参考截图 "电台 LV.03 经验: 3250/12000")。</summary>

@@ -37,6 +37,10 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [ObservableProperty]
     private bool _hasPredownload;
 
+    /// <summary>预下载已完成(本地暂存完整,等待官方开放更新):按钮禁用并显示「预下载完成」。</summary>
+    [ObservableProperty]
+    private bool _predownloadCompleted;
+
     [ObservableProperty]
     private bool _isBusy;
 
@@ -52,13 +56,13 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>是否显示暂停/继续按钮(下载进行中)。</summary>
     public bool ShowPauseResume => IsDownloading;
 
-    /// <summary>合并按钮文案:未下载时"预下载",下载中"暂停下载"/"继续下载"。</summary>
+    /// <summary>合并按钮文案:未下载时"预下载"(已完成显示"预下载完成"),下载中"暂停下载"/"继续下载"。</summary>
     public string PreDownloadButtonText => IsDownloading
         ? (DownloadPaused ? "继续下载" : "暂停下载")
-        : "预下载";
+        : PredownloadCompleted ? "预下载完成" : "预下载";
 
-    /// <summary>合并按钮是否可用:未下载时有预下载可用;下载中始终可用。</summary>
-    public bool PreDownloadButtonEnabled => IsDownloading || HasPredownload;
+    /// <summary>合并按钮是否可用:未下载时有预下载可用(已完成则禁用);下载中始终可用。</summary>
+    public bool PreDownloadButtonEnabled => IsDownloading || (HasPredownload && !PredownloadCompleted);
 
     partial void OnIsDownloadingChanged(bool value)
     {
@@ -76,6 +80,12 @@ public sealed partial class LauncherViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowDownloadCard));
     }
 
+    partial void OnPredownloadCompletedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(PreDownloadButtonText));
+        OnPropertyChanged(nameof(PreDownloadButtonEnabled));
+    }
+
     /// <summary>是否显示下载/安装进度卡片:有下载/安装活动或有预下载可领取时才显示。</summary>
     public bool ShowDownloadCard => IsDownloading || HasPredownload;
 
@@ -85,7 +95,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>是否显示预下载进度环(有预下载或正在下载)。</summary>
     public bool ShowPreDownloadRing => IsDownloading || HasPredownload;
 
-    /// <summary>合并下载按钮命令:未下载时触发预下载,下载中切换暂停/继续。</summary>
+    /// <summary>合并下载按钮命令:未下载时触发预下载,下载中切换暂停/继续(已完成预下载时不响应)。</summary>
     [RelayCommand]
     private void TogglePreDownload()
     {
@@ -103,7 +113,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             OnPropertyChanged(nameof(PauseResumeText));
             OnPropertyChanged(nameof(DownloadPaused));
         }
-        else
+        else if (!PredownloadCompleted)
         {
             PreDownloadCommand.Execute(null);
         }
@@ -450,6 +460,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             IsInstalled = false;
             HasUpdate = false;
             HasPredownload = false;
+            PredownloadCompleted = false;
             ServerVersionText = "-";
             PredownloadStateText = "";
             GameVersionText = "平台不适用";
@@ -469,6 +480,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
         {
             HasUpdate = false;
             HasPredownload = false;
+            PredownloadCompleted = false;
             ServerVersionText = "-";
             PredownloadStateText = "";
         }
@@ -519,10 +531,15 @@ public sealed partial class LauncherViewModel : ViewModelBase
                 ? $"v{result.InstalledVersion}"
                 : (result.NotInstalled ? "未安装" : "已安装");
             HasUpdate = result.HasUpdate;
+            // 预载版本本地已完整下载:HasPredownload 已被 Core 短路为 false,
+            // 这里置完成态让按钮禁用并显示「预下载完成」(对齐上游 1.6 修复)
+            PredownloadCompleted = result.PredownloadCompleted;
             HasPredownload = result.HasPredownload;
-            PredownloadStateText = result.HasPredownload
-                ? $"可预下载:版本 {result.PredownloadVersion}"
-                : "";
+            PredownloadStateText = result.PredownloadCompleted
+                ? "预下载完成,上线后可直接更新"
+                : result.HasPredownload
+                    ? $"可预下载:版本 {result.PredownloadVersion}"
+                    : "";
 
             // 下载/磁盘预估(参考 Haiyu Config.Size + UnCompressSize;空间不足时置警告)
             UpdateDownloadEstimate(result.TotalBytes);
@@ -584,6 +601,14 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
         var progress = new Progress<DownloadProgress>(p =>
         {
+            // 非下载安装阶段(差分合成/解压/资源安装):只切文案,不动进度条
+            if (p.StageText is not null)
+            {
+                ProgressText = p.StageText;
+                CurrentFileText = p.CurrentFile;
+                SpeedText = "";
+                return;
+            }
             // 校验阶段(BytesTotal==0):进度按文件数显示,告知用户"正在校验本地文件"
             if (p.BytesTotal <= 0 && p.FileTotal > 0)
             {
@@ -594,7 +619,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
                 return;
             }
             ProgressPercent = p.Percent * 100;
-            ProgressText = $"{p.FileIndex}/{p.FileTotal} 文件 · {FormatSize(p.BytesDownloaded)}/{FormatSize(p.BytesTotal)} · {FormatSpeed(p.SpeedBps)}";
+            // 速度只在 SpeedText 显示一处(对齐上游 1.6 修复:避免进度行与速度行重复显示)
+            ProgressText = $"{p.FileIndex}/{p.FileTotal} 文件 · {FormatSize(p.BytesDownloaded)}/{FormatSize(p.BytesTotal)}";
             CurrentFileText = p.CurrentFile;
             SpeedText = FormatSpeed(p.SpeedBps);
             BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
@@ -607,7 +633,10 @@ public sealed partial class LauncherViewModel : ViewModelBase
             var (success, _, message) = await AppServices.GameUpdater.PreDownloadAsync(ServerType, progress);
             if (success)
             {
-                PredownloadStateText = "预下载完成,正在自动安装…";
+                // 下载完整落盘即置完成态:按钮禁用并显示「预下载完成」(对齐上游 1.6)
+                PredownloadCompleted = true;
+                HasPredownload = false;
+                PredownloadStateText = "预下载完成,上线后可直接更新";
                 StatusText = "预下载完成,自动开始安装…";
                 // 下载完成后自动进入安装阶段,进度卡片继续显示安装进度。
                 await InstallCoreAsync();
@@ -661,6 +690,14 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
         var progress = new Progress<DownloadProgress>(p =>
         {
+            // 非下载安装阶段(差分合成/解压/资源安装):只切文案,不动进度条
+            if (p.StageText is not null)
+            {
+                ProgressText = p.StageText;
+                CurrentFileText = p.CurrentFile;
+                SpeedText = "";
+                return;
+            }
             var now = DateTime.UtcNow;
             var isFinal = p.FileTotal > 0 && p.FileIndex >= p.FileTotal;
             if (!isFinal && (now - _lastInstallUiUpdate).TotalMilliseconds < 500)
@@ -729,6 +766,14 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
         var progress = new Progress<DownloadProgress>(p =>
         {
+            // 非下载安装阶段(差分合成/解压/资源安装):只切文案,不动进度条
+            if (p.StageText is not null)
+            {
+                ProgressText = p.StageText;
+                CurrentFileText = p.CurrentFile;
+                SpeedText = "";
+                return;
+            }
             ProgressPercent = p.Percent * 100;
             ProgressText = $"{p.FileIndex}/{p.FileTotal} 文件 · {FormatSize(p.BytesDownloaded)}/{FormatSize(p.BytesTotal)}";
             CurrentFileText = p.CurrentFile;
@@ -845,6 +890,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
 
         StatusText = "游戏已退出";
+        // 广播会话结束(主页重拉今日数据、游玩统计页重新解析日志刷新今日游玩时间)
+        WeakReferenceMessenger.Default.Send(new GameSessionEndedMessage(reason));
         switch (AppServices.Settings.Current.AfterGameExitAction)
         {
             case "ExitApp":

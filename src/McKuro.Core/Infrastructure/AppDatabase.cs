@@ -94,6 +94,14 @@ public sealed class AppDatabase : IDisposable
                 version TEXT NOT NULL,
                 update_time TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS new_tower_history (
+                role_id TEXT NOT NULL,
+                end_time INTEGER NOT NULL,
+                json TEXT NOT NULL,
+                update_time TEXT NOT NULL,
+                PRIMARY KEY (role_id, end_time)
+            );
             """;
         cmd.ExecuteNonQuery();
 
@@ -214,6 +222,50 @@ public sealed class AppDatabase : IDisposable
             Run(tx, "CREATE INDEX IF NOT EXISTS idx_gacha_player_pool ON gacha_records(player_id, card_pool_type)");
             tx.Commit();
         }
+    }
+
+    /// <summary>保存终焉矩阵一期历史(同角色同期 UPSERT,对齐 WutheringWavesTool GameNewTowerService.saveToDB)。</summary>
+    public void UpsertNewTowerHistory(string roleId, long endTimeMillis, string json)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText =
+            """
+            INSERT INTO new_tower_history (role_id, end_time, json, update_time)
+            VALUES ($role, $end, $json, $time)
+            ON CONFLICT(role_id, end_time) DO UPDATE SET
+                json = excluded.json,
+                update_time = excluded.update_time
+            """;
+        cmd.Parameters.AddWithValue("$role", roleId);
+        cmd.Parameters.AddWithValue("$end", endTimeMillis);
+        cmd.Parameters.AddWithValue("$json", json);
+        cmd.Parameters.AddWithValue("$time", DateTime.Now.ToString("O"));
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>某角色的终焉矩阵历史赛季结束时间列表(降序,对齐 getEndTimesByRoleId)。</summary>
+    public List<long> GetNewTowerHistoryEndTimes(string roleId)
+    {
+        var result = new List<long>();
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "SELECT end_time FROM new_tower_history WHERE role_id = $role ORDER BY end_time DESC";
+        cmd.Parameters.AddWithValue("$role", roleId);
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            result.Add(reader.GetInt64(0));
+        }
+        return result;
+    }
+
+    /// <summary>读取某角色某期的终焉矩阵模式详情 JSON(无记录返回 null)。</summary>
+    public string? GetNewTowerHistory(string roleId, long endTimeMillis)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "SELECT json FROM new_tower_history WHERE role_id = $role AND end_time = $end LIMIT 1";
+        cmd.Parameters.AddWithValue("$role", roleId);
+        cmd.Parameters.AddWithValue("$end", endTimeMillis);
+        return cmd.ExecuteScalar() as string;
     }
 
     /// <summary>读取某游戏目录的已安装版本(无记录返回 null)。</summary>

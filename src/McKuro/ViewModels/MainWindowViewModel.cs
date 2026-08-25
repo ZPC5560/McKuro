@@ -110,6 +110,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             launcher.OnNavigatedTo();
         }
+        // 导航到账号页时校验各接口登录态是否过期
+        if (item.ViewModel is AccountViewModel account)
+        {
+            account.OnNavigatedTo();
+        }
     }
 
     /// <summary>通过字符串 key 导航(供消息接收)。</summary>

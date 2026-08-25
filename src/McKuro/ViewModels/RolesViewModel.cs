@@ -18,6 +18,9 @@ public sealed partial class RolesViewModel : ViewModelBase
     /// <summary>mcguide 详情填充进行中(避免并发重复请求)。</summary>
     private bool _guideDetailFilling;
 
+    /// <summary>按需详情请求的取消源(切换角色时取消上一个,保持 getRoleDetail 串行不并发)。</summary>
+    private CancellationTokenSource? _detailFetchCts;
+
     /// <summary>最近一次被 mcguide 填充的角色(其图标是 guide-res B 域名,不写入磁盘缓存)。</summary>
     private RoleDetail? _guideFilledRole;
 
@@ -103,10 +106,10 @@ public sealed partial class RolesViewModel : ViewModelBase
             ? $"已登录攻略站 ({AppServices.Settings.Current.GuideCName})"
             : "未登录攻略站";
         // 默认加载本地缓存,不自动请求库街区(频繁访问易触发账号风控);
-        // 仅当用户点击「同步」按钮(或显式调用 LoadFromKujiequCommand)时才在线获取
+        // 在线获取分两层:「同步」按钮只拉角色列表,角色详情在选中角色时按需单发
         LoadFromLocal();
 
-        // 登录/切号后自动同步 → 改为仅读缓存:在线获取完全依赖用户点击「同步」
+        // 登录/切号后自动同步 → 仅读缓存:在线列表获取依赖用户点击「同步」,详情按选择角色时拉取
         _messenger.Register<RolesViewModel, RolesRefreshRequestedMessage>(this, static (recipient, message) =>
         {
             recipient.TokenText = AppServices.Settings.Current.KujiequToken;
@@ -122,13 +125,14 @@ public sealed partial class RolesViewModel : ViewModelBase
 
     partial void OnRoleIdTextChanged(string value) => AppServices.Settings.Current.RoleId = value;
 
-    /// <summary>选中角色变化时:拉取官方达成度 + 角色头部背景取色 + 缺失详情用 mcguide 填充 + 图标磁盘缓存。</summary>
+    /// <summary>选中角色变化时:按需拉取库街区详情 + 官方达成度 + 角色头部背景取色 + 缺失详情 mcguide 填充 + 图标缓存。</summary>
     partial void OnSelectedRoleChanged(RoleDetail? value)
     {
         GuideAchievement = null;
         HasGuideAchievement = false;
         if (value is not null)
         {
+            _ = LoadRoleDetailFromKujiequAsync(value);
             _ = LoadGuideAchievementAsync();
             _ = LoadRoleHeaderBackgroundAsync();
             _ = FillRoleDetailFromGuideIfEmptyAsync();
@@ -240,7 +244,7 @@ public sealed partial class RolesViewModel : ViewModelBase
         }
         if (!AppServices.Guide.HasToken)
         {
-            GuideStatusText = "未登录攻略站(可输入手机号+验证码登录)";
+            GuideStatusText = "未登录攻略站(可在「账号」页登录)";
             return;
         }
 
@@ -275,6 +279,85 @@ public sealed partial class RolesViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// 选中角色详情缺失时,按需单发库街区 getRoleDetail(不在页面加载/同步时批量拉取;
+    /// 高频接口批量请求极易触发极验风控,且列表页本不需要全量详情)。
+    /// </summary>
+    private async Task LoadRoleDetailFromKujiequAsync(RoleDetail role)
+    {
+        // 详情已完整(本地缓存合并/mcguide 填充/已获取过)则不再请求
+        if (role.IsDetailComplete)
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(TokenText) || string.IsNullOrWhiteSpace(RoleIdText))
+        {
+            return; // 未配置库街区登录,交给 mcguide 兜底
+        }
+        if (!ReferenceEquals(role, SelectedRole))
+        {
+            return;
+        }
+
+        // 切换角色时取消上一条请求:单发 getRoleDetail 保持串行,并发请求易触发极验风控
+        _detailFetchCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _detailFetchCts = cts;
+
+        StatusText = $"正在获取 {role.RoleName} 详情…";
+        try
+        {
+            var result = await AppServices.Roles.LoadRoleDetailAsync(
+                TokenText, RoleIdText, role.Role?.RoleId ?? 0, cts.Token).ConfigureAwait(false);
+            if (!ReferenceEquals(role, SelectedRole))
+            {
+                return; // 已切到其他角色,丢弃过期结果
+            }
+            if (result.Detail is not null)
+            {
+                MergeKujiequDetail(role, result.Detail);
+                StatusText = $"已获取 {role.RoleName} 完整详情";
+            }
+            else if (result.GeeTest)
+            {
+                // 极验风控:不弹验证页(角色场景实测无法解除),提示稍后重试;详情留给 mcguide 兜底
+                StatusText = $"库街区触发了人机验证风控,{role.RoleName} 详情暂不可用(可稍后重试)";
+                _ = FillRoleDetailFromGuideIfEmptyAsync();
+            }
+            else
+            {
+                StatusText = $"获取 {role.RoleName} 详情失败(请确认登录状态后重试)";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 用户已切到其他角色,静默
+        }
+        catch (Exception ex)
+        {
+            if (ReferenceEquals(role, SelectedRole))
+            {
+                StatusText = $"获取 {role.RoleName} 详情失败: {ex.Message}";
+            }
+        }
+    }
+
+    /// <summary>把库街区 getRoleDetail 结果合并进选中角色(权威数据:整体替换详情区块,保留列表基础信息)。</summary>
+    private static void MergeKujiequDetail(RoleDetail target, RoleDetail source)
+    {
+        if (source.Role is not null)
+        {
+            target.Role = source.Role;
+        }
+        target.Level = source.Level;
+        target.WeaponData = source.WeaponData;
+        target.Skills = source.Skills;
+        target.Attributes = source.Attributes;
+        target.PhantomData = source.PhantomData;
+        target.Chains = source.Chains;
+        target.NotifyDetailChanged();
+    }
+
+    /// <summary>
     /// 当选中角色详情缺失(库街区 getRoleDetail 被极验风控 → 武器/技能/属性为空)
     /// 且已登录 mcguide 攻略站时,用 mcguide 数据填充 SelectedRole。
     /// </summary>
@@ -285,7 +368,7 @@ public sealed partial class RolesViewModel : ViewModelBase
         {
             return;
         }
-        // 详情已完整(getRoleDetail 未被风控)则跳过
+        // 详情已完整(库街区已返回/getRoleDetail 未被风控/缓存已合并)则跳过
         if (role.IsDetailComplete)
         {
             return;
@@ -308,7 +391,12 @@ public sealed partial class RolesViewModel : ViewModelBase
             {
                 return; // 已切到其他角色,丢弃过期结果
             }
+            var wasComplete = role.IsDetailComplete;
             MergeGuideDetail(role, detail);
+            if (wasComplete)
+            {
+                return; // 库街区按需详情已先返回完整数据:保留库街区状态,不用 guide 覆盖文案
+            }
             // mcguide 图标是 B 域名:命中库街区磁盘缓存时按名称替换为本地图标,避免缺失/错位
             ApplyCachedRoleIcons(role);
             _guideFilledRole = role;
@@ -439,15 +527,19 @@ public sealed partial class RolesViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = "正在从库街区获取角色数据…";
+        StatusText = "正在从库街区获取角色列表…";
         try
         {
-            // 触发极验风控时不再弹验证页(角色场景验证已实测无法解除),由服务返回提示并回退缓存
-            var result = await AppServices.Roles.LoadFromKujiequAsync(TokenText, RoleIdText);
+            // 仅同步角色列表(roleData);角色详情在点击具体角色时按需单发(高频接口批量易触发极验风控)
+            var result = await AppServices.Roles.LoadRoleListAsync(TokenText, RoleIdText);
             if (result.IsSuccess)
             {
                 ApplyRoles(result);
-                StatusText = result.Message ?? $"库街区同步成功: {result.Roles.Count} 个角色";
+                StatusText = result.Message ?? $"角色列表同步成功: {result.Roles.Count} 个角色";
+                if (result.Roles is { Count: > 0 } && SelectedRole is { } first && first.IsDetailComplete)
+                {
+                    StatusText += " (从缓存合并详情)";
+                }
             }
             else
             {

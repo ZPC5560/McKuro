@@ -43,7 +43,7 @@ public class RoleCacheAccountTests : IDisposable
             accounts: null!,
             logger: NullLogger<RoleDataService>.Instance);
 
-        // 先通过私有 SaveCache 写入?不直接暴露 —— 用 LoadFromKujiequAsync 无法在无网络下测。
+        // 先通过私有 SaveCache 写入?不直接暴露 —— 用 LoadRoleListAsync 无法在无网络下测。
         // 改为直接验证:未写入时任意账号均不可用,且不抛异常。
         var miss = service.LoadFromCache("account-a", "player-1");
         Assert.False(miss.IsSuccess);

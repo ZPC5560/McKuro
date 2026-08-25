@@ -98,6 +98,9 @@ public sealed class AppSettings
     /// <summary>mcguide cName(SDK 登录返回的 username)。</summary>
     public string GuideCName { get; set; } = "";
 
+    /// <summary>mcguide 登录手机号(账号页登录表单复用与同账号判定用)。</summary>
+    public string GuidePhone { get; set; } = "";
+
     /// <summary>已选玩家 ID(mcguide user/player/choose)。</summary>
     public long GuidePlayerId { get; set; }
 
@@ -111,6 +114,9 @@ public sealed class AppSettings
 
     /// <summary>云鸣潮登录账号名(显示用)。</summary>
     public string CloudLoginName { get; set; } = "";
+
+    /// <summary>云鸣潮登录手机号(账号页登录表单复用与同账号判定用)。</summary>
+    public string CloudLoginPhone { get; set; } = "";
 
     // ---------- 快捷键截图 ----------
 

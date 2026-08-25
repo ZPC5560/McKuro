@@ -209,7 +209,8 @@ public static class AppServices
             sp.GetRequiredService<KujiequApiClient>(),
             sp.GetRequiredService<IKuroClient>(),
             sp.GetRequiredService<KuroAccountService>(),
-            logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<TowerService>()));
+            logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<TowerService>(),
+            database: sp.GetRequiredService<AppDatabase>()));
         services.AddSingleton<DailyDataService>(sp => new DailyDataService(
             sp.GetRequiredService<KujiequApiClient>(),
             sp.GetRequiredService<IKuroClient>(),

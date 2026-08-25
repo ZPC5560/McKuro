@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.RegularExpressions;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -7,7 +6,6 @@ using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Core.Models.Kuro;
 using McKuro.Core.Services.Kuro;
 using McKuro.Services;
-using Microsoft.Extensions.Logging;
 
 namespace McKuro.ViewModels;
 
@@ -26,8 +24,8 @@ public sealed partial class RoleSignItem : ObservableObject
 }
 
 /// <summary>
-/// 签到页:库街区账号登录 + 游戏签到 + 库街区每日任务。
-/// 参考 Haiyu 的 GamerSignPage / LoginDialog / AutoKuroClientSignService。
+/// 签到页:游戏签到 + 库街区每日任务(登录已统一迁移到「账号」页)。
+/// 参考 Haiyu 的 GamerSignPage / AutoKuroClientSignService。
 /// </summary>
 public sealed partial class SignViewModel : ViewModelBase
 {
@@ -49,23 +47,6 @@ public sealed partial class SignViewModel : ViewModelBase
     [ObservableProperty]
     private bool _autoKuroClientTaskEnabled;
 
-    // 登录表单
-    [ObservableProperty]
-    private string _mobileInput = "";
-
-    [ObservableProperty]
-    private string _verifyCodeInput = "";
-
-    [ObservableProperty]
-    private string _smsStatusText = "";
-
-    // 验证码重发倒计时(60s,对齐 WutheringWavesTool smsCooldown)
-    [ObservableProperty]
-    private int _smsCountdown;
-
-    [ObservableProperty]
-    private bool _smsSending;
-
     public ObservableCollection<RoleSignItem> Roles { get; } = [];
 
     /// <summary>签到奖励格子(主角色的签到奖励配置,参照 WutheringWavesTool goodsView)。</summary>
@@ -81,52 +62,6 @@ public sealed partial class SignViewModel : ViewModelBase
 
     /// <summary>签到历史统计(按物品聚合,星声置顶,参照 WutheringWavesTool signHistoryListView)。</summary>
     public ObservableCollection<McKuro.Core.Models.Kuro.SignRecordItem> SignHistory { get; } = [];
-
-    /// <summary>发送验证码按钮文案(倒计时中显示剩余秒数)。</summary>
-    public string SmsButtonText => SmsCountdown > 0 ? $"重新发送 ({SmsCountdown}s)" : "发送验证码";
-
-    /// <summary>发送验证码按钮可用(极验/发送中或倒计时中禁用)。</summary>
-    public bool CanSendSms => !SmsSending && !IsBusy && SmsCountdown <= 0;
-
-    // 设备 ID:稳定持久化(库街区 did 需跨启动不变,否则触发极验风控;对齐 Haiyu 持久 devCode)
-    private readonly string _smsDeviceId = AppServices.StableDeviceId;
-
-    // 短信/极验流程日志(写本地文件,方便排查)
-    private readonly ILogger? _smsLog = AppServices.LoggerFactory?.CreateLogger("McKuro.SmsLogin");
-
-    private readonly DispatcherTimer _smsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
-
-    partial void OnSmsCountdownChanged(int value)
-    {
-        OnPropertyChanged(nameof(SmsButtonText));
-        OnPropertyChanged(nameof(CanSendSms));
-    }
-
-    partial void OnSmsSendingChanged(bool value) => OnPropertyChanged(nameof(CanSendSms));
-
-    partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanSendSms));
-
-    /// <summary>启动验证码重发倒计时(默认 60 秒)。</summary>
-    private void StartSmsCountdown(int seconds = 60)
-    {
-        SmsCountdown = seconds;
-        _smsTimer.Tick -= OnSmsTick;
-        _smsTimer.Tick += OnSmsTick;
-        _smsTimer.Start();
-    }
-
-    private void OnSmsTick(object? sender, EventArgs e)
-    {
-        if (SmsCountdown <= 1)
-        {
-            _smsTimer.Stop();
-            SmsCountdown = 0;
-        }
-        else
-        {
-            SmsCountdown--;
-        }
-    }
 
     public SignViewModel()
     {
@@ -186,148 +121,10 @@ public sealed partial class SignViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// 发送手机号验证码:先极验(GeeTest)人机验证,再调用发送接口;成功后启动 60s 重发倒计时。
-    /// 流程对齐 Haiyu:极验 → /user/getSmsCode(mobile + geeTestData)。
-    /// </summary>
+    /// <summary>跳转「账号」页登录(登录入口已统一迁移到账号页)。</summary>
     [RelayCommand]
-    private async Task SendSmsAsync()
-    {
-        var mobile = MobileInput.Trim();
-        if (!Regex.IsMatch(mobile, @"^1[3-9]\d{9}$"))
-        {
-            SmsStatusText = "请输入正确的 11 位手机号";
-            return;
-        }
-        if (SmsCountdown > 0)
-        {
-            SmsStatusText = $"请 {SmsCountdown} 秒后再试";
-            return;
-        }
-        if (SmsSending || IsBusy)
-        {
-            return;
-        }
-
-        SmsSending = true;
-        SmsStatusText = "正在打开极验验证,请在浏览器完成滑块…";
-        try
-        {
-            // 极验人机验证(系统浏览器打开本地滑块页,完成后本地回调)
-            var geeTestJson = await AppServices.GeetVerify.VerifyAsync();
-            if (string.IsNullOrEmpty(geeTestJson))
-            {
-                SmsStatusText = "极验验证未完成或超时,请重试";
-                _smsLog?.LogWarning("极验验证未完成或超时(返回 null),手机号: {Mobile}", mobile);
-                return;
-            }
-
-            _smsLog?.LogInformation("极验验证成功,极验 JSON 长度={Len} 摘要={Summary}",
-                geeTestJson.Length, geeTestJson.Length <= 80 ? geeTestJson : geeTestJson[..80] + "…");
-            SmsStatusText = "正在发送验证码…";
-            var result = await AppServices.Kuro.SendSMSAsync(mobile, geeTestJson, _smsDeviceId);
-            if (result is null)
-            {
-                _smsLog?.LogWarning("SendSMSAsync 返回 null(服务无响应),手机号: {Mobile}", mobile);
-                SmsStatusText = "发送失败: 服务无响应";
-                return;
-            }
-            _smsLog?.LogInformation("SendSMSAsync 响应: Code={Code} Success={Success} Msg={Msg} GeeTest={GeeTest}",
-                result.Code, result.Success, result.Msg, result.Data?.GeeTest);
-            if (result.Code == 242)
-            {
-                SmsStatusText = "短信发送频繁,请稍后再试";
-                return;
-            }
-            // Data.GeeTest == false 表示服务端确认发送成功(对齐 Haiyu 判断)
-            if (result is { Data.GeeTest: false } || result.Success || result.Code is 0 or 200)
-            {
-                SmsStatusText = "验证码已发送,请查收";
-                StartSmsCountdown(60);
-            }
-            else
-            {
-                SmsStatusText = $"发送失败: {result.Msg ?? $"code={result.Code}"}";
-            }
-        }
-        catch (Exception ex)
-        {
-            SmsStatusText = $"发送失败: {ex.Message}";
-        }
-        finally
-        {
-            SmsSending = false;
-        }
-    }
-
-    /// <summary>手机号 + 验证码登录。</summary>
-    [RelayCommand]
-    private async Task LoginWithSmsAsync()
-    {
-        var mobile = MobileInput.Trim();
-        var code = VerifyCodeInput.Trim();
-        if (string.IsNullOrWhiteSpace(mobile) || string.IsNullOrWhiteSpace(code))
-        {
-            StatusText = "请填写手机号与验证码";
-            return;
-        }
-        if (string.IsNullOrEmpty(_smsDeviceId))
-        {
-            StatusText = "请先点击「发送验证码」";
-            return;
-        }
-
-        IsBusy = true;
-        StatusText = "正在登录…";
-        try
-        {
-            var result = await AppServices.Kuro.LoginAsync(mobile, code, _smsDeviceId);
-            if (result is not { Success: true } || result.Data is null || string.IsNullOrEmpty(result.Data.Token))
-            {
-                StatusText = $"登录失败: {result?.Msg ?? "响应无效"}";
-                return;
-            }
-
-            var account = new KuroAccount
-            {
-                UserId = result.Data.UserId ?? "",
-                Token = result.Data.Token!,
-                DeviceId = _smsDeviceId,
-                Mobile = mobile,
-                Nickname = result.Data.UserName ?? "",
-            };
-            AppServices.KuroAccounts.AddOrUpdate(account);
-            _smsTimer.Stop();
-            SmsCountdown = 0;
-            // 同步 Token 到设置:角色数据页自动加载依赖 KujiequToken
-            AppServices.Settings.Current.KujiequToken = account.Token;
-            AppServices.Settings.Save();
-            RefreshAccount();
-            StatusText = "登录成功";
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"登录失败: {ex.Message}";
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    [RelayCommand]
-    private void Logout()
-    {
-        var current = AppServices.KuroAccounts.Current;
-        if (current is not null)
-        {
-            AppServices.KuroAccounts.Remove(current.UserId);
-        }
-        IsLoggedIn = false;
-        AccountText = "未登录";
-        Roles.Clear();
-        StatusText = "已退出登录";
-    }
+    private void GoAccount()
+        => WeakReferenceMessenger.Default.Send(new NavigationRequestedMessage(NavigationKeys.Account));
 
     /// <summary>刷新角色列表(鸣潮)。</summary>
     [RelayCommand]

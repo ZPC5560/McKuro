@@ -60,7 +60,7 @@
                       SelectedItem="{Binding SelectedSort, Mode=TwoWay}" />
             <TextBlock Grid.Column="3" VerticalAlignment="Center" FontSize="12"
                        Foreground="{DynamicResource SemiColorText3}"
-                       Text="默认显示本地缓存;点击右上角「同步」才会向库街区拉取最新数据" />
+                       Text="「同步」仅拉取角色列表;点击角色卡片时按需获取该角色完整详情" />
         </Grid>
 
         <!-- 内容:角色列表 + 详情 -->
@@ -311,7 +311,7 @@
                                 </ItemsControl>
                             </StackPanel>
                         </Border>
-<!-- ③ mcguide 官方养成达成度(仅登录后显示;登录入口在设置页) -->
+<!-- ③ mcguide 官方养成达成度(仅登录后显示;登录入口在账号页) -->
                         <Border CornerRadius="12" Padding="14"
                                 Background="{DynamicResource SemiColorBg3}"
                                 IsVisible="{Binding GuideLoggedIn}">
@@ -492,7 +492,7 @@
                     IsVisible="{Binding !HasRoles}">
             <TextBlock Text="暂无角色数据" FontSize="18" Foreground="{DynamicResource SemiColorText2}"
                        HorizontalAlignment="Center" />
-            <TextBlock Text="点击「从库街区同步」拉取当前账号角色,或「读取本地数据」解析游戏本地缓存。"
+            <TextBlock Text="点击右上角「同步」拉取当前账号的角色列表,再点击角色卡片查看该角色的完整详情。"
                        FontSize="13" Foreground="{DynamicResource SemiColorText3}"
                        HorizontalAlignment="Center" />
         </StackPanel>

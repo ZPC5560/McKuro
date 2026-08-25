@@ -75,6 +75,7 @@ public sealed class GuideAchievementService
             s.GuideToken = token;
             s.GuideCUid = cUid;
             s.GuideCName = cName;
+            s.GuidePhone = phone; // 记录手机号:账号页表单复用 + 跨接口同账号判定
             _settings.Save();
 
             var playerOk = await EnsurePlayerAsync(ct).ConfigureAwait(false);
@@ -143,9 +144,58 @@ public sealed class GuideAchievementService
             return null;
         }
 
-        var list = await _api.GetIntroductionListAsync(_settings.Current.GuideToken, gbId, ct).ConfigureAwait(false);
-        var top = list.FirstOrDefault();
-        return top is null ? null : await _api.GetIntroductionInfoAsync(_settings.Current.GuideToken, gbId, top.Id, ct).ConfigureAwait(false);
+        try
+        {
+            var list = await _api.GetIntroductionListAsync(_settings.Current.GuideToken, gbId, ct).ConfigureAwait(false);
+            var top = list.FirstOrDefault();
+            return top is null ? null : await _api.GetIntroductionInfoAsync(_settings.Current.GuideToken, gbId, top.Id, ct).ConfigureAwait(false);
+        }
+        catch (GuideApiException ex) when (ex.Code == GuideApiException.SessionExpiredCode)
+        {
+            // x-token 已失效:清除会话让账号页回到登录表单(保留手机号便于复用),提示重新登录
+            ClearExpiredSession();
+            throw new GuideApiException("mcguide 登录已过期,请到「账号」页的攻略站区块重新登录", ex.Code);
+        }
+    }
+
+    /// <summary>
+    /// 校验 mcguide 会话是否仍有效(账号页加载时调用)。
+    /// 返回 valid: null=未登录/校验失败(不判定), true=有效, false=已过期(会话已被清除)。
+    /// </summary>
+    public async Task<(bool? Valid, string Message)> ValidateSessionAsync(CancellationToken ct = default)
+    {
+        var s = _settings.Current;
+        if (string.IsNullOrWhiteSpace(s.GuideToken))
+        {
+            return (null, "未登录(角色页将隐藏官方评级)");
+        }
+        try
+        {
+            // /user/player/list 是最轻的鉴权 GET,足以判定 x-token 有效性
+            await _api.GetPlayerListAsync(s.GuideToken, ct).ConfigureAwait(false);
+            return (true, string.IsNullOrWhiteSpace(s.GuideCName) ? "已登录" : $"已登录: {s.GuideCName}");
+        }
+        catch (GuideApiException ex) when (ex.Code == GuideApiException.SessionExpiredCode)
+        {
+            ClearExpiredSession();
+            return (false, "登录已过期,请重新登录");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "mcguide 会话校验失败(不判定过期)");
+            return (null, $"会话校验失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>清除失效的 mcguide 会话(保留手机号/账号名便于表单复用与同账号判定)。</summary>
+    private void ClearExpiredSession()
+    {
+        _logger.LogWarning("mcguide 会话已过期(code=1001),清除本地 GuideToken");
+        var s = _settings.Current;
+        s.GuideToken = "";
+        s.GuidePlayerId = 0;
+        s.GuideServerId = "";
+        _settings.Save();
     }
 
     /// <summary>

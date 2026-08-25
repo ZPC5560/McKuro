@@ -1,7 +1,9 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using McKuro.Core.Infrastructure;
 using McKuro.Core.Models.Kuro;
+using McKuro.Core.Models.Roles;
 using McKuro.Core.Services.Kuro;
 using McKuro.Core.Services.Roles;
 using McKuro.Core.Services.Settings;
@@ -10,10 +12,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace McKuro.Tests;
 
 /// <summary>
-/// 角色同步「极验风控 → 不弹验证页 → 缓存回退 + 提示」链路测试:
-/// getRoleDetail 返回 {"geeTest":true} 时,服务不再调用极验验证器(角色场景验证实测无法解除,
-/// 登录场景票据上行仍被服务端拒绝),直接回退上次完整缓存并返回风控提示;且不得覆盖旧缓存。
-/// (refreshData 接口已被库街区停用,同步链不再包含刷新缓存步骤。)
+/// 角色数据「列表/详情分离」链路测试(2026-08 优化):
+/// 1) 页面加载/同步(LoadRoleListAsync)只查角色列表,不请求任何 getRoleDetail;
+/// 2) 列表项合并本地缓存已同步过的详情(加载后详情区不空白);
+/// 3) 点击角色按需拉详情(LoadRoleDetailAsync)单发 getRoleDetail;触发极验风控时报 GeeTest、
+///    不弹验证页、不上行验证票据,且不得覆盖已有完整缓存;
+/// 4) 详情成功后按 cardRoleId 回写缓存。
 /// </summary>
 public class RoleDataServiceRiskControlTests : IDisposable
 {
@@ -44,18 +48,21 @@ public class RoleDataServiceRiskControlTests : IDisposable
         }
     }
 
-    /// <summary>按路径返回脚本化响应的库街区模拟(首个 getRoleDetail 触发极验风控,之后正常)。</summary>
+    /// <summary>按路径返回脚本化响应的库街区模拟(首个 getRoleDetail 按配置触发极验风控)。</summary>
     private sealed class MockKuroHandler : HttpMessageHandler
     {
         public int DetailCalls { get; private set; }
 
-        /// <summary>已接收的请求 (路径, body),用于断言未上行验证票据。</summary>
+        /// <summary>已接收的请求 (路径, body),用于断言未上行验证票据/未批量拉详情。</summary>
         public readonly List<(string Path, string Body)> Requests = new();
+
+        /// <summary>首个 getRoleDetail 是否触发极验风控(其余调用返回正常详情)。</summary>
+        public bool FirstDetailGeeTest { get; init; } = true;
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var path = request.RequestUri!.AbsolutePath;
-            var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
             lock (Requests)
             {
                 Requests.Add((path, body));
@@ -75,21 +82,21 @@ public class RoleDataServiceRiskControlTests : IDisposable
             {
                 Content = new StringContent(responseBody, Encoding.UTF8, "application/json"),
             };
-            return await Task.FromResult(resp).ConfigureAwait(false);
+            return await Task.FromResult(resp);
         }
 
         private string NextDetail()
         {
             DetailCalls++;
-            return DetailCalls == 1
+            return DetailCalls == 1 && FirstDetailGeeTest
                 ? """{"geeTest":true}"""
                 : DetailOkBody;
         }
     }
 
-    private (RoleDataService Service, MockKuroHandler Handler, AppDatabase Db) CreateService()
+    private (RoleDataService Service, MockKuroHandler Handler, AppDatabase Db) CreateService(bool firstDetailGeeTest = true)
     {
-        var handler = new MockKuroHandler();
+        var handler = new MockKuroHandler { FirstDetailGeeTest = firstDetailGeeTest };
         var http = new HttpClient(handler);
         var api = new KujiequApiClient(http, baseUrl: "http://127.0.0.1:1");
         var kuro = new KuroClient(http);
@@ -107,64 +114,126 @@ public class RoleDataServiceRiskControlTests : IDisposable
         return (service, handler, db);
     }
 
+    private static RoleDetail CompleteRole(int cardId, string name) => new()
+    {
+        Role = new RoleInfo { RoleId = cardId, RoleName = name, StarLevel = 5 },
+        WeaponData = new WeaponData { Weapon = new WeaponInfo { WeaponName = "晨光" } },
+        Skills = [new SkillInfo { SkillLevel = 1, Skill = new SkillBase { SkillName = "剑心" } }],
+        Attributes = [new RoleAttribute { AttributeName = "攻击", AttributeValue = "123" }],
+    };
+
+    private static void InsertCache(AppDatabase db, string accountId, string playerId, List<RoleDetail> roles)
+    {
+        var json = JsonSerializer.Serialize(roles, RoleJsonContext.Default.ListRoleDetail);
+        using var cmd = db.Connection.CreateCommand();
+        cmd.CommandText =
+            """
+            INSERT INTO role_cache (account_id, player_id, json, update_time)
+            VALUES ($account, $player, $json, '2026-01-01')
+            """;
+        cmd.Parameters.AddWithValue("$account", accountId);
+        cmd.Parameters.AddWithValue("$player", playerId);
+        cmd.Parameters.AddWithValue("$json", json);
+        cmd.ExecuteNonQuery();
+    }
+
     [Fact]
-    public async Task GeeTest_No_Verifier_And_Falls_Back_To_Complete_Cache()
+    public async Task ListSync_Does_Not_Request_Any_RoleDetail()
     {
         var (service, handler, db) = CreateService();
         using (db)
         {
-            // 先写入上一次完整同步的缓存(风控时不得覆盖)
-            var json = System.Text.Json.JsonSerializer.Serialize(
-                new List<McKuro.Core.Models.Roles.RoleDetail>
-                {
-                    new McKuro.Core.Models.Roles.RoleDetail
-                    {
-                        Role = new McKuro.Core.Models.Roles.RoleInfo { RoleId = 1304, RoleName = "秧秧", StarLevel = 5 },
-                        WeaponData = new McKuro.Core.Models.Roles.WeaponData { Weapon = new McKuro.Core.Models.Roles.WeaponInfo { WeaponName = "晨光" } },
-                        Skills = [new McKuro.Core.Models.Roles.SkillInfo { SkillLevel = 1, Skill = new McKuro.Core.Models.Roles.SkillBase { SkillName = "剑心" } }],
-                        Attributes = [new McKuro.Core.Models.Roles.RoleAttribute { AttributeName = "攻击", AttributeValue = "123" }],
-                    },
-                },
-                McKuro.Core.Models.Roles.RoleJsonContext.Default.ListRoleDetail);
-            using (var cmd = db.Connection.CreateCommand())
-            {
-                cmd.CommandText =
-                    """
-                    INSERT INTO role_cache (account_id, player_id, json, update_time)
-                    VALUES ($account, $player, $json, '2026-01-01')
-                    """;
-                cmd.Parameters.AddWithValue("$account", UserId);
-                cmd.Parameters.AddWithValue("$player", RoleId);
-                cmd.Parameters.AddWithValue("$json", json);
-                cmd.ExecuteNonQuery();
-            }
-
-            // 新签名不再接受验证器:触发风控后直接回退缓存
-            var result = await service.LoadFromKujiequAsync(Token, RoleId).ConfigureAwait(false);
+            var result = await service.LoadRoleListAsync(Token, RoleId);
 
             Assert.True(result.IsSuccess);
-            Assert.Contains("风控", result.Message ?? "");
-            Assert.True(Assert.Single(result.Roles).IsDetailComplete); // 展示的是缓存完整数据
-            // 详情接口只被调用一次(不重试),且没有上行任何验证票据
-            Assert.Equal(1, handler.DetailCalls);
-            Assert.All(
-                handler.Requests.Where(r => r.Path == "/aki/roleBox/akiBox/getRoleDetail"),
-                r => Assert.DoesNotContain("geeTestData=", r.Body));
+            Assert.Equal(RoleDataSource.Kujiequ, result.Source);
+            var role = Assert.Single(result.Roles);
+            Assert.False(role.IsDetailComplete); // 页面加载只有基础列表
+            Assert.Equal(0, handler.DetailCalls); // 不请求任何 getRoleDetail
+            Assert.DoesNotContain(handler.Requests, r => r.Path == "/aki/roleBox/akiBox/getRoleDetail");
         }
     }
 
     [Fact]
-    public async Task GeeTest_Without_Existing_Cache_Returns_Basic_List_And_Hint()
+    public async Task ListSync_Merges_Cached_Detail_So_Detail_Panel_Not_Blank()
+    {
+        var (service, handler, db) = CreateService();
+        using (db)
+        {
+            InsertCache(db, UserId, RoleId, [CompleteRole(1304, "秧秧")]);
+
+            var result = await service.LoadRoleListAsync(Token, RoleId);
+
+            Assert.True(result.IsSuccess);
+            var role = Assert.Single(result.Roles);
+            Assert.True(role.IsDetailComplete); // 上次同步的详情合并进新列表 → 详情区不空白
+            Assert.Equal(0, handler.DetailCalls);
+        }
+    }
+
+    [Fact]
+    public async Task Detail_GeeTest_Returns_Flag_Without_Verifier_And_Keeps_Cache()
+    {
+        var (service, handler, db) = CreateService();
+        using (db)
+        {
+            InsertCache(db, UserId, RoleId, [CompleteRole(1304, "秧秧")]);
+
+            var result = await service.LoadRoleDetailAsync(Token, RoleId, 1304);
+
+            Assert.True(result.GeeTest);
+            Assert.Null(result.Detail);
+            Assert.Equal(1, handler.DetailCalls); // 单发一次,不重试
+            Assert.All(
+                handler.Requests.Where(r => r.Path == "/aki/roleBox/akiBox/getRoleDetail"),
+                r => Assert.DoesNotContain("geeTestData=", r.Body));
+            // 风控不覆盖已有完整缓存
+            Assert.True(Assert.Single(service.LoadFromCache(UserId, RoleId).Roles).IsDetailComplete);
+        }
+    }
+
+    [Fact]
+    public async Task Detail_After_ListSync_Reuses_AccessToken()
+    {
+        var (service, handler, _) = CreateService(firstDetailGeeTest: false);
+        await service.LoadRoleListAsync(Token, RoleId);
+
+        var result = await service.LoadRoleDetailAsync(Token, RoleId, 1304);
+
+        Assert.NotNull(result.Detail);
+        Assert.False(result.GeeTest);
+        Assert.True(result.Detail!.IsDetailComplete);
+        // 列表同步已换取令牌 → 详情按需加载不重复 getGamer/requestToken,只单发一次 getRoleDetail
+        Assert.Equal(1, handler.Requests.Count(r => r.Path == "/aki/roleBox/requestToken"));
+        Assert.Equal(1, handler.DetailCalls);
+    }
+
+    [Fact]
+    public async Task Detail_Success_Writes_Cache_By_CardId()
+    {
+        var (service, handler, db) = CreateService(firstDetailGeeTest: false);
+        using (db)
+        {
+            // 无缓存时点击角色:详情成功后按 cardRoleId 写入缓存
+            var result = await service.LoadRoleDetailAsync(Token, RoleId, 1304);
+
+            Assert.NotNull(result.Detail);
+            var cached = service.LoadFromCache(UserId, RoleId);
+            Assert.True(cached.IsSuccess);
+            var cachedRole = Assert.Single(cached.Roles);
+            Assert.True(cachedRole.IsDetailComplete);
+            Assert.Equal("晨光", cachedRole.WeaponData?.Weapon?.WeaponName);
+        }
+    }
+
+    [Fact]
+    public async Task Detail_Without_Configured_Inputs_Returns_Empty()
     {
         var (service, handler, _) = CreateService();
-        // 无缓存
-        var result = await service.LoadFromKujiequAsync(Token, RoleId).ConfigureAwait(false);
+        var result = await service.LoadRoleDetailAsync("", RoleId, 1304);
 
-        Assert.True(result.IsSuccess);
-        Assert.Contains("风控", result.Message ?? "");
-        // 无缓存时回退到 roleData 基础列表(非完整详情)
-        var role = Assert.Single(result.Roles);
-        Assert.False(role.IsDetailComplete);
-        Assert.Equal(1, handler.DetailCalls);
+        Assert.Null(result.Detail);
+        Assert.False(result.GeeTest);
+        Assert.Equal(0, handler.DetailCalls);
     }
 }

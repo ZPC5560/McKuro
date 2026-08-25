@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Core.Services.Game;
 using McKuro.Services;
 
@@ -79,6 +80,15 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
 
     public PlayTimeViewModel()
     {
+        // 游戏进程正常退出后重新解析日志(游玩期间产生的新时段要计入今日时长)
+        WeakReferenceMessenger.Default.Register<PlayTimeViewModel, GameSessionEndedMessage>(this,
+            static (recipient, message) =>
+            {
+                if (message.Value == GameSessionEndReason.Finished)
+                {
+                    _ = recipient.AnalyzeAsync();
+                }
+            });
         RefreshFromDb();
         // 进入页面自动解析日志(页面不再提供"解析日志"按钮)
         _ = AnalyzeAsync();

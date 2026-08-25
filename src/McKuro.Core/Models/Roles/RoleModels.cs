@@ -171,15 +171,32 @@ public sealed class RoleDetail : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    /// <summary>数据填充(mcguide 攻略站)后通知绑定区刷新武器/技能/属性/声骸/共鸣链等区块。</summary>
+    /// <summary>
+    /// 数据填充(库街区 getRoleDetail 按需合并 / mcguide 攻略站)后通知绑定区刷新
+    /// 详情区块及其计算属性(武器/技能/属性/声骸/共鸣链、列表卡片与头部卡片字段)。
+    /// </summary>
     public void NotifyDetailChanged()
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Role)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Level)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(WeaponData)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Skills)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Attributes)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PhantomData)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Chains)));
+        // 计算属性(依赖上方区块;不通知时绑定到精确属性名的表达式不会刷新)
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RoleName)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StarLevel)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AttributeName)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LevelText)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ChainCount)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UnlockedChainCount)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsFullChain)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(FullChainTitle)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasPhantoms)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasAttributes)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasEchoRating)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EchoRatingText)));
     }
 
     [JsonPropertyName("role")] public RoleInfo? Role { get; set; }

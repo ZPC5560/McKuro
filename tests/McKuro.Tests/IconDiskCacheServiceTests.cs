@@ -226,4 +226,51 @@ public class IconDiskCacheServiceTests : IDisposable
         Assert.NotEqual("https://guide-res.aki-game.com/weapon.png", resolved);
         Assert.True(File.Exists(resolved));
     }
+
+    [Fact]
+    public async Task CacheUrlAsync_Downloads_Persists_And_Skips_Already_Cached()
+    {
+        // 玩家头像场景(参照 Java WutheringWavesTool imageBuffer):URL → 本地文件,按稳定 key 复用
+        var downloader = new FakeDownloader(new Dictionary<string, byte[]>
+        {
+            ["https://web-static.kurobbs.com/profile_picture/1.png"] = Png("avatar"),
+        });
+        var service = new IconDiskCacheService(_dir, downloader.Download);
+
+        // 首次:下载落盘并命中本地路径
+        await service.CacheUrlAsync(IconDiskCacheService.CategoryAvatar, "15714568",
+            "https://web-static.kurobbs.com/profile_picture/1.png");
+        var path = service.GetCachedIconPath(IconDiskCacheService.CategoryAvatar, "15714568");
+        Assert.NotNull(path);
+        Assert.True(File.Exists(path));
+        Assert.Equal(Png("avatar"), await File.ReadAllBytesAsync(path!));
+
+        // 二次:已缓存不再下载;换 URL 同 key 也命中本地缓存(头像地址变化仍用旧图,直到手动清理)
+        await service.CacheUrlAsync(IconDiskCacheService.CategoryAvatar, "15714568",
+            "https://web-static.kurobbs.com/profile_picture/2.png");
+        Assert.Single(downloader.Requested);
+
+        // 索引持久化:新实例读同一目录仍命中
+        var reloaded = new IconDiskCacheService(_dir, downloader.Download);
+        Assert.Equal(path, reloaded.GetCachedIconPath(IconDiskCacheService.CategoryAvatar, "15714568"));
+    }
+
+    [Fact]
+    public async Task CacheUrlAsync_Ignores_Non_Http_And_Failures()
+    {
+        var downloader = new FakeDownloader(new Dictionary<string, byte[]>()); // 全部返回 null
+        var service = new IconDiskCacheService(_dir, downloader.Download);
+
+        // 非 http(本地路径)/空 URL 不触发下载
+        await service.CacheUrlAsync(IconDiskCacheService.CategoryAvatar, "a", "E:\\not\\http.png");
+        await service.CacheUrlAsync(IconDiskCacheService.CategoryAvatar, "a", "");
+        // 下载失败静默,不留缓存条目
+        await service.CacheUrlAsync(IconDiskCacheService.CategoryAvatar, "b", "https://img.kurobbs.com/missing.png");
+
+        // 仅 http URL 被请求(失败返回 null);本地路径与空 URL 未请求
+        var requested = Assert.Single(downloader.Requested);
+        Assert.Equal("https://img.kurobbs.com/missing.png", requested);
+        Assert.Null(service.GetCachedIconPath(IconDiskCacheService.CategoryAvatar, "a"));
+        Assert.Null(service.GetCachedIconPath(IconDiskCacheService.CategoryAvatar, "b"));
+    }
 }

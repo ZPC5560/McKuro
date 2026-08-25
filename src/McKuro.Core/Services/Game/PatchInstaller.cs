@@ -37,9 +37,11 @@ public sealed class PatchInstaller
                     "当前更新包含 krdiff/krpdiff 差分包,但未找到 hpatchz.exe。请将 hpatchz.exe 放入 Assets\\HpatchzResource,或设置 MCKURO_HPATCHZ 环境变量。");
             }
 
-            foreach (var package in plan.DiffPackages)
+            for (var i = 0; i < plan.DiffPackages.Count; i++)
             {
+                var package = plan.DiffPackages[i];
                 ct.ThrowIfCancellationRequested();
+                ReportStage(progress, $"正在合成差分包 ({i + 1}/{plan.DiffPackages.Count})…", package.Package.Path);
                 var diffPath = GetStagedPath(stagingDir, package.Package.Path);
                 if (!File.Exists(diffPath))
                 {
@@ -58,7 +60,7 @@ public sealed class PatchInstaller
 
             if (plan.DiffGroups.Count > 0)
             {
-                var groupResult = await InstallGroupsAsync(hpatchz, plan.DiffGroups, stagingDir, gameRootDir, ct)
+                var groupResult = await InstallGroupsAsync(hpatchz, plan.DiffGroups, stagingDir, gameRootDir, progress, ct)
                     .ConfigureAwait(false);
                 if (!groupResult.Success)
                 {
@@ -67,9 +69,11 @@ public sealed class PatchInstaller
             }
         }
 
-        foreach (var zip in plan.ZipPackages)
+        for (var i = 0; i < plan.ZipPackages.Count; i++)
         {
+            var zip = plan.ZipPackages[i];
             ct.ThrowIfCancellationRequested();
+            ReportStage(progress, $"正在解压压缩包 ({i + 1}/{plan.ZipPackages.Count})…", zip.Package.Path);
             var zipPath = GetStagedPath(stagingDir, zip.Package.Path);
             if (!File.Exists(zipPath))
             {
@@ -88,6 +92,7 @@ public sealed class PatchInstaller
         var installed = 0;
         if (ordinary.Length > 0)
         {
+            ReportStage(progress, $"正在安装资源文件 ({ordinary.Length} 个)…");
             var fileResult = await Task.Run(
                 () => _fileInstaller.InstallFilesFromStaging(stagingDir, gameRootDir, ordinary),
                 ct).ConfigureAwait(false);
@@ -113,6 +118,7 @@ public sealed class PatchInstaller
         IReadOnlyList<GamePatchGroup> groups,
         string stagingDir,
         string gameRootDir,
+        IProgress<DownloadProgress>? progress,
         CancellationToken ct)
     {
         // 与 Haiyu 一致:分组差分输出位于游戏盘,避免预载目录在另一盘时耗尽错误磁盘。
@@ -123,9 +129,11 @@ public sealed class PatchInstaller
             // Haiyu 先完成所有 group diff,再统一替换源文件;避免后续差分失去旧版本输入。
             var sourcesToDelete = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var generatedFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var group in groups)
+            for (var gi = 0; gi < groups.Count; gi++)
             {
+                var group = groups[gi];
                 ct.ThrowIfCancellationRequested();
+                ReportStage(progress, $"正在合成分组差分 ({gi + 1}/{groups.Count})…", group.Package.Path);
                 var diffPath = GetStagedPath(stagingDir, group.Package.Path);
                 if (!File.Exists(diffPath))
                 {
@@ -289,6 +297,21 @@ public sealed class PatchInstaller
         {
             return PatchInstallResult.Failed($"执行差分引擎失败: {ex.Message}");
         }
+    }
+
+    /// <summary>上报非下载安装阶段(差分合成/解压/资源安装),UI 据此切换文案而不动进度条。</summary>
+    private static void ReportStage(IProgress<DownloadProgress>? progress, string stageText, string? currentFile = null)
+    {
+        progress?.Report(new DownloadProgress
+        {
+            CurrentFile = currentFile ?? stageText,
+            FileIndex = 0,
+            FileTotal = 0,
+            BytesDownloaded = 0,
+            BytesTotal = 0,
+            SpeedBps = 0,
+            StageText = stageText,
+        });
     }
 
     private static string? FindHpatchz()

@@ -2,6 +2,7 @@ using Avalonia.Collections;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Controls;
 using McKuro.Core.Models.Gacha;
 using McKuro.Core.Services.Gacha;
@@ -60,41 +61,17 @@ public sealed partial class GachaViewModel : ViewModelBase
     /// <summary>"全部账号"聚合选项的显示文本。</summary>
     public const string AllPlayersLabel = "全部账号";
 
-    // ---- 云鸣潮登录(抽卡记录接口通道) ----
+    // ---- 云鸣潮登录状态(登录表单已迁移到「账号」页;此处仅显示状态) ----
     [ObservableProperty]
     private bool _isCloudLoggedIn;
 
     [ObservableProperty]
     private string _cloudAccountText = "未登录";
 
-    [ObservableProperty]
-    private string _cloudMobile = "";
-
-    [ObservableProperty]
-    private string _cloudCode = "";
-
-    [ObservableProperty]
-    private string _cloudStatusText = "";
-
-    [ObservableProperty]
-    private int _cloudSmsCountdown;
-
-    [ObservableProperty]
-    private bool _cloudSmsSending;
-
-    /// <summary>发送验证码按钮文案(倒计时中显示剩余秒数)。</summary>
-    public string CloudSmsButtonText => CloudSmsCountdown > 0 ? $"重新发送 ({CloudSmsCountdown}s)" : "发送验证码";
-
-    /// <summary>发送验证码按钮可用。</summary>
-    public bool CanSendCloudSms => !CloudSmsSending && CloudSmsCountdown <= 0;
-
-    partial void OnCloudSmsCountdownChanged(int value)
-    {
-        OnPropertyChanged(nameof(CloudSmsButtonText));
-        OnPropertyChanged(nameof(CanSendCloudSms));
-    }
-
-    partial void OnCloudSmsSendingChanged(bool value) => OnPropertyChanged(nameof(CanSendCloudSms));
+    /// <summary>跳转「账号」页登录云鸣潮。</summary>
+    [RelayCommand]
+    private void GoAccount()
+        => WeakReferenceMessenger.Default.Send(new NavigationRequestedMessage(NavigationKeys.Account));
 
     /// <summary>玩家筛选选项(含"全部账号")。</summary>
     public AvaloniaList<string> PlayerIds { get; } = [];
@@ -437,92 +414,6 @@ public sealed partial class GachaViewModel : ViewModelBase
         CloudAccountText = IsCloudLoggedIn
             ? (string.IsNullOrWhiteSpace(AppServices.CloudGacha.SavedLoginName) ? "已登录" : AppServices.CloudGacha.SavedLoginName)
             : "未登录";
-    }
-
-    /// <summary>发送云鸣潮登录验证码。</summary>
-    [RelayCommand]
-    private async Task SendCloudSmsAsync()
-    {
-        if (CloudSmsSending || CloudSmsCountdown > 0)
-        {
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(CloudMobile))
-        {
-            CloudStatusText = "请先填写手机号";
-            return;
-        }
-        CloudSmsSending = true;
-        CloudStatusText = "正在发送验证码…";
-        try
-        {
-            var (ok, msg) = await AppServices.CloudGacha.SendSmsAsync(CloudMobile.Trim());
-            CloudStatusText = msg ?? (ok ? "验证码已发送" : "发送失败");
-            if (ok)
-            {
-                CloudSmsCountdown = 60;
-                _ = RunCloudSmsCountdownAsync();
-            }
-        }
-        catch (Exception ex)
-        {
-            CloudStatusText = $"发送失败: {ex.Message}";
-        }
-        finally
-        {
-            CloudSmsSending = false;
-        }
-    }
-
-    private async Task RunCloudSmsCountdownAsync()
-    {
-        while (CloudSmsCountdown > 0)
-        {
-            await Task.Delay(1000);
-            if (CloudSmsCountdown > 0)
-            {
-                CloudSmsCountdown--;
-            }
-        }
-    }
-
-    /// <summary>云鸣潮手机号登录(登录成功后自动同步)。</summary>
-    [RelayCommand]
-    private async Task CloudLoginAsync()
-    {
-        if (string.IsNullOrWhiteSpace(CloudMobile) || string.IsNullOrWhiteSpace(CloudCode))
-        {
-            CloudStatusText = "请填写手机号与验证码";
-            return;
-        }
-        CloudStatusText = "正在登录…";
-        try
-        {
-            var (ok, msg) = await AppServices.CloudGacha.LoginAsync(CloudMobile.Trim(), CloudCode.Trim());
-            if (ok)
-            {
-                CloudCode = "";
-                RefreshCloudState();
-                CloudStatusText = "登录成功,点击「同步」拉取抽卡记录";
-            }
-            else
-            {
-                CloudStatusText = msg ?? "登录失败";
-            }
-        }
-        catch (Exception ex)
-        {
-            CloudStatusText = $"登录失败: {ex.Message}";
-        }
-    }
-
-    /// <summary>退出云鸣潮登录。</summary>
-    [RelayCommand]
-    private void CloudLogout()
-    {
-        AppServices.CloudGacha.Logout();
-        RefreshCloudState();
-        CloudStatusText = "已退出云鸣潮登录";
     }
 
     private void ApplyAnalysis(GachaAnalysisResult analysis)
