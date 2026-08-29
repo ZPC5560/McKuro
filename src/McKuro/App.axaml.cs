@@ -69,15 +69,20 @@ public partial class App : Application
                 });
             }
 
-            // 极验窗口冒烟:应用内验证窗口 4s 自检(创建平台 WebView 控件并加载页面),然后退出。
-            // 仅开发诊断用:验证 GeetestWindow 的 XAML/控件挂载链路,不触碰任何登录接口。
-            if (Environment.GetEnvironmentVariable("McKuro_GEETEST_SMOKE") == "1")
+            // 极验窗口冒烟:应用内验证窗口自检(创建平台 WebView 控件并加载页面),4s 后自动退出。
+            // McKuro_GEETEST_SMOKE=1 加载 example.com;设为具体 URL 则加载该页面(如本地极验页,用于布局验证)。
+            // 仅开发诊断用:不触碰任何登录接口。
+            var geetestSmoke = Environment.GetEnvironmentVariable("McKuro_GEETEST_SMOKE");
+            if (!string.IsNullOrEmpty(geetestSmoke))
             {
-                var win = new GeetestWindow("https://example.com/");
+                var url = geetestSmoke == "1" ? "https://example.com/" : geetestSmoke;
+                var win = new GeetestWindow(url);
                 win.Show();
                 System.Console.Error.WriteLine("MCKURO-GEETEST-SMOKE window shown, supported="
                     + GeetestWindow.IsPlatformSupported);
-                DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(4));
+                // "1" 快速自检 4s;URL 模式给 15s(极验脚本初始化+布局检查需要时间)
+                DispatcherTimer.RunOnce(() => desktop.Shutdown(),
+                    TimeSpan.FromSeconds(geetestSmoke == "1" ? 4 : 15));
             }
         }
 

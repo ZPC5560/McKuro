@@ -10,14 +10,17 @@
       padding: 8px 12px; font-size: 13px; color: #334;
       background: #fff; border-bottom: 1px solid #dde3ea;
       word-break: break-all;
+      flex: none;
     }
     #status.ok { color: #067647; }
     #status.err { color: #b42318; }
-    /* 对齐 Haiyu geet.html:popup 模式按钮铺满容器 */
+    /* 验证按钮在状态栏下方的剩余空间内水平+垂直居中 */
+    body { display: flex; flex-direction: column; }
     .box {
-      height: 350px;
-      width: 500px;
-      margin: 40px auto 0;
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       text-align: center;
     }
     #captcha {
