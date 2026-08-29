@@ -21,7 +21,56 @@ public sealed class GeetVerifyService
 {
     private const int TimeoutSeconds = 120;
 
+    /// <summary>极验加载性能排查用毫秒级侧日志(临时)。</summary>
+    internal static readonly System.Diagnostics.Stopwatch TimingSw = System.Diagnostics.Stopwatch.StartNew();
+
+    internal static void TimingLog(string s)
+    {
+        try
+        {
+            File.AppendAllText(@"E:\donet\geet_timing.log", $"{TimingSw.ElapsedMilliseconds}ms {s}\n");
+        }
+        catch
+        {
+        }
+    }
+
     private readonly ILogger<GeetVerifyService> _logger;
+
+    /// <summary>
+    /// 解析当前应用主题("dark"/"light"),供极验验证页配色跟随主题。
+    /// 设置为 Default 时跟随系统(Windows 读个性化注册表;其他平台视为 light)。
+    /// </summary>
+    public static string ResolveTheme()
+    {
+        var setting = AppServices.Settings.Current.Theme;
+        if (setting == "Dark")
+        {
+            return "dark";
+        }
+        if (setting == "Light")
+        {
+            return "light";
+        }
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                var v = Microsoft.Win32.Registry.GetValue(
+                    @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+                    "AppsUseLightTheme", 1);
+                if (v is int i && i == 0)
+                {
+                    return "dark";
+                }
+            }
+            catch
+            {
+                // 注册表不可读时按 light 处理
+            }
+        }
+        return "light";
+    }
 
     public GeetVerifyService(ILogger<GeetVerifyService>? logger = null)
     {
@@ -55,8 +104,9 @@ public sealed class GeetVerifyService
 
         // 回调地址 = 同一监听端口的 /cb;验证页 = 同一端口的 /verify?cb=...
         var cb = $"http://127.0.0.1:{port}/cb";
-        // 回调地址直接注入页面(替换占位符),不依赖浏览器解析 location.search
+        // 回调地址与主题直接注入页面(替换占位符),不依赖浏览器解析 location.search
         html = html.Replace("__MCKURO_CB__", cb, StringComparison.Ordinal);
+        html = html.Replace("__MCKURO_THEME__", ResolveTheme(), StringComparison.Ordinal);
         var pageUrl = $"http://127.0.0.1:{port}/verify?cb={Uri.EscapeDataString(cb)}";
         _logger.LogInformation("极验验证启动: 页面={PageUrl} 回调={Cb}", pageUrl, cb);
 
@@ -140,6 +190,7 @@ public sealed class GeetVerifyService
             }
             var request = sb.ToString();
             var path = GetPath(request);
+            TimingLog($"请求到达 {path}");
             _logger.LogInformation("极验本地服务收到请求: {Path}", path);
 
             string body;
@@ -200,6 +251,7 @@ public sealed class GeetVerifyService
             var respBytes = Encoding.UTF8.GetBytes(response);
             await stream.WriteAsync(respBytes.AsMemory(), ct);
             await stream.FlushAsync(ct);
+            TimingLog($"响应已写入 {path} ({respBytes.Length}B)");
         }
         catch (Exception ex)
         {

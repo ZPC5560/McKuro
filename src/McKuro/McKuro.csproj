@@ -9,7 +9,10 @@
     <ApplicationManifest Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(RuntimeIdentifier)' == 'win-arm64' Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')">app.manifest</ApplicationManifest>
     <!-- 应用图标(守岸人,多尺寸 ICO) -->
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <!-- 内置 COM:默认关闭(NativeAOT 不支持);无 RID 的常规 JIT 构建开启,
+         供应用内极验窗口反射调用官方 WebView2 包装器;AOT 发布(RID 构建)保持关闭并回退系统浏览器 -->
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <BuiltInComInteropSupport Condition="'$(RuntimeIdentifier)' == ''">true</BuiltInComInteropSupport>
 
     <!-- Native AOT 发布 (win-x64 需在 Windows 上发布;osx-arm64 可本地验证) -->
     <PublishAot>true</PublishAot>
@@ -55,6 +58,11 @@
   <ItemGroup>
     <None Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-x64\native\WebView2Loader.dll" Condition="'$(RuntimeIdentifier)' == 'win-x64' Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')" Link="WebView2Loader.dll" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-arm64\native\WebView2Loader.dll" Condition="'$(RuntimeIdentifier)' == 'win-arm64'" Link="WebView2Loader.dll" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 官方托管包装器(netcoreapp3.0,.NET 5+ 应用默认引用的构建):WebView2Control 反射加载它,
+         以全托管链路创建环境/Controller。实测 .NET 10 上裸 P/Invoke 与 net462 内置 COM 互操作均无法
+         拉起浏览器子进程,netcoreapp3.0 官方包装器正常。NativeAOT 下内置 COM 互操作被禁用,
+         加载即抛异常 → 自动回退系统浏览器,不影响 AOT 发布。 -->
+    <None Include="$(PkgMicrosoft_Web_WebView2)\lib_manual\netcoreapp3.0\Microsoft.Web.WebView2.Core.dll" Link="Microsoft.Web.WebView2.Core.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- DI 容器 + 日志(AOT 兼容) -->

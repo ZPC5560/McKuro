@@ -14,7 +14,7 @@
     }
     #status.ok { color: #067647; }
     #status.err { color: #b42318; }
-    /* 验证按钮在状态栏下方的剩余空间内水平+垂直居中 */
+    /* 验证按钮在状态栏下方的剩余空间内水平+垂直居中(云云端布局,mac/Windows 共用) */
     body { display: flex; flex-direction: column; }
     .box {
       flex: 1 1 auto;
@@ -23,24 +23,61 @@
       justify-content: center;
       text-align: center;
     }
+    /* flex 强制居中:极验按钮有固有宽度且非行内元素,text-align 无法居中(平台无关,两端共用此页) */
     #captcha {
-      display: inline-block;
+      display: flex;
+      justify-content: center;
+      align-items: center;
       height: 60px;
       width: 350px;
+      margin: 0 auto;
     }
+    #captcha > * {
+      flex: 0 0 auto;
+    }
+    /* 加载动画:Chromium 首帧即显示,盖过宿主初始化的黑色间隙 */
+    #loading {
+      padding-top: 130px;
+      text-align: center;
+      color: #667085;
+      font-size: 14px;
+    }
+    .spinner {
+      width: 42px;
+      height: 42px;
+      margin: 0 auto 18px;
+      border: 4px solid #e2e8f0;
+      border-top-color: #14b8c6;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* 暗色主题(由启动器按应用主题注入 html.dark) */
+    html.dark body { background: #10141a; }
+    html.dark #status { background: #161b22; color: #c9d1d9; border-bottom-color: #30363d; }
+    html.dark #status.ok { color: #3fb950; }
+    html.dark #status.err { color: #f85149; }
+    html.dark #loading { color: #8b949e; }
+    html.dark .spinner { border-color: #30363d; border-top-color: #14b8c6; }
   </style>
+  <script>
+    // 主题由启动器注入:dark 时首帧即为暗色,避免闪白
+    if ("__MCKURO_THEME__" === "dark") { document.documentElement.className = "dark"; }
+  </script>
 </head>
 <body>
 <div id="status">正在加载极验…</div>
 <div class="box">
+  <div id="loading">
+    <div class="spinner"></div>
+    <div id="loadingText">正在加载验证组件…</div>
+  </div>
   <div id="captcha"></div>
 </div>
 <script>
-  // 页面级错误捕获:任何 JS 错误都显示到状态栏,便于排查
+  // 页面级错误捕获:任何 JS 错误都显示到状态栏与加载区,便于排查
   window.onerror = function (msg, src, line, col, err) {
-    var el = document.getElementById("status");
-    el.textContent = "页面脚本错误: " + msg + " @" + (src || "") + ":" + line;
-    el.className = "err";
+    setStatus("页面脚本错误: " + msg + " @" + (src || "") + ":" + line, "err");
     return false;
   };
 
@@ -57,6 +94,16 @@
     var el = document.getElementById("status");
     el.textContent = text;
     el.className = cls || "";
+    // 同步到页面内加载区:就绪后隐藏加载动画,错误时展示原因
+    var loading = document.getElementById("loading");
+    if (loading) {
+      if (cls === "ok") {
+        loading.style.display = "none";
+      } else {
+        var lt = document.getElementById("loadingText");
+        if (lt) { lt.textContent = text; }
+      }
+    }
   }
 
   // 依次尝试脚本加载,第一个成功即回调(true);全部失败回调(false)
@@ -87,17 +134,18 @@
     return false;
   }
 
-  // 脚本加载:CDN 优先(历史验证可用),本地文件兜底
+  // 脚本加载:本地优先(Assets/Js 由启动器本地服务提供,127.0.0.1 秒载,页面立现加载动画),
+  // CDN 兜底(本地文件缺失或损坏时)。本地 gt4 为 v4.2.1 官方构建,兼容新旧版弹窗方法名。
   loadScripts([
-    "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js",
-    "Js/jquery.min.js"
+    "Js/jquery.min.js",
+    "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"
   ], function (jqOk) {
     if (!jqOk) { setStatus("jquery 加载失败(CDN 与本地均不可用)", "err"); return; }
     setStatus("jquery 已加载,正在加载极验脚本…");
     loadScripts([
+      "Js/gt4.js",
       "https://static.geetest.com/v4/gt4.js",
-      "https://static.geevisit.com/v4/gt4.js",
-      "Js/gt4.js"
+      "https://static.geevisit.com/v4/gt4.js"
     ], function (gtOk) {
       if (!gtOk || typeof window.initGeetest4 === "undefined") {
         setStatus("极验脚本加载失败(CDN 与本地均不可用)", "err");

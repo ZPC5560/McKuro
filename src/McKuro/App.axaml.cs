@@ -19,7 +19,22 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // 诊断:确认启动线程模型(App 初始化线程 vs 平台线程是否同一条)
+        System.Console.Error.WriteLine(
+            $"MCKURO-THREAD app-init tid={Environment.CurrentManagedThreadId} apt={Thread.CurrentThread.GetApartmentState()}");
+
         AppServices.Initialize();
+
+        // WebView2 环境预热:仅当库街区账号未登录时(登录验证需要极验;已有账号则无需每次启动加载)。
+        // 当前线程即平台线程(STA),环境对象绑定此线程,后续验证窗口的 Controller 创建与之同套间。
+        if (AppServices.KuroAccounts.GetAccounts().Count == 0)
+        {
+            Controls.WebView2Control.PrewarmEnvironment();
+        }
+        else
+        {
+            System.Console.Error.WriteLine("MCKURO-WV2 已有库街区账号,跳过 WebView2 预热");
+        }
 
         // 异步探测出口 IP(数据中心 Devcode 头需要;避免库街区风控)
         _ = AppServices.Kuro.InitAsync();

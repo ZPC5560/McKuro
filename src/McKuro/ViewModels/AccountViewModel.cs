@@ -541,7 +541,8 @@ public sealed partial class AccountViewModel : ViewModelBase
         SmsSending = true;
         SmsStatusText = "正在打开极验验证…";
         var geetCts = new CancellationTokenSource(); // 用户关闭内置验证窗口时取消等待
-        Window? geetestWindow = null;
+        GeetestWindow? geetestWindow = null;
+        var fallbackToBrowser = false; // 内置窗口不可用自动改走系统浏览器:此时关窗不算取消
         try
         {
             // 极验人机验证:macOS 用应用内 WKWebView 窗口完成(对齐 Java 版鸣潮助手),
@@ -561,15 +562,37 @@ public sealed partial class AccountViewModel : ViewModelBase
                             {
                                 geetestWindow = null;
                                 // 用户主动关闭 → 立即取消等待;验证流程收尾先关闭窗口时
-                                // Closed 回调晚于 finally 的 Dispose,需吞掉 ObjectDisposedException
-                                try
+                                // Closed 回调晚于 finally 的 Dispose,需吞掉 ObjectDisposedException;
+                                // 内置窗口不可用自动回退系统浏览器时的关窗不算取消
+                                if (!fallbackToBrowser)
                                 {
-                                    geetCts.Cancel();
-                                }
-                                catch (ObjectDisposedException)
-                                {
+                                    try
+                                    {
+                                        geetCts.Cancel();
+                                    }
+                                    catch (ObjectDisposedException)
+                                    {
+                                    }
                                 }
                             };
+                            geetestWindow.CreationFailed += () => Dispatcher.UIThread.Post(() =>
+                            {
+                                // 内置窗口不可用(WebView2 被安全软件拦截等):自动改用系统浏览器,
+                                // 验证结果仍走本地 HTTP 回调,流程继续
+                                fallbackToBrowser = true;
+                                geetestWindow?.Close();
+                                geetestWindow = null;
+                                SmsStatusText = "内置验证窗口不可用,已改用系统浏览器完成验证…";
+                                _loginLog?.LogWarning("内置极验窗口不可用,自动回退系统浏览器");
+                                try
+                                {
+                                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                                }
+                                catch (Exception ex)
+                                {
+                                    SmsStatusText = $"打开系统浏览器失败: {ex.Message}";
+                                }
+                            });
                             if (owner is not null)
                             {
                                 _ = geetestWindow.ShowDialog(owner);
