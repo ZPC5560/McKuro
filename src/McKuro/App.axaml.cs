@@ -68,6 +68,17 @@ public partial class App : Application
                     DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(seconds));
                 });
             }
+
+            // 极验窗口冒烟:应用内验证窗口 4s 自检(创建平台 WebView 控件并加载页面),然后退出。
+            // 仅开发诊断用:验证 GeetestWindow 的 XAML/控件挂载链路,不触碰任何登录接口。
+            if (Environment.GetEnvironmentVariable("McKuro_GEETEST_SMOKE") == "1")
+            {
+                var win = new GeetestWindow("https://example.com/");
+                win.Show();
+                System.Console.Error.WriteLine("MCKURO-GEETEST-SMOKE window shown, supported="
+                    + GeetestWindow.IsPlatformSupported);
+                DispatcherTimer.RunOnce(() => desktop.Shutdown(), TimeSpan.FromSeconds(4));
+            }
         }
 
         base.OnFrameworkInitializationCompleted();

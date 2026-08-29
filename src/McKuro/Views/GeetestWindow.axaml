@@ -1,0 +1,14 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="520"
+        x:Class="McKuro.Views.GeetestWindow"
+        Title="完成滑块验证"
+        Width="500" Height="520"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <!-- 应用内极验验证窗口:WebView 控件由代码后置按平台选择
+         (macOS=WkWebViewControl,Windows=WebView2Control),验证结果仍走本地 HTTP 回调,
+         页面自身负责状态提示。 -->
+</Window>

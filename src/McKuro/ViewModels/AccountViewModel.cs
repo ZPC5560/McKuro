@@ -1,5 +1,9 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -8,6 +12,7 @@ using McKuro.Core.Models.Kuro;
 using McKuro.Core.Services.Gacha;
 using McKuro.Core.Services.Kuro;
 using McKuro.Services;
+using McKuro.Views;
 using Microsoft.Extensions.Logging;
 
 namespace McKuro.ViewModels;
@@ -54,6 +59,73 @@ public sealed partial class AccountViewModel : ViewModelBase
     // ---- 库街区短信登录(自签到页迁移;极验 GeeTest 流程对齐 Haiyu)----
     [ObservableProperty]
     private bool _isKuroLoginOpen;
+
+    // ---- 登录卡片堆叠(三个登录账号以堆叠/标签方式展示,登录完自动切下一个) ----
+    /// <summary>堆叠卡片当前激活索引:0=库街区,1=云鸣潮,2=官方养成评级。</summary>
+    [ObservableProperty]
+    private int _selectedLoginCard;
+
+    /// <summary>库街区标签头(带登录状态后缀)。</summary>
+    [ObservableProperty]
+    private string _kuroTabHeader = "库街区账号";
+
+    /// <summary>云鸣潮标签头。</summary>
+    [ObservableProperty]
+    private string _cloudTabHeader = "云鸣潮账号";
+
+    /// <summary>mcguide 标签头。</summary>
+    [ObservableProperty]
+    private string _guideTabHeader = "官方养成评级";
+
+    /// <summary>
+    /// 切换到下一个堆叠卡片(登录成功后自动调用):
+    /// 按库街区 → 云鸣潮 → 官方评级的顺序推进,已登录的自动跳过,全部登录完则停在最后。
+    /// </summary>
+    /// <param name="completedIndex">刚完成登录的卡片索引。</param>
+    private void AdvanceToNextLoginCard(int completedIndex)
+    {
+        for (var step = 1; step <= 3; step++)
+        {
+            var next = (completedIndex + step) % 3;
+            if (next != completedIndex && !IsCardLoggedIn(next))
+            {
+                SelectedLoginCard = next;
+                return;
+            }
+        }
+        // 三个都登录完:停回第一个(库街区,通常展示账号管理)
+        SelectedLoginCard = 0;
+    }
+
+    private bool IsCardLoggedIn(int index) => index switch
+    {
+        0 => AppServices.KuroAccounts.Current is not null,
+        1 => AppServices.CloudGacha.HasSavedLogin,
+        2 => AppServices.Guide.HasToken,
+        _ => false,
+    };
+
+    /// <summary>按各接口登录态刷新三个标签头(已登录追加 ✓ 后缀)。</summary>
+    private void RefreshTabHeaders()
+    {
+        KuroTabHeader = IsCardLoggedIn(0) ? "库街区账号 ✓" : "库街区账号";
+        CloudTabHeader = IsCardLoggedIn(1) ? "云鸣潮 ✓" : "云鸣潮";
+        GuideTabHeader = IsCardLoggedIn(2) ? "官方评级 ✓" : "官方评级";
+    }
+
+    /// <summary>构造时选第一个未登录的卡片(全部已登录则停在库街区管理账号)。</summary>
+    private void SelectInitialLoginCard()
+    {
+        for (var i = 0; i < 3; i++)
+        {
+            if (!IsCardLoggedIn(i))
+            {
+                SelectedLoginCard = i;
+                return;
+            }
+        }
+        SelectedLoginCard = 0;
+    }
 
     [ObservableProperty]
     private string _mobileInput = "";
@@ -234,6 +306,8 @@ public sealed partial class AccountViewModel : ViewModelBase
 
         // 自动进行同一账号判定
         RefreshSameAccountAuto();
+        RefreshTabHeaders();
+        SelectInitialLoginCard();
     }
 
     /// <summary>导航到账号页时调用:并行校验三个接口的登录态是否过期。</summary>
@@ -329,6 +403,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasKuroLogin));
         OnPropertyChanged(nameof(HasKuroAccounts));
         RefreshSameAccountAuto();
+        RefreshTabHeaders();
     }
 
     private static string MaskMobile(string mobile)
@@ -341,6 +416,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             ? (string.IsNullOrWhiteSpace(AppServices.CloudGacha.SavedLoginName) ? "已登录" : AppServices.CloudGacha.SavedLoginName)
             : "未登录";
         RefreshSameAccountAuto();
+        RefreshTabHeaders();
     }
 
     partial void OnSelectedAccountIndexChanged(int value)
@@ -463,14 +539,59 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
 
         SmsSending = true;
-        SmsStatusText = "正在打开极验验证,请在浏览器完成滑块…";
+        SmsStatusText = "正在打开极验验证…";
+        var geetCts = new CancellationTokenSource(); // 用户关闭内置验证窗口时取消等待
+        Window? geetestWindow = null;
         try
         {
-            // 极验人机验证(系统浏览器打开本地滑块页,完成后本地回调)
-            var geeTestJson = await AppServices.GeetVerify.VerifyAsync();
+            // 极验人机验证:macOS 用应用内 WKWebView 窗口完成(对齐 Java 版鸣潮助手),
+            // 其余平台回退系统浏览器打开本地滑块页。结果统一走本地 HTTP 回调。
+            var geeTestJson = await AppServices.GeetVerify.VerifyAsync(
+                geetCts.Token,
+                openBrowser: url =>
+                {
+                    if (GeetestWindow.IsPlatformSupported)
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            var owner = (Application.Current?.ApplicationLifetime
+                                as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+                            geetestWindow = new GeetestWindow(url);
+                            geetestWindow.Closed += (_, _) =>
+                            {
+                                geetestWindow = null;
+                                // 用户主动关闭 → 立即取消等待;验证流程收尾先关闭窗口时
+                                // Closed 回调晚于 finally 的 Dispose,需吞掉 ObjectDisposedException
+                                try
+                                {
+                                    geetCts.Cancel();
+                                }
+                                catch (ObjectDisposedException)
+                                {
+                                }
+                            };
+                            if (owner is not null)
+                            {
+                                _ = geetestWindow.ShowDialog(owner);
+                            }
+                            else
+                            {
+                                geetestWindow.Show();
+                            }
+                        });
+                    }
+                    else
+                    {
+                        // 平台无内置 WebView 或 WebView2 运行时缺失:维持原有系统浏览器流程
+                        SmsStatusText = "正在打开浏览器,请在浏览器完成滑块…";
+                        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                    }
+                });
             if (string.IsNullOrEmpty(geeTestJson))
             {
-                SmsStatusText = "极验验证未完成或超时,请重试";
+                SmsStatusText = geetestWindow is null
+                    ? "极验验证未完成或已取消,请重试"
+                    : "极验验证未完成或超时,请重试";
                 _loginLog?.LogWarning("极验验证未完成或超时(返回 null),手机号: {Mobile}", mobile);
                 return;
             }
@@ -508,6 +629,13 @@ public sealed partial class AccountViewModel : ViewModelBase
         finally
         {
             SmsSending = false;
+            // 关闭可能仍开着的内置验证窗口(验证完成/失败/异常后统一收尾)
+            if (geetestWindow is not null)
+            {
+                var win = geetestWindow;
+                Dispatcher.UIThread.Post(win.Close);
+            }
+            geetCts.Dispose();
         }
     }
 
@@ -586,6 +714,8 @@ public sealed partial class AccountViewModel : ViewModelBase
             await SyncFirstRoleAsync(account);
 
             IsKuroLoginOpen = false;
+            // 堆叠卡片:库街区登录完成 → 自动切到下一个未登录的卡片
+            AdvanceToNextLoginCard(0);
         }
         catch (Exception ex)
         {
@@ -703,6 +833,9 @@ public sealed partial class AccountViewModel : ViewModelBase
                 CloudStatusText = "登录成功,可到「抽卡分析」页同步记录";
                 StatusText = "云鸣潮登录成功";
 
+                // 堆叠卡片:云鸣潮登录完成 → 自动切到下一个未登录的卡片
+                AdvanceToNextLoginCard(1);
+
                 // 一个接口账号登录成功 → 其他接口账号复用该手机号
                 ReusePhoneAcrossLogins(CloudMobile.Trim(), source: "cloud");
             }
@@ -815,6 +948,10 @@ public sealed partial class AccountViewModel : ViewModelBase
                 GuideSmsSending = false;
                 OnPropertyChanged(nameof(GuideLoggedIn));
                 StatusText = "攻略站登录成功";
+                RefreshTabHeaders();
+
+                // 堆叠卡片:官方评级登录完成 → 自动切到下一个未登录的卡片(全登录完则回库街区)
+                AdvanceToNextLoginCard(2);
 
                 // 一个接口账号登录成功 → 其他接口账号复用该手机号
                 ReusePhoneAcrossLogins(mobile, source: "guide");
@@ -850,6 +987,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         GuideStatusText = "未登录(角色页将隐藏官方评级)";
         StatusText = "已退出 mcguide 登录";
         RefreshSameAccountAuto();
+        RefreshTabHeaders();
         // 退出后重新展开登录表单,便于再次登录
         IsGuideLoginOpen = true;
     }
