@@ -33,6 +33,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private NavigationItem? _selectedNavigationItem;
 
+    /// <summary>导航栏账号头像(本地磁盘缓存路径;空 = 无缓存,显示默认守岸人图标)。</summary>
+    [ObservableProperty]
+    private string _navAvatarPath = "";
+
+    /// <summary>导航栏是否已有真实账号头像可显示。</summary>
+    public bool HasNavAvatar => !string.IsNullOrEmpty(NavAvatarPath);
+
+    partial void OnNavAvatarPathChanged(string value) => OnPropertyChanged(nameof(HasNavAvatar));
+
     public List<NavigationItem> NavigationItems { get; }
 
     private readonly Dictionary<string, NavigationItem> _navByKey;
@@ -45,6 +54,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel(IMessenger messenger)
     {
         _messenger = messenger;
+
+        // 启动即用磁盘缓存头像占位(主页每次刷新都会把头像落盘到 icon_cache/avatar,按 userId)
+        var navAccount = AppServices.KuroAccounts.Current;
+        if (navAccount is not null && !string.IsNullOrEmpty(navAccount.UserId))
+        {
+            var cached = AppServices.IconCache.GetCachedIconPath("avatar", IconDiskCacheService.Safe(navAccount.UserId));
+            if (cached is not null)
+            {
+                NavAvatarPath = cached;
+            }
+        }
+
+        // 主页解析出新头像(下载落盘)后即时切换
+        WeakReferenceMessenger.Default.Register<MainWindowViewModel, AvatarResolvedMessage>(this,
+            static (recipient, message) => recipient.NavAvatarPath = message.Value);
 
         var home = new HomeViewModel();
         var launcher = new LauncherViewModel();
@@ -77,7 +101,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         _navByKey = NavigationItems.ToDictionary(n => n.Key, StringComparer.Ordinal);
 
-        _selectedNavigationItem = NavigationItems[0];
+        // 初始页按设置选择:Home(主页,默认)/ Launcher(鸣潮启动页)
+        var startKey = string.Equals(AppServices.Settings.Current.StartupPage, "Launcher", StringComparison.OrdinalIgnoreCase)
+            ? NavigationKeys.Launcher
+            : NavigationKeys.Home;
+        _selectedNavigationItem = _navByKey.GetValueOrDefault(startKey) ?? NavigationItems[0];
         NavigateTo(_selectedNavigationItem);
 
         _messenger.Register<MainWindowViewModel, NavigationRequestedMessage>(this, (recipient, message) =>

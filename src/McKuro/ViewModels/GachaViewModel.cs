@@ -17,9 +17,6 @@ public sealed partial class GachaViewModel : ViewModelBase
     private string _statusText = "就绪";
 
     [ObservableProperty]
-    private string _playerIdText = "-";
-
-    [ObservableProperty]
     private int _totalPulls;
 
     [ObservableProperty]
@@ -60,18 +57,6 @@ public sealed partial class GachaViewModel : ViewModelBase
 
     /// <summary>"全部账号"聚合选项的显示文本。</summary>
     public const string AllPlayersLabel = "全部账号";
-
-    // ---- 云鸣潮登录状态(登录表单已迁移到「账号」页;此处仅显示状态) ----
-    [ObservableProperty]
-    private bool _isCloudLoggedIn;
-
-    [ObservableProperty]
-    private string _cloudAccountText = "未登录";
-
-    /// <summary>跳转「账号」页登录云鸣潮。</summary>
-    [RelayCommand]
-    private void GoAccount()
-        => WeakReferenceMessenger.Default.Send(new NavigationRequestedMessage(NavigationKeys.Account));
 
     /// <summary>玩家筛选选项(含"全部账号")。</summary>
     public AvaloniaList<string> PlayerIds { get; } = [];
@@ -171,7 +156,6 @@ public sealed partial class GachaViewModel : ViewModelBase
 
     public GachaViewModel()
     {
-        RefreshCloudState();
         LoadExisting();
         _ = PreloadUpIdsAsync();
     }
@@ -201,17 +185,14 @@ public sealed partial class GachaViewModel : ViewModelBase
     {
         var selected = SelectedPlayerId;
         List<GachaRecord> records;
-        string display;
 
         if (string.IsNullOrEmpty(selected) || selected == AllPlayersLabel)
         {
             records = AppServices.GachaStore.GetAllRecords();
-            display = AllPlayersLabel;
         }
         else
         {
             records = AppServices.GachaStore.GetRecords(selected);
-            display = selected;
         }
 
         if (records.Count == 0)
@@ -221,7 +202,7 @@ public sealed partial class GachaViewModel : ViewModelBase
 
         var playerId = selected == AllPlayersLabel ? "" : selected;
         ApplyAnalysis(AppServices.GachaAnalysis.Analyze(playerId, records, _upIds));
-        StatusText = $"已加载本地记录 ({display})";
+        StatusText = "已加载本地记录";
     }
 
     private void LoadExisting()
@@ -293,7 +274,6 @@ public sealed partial class GachaViewModel : ViewModelBase
                 var cachedRecords = TryLoadCache(cachedTarget, out var cachePlayerId);
                 if (cachedRecords is not null)
                 {
-                    PlayerIdText = cachePlayerId ?? "-";
                     ApplyAnalysis(AppServices.GachaAnalysis.Analyze(cachePlayerId ?? "", cachedRecords, _upIds));
                     var cachedIds = AppServices.GachaStore.GetAllPlayerIds();
                     PlayerIds.Clear();
@@ -309,7 +289,6 @@ public sealed partial class GachaViewModel : ViewModelBase
                 return;
             }
 
-            PlayerIdText = result.Request?.PlayerId ?? "-";
             if (result.Request?.PlayerId is { Length: > 0 } syncedPlayerId)
             {
                 // 云端同步的底层流水线没有 UP 配置参数,这里统一用最新 UP 集合重算,
@@ -407,22 +386,12 @@ public sealed partial class GachaViewModel : ViewModelBase
         return result;
     }
 
-    /// <summary>刷新云鸣潮登录状态。</summary>
-    private void RefreshCloudState()
-    {
-        IsCloudLoggedIn = AppServices.CloudGacha.HasSavedLogin;
-        CloudAccountText = IsCloudLoggedIn
-            ? (string.IsNullOrWhiteSpace(AppServices.CloudGacha.SavedLoginName) ? "已登录" : AppServices.CloudGacha.SavedLoginName)
-            : "未登录";
-    }
-
     private void ApplyAnalysis(GachaAnalysisResult analysis)
     {
         _analysis = analysis;
         TotalPulls = analysis.TotalPulls;
         TotalFiveStars = analysis.TotalFiveStars;
         Score = Math.Round(analysis.Score, 1);
-        PlayerIdText = analysis.PlayerId;
         Designation = analysis.Designation;
         DoubleCount = analysis.DoubleCount;
         CrookedTotal = analysis.CrookedTotal;

@@ -179,28 +179,22 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Save();
     }
 
-    // 自动游戏签到(打开软件后自动签到;与签到页开关同步同一配置)
-    [ObservableProperty]
-    private bool _autoSignEnabled;
+    // 启动时打开的页面(主页 / 鸣潮启动页)
+    /// <summary>启动页选项:0=主页,1=启动页(鸣潮)。</summary>
+    public ObservableCollection<string> StartupPages { get; } = ["主页", "启动页"];
 
-    /// <summary>自动签到开关即时保存(与签到页一致),无需点保存。</summary>
-    partial void OnAutoSignEnabledChanged(bool value)
+    [ObservableProperty]
+    private int _startupPageIndex;
+
+    /// <summary>启动页选择即时保存(下次启动生效)。</summary>
+    partial void OnStartupPageIndexChanged(int value)
     {
-        AppServices.Settings.Current.AutoSignEnabled = value;
+        AppServices.Settings.Current.StartupPage = value == 1 ? "Launcher" : "Home";
         AppServices.Settings.Save();
     }
 
-    // 应用自更新(对齐 Haiyu UpdateAppViewModel)
-    [ObservableProperty]
-    private string _appUpdateRepo = "";
-
-    /// <summary>更新仓库地址即时保存(无需点保存)。</summary>
-    partial void OnAppUpdateRepoChanged(string value)
-    {
-        AppServices.Settings.Current.AppUpdateRepo = value;
-        AppServices.Settings.Save();
-    }
-
+    // 签到设置(AutoSignEnabled/AutoKuroClientTaskEnabled)已迁移至「签到」页管理,
+    // 此处不再持有副本:避免保存其他设置时用启动时的旧值回滚签到页的新值
     [ObservableProperty]
     private string _appUpdateStatusText = "";
 
@@ -230,8 +224,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string PlatformNameText => AppServices.Capabilities.PlatformName;
 
-    public string PlatformCapabilityText => AppServices.Capabilities.GameSupportText;
-
     /// <summary>平台徽标:是否为 Windows(四格窗格 Logo)。</summary>
     public bool IsPlatformWindows => AppServices.Capabilities.IsWindows;
 
@@ -240,9 +232,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <summary>平台徽标:Linux 或其他平台(回退终端图标)。</summary>
     public bool IsPlatformLinux => AppServices.Capabilities.IsLinux;
-
-    /// <summary>系统运行环境描述(如 Microsoft Windows 11 专业版 10.0.26100)。</summary>
-    public string PlatformRuntimeText => AppServices.Capabilities.RuntimeDescription;
 
     /// <summary>平台支持状态徽标文本。</summary>
     public string PlatformSupportBadgeText => AppServices.Capabilities.IsWindows ? "原生支持" : "部分支持";
@@ -339,8 +328,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             SkipVerifyFiles.Add(p);
         }
         _languageIndex = Math.Max(0, Languages.IndexOf(LanguageLabel(s.Language)));
-        _autoSignEnabled = s.AutoSignEnabled;
-        _appUpdateRepo = s.AppUpdateRepo;
+        _startupPageIndex = s.StartupPage == "Launcher" ? 1 : 0;
         _themeIndex = s.Theme switch
         {
             "Light" => 1,
@@ -477,14 +465,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.SkipVerifyFiles = [.. SkipVerifyFiles];
         s.AutoSkipVerifyDelete = AutoSkipVerifyDelete;
         s.Language = LanguageIndex == 1 ? "en-US" : "zh-Hans";
-        s.AutoSignEnabled = AutoSignEnabled;
+        s.StartupPage = StartupPageIndex == 1 ? "Launcher" : "Home";
         s.Theme = ThemeIndex switch
         {
             1 => "Light",
             2 => "Dark",
             _ => "Default",
         };
-        s.AppUpdateRepo = AppUpdateRepo.Trim();
         AppServices.Settings.Save();
 
         // 重新应用并发数与限速(无需重启);路径解析器已通过 Func<string?> 自动读取最新值
@@ -501,10 +488,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private async Task CheckAppUpdateAsync()
     {
-        var repo = AppUpdateRepo.Trim();
+        // 仓库由配置提供(默认 ZPC5560/McKuro),设置页不再提供输入框
+        var repo = AppServices.Settings.Current.AppUpdateRepo.Trim();
         if (string.IsNullOrWhiteSpace(repo))
         {
-            AppUpdateStatusText = "请先填写 GitHub 仓库(owner/repo)";
+            AppUpdateStatusText = "未配置更新仓库,无法检查更新";
             return;
         }
         if (AppUpdateChecking || AppUpdateDownloading)
@@ -534,7 +522,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             }
             if (string.Equals(info.Version, AppServices.Settings.Current.SkipAppVersion, StringComparison.OrdinalIgnoreCase))
             {
-                AppUpdateStatusText = $"已跳过版本 {info.Version}(可在仓库地址清空后保存重置)";
+                AppUpdateStatusText = $"已跳过版本 {info.Version}(发布更新版本时会再次提示)";
                 return;
             }
 

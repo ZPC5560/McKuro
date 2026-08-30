@@ -53,24 +53,6 @@
             </Ellipse>
         </Panel>
 
-        <!-- ═══ 左上角:账号 + 刷新数据(半透明胶囊) ═══ -->
-        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="32,22,0,0"
-                CornerRadius="18" Background="{DynamicResource McKuroGlassFill}"
-                BorderBrush="{DynamicResource McKuroGlassStroke}" BorderThickness="1" Padding="18,7">
-            <StackPanel Orientation="Horizontal" Spacing="14">
-                <TextBlock Text="{Binding AccountText}" FontSize="13.5" FontWeight="Bold"
-                           Foreground="{DynamicResource McKuroTextOnWallpaper}" VerticalAlignment="Center" />
-                <Button Command="{Binding RefreshDailyCommand}"
-                        IsEnabled="{Binding !IsBusy}" Classes="splashBtn"
-                        Padding="14,6" CornerRadius="14">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <ic:FluentIcon Icon="ArrowSync" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                        <TextBlock Text="刷新数据" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
-            </StackPanel>
-        </Border>
-
         <!-- ═══ 主内容 ═══ -->
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
             <Grid Margin="96,0,40,0" Opacity="{Binding RevealOpacity}">

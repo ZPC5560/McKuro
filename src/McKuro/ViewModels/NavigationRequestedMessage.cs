@@ -66,3 +66,14 @@ public sealed class GameSessionEndedMessage : ValueChangedMessage<GameSessionEnd
     {
     }
 }
+/// <summary>
+/// 账号头像已解析(本地磁盘缓存路径)。
+/// 主页拉取每日数据后把头像落盘缓存(icon_cache/avatar,按 userId),
+/// 导航栏左上角账号头像订阅此消息即时切换为真实头像。
+/// </summary>
+public sealed class AvatarResolvedMessage : ValueChangedMessage<string>
+{
+    public AvatarResolvedMessage(string localPath) : base(localPath)
+    {
+    }
+}

@@ -9,8 +9,6 @@
              x:DataType="vm:PlayTimeViewModel">
     <UserControl.Resources>
         <vm:IntensityBrushConverter x:Key="IntensityBrush" />
-        <vm:IntToGridRowConverter x:Key="RowConv" />
-        <vm:IntToGridColConverter x:Key="ColConv" />
         <vm:PercentToHeightConverter x:Key="PctOfHeight" />
     </UserControl.Resources>
     <ScrollViewer>
@@ -66,7 +64,9 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:PlayDayItem">
                                 <StackPanel Spacing="6" HorizontalAlignment="Center">
+                                    <!-- 轨道:今天且无数据时隐藏空轨道(Classes.barless → 透明,仍占位保持标签对齐) -->
                                     <Border Height="120" Width="44" CornerRadius="6"
+                                            Classes.barless="{Binding !ShowBar}"
                                             Background="{DynamicResource SemiColorBg3}"
                                             VerticalAlignment="Bottom">
                                         <Border Height="{Binding BarHeight, Converter={StaticResource PctOfHeight}}"
@@ -91,64 +91,20 @@
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
+                        <ItemsControl.Styles>
+                            <!-- 无柱日:轨道透明(仍占位对齐),内部柱体隐藏 -->
+                            <Style Selector="Border.barless">
+                                <Setter Property="Background" Value="Transparent" />
+                            </Style>
+                            <Style Selector="Border.barless Border">
+                                <Setter Property="IsVisible" Value="False" />
+                            </Style>
+                        </ItemsControl.Styles>
                     </ItemsControl>
                 </StackPanel>
             </Border>
 
-            <!-- 最近 7 天时段热力图(7 行 × 24 小时) -->
-            <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="最近 7 天游玩时间区间(7×24 小时热力)" FontSize="15" FontWeight="Bold" />
-                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
-                        <!-- 行标签(最近 7 天日期) -->
-                        <StackPanel Grid.Row="0" Grid.Column="0" Spacing="3" Margin="0,0,8,0">
-                            <ItemsControl ItemsSource="{Binding Last7Days}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel Spacing="3" />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:PlayDayItem">
-                                        <TextBlock Text="{Binding Label}" FontSize="10" Height="16"
-                                                   Foreground="{DynamicResource SemiColorText2}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                        <!-- 热力格(24 列,每行一天;UniformGrid 行优先填充) -->
-                        <Border Grid.Row="0" Grid.Column="1">
-                            <ItemsControl ItemsSource="{Binding HourlyCells}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <UniformGrid Rows="7" Columns="24" />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:PlayHourCell">
-                                        <Border Width="16" Height="16" CornerRadius="2" Margin="1"
-                                                Background="{Binding Intensity, Converter={StaticResource IntensityBrush}}">
-                                            <ToolTip.Tip>
-                                                <TextBlock Text="{Binding Tip}" FontSize="11" />
-                                            </ToolTip.Tip>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </Border>
-                        <!-- 小时刻度(0-23) -->
-                        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="1,4,0,0">
-                            <TextBlock Text="0" FontSize="9" Width="18" Foreground="{DynamicResource SemiColorText3}" />
-                            <TextBlock Text="6" FontSize="9" Width="18" Foreground="{DynamicResource SemiColorText3}" />
-                            <TextBlock Text="12" FontSize="9" Width="18" Foreground="{DynamicResource SemiColorText3}" />
-                            <TextBlock Text="18" FontSize="9" Width="18" Foreground="{DynamicResource SemiColorText3}" />
-                            <TextBlock Text="23" FontSize="9" Width="18" Foreground="{DynamicResource SemiColorText3}" />
-                        </StackPanel>
-                    </Grid>
-                </StackPanel>
-            </Border>
-
-            <!-- 最近 7 天游玩分析报告(关键指标 + 行为洞察 + 自动总结 + 逐日明细) -->
+            <!-- 最近 7 天游玩分析报告(关键指标 + 行为洞察 + 自动总结) -->
             <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                 <StackPanel Spacing="14">
                     <Grid ColumnDefinitions="*,Auto">
@@ -252,52 +208,79 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- 逐日明细 -->
-                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                        <TextBlock Text="逐日明细" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" />
-                        <TextBlock Text="每次开始玩到结束独立统计,相邻会话(≤60min)合并为同一时段" FontSize="11"
-                                   Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <ItemsControl ItemsSource="{Binding ReportRows}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:PlayTimeReportRow">
-                                <Border Padding="12,10" CornerRadius="10" Margin="0,0,0,8"
-                                        Background="{DynamicResource SemiColorBg3}">
-                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                                        <!-- 日期 + 星期 + 今天/昨天 -->
-                                        <StackPanel Grid.Column="0" Spacing="2" Width="76">
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <TextBlock Text="{Binding Label}" FontSize="13" FontWeight="Bold" />
-                                                <TextBlock Text="{Binding Weekday}" FontSize="11"
-                                                           Foreground="{DynamicResource SemiColorText2}" />
-                                            </StackPanel>
-                                            <TextBlock Text="{Binding DayTag}" FontSize="10"
-                                                       Foreground="{DynamicResource SemiColorPrimary}"
-                                                       IsVisible="{Binding HasDayTag}" />
-                                        </StackPanel>
-                                        <!-- 时段 + 时长条 -->
-                                        <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding SessionsText}" FontSize="12"
-                                                       Foreground="{DynamicResource SemiColorText2}"
-                                                       TextWrapping="Wrap" />
-                                            <Border Width="160" Height="4" CornerRadius="2"
-                                                    Background="{DynamicResource SemiColorBg1}"
-                                                    HorizontalAlignment="Left">
-                                                <Border Width="{Binding DurationWidth}" Height="4" CornerRadius="2"
-                                                        Background="{DynamicResource SemiColorPrimary}"
-                                                        HorizontalAlignment="Left" />
-                                            </Border>
-                                        </StackPanel>
-                                        <!-- 当天总时长 -->
-                                        <TextBlock Grid.Column="2" Text="{Binding HoursText}" FontSize="16"
-                                                   FontWeight="Bold" Foreground="{DynamicResource SemiColorPrimary}"
-                                                   VerticalAlignment="Center" MinWidth="48"
-                                                   TextAlignment="Right" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- 最近 7 天时段热力图(7 行 × 24 小时,放页面最底部) -->
+            <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="最近 7 天游玩时间区间(7×24 小时热力)" FontSize="15" FontWeight="Bold" />
+                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                        <!-- 行标签(最近 7 天日期) -->
+                        <StackPanel Grid.Row="0" Grid.Column="0" Spacing="3" Margin="0,0,8,0">
+                            <ItemsControl ItemsSource="{Binding Last7Days}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Spacing="3" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:PlayDayItem">
+                                        <TextBlock Text="{Binding Label}" FontSize="10" Height="16"
+                                                   Foreground="{DynamicResource SemiColorText2}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                        <!-- 热力格(24 列,每行一天;UniformGrid 行优先填充) -->
+                        <Border Grid.Row="0" Grid.Column="1">
+                            <ItemsControl ItemsSource="{Binding HourlyCells}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Rows="7" Columns="24" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:PlayHourCell">
+                                        <Border Width="16" Height="16" CornerRadius="2" Margin="1"
+                                                Background="{Binding Intensity, Converter={StaticResource IntensityBrush}}">
+                                            <ToolTip.Tip>
+                                                <TextBlock Text="{Binding Tip}" FontSize="11" />
+                                            </ToolTip.Tip>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+                        <!-- 小时刻度(0-23):与热力格同用 24 列 UniformGrid 等分,文字居中,
+                             使每个刻度落在对应小时列的正下方(空 TextBlock 仅占位) -->
+                        <UniformGrid Grid.Row="1" Grid.Column="1" Columns="24" Margin="0,4,0,0">
+                            <TextBlock Text="0" FontSize="9" TextAlignment="Center" Foreground="{DynamicResource SemiColorText3}" />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock Text="6" FontSize="9" TextAlignment="Center" Foreground="{DynamicResource SemiColorText3}" />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock Text="12" FontSize="9" TextAlignment="Center" Foreground="{DynamicResource SemiColorText3}" />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock Text="18" FontSize="9" TextAlignment="Center" Foreground="{DynamicResource SemiColorText3}" />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock />
+                            <TextBlock Text="23" FontSize="9" TextAlignment="Center" Foreground="{DynamicResource SemiColorText3}" />
+                        </UniformGrid>
+                    </Grid>
                 </StackPanel>
             </Border>
         </StackPanel>

@@ -59,6 +59,9 @@ public sealed class AppSettings
     /// <summary>主题(light/dark)。</summary>
     public string Theme { get; set; } = "Default";
 
+    /// <summary>启动软件后默认进入的页面:Home(主页,默认)/ Launcher(鸣潮启动页)。</summary>
+    public string StartupPage { get; set; } = "Home";
+
     /// <summary>背景封面视频(默认开启;无 LibVLC native 库时自动回退首帧图)。</summary>
     public bool BackgroundVideoEnabled { get; set; } = true;
 

@@ -16,6 +16,12 @@ public sealed partial class RoleSignItem : ObservableObject
     public required string RoleName { get; init; }
     public required string ServerName { get; init; }
     public string? Level { get; init; }
+    /// <summary>所属库街区账号标识(多账号时区分同名角色;单账号时为空不显示)。</summary>
+    public string AccountLabel { get; init; } = "";
+
+    /// <summary>角色头像(优先本地磁盘缓存路径,后台落盘完成后切换)。</summary>
+    [ObservableProperty]
+    private string _headUrl = "";
 
     [ObservableProperty]
     private string _signStatus = "待签到";
@@ -68,6 +74,12 @@ public sealed partial class SignViewModel : ViewModelBase
         _autoSignEnabled = AppServices.Settings.Current.AutoSignEnabled;
         _autoKuroClientTaskEnabled = AppServices.Settings.Current.AutoKuroClientTaskEnabled;
         RefreshAccount();
+
+        // 账号页登录/切号/移除后自动刷新本页(与 RolesViewModel 同一消息源)
+        WeakReferenceMessenger.Default.Register<SignViewModel, RolesRefreshRequestedMessage>(this, static (recipient, _) =>
+        {
+            recipient.RefreshAccount();
+        });
     }
 
     partial void OnAutoSignEnabledChanged(bool value)
@@ -84,41 +96,142 @@ public sealed partial class SignViewModel : ViewModelBase
 
     private void RefreshAccount()
     {
-        var account = AppServices.KuroAccounts.Current;
-        IsLoggedIn = account is not null;
-        AccountText = account is null
-            ? "未登录"
-            : $"{(string.IsNullOrEmpty(account.Nickname) ? "库街区用户" : account.Nickname)} (ID: {account.UserId})";
-        if (account is not null)
+        var accounts = AppServices.KuroAccounts.GetAccounts();
+        IsLoggedIn = accounts.Count > 0;
+        AccountText = accounts.Count switch
         {
-            // 异步校验 token 有效性:若在其他设备登录导致失效,自动登出并提示
-            _ = ValidateAndRefreshAsync(account);
+            0 => "未登录",
+            1 => DescribeAccount(accounts[0]),
+            _ => $"{accounts.Count} 个库街区账号",
+        };
+        if (accounts.Count > 0)
+        {
+            // 异步校验各账号 token 并拉取全部角色(失效账号自动移除并提示)
+            _ = RefreshAllAccountsAsync(accounts);
         }
     }
 
-    /// <summary>校验当前账号 token 是否仍有效;失效则自动登出(账号在其他设备登录),有效则刷新角色列表。</summary>
-    private async Task ValidateAndRefreshAsync(KuroAccount account)
+    private static string DescribeAccount(KuroAccount account) =>
+        $"{(string.IsNullOrEmpty(account.Nickname) ? "库街区用户" : account.Nickname)} (ID: {account.UserId})";
+
+    /// <summary>遍历全部已保存账号:拉取角色、失效账号自动移除、汇总签到状态。</summary>
+    private async Task RefreshAllAccountsAsync(IReadOnlyList<KuroAccount> accounts)
     {
+        // 重入保护:消息与按钮可能同时触发,两次并发刷新会交错 Clear/Add 产生重复条目
+        if (_refreshingRoles)
+        {
+            return;
+        }
+        _refreshingRoles = true;
+        IsBusy = true;
+        Roles.Clear();
+        var removed = new List<string>();
+        var seenRoleIds = new HashSet<string>();
         try
         {
-            var ok = await AppServices.Kuro.IsLoginAsync(account);
-            if (!ok)
+            foreach (var account in accounts)
             {
-                // token 已失效(可能在别处登录被顶掉):清除本地登录态
-                AppServices.KuroAccounts.Remove(account.UserId);
-                IsLoggedIn = false;
-                AccountText = "未登录";
-                StatusText = "登录已失效(账号可能已在其他设备登录),请重新登录";
-                WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(account.UserId));
-                return;
+                // 单账号标签:不显示(底部行已有账号语义);多账号:用昵称/ID 区分同名角色
+                var label = accounts.Count > 1
+                    ? (string.IsNullOrEmpty(account.Nickname) ? $"ID {account.UserId}" : account.Nickname)
+                    : "";
+                try
+                {
+                    var resp = await AppServices.Kuro.GetGamerAsync(account, (int)KuroGameType.Waves);
+                    if (resp is { Code: 200 } && resp.Data is not null)
+                    {
+                        foreach (var role in resp.Data)
+                        {
+                            // 去重兜底:同 RoleId 只保留一份(接口重复返回或并发残留不再显示两行)
+                            if (!seenRoleIds.Add(role.RoleId ?? ""))
+                            {
+                                continue;
+                            }
+                            var item = new RoleSignItem
+                            {
+                                GameName = "鸣潮",
+                                RoleName = role.RoleName ?? "未知角色",
+                                ServerName = role.ServerName ?? "",
+                                Level = role.GameLevel,
+                                Source = role,
+                                AccountLabel = label,
+                            };
+                            Roles.Add(item);
+                            ResolveRoleHeadAsync(item, role);
+                        }
+                        // 异步查询各角色当日签到状态(已签到→更新状态;失败保持"待签到")
+                        _ = RefreshSignStatusAsync(account);
+                    }
+                    else if (resp is not null)
+                    {
+                        // token 失效(如账号在其他设备登录):自动移除该账号
+                        AppServices.KuroAccounts.Remove(account.UserId);
+                        removed.Add($"{DescribeAccount(account)}: {resp.Msg ?? $"code={resp.Code}"}");
+                    }
+                    else
+                    {
+                        removed.Add($"{DescribeAccount(account)}: 网络异常");
+                    }
+                }
+                catch (Exception)
+                {
+                    removed.Add($"{DescribeAccount(account)}: 网络异常");
+                }
             }
-            await RefreshRolesAsync();
+
+            // 同步角色 ID 到设置(取当前账号的第一个有效角色;角色数据页自动加载依赖)
+            var current = AppServices.KuroAccounts.Current;
+            if (current is not null)
+            {
+                var firstRoleId = Roles.FirstOrDefault(r => r.Source.RoleId is not null)?.Source.RoleId;
+                if (!string.IsNullOrEmpty(firstRoleId) && AppServices.Settings.Current.RoleId != firstRoleId)
+                {
+                    AppServices.Settings.Current.RoleId = firstRoleId;
+                    AppServices.Settings.Save();
+                }
+            }
+
+            StatusText = removed.Count > 0
+                ? $"共 {Roles.Count} 个角色(已移除失效账号:{string.Join("; ", removed)}) → 请重新登录"
+                : $"共 {Roles.Count} 个角色";
         }
-        catch (Exception)
+        finally
         {
-            // 网络异常:不登出,尝试刷新(失败由 RefreshRolesAsync 提示)
-            await RefreshRolesAsync();
+            _refreshingRoles = false;
+            IsBusy = false;
         }
+    }
+
+    private bool _refreshingRoles;
+
+    /// <summary>
+    /// 解析角色头像(对齐主页头像链路):磁盘缓存命中直接用本地路径;
+    /// 未命中先用远程 URL 显示并后台落盘,完成后切换为本地路径(下次秒开)。
+    /// </summary>
+    private static void ResolveRoleHeadAsync(RoleSignItem item, GameRoilDataItem role)
+    {
+        var url = !string.IsNullOrWhiteSpace(role.HeadPhotoUrl) ? role.HeadPhotoUrl : role.GameHeadUrl;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return;
+        }
+        var key = IconDiskCacheService.Safe(role.RoleId ?? role.RoleName ?? url);
+        var cached = AppServices.IconCache.GetCachedIconPath("role_head", key);
+        if (cached is not null)
+        {
+            item.HeadUrl = cached;
+            return;
+        }
+        item.HeadUrl = url;
+        _ = Task.Run(async () =>
+        {
+            await AppServices.IconCache.CacheUrlAsync("role_head", key, url);
+            var local = AppServices.IconCache.GetCachedIconPath("role_head", key);
+            if (!string.IsNullOrEmpty(local))
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => item.HeadUrl = local);
+            }
+        });
     }
 
     /// <summary>跳转「账号」页登录(登录入口已统一迁移到账号页)。</summary>
@@ -126,81 +239,16 @@ public sealed partial class SignViewModel : ViewModelBase
     private void GoAccount()
         => WeakReferenceMessenger.Default.Send(new NavigationRequestedMessage(NavigationKeys.Account));
 
-    /// <summary>刷新角色列表(鸣潮)。</summary>
+    /// <summary>刷新角色列表(鸣潮):统一走全账号刷新,避免与消息触发的新流程并发造成重复条目。</summary>
     [RelayCommand]
     private async Task RefreshRolesAsync()
     {
-        var account = AppServices.KuroAccounts.Current;
-        if (account is null)
+        var accounts = AppServices.KuroAccounts.GetAccounts();
+        if (accounts.Count == 0)
         {
             return;
         }
-
-        IsBusy = true;
-        StatusText = "正在获取角色列表…";
-        try
-        {
-            Roles.Clear();
-            var roles = await AppServices.Kuro.GetGamerAsync(account, (int)KuroGameType.Waves);
-            if (roles is not { Code: 200 })
-            {
-                // token 失效(如账号在其他设备登录)或接口异常:提示重新登录并登出
-                StatusText = roles is null
-                    ? "获取角色列表失败(网络异常),请重试"
-                    : $"登录已失效或获取失败: {roles.Msg ?? $"code={roles.Code}"}";
-                if (roles is not null && roles.Code != 200)
-                {
-                    AppServices.KuroAccounts.Remove(account.UserId);
-                    IsLoggedIn = false;
-                    AccountText = "未登录";
-                    StatusText += " → 请重新登录";
-                    WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(account.UserId));
-                }
-                return;
-            }
-            if (roles.Data is not null)
-            {
-                foreach (var role in roles.Data)
-                {
-                    Roles.Add(new RoleSignItem
-                    {
-                        GameName = "鸣潮",
-                        RoleName = role.RoleName ?? "未知角色",
-                        ServerName = role.ServerName ?? "",
-                        Level = role.GameLevel,
-                        Source = role,
-                    });
-                }
-
-                // 异步查询各角色当日签到状态(已签到→更新状态;失败保持"待签到")
-                _ = RefreshSignStatusAsync(account);
-
-                // 自动同步角色 ID 到设置:角色数据页自动加载依赖 RoleId(取第一个有效角色)
-                var firstRoleId = roles.Data.FirstOrDefault(r => !string.IsNullOrEmpty(r.RoleId))?.RoleId;
-                if (!string.IsNullOrEmpty(firstRoleId))
-                {
-                    var settings = AppServices.Settings.Current;
-                    if (settings.RoleId != firstRoleId)
-                    {
-                        settings.RoleId = firstRoleId!;
-                        AppServices.Settings.Save();
-                    }
-                }
-                // 通知角色数据页自动同步(登录态下;手动刷新同样触发)
-                WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(account.UserId));
-            }
-            StatusText = Roles.Count > 0
-                ? $"共 {Roles.Count} 个角色"
-                : "未找到游戏角色(可在设置页确认已绑定游戏)";
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"获取角色失败: {ex.Message}";
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+        await RefreshAllAccountsAsync(accounts);
     }
 
     /// <summary>并行查询各角色当日签到状态,更新列表中的 SignStatus(已签到/待签到)。</summary>

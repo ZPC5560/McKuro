@@ -115,14 +115,43 @@ public sealed class CloudGachaService
             }
             // 静默续期一次:成功即证明会话仍有效(与同步走同一条续期链路)
             var session = await _cloud.BuildSessionAsync(data, ct).ConfigureAwait(false);
-            return session is null
-                ? (CloudGachaStatus.LoginFailed, "云鸣潮会话已失效,请重新登录")
-                : (CloudGachaStatus.Success, null);
+            if (session is null)
+            {
+                return (CloudGachaStatus.LoginFailed, "云鸣潮会话已失效,请重新登录");
+            }
+            PersistRenewedToken(data, session.PhoneToken);
+            return (CloudGachaStatus.Success, null);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "云鸣潮会话校验失败(不判定过期)");
             return (CloudGachaStatus.FetchFailed, $"会话校验失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 把续期后轮换的新 phoneToken 回存到持久化登录数据。
+    /// phoneToken.lg 每次续期都会签发新 token(旧 token 随之失效);不回存的话,
+    /// 下一次续期仍带旧 token 会被判"会话已失效",实际登录却仍是有效状态。
+    /// </summary>
+    private void PersistRenewedToken(CloudGameLoginData data, PhoneTokenData? refreshed)
+    {
+        var newToken = refreshed?.PhoneToken;
+        if (string.IsNullOrWhiteSpace(newToken) || string.Equals(data.PhoneToken, newToken, StringComparison.Ordinal))
+        {
+            return;
+        }
+        data.PhoneToken = newToken;
+        try
+        {
+            var s = _settings.Current;
+            s.CloudLoginDataJson = JsonSerializer.Serialize(data, CloudGameJsonContext.Default.CloudGameLoginData);
+            _settings.Save();
+            _logger.LogInformation("已回存云鸣潮轮换 phoneToken(账号: {Name})", s.CloudLoginName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "回存云鸣潮轮换 phoneToken 失败");
         }
     }
 
@@ -149,6 +178,7 @@ public sealed class CloudGachaService
             {
                 return new CloudGachaResult { Status = CloudGachaStatus.LoginFailed, Message = "云鸣潮会话续期失败(可能已失效,请重新登录)" };
             }
+            PersistRenewedToken(data, session.PhoneToken);
 
             // 拿 recordId/playerId
             var record = await _cloud.GetRecordAsync(session, ct).ConfigureAwait(false);

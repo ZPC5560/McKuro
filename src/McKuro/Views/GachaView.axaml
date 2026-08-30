@@ -10,49 +10,17 @@
              x:Class="McKuro.Views.GachaView"
              x:DataType="vm:GachaViewModel">
 
-    <Grid RowDefinitions="Auto,Auto,*">
-        <!-- 云鸣潮登录状态(登录表单已迁移到「账号」页) -->
-        <Border Grid.Row="0" Margin="20,6,20,2" Padding="10,6" CornerRadius="10"
-                Background="{DynamicResource SemiColorBg2}">
-            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <ic:FluentIcon Icon="Cloud" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                    <TextBlock Text="云鸣潮" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
-                </StackPanel>
-                <!-- 已登录:账号名 -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
-                            IsVisible="{Binding IsCloudLoggedIn}">
-                    <TextBlock Text="{Binding CloudAccountText}" FontSize="12" FontWeight="Bold"
-                               VerticalAlignment="Center" Foreground="{DynamicResource SemiColorPrimary}" />
-                    <TextBlock Text="已登录 · 同步优先(退出登录在「账号」页)" FontSize="11" VerticalAlignment="Center"
-                               Foreground="{DynamicResource SemiColorText3}" />
-                </StackPanel>
-                <!-- 未登录:引导去账号页 -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
-                            IsVisible="{Binding !IsCloudLoggedIn}">
-                    <TextBlock Text="未登录 · 云接口同步需先在「账号」页登录云鸣潮(本地日志解析不受影响)"
-                               FontSize="11" VerticalAlignment="Center"
-                               Foreground="{DynamicResource SemiColorText3}" />
-                    <Button Content="前往「账号」页" Command="{Binding GoAccountCommand}"
-                            FontSize="11" Padding="8,2" />
-                </StackPanel>
-                <TextBlock Grid.Column="2" Text="接口优先,本地兜底" FontSize="11"
-                           Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
-            </Grid>
-        </Border>
+    <Grid RowDefinitions="Auto,*">
         <!-- 标题 + 玩家选择 + 同步按钮 -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" Margin="20,8,20,6" ColumnSpacing="10">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="20,8,20,6" ColumnSpacing="10">
             <StackPanel Spacing="1">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ic:FluentIcon Icon="Gauge" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
                     <TextBlock Text="抽卡分析" FontSize="20" FontWeight="Bold" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <TextBlock Text="{Binding StatusText}" FontSize="11"
-                               Foreground="{DynamicResource SemiColorText2}" />
-                    <TextBlock Text="{Binding PlayerIdText, StringFormat=玩家: {0}}" FontSize="11"
-                               Foreground="{DynamicResource SemiColorPrimary}" />
-                </StackPanel>
+                <!-- 仅显示数据来源(玩家账号 ID 已移除) -->
+                <TextBlock Text="{Binding StatusText}" FontSize="11"
+                           Foreground="{DynamicResource SemiColorText2}" />
             </StackPanel>
             <!-- 玩家切换:支持多账号查看与"全部账号"聚合 -->
             <ComboBox Grid.Column="1"
@@ -67,7 +35,7 @@
         </Grid>
 
         <!-- 视图切换(0=综合分析[默认] 1=统计卡片 2=表格) -->
-        <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedViewIndex}" Padding="0" Background="Transparent" FontSize="13">
+        <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedViewIndex}" Padding="0" Background="Transparent" FontSize="13">
             <TabItem Header="综合分析">
                 <Grid ColumnDefinitions="380,*">
             <!-- 左侧:卡池 + 五星列表 -->
@@ -190,10 +158,10 @@
 
             <!-- 右侧:统计条 + 图表 -->
             <Grid Grid.Column="1" Margin="5,0,0,10">
-                <ScrollViewer>
-                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
+                
+                    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="10">
                         <!-- 统计条 (8 列) -->
-                        <Border Grid.ColumnSpan="2" CornerRadius="10" Padding="12,10"
+                        <Border CornerRadius="10" Padding="12,10"
                                 Background="{DynamicResource SemiColorBg2}">
                             <Grid ColumnDefinitions="*,*,*,*,*,*,*,*">
                                 <StackPanel HorizontalAlignment="Center" Spacing="2">
@@ -239,7 +207,7 @@
                         </Border>
 
                         <!-- 统计图(三图合一:下拉切换 保底状态/出货占比/各卡池占比,环形) -->
-                        <Border Grid.Row="1" Grid.Column="0" CornerRadius="10" Padding="12"
+                        <Border Grid.Row="1" CornerRadius="10" Padding="12"
                                 Background="{DynamicResource SemiColorBg2}">
                             <Grid RowDefinitions="Auto,*">
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
@@ -250,48 +218,46 @@
                                               SelectedIndex="{Binding SelectedChartIndex, Mode=TwoWay}" />
                                 </Grid>
 
-                                <!-- 面板0:保底状态 -->
+                                <!-- 面板0:保底状态(环形图居左,颜色示例竖排在右侧) -->
                                 <StackPanel Grid.Row="1" Spacing="6" Margin="0,8,0,0" VerticalAlignment="Center"
                                             IsVisible="{Binding SelectedChartIndex, Converter={x:Static vm:IndexEqualsConverter.Instance}, ConverterParameter=0}">
                                     <TextBlock Text="{Binding GuaranteeHeader}" FontSize="11"
                                                Foreground="{DynamicResource SemiColorText2}" />
-                                    <Grid Width="140" Height="140" HorizontalAlignment="Center">
-                                        <ItemsControl ItemsSource="{Binding GuaranteeSlices}">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <Grid />
-                                                </ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="28">
+                                        <Grid Width="140" Height="140" VerticalAlignment="Center">
+                                            <ItemsControl ItemsSource="{Binding GuaranteeSlices}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <Grid />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:PieSliceViewModel">
+                                                        <Path Data="{Binding Data}" Fill="{Binding Brush}" Stretch="None" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
+                                                <TextBlock Text="{Binding TotalFiveStars}" FontSize="18" FontWeight="Bold"
+                                                           HorizontalAlignment="Center" />
+                                                <TextBlock Text="五星" FontSize="11" Foreground="{DynamicResource SemiColorText2}"
+                                                           HorizontalAlignment="Center" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <!-- 颜色示例(图例)移到环形图右侧,竖排 -->
+                                        <ItemsControl ItemsSource="{Binding GuaranteeSlices}" VerticalAlignment="Center">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:PieSliceViewModel">
-                                                    <Path Data="{Binding Data}" Fill="{Binding Brush}" Stretch="None" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,7">
+                                                        <Ellipse Width="10" Height="10" Fill="{Binding Brush}" VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding Name}" FontSize="13" VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding Value}" FontSize="13" FontWeight="Bold"
+                                                                   Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
+                                                    </StackPanel>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
-                                            <TextBlock Text="{Binding TotalFiveStars}" FontSize="18" FontWeight="Bold"
-                                                       HorizontalAlignment="Center" />
-                                            <TextBlock Text="五星" FontSize="11" Foreground="{DynamicResource SemiColorText2}"
-                                                       HorizontalAlignment="Center" />
-                                        </StackPanel>
-                                    </Grid>
-                                    <ItemsControl ItemsSource="{Binding GuaranteeSlices}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <WrapPanel HorizontalAlignment="Center" />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="vm:PieSliceViewModel">
-                                                <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,2,10,2">
-                                                    <Ellipse Width="8" Height="8" Fill="{Binding Brush}" VerticalAlignment="Center" />
-                                                    <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center" />
-                                                    <TextBlock Text="{Binding Value}" FontSize="12" FontWeight="Bold"
-                                                               Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
+                                    </StackPanel>
                                 </StackPanel>
 
                                 <!-- 面板1:出货占比 -->
@@ -382,18 +348,17 @@
                         </Border>
 
                         <!-- 每日抽数平滑面积图(自绘:平滑曲线 + 左侧单位刻度 + 网格线) -->
-                        <Border Grid.Row="1" Grid.Column="1" CornerRadius="10" Padding="12"
+                        <Border Grid.Row="2" CornerRadius="10" Padding="12"
                                 Background="{DynamicResource SemiColorBg2}">
                             <Grid RowDefinitions="Auto,*">
                                 <TextBlock Text="每日抽数" FontSize="13" FontWeight="Bold" Margin="0,0,0,6" />
-                                <controls:TimeLineChart Grid.Row="1" Height="262" Margin="0,2,0,0"
+                                <controls:TimeLineChart Grid.Row="1" Margin="0,2,0,0"
                                                         Values="{Binding TimeLineCounts}"
                                                         Labels="{Binding TimeLineLabels}"
                                                         Tips="{Binding TimeLineTips}" />
                             </Grid>
                         </Border>
                     </Grid>
-                </ScrollViewer>
             </Grid>
             </Grid>
             </TabItem>

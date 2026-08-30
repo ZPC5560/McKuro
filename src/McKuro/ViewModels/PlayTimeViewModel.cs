@@ -16,19 +16,8 @@ public sealed class PlayDayItem
     public required double Minutes { get; init; }     // 用于柱状高度
     public required double BarHeight { get; init; }   // 0-100 相对高度
     public string SessionsText { get; init; } = "";   // 当天每次独立时段(20:00-21:30、22:00-23:00)
-}
-
-/// <summary>最近 7 天游玩时间范围报告中的某一天。</summary>
-public sealed class PlayTimeReportRow
-{
-    public required string Label { get; init; }        // 08/16
-    public required string Weekday { get; init; }      // 周五
-    public required string DayTag { get; init; }       // 今天 / 昨天 / 空
-    public bool HasDayTag { get; init; }
-    public required string HoursText { get; init; }    // 3.3h
-    public required string SessionsText { get; init; } // 15:47-17:51 · 17:27-17:29
-    /// <summary>当天游玩时长的相对条宽度(满宽 ≈ 最近 7 天最大值)。</summary>
-    public required double DurationWidth { get; init; }
+    /// <summary>是否显示柱状轨道:今天且尚无游玩数据时隐藏空轨道(已过的天始终显示,0 也算记录)。</summary>
+    public bool ShowBar { get; init; } = true;
 }
 
 /// <summary>7×24 时段热力格。</summary>
@@ -74,9 +63,6 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
     public ObservableCollection<PlayDayItem> Last7Days { get; } = [];
 
     public ObservableCollection<PlayHourCell> HourlyCells { get; } = [];
-
-    /// <summary>最近 7 天游玩时间范围报告(结构化,每行一天)。</summary>
-    public ObservableCollection<PlayTimeReportRow> ReportRows { get; } = [];
 
     public PlayTimeViewModel()
     {
@@ -131,58 +117,31 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
         // 最近 7 天每日时长(柱状)
         Last7Days.Clear();
         long maxDay = Math.Max(1, a.Last7DaysSeconds.Max());
+        var today = DateTime.Now.ToString("MM/dd");
         for (int i = 0; i < 7; i++)
         {
             long secs = a.Last7DaysSeconds[i];
             // 每天每次独立时段(参考睡眠检测:合并相邻会话)
             var sessions = a.Last7DaysSessions?[i] ?? [];
             var sessionsText = string.Join("、", sessions.Select(s => s.Display));
+            var date = a.Last7DaysDates[i];
             Last7Days.Add(new PlayDayItem
             {
-                Date = a.Last7DaysDates[i],
-                Label = FormatDayLabel(a.Last7DaysDates[i]),
+                Date = date,
+                Label = FormatDayLabel(date),
                 HoursText = FormatHours(secs),
                 Minutes = secs / 60.0,
                 BarHeight = secs * 100.0 / maxDay,
                 SessionsText = sessionsText,
+                // 今天且还没有游玩记录:隐藏空柱状轨道(当天还没结束,0 不代表"没玩")
+                ShowBar = !(date == today && secs == 0),
             });
         }
 
-        // 最近 7 天游玩时间范围报告(结构化):只列出有游玩的日期。
-        ReportRows.Clear();
-        var today = DateTime.Today;
-        double maxReportMin = 1;
-        var played = new List<(int Index, long Secs)>();
-        for (int i = 0; i < 7; i++)
-        {
-            long secs = a.Last7DaysSeconds[i];
-            if (secs <= 0)
-            {
-                continue;
-            }
-            played.Add((i, secs));
-            maxReportMin = Math.Max(maxReportMin, secs / 60.0);
-        }
-        var dayTagCache = new Dictionary<string, string>();
-        foreach (var (i, secs) in played)
-        {
-            var date = a.Last7DaysDates[i];
-            var sessions = a.Last7DaysSessions?[i] ?? [];
-            var sessionsText = string.Join(" · ", sessions.Select(s => s.Display));
-            var dayTag = FormatDayTag(date, today, dayTagCache);
-            ReportRows.Add(new PlayTimeReportRow
-            {
-                Label = FormatDayLabel(date),
-                Weekday = FormatWeekday(date),
-                DayTag = dayTag,
-                HasDayTag = dayTag.Length > 0,
-                HoursText = FormatHours(secs),
-                SessionsText = sessionsText,
-                DurationWidth = Math.Max(4, secs / 60.0 * 160.0 / maxReportMin),
-            });
-        }
-        ReportSummaryText = ReportRows.Count > 0
-            ? $"最近 7 天共 {ReportRows.Count} 天有游玩"
+        // 报告总览:最近 7 天有游玩的天数(逐日明细已移除,仅保留汇总徽标)
+        var playedDays = a.Last7DaysSeconds.Count(secs => secs > 0);
+        ReportSummaryText = playedDays > 0
+            ? $"最近 7 天共 {playedDays} 天有游玩"
             : "最近 7 天暂无游玩记录";
 
         // 7 天分析报告:在逐日聚合之上二次计算(纯 Core 计算,便于测试)
@@ -219,34 +178,6 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
         return DateTime.TryParse(date, out var day)
             ? day.ToString("MM/dd")
             : date;
-    }
-
-    private static string FormatWeekday(string date)
-    {
-        return DateTime.TryParse(date, out var day)
-            ? day.ToString("ddd", System.Globalization.CultureInfo.GetCultureInfo("zh-CN"))
-            : "";
-    }
-
-    private static string FormatDayTag(string date, DateTime today, Dictionary<string, string> cache)
-    {
-        if (cache.TryGetValue(date, out var cached))
-        {
-            return cached;
-        }
-        string tag = "";
-        if (DateTime.TryParse(date, out var day))
-        {
-            var span = (today.Date - day.Date).Days;
-            tag = span switch
-            {
-                0 => "今天",
-                1 => "昨天",
-                _ => "",
-            };
-        }
-        cache[date] = tag;
-        return tag;
     }
 
     private static string FormatHours(long totalSeconds)

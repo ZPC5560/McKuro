@@ -132,9 +132,6 @@ public sealed partial class HomeViewModel : ViewModelBase
     private bool _isLoggedIn;
 
     [ObservableProperty]
-    private string _accountText = "未登录";
-
-    [ObservableProperty]
     private bool _isBusy;
 
     /// <summary>欢迎页淡入动画(0→1,配合 Avalonia Transitions)。</summary>
@@ -236,10 +233,6 @@ public sealed partial class HomeViewModel : ViewModelBase
         };
         var account = AppServices.KuroAccounts.Current;
         IsLoggedIn = account is not null;
-        // 显示账号名称(昵称);未登录显示"未登录",名称缺失时用友好占位而非账号 ID
-        AccountText = account is null
-            ? "未登录"
-            : (!string.IsNullOrWhiteSpace(account.Nickname) ? account.Nickname : "已登录账号");
     }
 
     [RelayCommand]
@@ -291,7 +284,7 @@ public sealed partial class HomeViewModel : ViewModelBase
             {
                 ClearProfile();
                 DailyItems.Clear();
-                StatusText = "本地无游戏缓存,请登录库街区账号显示每日数据";
+                StatusText = "本地无游戏缓存,暂无每日数据";
                 return;
             }
             var data = await AppServices.DailyData.GetDailyDataAsync();
@@ -299,7 +292,7 @@ public sealed partial class HomeViewModel : ViewModelBase
             {
                 ClearProfile();
                 DailyItems.Clear();
-                StatusText = "拉取每日数据失败(未登录或接口异常)";
+                StatusText = "拉取每日数据失败";
                 return;
             }
             ApplyDailyData(data, "库街区");
@@ -350,7 +343,8 @@ public sealed partial class HomeViewModel : ViewModelBase
         AddItem(data.RougeData, Icon.Door, "千道门扉", curOnly: true);
         AddItem(data.WeeklyFrameData, Icon.Map, "周度游历", curOnly: true);
         AddBattlePass(data.BattlePassData);
-        StatusText = $"已更新({source}) · {data.RoleName ?? ""}({data.RoleId ?? ""})";
+        // 只显示数据来源与更新状态,不显示账号信息(角色名/角色 ID)
+        StatusText = $"已更新({source})";
     }
 
     /// <summary>填充资料卡:昵称/等级/游玩天数/头像/开服玩家徽章(参照 Java WutheringWavesTool 角色卡)。</summary>
@@ -424,6 +418,11 @@ public sealed partial class HomeViewModel : ViewModelBase
             await AppServices.IconCache.CacheUrlAsync(AvatarCacheCategory, key, url);
             var local = AppServices.IconCache.GetCachedIconPath(AvatarCacheCategory, key);
             AvatarUrl = local ?? url;
+            // 通知导航栏切换为真实账号头像(落盘后的本地路径;主页已用磁盘缓存,导航栏复用同一份)
+            if (!string.IsNullOrEmpty(local))
+            {
+                WeakReferenceMessenger.Default.Send(new AvatarResolvedMessage(local));
+            }
         }
         catch (Exception)
         {

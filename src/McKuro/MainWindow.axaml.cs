@@ -4,6 +4,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform;
+using Avalonia.Animation;
+
+using Avalonia.Media;
 using Avalonia.Threading;
 using McKuro.Services;
 
@@ -34,6 +37,8 @@ public partial class MainWindow : Window
     /// <summary>系统托盘图标(隐藏到托盘时显示;从托盘恢复后隐藏)。</summary>
     private TrayIcon? _trayIcon;
 
+    /// <summary>导航滑动胶囊动画进行中(布局回归时暂停吸附,避免与动画互相争抢)。</summary>
+
     public MainWindow()
     {
         InitializeComponent();
@@ -44,6 +49,7 @@ public partial class MainWindow : Window
         Opened += (_, _) => InstallSizeAspectHook();
         InitTrayIcon();
         InitSystemMaterial();
+        HookNavPill();
     }
 
     /// <summary>
@@ -545,4 +551,138 @@ public partial class MainWindow : Window
 
     [DllImport("user32.dll")]
     private static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-}
+
+
+    // ---- 导航栏液态玻璃滑动胶囊(Apple 风格):可打断的滑动 + 形变 ----
+
+    private DispatcherTimer? _pillTimer;
+    private double _pillTargetX;
+    private double _pillTargetY;
+
+    /// <summary>目标已定但容器未就绪:挂起,LayoutUpdated 补滑(绝不直接跳位)。</summary>
+    private bool _pillTargetPending;
+
+    /// <summary>挂接选中/尺寸/布局事件,驱动滑动胶囊。</summary>
+    private void HookNavPill()
+    {
+        NavList.SelectionChanged += (_, _) => UpdateNavPill(animate: true);
+        NavList.SizeChanged += (_, _) => UpdateNavPillTarget(animate: false);
+        NavList.Loaded += (_, _) => UpdateNavPillTarget(animate: false);
+        NavList.LayoutUpdated += (_, _) =>
+        {
+            if (_pillTimer is not null)
+            {
+                // 滑动中:目标字段可能已被更新,滑行自动滑向新目标(可打断,无跳变)
+                return;
+            }
+            if (_pillTargetPending)
+            {
+                // 容器就绪了:补上之前挂起的滑动
+                UpdateNavPillTarget(animate: true);
+                return;
+            }
+            // 静默贴合(窗口缩放等导致的行高变化)
+            UpdateNavPillTarget(animate: false);
+        };
+    }
+
+    private void UpdateNavPill(bool animate) => UpdateNavPillTarget(animate);
+
+    private void UpdateNavPillTarget(bool animate)
+    {
+        if (NavList.SelectedIndex < 0 || NavList.ItemCount == 0)
+        {
+            NavPill.IsVisible = false;
+            _pillTargetPending = false;
+            return;
+        }
+        if (NavList.ContainerFromIndex(NavList.SelectedIndex) is not ListBoxItem container
+            || !container.IsLoaded)
+        {
+            // 容器未就绪:点击路径挂起待滑(绝不容许直接跳位);尺寸路径直接隐藏
+            if (animate)
+            {
+                _pillTargetPending = true;
+            }
+            else
+            {
+                NavPill.IsVisible = false;
+            }
+            return;
+        }
+        var pt = container.TranslatePoint(new Point(0, 0), NavGlassPanel);
+        if (pt is null)
+        {
+            return;
+        }
+        NavPill.IsVisible = true;
+        NavPill.Width = container.Bounds.Width;
+        NavPill.Height = Math.Max(36, container.Bounds.Height - 6);
+        _pillTargetX = pt.Value.X;
+        _pillTargetY = pt.Value.Y + 3;
+        _pillTargetPending = false;
+
+        if (_pillTimer is not null)
+        {
+            // 滑动中改目标:滑行 tick 直接读目标字段,自动滑向新目标(可打断)
+            return;
+        }
+        if (animate && NavPill.IsVisible)
+        {
+            GlidePillTo();
+        }
+        else if (!animate)
+        {
+            PillTranslate.X = _pillTargetX;
+            PillTranslate.Y = _pillTargetY;
+            PillScale.ScaleX = 1;
+            PillScale.ScaleY = 1;
+        }
+    }
+
+    /// <summary>液态玻璃滑动:指数追踪 + 速度驱动的挤压/拉伸(可打断,随时改目标)。</summary>
+    private void GlidePillTo()
+    {
+        _pillTimer?.Stop();
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _pillTimer = timer;
+        timer.Tick += (_, _) =>
+        {
+            var dx = _pillTargetX - PillTranslate.X;
+            var dy = _pillTargetY - PillTranslate.Y;
+            if (Math.Abs(dx) < 0.5 && Math.Abs(dy) < 0.5)
+            {
+                PillTranslate.X = _pillTargetX;
+                PillTranslate.Y = _pillTargetY;
+                PillScale.ScaleX = 1;
+                PillScale.ScaleY = 1;
+                timer.Stop();
+                _pillTimer = null;
+                return;
+            }
+            // 0.12 收敛系数:约 500ms 的长滑行,液态玻璃的缓动拖尾感
+            var vx = dx * 0.12;
+            var vy = dy * 0.12;
+            PillTranslate.X += vx;
+            PillTranslate.Y += vy;
+
+            // 速度驱动的挤压/拉伸(Apple Liquid Glass squash & stretch):
+            // 沿运动方向拉伸、垂直方向等比压扁,速度衰减时形变自动归零
+            var speed = Math.Sqrt(vx * vx + vy * vy);
+            var stretch = Math.Min(0.28, speed * 0.018);
+            if (Math.Abs(dx) >= Math.Abs(dy))
+            {
+                PillScale.ScaleX = 1 + stretch;
+                PillScale.ScaleY = Math.Max(0.75, 1 - stretch * 0.55);
+            }
+            else
+            {
+                PillScale.ScaleY = 1 + stretch;
+                PillScale.ScaleX = Math.Max(0.75, 1 - stretch * 0.55);
+            }
+        };
+        timer.Start();
+    }
+
+    private TranslateTransform PillTranslate => ((TransformGroup)NavPill.RenderTransform!).Children[0] as TranslateTransform ?? throw new InvalidOperationException();
+    private ScaleTransform PillScale => ((TransformGroup)NavPill.RenderTransform!).Children[1] as ScaleTransform ?? throw new InvalidOperationException();}

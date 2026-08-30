@@ -14,7 +14,7 @@
         <vm:SerialNumPlusOneConverter x:Key="SerialNumPlusOne" />
     </UserControl.Resources>
     <Grid RowDefinitions="Auto,Auto,Auto,*">
-        <!-- 标题 -->
+        <!-- 标题行:左标题 + 右侧账号信息与操作(账号信息按需求移至标题栏右边) -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="20,16,20,8">
             <StackPanel Spacing="2">
                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -27,42 +27,36 @@
                                Foreground="{DynamicResource SemiColorText2}" />
                 </StackPanel>
             </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center"
-                        IsVisible="{Binding IsLoggedIn}">
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <!-- 账号信息(登录/切号/登出后经 RolesRefreshRequestedMessage 自动刷新) -->
+                <TextBlock Text="{Binding AccountText}" FontSize="13" FontWeight="Bold"
+                           VerticalAlignment="Center"
+                           IsVisible="{Binding IsLoggedIn}" />
+                <Button Content="刷新角色" Command="{Binding RefreshRolesCommand}"
+                        FontSize="12" Padding="8,2"
+                        IsVisible="{Binding IsLoggedIn}" />
                 <Button Content="游戏签到" Classes="primary"
                         Command="{Binding SignAllCommand}"
-                        IsEnabled="{Binding !IsBusy}" />
+                        IsEnabled="{Binding !IsBusy}"
+                        IsVisible="{Binding IsLoggedIn}" />
                 <Button Content="库街区每日任务" Command="{Binding ExecuteDailyCommand}"
-                        IsEnabled="{Binding !IsBusy}" />
+                        IsEnabled="{Binding !IsBusy}"
+                        IsVisible="{Binding IsLoggedIn}" />
+                <!-- 未登录:引导去账号页 -->
+                <Button Content="前往「账号」页登录" Classes="primary"
+                        Command="{Binding GoAccountCommand}"
+                        IsVisible="{Binding !IsLoggedIn}" />
             </StackPanel>
         </Grid>
 
-        <!-- 账号信息(登录在「账号」页完成) -->
+        <!-- 签到设置(自设置页迁移到功能页;常显,执行时自行校验登录)。
+             AutoSignEnabled 同时控制启动后与每日 8:00 两个时机(DailyTaskScheduler),故只留一个开关 -->
         <Border Grid.Row="1" Margin="20,0,20,10" Padding="16" CornerRadius="12"
                 Background="{DynamicResource SemiColorBg2}">
-            <Grid RowDefinitions="Auto,Auto">
-                <!-- 未登录:引导去账号页 -->
-                <StackPanel Grid.Row="0" Spacing="8" IsVisible="{Binding !IsLoggedIn}">
-                    <TextBlock Text="库街区账号未登录。登录入口已统一迁移到「账号」页。" FontSize="13"
-                               Foreground="{DynamicResource SemiColorText2}" />
-                    <Button Content="前往「账号」页登录" Classes="primary"
-                            Command="{Binding GoAccountCommand}"
-                            HorizontalAlignment="Left" />
-                </StackPanel>
-
-                <!-- 已登录:账号信息 + 开关 -->
-                <StackPanel Grid.Row="1" Spacing="8" IsVisible="{Binding IsLoggedIn}">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Text="{Binding AccountText}" FontSize="15" FontWeight="Bold" />
-                        <Button Content="刷新角色" Command="{Binding RefreshRolesCommand}"
-                                FontSize="12" Padding="8,2" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="16">
-                        <CheckBox Content="每日 8:00 自动游戏签到" IsChecked="{Binding AutoSignEnabled}" />
-                        <CheckBox Content="自动执行库街区每日任务" IsChecked="{Binding AutoKuroClientTaskEnabled}" />
-                    </StackPanel>
-                </StackPanel>
-            </Grid>
+            <StackPanel Orientation="Horizontal" Spacing="16">
+                <CheckBox Content="自动游戏签到(启动后 + 每日 8:00)" IsChecked="{Binding AutoSignEnabled}" />
+                <CheckBox Content="自动执行库街区每日任务" IsChecked="{Binding AutoKuroClientTaskEnabled}" />
+            </StackPanel>
         </Border>
 
         <!-- 签到奖励格子 + 今日状态(参照 WutheringWavesTool goodsView) -->
@@ -84,12 +78,15 @@
                                    Foreground="{DynamicResource SemiColorText2}"
                                    VerticalAlignment="Center" />
                     </StackPanel>
-                    <ItemsControl ItemsSource="{Binding SignGoods}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
+                    <!-- 奖励格子内部滚动(MaxHeight≈3 行):页面高度留给底部角色签到状态,
+                         31 格全量展开会把底部行挤出视口 -->
+                    <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding SignGoods}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="kuro:SignInGoodsItem">
                                 <Border Width="76" Height="90" CornerRadius="8" Margin="0,0,8,8"
@@ -125,7 +122,8 @@
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                        </ItemsControl>
+                    </ScrollViewer>
                 </StackPanel>
                 <!-- 右:签到统计(参照 WutheringWavesTool signHistoryListView) -->
                 <Border Grid.Column="1" Width="200" CornerRadius="10"
@@ -169,7 +167,10 @@
                                 Background="{DynamicResource SemiColorBg2}">
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
                                 <Border Width="36" Height="36" CornerRadius="8"
-                                        Background="{DynamicResource SemiColorBg3}" />
+                                        Background="{DynamicResource SemiColorBg3}">
+                                    <controls:AsyncImage ImageUrl="{Binding HeadUrl}"
+                                                         Width="36" Height="36" Stretch="UniformToFill" />
+                                </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <TextBlock Text="{Binding RoleName}" FontSize="15" FontWeight="Bold" />

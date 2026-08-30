@@ -40,6 +40,9 @@
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
                         <ic:FluentIcon Icon="Home" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
                         <TextBlock Text="国服" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                        <Border CornerRadius="6" Padding="7,1" Background="{DynamicResource SemiColorBg3}" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding MainlandCodes.Count}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                        </Border>
                     </StackPanel>
                     <ListBox Grid.Row="1" ItemsSource="{Binding MainlandCodes}"
                              SelectedItem="{Binding SelectedMainland, Mode=TwoWay}"
@@ -49,11 +52,16 @@
                                 <Border CornerRadius="8" Background="{DynamicResource SemiColorBg3}"
                                         Padding="10,8" Margin="0,0,0,8"
                                         Opacity="{Binding Valid, Converter={StaticResource ValidOpacity}}">
-                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                                        <StackPanel Spacing="3">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                        <!-- 有效性色条:有效=主题色,过期=灰(ValidBrush) -->
+                                        <Border Width="3" CornerRadius="2" VerticalAlignment="Stretch"
+                                                Background="{Binding Valid, Converter={StaticResource ValidBrush}}" />
+                                        <StackPanel Grid.Column="1" Spacing="3">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <TextBlock Text="{Binding Key}" FontSize="14" FontWeight="Bold"
-                                                           FontFamily="Consolas" />
+                                                <Border CornerRadius="6" Background="{DynamicResource SemiColorBg2}" Padding="9,2">
+                                                    <TextBlock Text="{Binding Key}" FontSize="14" FontWeight="Bold"
+                                                               FontFamily="Consolas" />
+                                                </Border>
                                                 <Border CornerRadius="4" Padding="5,1"
                                                         Background="{Binding Valid, Converter={StaticResource ValidBrush}}">
                                                     <TextBlock Text="{Binding Valid, Converter={StaticResource ValidText}}"
@@ -93,6 +101,9 @@
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
                         <ic:FluentIcon Icon="Globe" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
                         <TextBlock Text="国际服" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                        <Border CornerRadius="6" Padding="7,1" Background="{DynamicResource SemiColorBg3}" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding GlobalCodes.Count}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                        </Border>
                     </StackPanel>
                     <ListBox Grid.Row="1" ItemsSource="{Binding GlobalCodes}"
                              SelectedItem="{Binding SelectedGlobal, Mode=TwoWay}"
@@ -102,11 +113,16 @@
                                 <Border CornerRadius="8" Background="{DynamicResource SemiColorBg3}"
                                         Padding="10,8" Margin="0,0,0,8"
                                         Opacity="{Binding Valid, Converter={StaticResource ValidOpacity}}">
-                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                                        <StackPanel Spacing="3">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                        <!-- 有效性色条:有效=主题色,过期=灰(ValidBrush) -->
+                                        <Border Width="3" CornerRadius="2" VerticalAlignment="Stretch"
+                                                Background="{Binding Valid, Converter={StaticResource ValidBrush}}" />
+                                        <StackPanel Grid.Column="1" Spacing="3">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <TextBlock Text="{Binding Key}" FontSize="14" FontWeight="Bold"
-                                                           FontFamily="Consolas" />
+                                                <Border CornerRadius="6" Background="{DynamicResource SemiColorBg2}" Padding="9,2">
+                                                    <TextBlock Text="{Binding Key}" FontSize="14" FontWeight="Bold"
+                                                               FontFamily="Consolas" />
+                                                </Border>
                                                 <Border CornerRadius="4" Padding="5,1"
                                                         Background="{Binding Valid, Converter={StaticResource ValidBrush}}">
                                                     <TextBlock Text="{Binding Valid, Converter={StaticResource ValidText}}"

@@ -8,83 +8,60 @@
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.AccountView"
              x:DataType="vm:AccountViewModel">
+    <UserControl.Resources>
+        <!-- 接口登录状态点颜色:绿=登录正常,橙=异常登录,灰=未登录 -->
+        <vm:LoginDotBrushConverter x:Key="LoginDotBrush" />
+    </UserControl.Resources>
     <ScrollViewer>
         <StackPanel Margin="25" Spacing="12" MaxWidth="820" HorizontalAlignment="Left">
-            <!-- 标题 -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
-                <ic:FluentIcon Icon="Person" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
-                <TextBlock Text="账号" FontSize="24" FontWeight="Bold" VerticalAlignment="Center" />
-                <TextBlock Text="所有接口账号在此登录与管理" FontSize="12"
-                           Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
-            </StackPanel>
-
-            <!-- 同一账号判定:自动,仅提醒不强制登出 -->
-            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="16,12">
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                    <Border Width="40" Height="40" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
-                        <ic:FluentIcon Icon="Checkmark" IconVariant="Regular" IconSize="Size20"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <!-- 标题(右侧:同一账号判定徽标,自动判定仅提醒不强制登出) -->
+            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <ic:FluentIcon Icon="Person" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
+                    <TextBlock Text="账号" FontSize="24" FontWeight="Bold" VerticalAlignment="Center" />
+                    <TextBlock Text="所有接口账号在此登录与管理" FontSize="12"
+                               Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
+                </StackPanel>
+                <!-- 判定徽标(自动;悬停查看完整判定结果) -->
+                <Grid Grid.Column="1" VerticalAlignment="Center"
+                      ToolTip.Tip="{Binding SameAccountStatus}">
+                    <!-- 同一账号(强调色) -->
+                    <Border CornerRadius="8" Padding="10,4" Background="#D9481F" IsVisible="{Binding SameAccountIsSame}">
+                        <TextBlock Text="{Binding SameAccountStatus}" FontSize="12" Foreground="White"
+                                   MaxWidth="320" TextTrimming="CharacterEllipsis" />
                     </Border>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                        <TextBlock Text="同一账号自动判定" FontSize="14" FontWeight="Bold" />
-                        <TextBlock Text="依据各接口登录手机号自动判断;不同账号仅提醒,不会强制登出" FontSize="11"
-                                   Foreground="{DynamicResource SemiColorText3}" />
-                    </StackPanel>
-                    <!-- 判定徽标(自动,无需手动) -->
-                    <Grid Grid.Column="2" VerticalAlignment="Center">
-                        <!-- 同一账号(强调色) -->
-                        <Border CornerRadius="8" Padding="10,4" Background="#D9481F" IsVisible="{Binding SameAccountIsSame}">
-                            <TextBlock Text="{Binding SameAccountStatus}" FontSize="12" Foreground="White"
-                                       TextWrapping="Wrap" MaxWidth="240" />
-                        </Border>
-                        <!-- 不同账号(警示色) -->
-                        <Border CornerRadius="8" Padding="10,4" Background="#B98900" IsVisible="{Binding SameAccountIsDifferent}">
-                            <TextBlock Text="{Binding SameAccountStatus}" FontSize="12" Foreground="White"
-                                       TextWrapping="Wrap" MaxWidth="240" />
-                        </Border>
-                        <!-- 信息不足(中性) -->
-                        <Border CornerRadius="8" Padding="10,4" Background="{DynamicResource SemiColorBg3}"
-                                IsVisible="{Binding SameAccountIsUnknown}">
-                            <TextBlock Text="{Binding SameAccountStatus}" FontSize="12"
-                                       Foreground="{DynamicResource SemiColorText2}"
-                                       TextWrapping="Wrap" MaxWidth="240" />
-                        </Border>
-                    </Grid>
-                </Grid>
-            </Border>
-            <!-- 判定明细(自动生成,可读信息) -->
-            <ItemsControl ItemsSource="{Binding IdentityCheckLines}" IsVisible="{Binding HasIdentityDetails}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                        <TextBlock Text="{Binding}" FontSize="11" Margin="4,0,0,1"
-                                   Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-
-            <!-- 角色 ID -->
-            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="20">
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
-                    <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
-                        <ic:FluentIcon Icon="XboxController" IconVariant="Regular" IconSize="Size20"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <!-- 不同账号(警示色) -->
+                    <Border CornerRadius="8" Padding="10,4" Background="#B98900" IsVisible="{Binding SameAccountIsDifferent}">
+                        <TextBlock Text="{Binding SameAccountStatus}" FontSize="12" Foreground="White"
+                                   MaxWidth="320" TextTrimming="CharacterEllipsis" />
                     </Border>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-                        <TextBlock Text="角色 ID (playerId)" FontSize="15" FontWeight="Bold" />
-                        <TextBlock Text="游戏内账号的角色 ID,用于拉取角色养成数据(登录后自动同步)" FontSize="12"
-                                   Foreground="{DynamicResource SemiColorText2}" />
-                    </StackPanel>
-                    <TextBox Grid.Column="2" Width="320" VerticalAlignment="Center"
-                             Text="{Binding RoleId}"
-                             PlaceholderText="playerId" />
+                    <!-- 信息不足(中性) -->
+                    <Border CornerRadius="8" Padding="10,4" Background="{DynamicResource SemiColorBg3}"
+                            IsVisible="{Binding SameAccountIsUnknown}">
+                        <TextBlock Text="{Binding SameAccountStatus}" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}"
+                                   MaxWidth="320" TextTrimming="CharacterEllipsis" />
+                    </Border>
                 </Grid>
-            </Border>
+            </Grid>
 
             <!-- 登录账号堆叠卡片:三个接口账号以标签堆叠展示,登录完自动切下一个,也可手动点击切换 -->
+            <!-- 各标签后的状态点:绿=登录正常,橙=异常登录(会话失效),灰=未登录 -->
             <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="0">
                 <TabControl SelectedIndex="{Binding SelectedLoginCard}" Padding="20" Background="Transparent">
                     <!-- 卡片 1:库街区账号(多账号切换 + 登录) -->
-                    <TabItem Header="{Binding KuroTabHeader}">
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="库街区账号" VerticalAlignment="Center" />
+                                <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                         Fill="{Binding KuroLoginState, Converter={StaticResource LoginDotBrush}}">
+                                    <ToolTip.Tip>
+                                        <TextBlock Text="库街区登录状态:绿=登录正常,橙=异常登录,灰=未登录" FontSize="11" />
+                                    </ToolTip.Tip>
+                                </Ellipse>
+                            </StackPanel>
+                        </TabItem.Header>
                         <StackPanel Spacing="12" Margin="0,12,0,0">
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
                                 <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
@@ -141,7 +118,18 @@
                     </TabItem>
 
                     <!-- 卡片 2:云鸣潮账号 -->
-                    <TabItem Header="{Binding CloudTabHeader}">
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="云鸣潮" VerticalAlignment="Center" />
+                                <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                         Fill="{Binding CloudLoginState, Converter={StaticResource LoginDotBrush}}">
+                                    <ToolTip.Tip>
+                                        <TextBlock Text="云鸣潮登录状态:绿=登录正常,橙=异常登录,灰=未登录" FontSize="11" />
+                                    </ToolTip.Tip>
+                                </Ellipse>
+                            </StackPanel>
+                        </TabItem.Header>
                         <StackPanel Spacing="12" Margin="0,12,0,0">
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
                                 <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
@@ -193,7 +181,18 @@
                     </TabItem>
 
                     <!-- 卡片 3:官方养成评级(mcguide) -->
-                    <TabItem Header="{Binding GuideTabHeader}">
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="官方养成评级" VerticalAlignment="Center" />
+                                <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                         Fill="{Binding GuideLoginState, Converter={StaticResource LoginDotBrush}}">
+                                    <ToolTip.Tip>
+                                        <TextBlock Text="mcguide 登录状态:绿=登录正常,橙=异常登录,灰=未登录" FontSize="11" />
+                                    </ToolTip.Tip>
+                                </Ellipse>
+                            </StackPanel>
+                        </TabItem.Header>
                         <StackPanel Spacing="12" Margin="0,12,0,0">
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
                                 <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">

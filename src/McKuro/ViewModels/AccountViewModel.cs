@@ -28,6 +28,17 @@ public enum SameAccountVerdict
     Different,
 }
 
+/// <summary>接口账号登录状态(登录卡片标签后的状态点)。</summary>
+public enum InterfaceLoginState
+{
+    /// <summary>未登录(灰点)。</summary>
+    NotLoggedIn,
+    /// <summary>登录正常(绿点)。</summary>
+    Ok,
+    /// <summary>异常登录:已保存登录但会话校验已失效(橙点)。</summary>
+    Error,
+}
+
 /// <summary>
 /// 账号页:全部接口账号登录的统一入口。
 /// 包含:库街区多账号(短信+极验登录/切换/移除)、云鸣潮登录、mcguide 官方评级登录,
@@ -35,9 +46,6 @@ public enum SameAccountVerdict
 /// </summary>
 public sealed partial class AccountViewModel : ViewModelBase
 {
-    [ObservableProperty]
-    private string _roleId;
-
     [ObservableProperty]
     private string _statusText = "";
 
@@ -56,6 +64,19 @@ public sealed partial class AccountViewModel : ViewModelBase
     /// <summary>是否已保存库街区账号(控制「当前账号」切换行显示;无账号时隐藏,避免出现空下拉)。</summary>
     public bool HasKuroAccounts => AccountOptions.Count > 0;
 
+    // ---- 登录状态点(每个接口账号标签后:绿=登录正常,橙=异常登录,灰=未登录) ----
+    /// <summary>库街区登录状态点。</summary>
+    [ObservableProperty]
+    private InterfaceLoginState _kuroLoginState = InterfaceLoginState.NotLoggedIn;
+
+    /// <summary>云鸣潮登录状态点。</summary>
+    [ObservableProperty]
+    private InterfaceLoginState _cloudLoginState = InterfaceLoginState.NotLoggedIn;
+
+    /// <summary>mcguide 官方评级登录状态点。</summary>
+    [ObservableProperty]
+    private InterfaceLoginState _guideLoginState = InterfaceLoginState.NotLoggedIn;
+
     // ---- 库街区短信登录(自签到页迁移;极验 GeeTest 流程对齐 Haiyu)----
     [ObservableProperty]
     private bool _isKuroLoginOpen;
@@ -64,18 +85,6 @@ public sealed partial class AccountViewModel : ViewModelBase
     /// <summary>堆叠卡片当前激活索引:0=库街区,1=云鸣潮,2=官方养成评级。</summary>
     [ObservableProperty]
     private int _selectedLoginCard;
-
-    /// <summary>库街区标签头(带登录状态后缀)。</summary>
-    [ObservableProperty]
-    private string _kuroTabHeader = "库街区账号";
-
-    /// <summary>云鸣潮标签头。</summary>
-    [ObservableProperty]
-    private string _cloudTabHeader = "云鸣潮账号";
-
-    /// <summary>mcguide 标签头。</summary>
-    [ObservableProperty]
-    private string _guideTabHeader = "官方养成评级";
 
     /// <summary>
     /// 切换到下一个堆叠卡片(登录成功后自动调用):
@@ -104,14 +113,6 @@ public sealed partial class AccountViewModel : ViewModelBase
         2 => AppServices.Guide.HasToken,
         _ => false,
     };
-
-    /// <summary>按各接口登录态刷新三个标签头(已登录追加 ✓ 后缀)。</summary>
-    private void RefreshTabHeaders()
-    {
-        KuroTabHeader = IsCardLoggedIn(0) ? "库街区账号 ✓" : "库街区账号";
-        CloudTabHeader = IsCardLoggedIn(1) ? "云鸣潮 ✓" : "云鸣潮";
-        GuideTabHeader = IsCardLoggedIn(2) ? "官方评级 ✓" : "官方评级";
-    }
 
     /// <summary>构造时选第一个未登录的卡片(全部已登录则停在库街区管理账号)。</summary>
     private void SelectInitialLoginCard()
@@ -265,12 +266,6 @@ public sealed partial class AccountViewModel : ViewModelBase
     /// <summary>信息不足(中性提示)。</summary>
     public bool SameAccountIsUnknown => SameAccountVerdict == SameAccountVerdict.Unknown;
 
-    /// <summary>判定明细(自动生成的逐接口/去重信息)。</summary>
-    public ObservableCollection<string> IdentityCheckLines { get; } = [];
-
-    /// <summary>是否存在判定明细(控制明细区可见性)。</summary>
-    public bool HasIdentityDetails => IdentityCheckLines.Count > 0;
-
     partial void OnSameAccountVerdictChanged(SameAccountVerdict value)
     {
         OnPropertyChanged(nameof(SameAccountIsSame));
@@ -284,7 +279,6 @@ public sealed partial class AccountViewModel : ViewModelBase
     public AccountViewModel()
     {
         var s = AppServices.Settings.Current;
-        _roleId = s.RoleId;
         RefreshAccounts();
         RefreshCloudState();
 
@@ -303,10 +297,11 @@ public sealed partial class AccountViewModel : ViewModelBase
         _isKuroLoginOpen = AppServices.KuroAccounts.GetAccounts().Count == 0;
         _isCloudLoginOpen = !AppServices.CloudGacha.HasSavedLogin;
         _isGuideLoginOpen = !AppServices.Guide.HasToken;
+        // mcguide 已保存登录先按绿点显示,会话校验失败再转橙点
+        _guideLoginState = AppServices.Guide.HasToken ? InterfaceLoginState.Ok : InterfaceLoginState.NotLoggedIn;
 
         // 自动进行同一账号判定
         RefreshSameAccountAuto();
-        RefreshTabHeaders();
         SelectInitialLoginCard();
     }
 
@@ -351,8 +346,11 @@ public sealed partial class AccountViewModel : ViewModelBase
             var gamer = await AppServices.Kuro.GetGamerAsync(account, (int)KuroGameType.Waves).ConfigureAwait(true);
             if (gamer is { Code: 200, Data: not null })
             {
+                KuroLoginState = InterfaceLoginState.Ok;
                 return; // 有效,不打扰
             }
+            // 服务端明确拒绝 → 橙点(异常登录);网络异常不改状态,避免误报
+            KuroLoginState = InterfaceLoginState.Error;
             StatusText = $"库街区登录态已失效({gamer?.Msg ?? $"code={gamer?.Code}"}),请重新登录或切换账号";
         }
         catch (Exception ex)
@@ -361,7 +359,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
     }
 
-    /// <summary>云鸣潮:静默续期一次判定会话有效性;失效仅提示并展开登录表单(不自动清除)。</summary>
+    /// <summary>云鸣潮:静默续期一次判定会话有效性;失效自动退出登录并展开登录表单。</summary>
     private async Task ValidateCloudSessionAsync()
     {
         if (!AppServices.CloudGacha.HasSavedLogin)
@@ -371,9 +369,18 @@ public sealed partial class AccountViewModel : ViewModelBase
         var (status, msg) = await AppServices.CloudGacha.ValidateSessionAsync().ConfigureAwait(true);
         if (status == CloudGachaStatus.LoginFailed)
         {
+            // 会话已失效:自动退出登录(清除保存的会话),避免同时显示登录表单与「退出登录」按钮;
+            // 状态点转灰(未登录),状态文案保留失效原因
+            AppServices.CloudGacha.Logout();
+            RefreshCloudState();
             CloudStatusText = msg ?? "云鸣潮会话已失效,请重新登录";
             IsCloudLoginOpen = true;
         }
+        else if (status == CloudGachaStatus.Success)
+        {
+            CloudLoginState = InterfaceLoginState.Ok;
+        }
+        // FetchFailed(网络等临时失败)不改状态,避免误报异常登录
     }
 
     /// <summary>mcguide:轻量鉴权请求判定 x-token;过期时服务层已清会话,这里展开登录表单。</summary>
@@ -383,9 +390,17 @@ public sealed partial class AccountViewModel : ViewModelBase
         GuideStatusText = msg;
         if (valid == false)
         {
+            // 会话已被服务层清除(自动退出登录):状态点转灰(未登录),展开登录表单
+            GuideLoginState = InterfaceLoginState.NotLoggedIn;
             IsGuideLoginOpen = true;
             OnPropertyChanged(nameof(GuideLoggedIn));
+            RefreshSameAccountAuto();
         }
+        else if (valid == true)
+        {
+            GuideLoginState = InterfaceLoginState.Ok;
+        }
+        // valid == null(未登录/校验失败)不改状态,避免误报
     }
 
     private void RefreshAccounts()
@@ -400,10 +415,11 @@ public sealed partial class AccountViewModel : ViewModelBase
         var current = AppServices.KuroAccounts.Current;
         AccountText = current is null ? "未登录" : AccountOptions.FirstOrDefault(o => o.Contains(current.UserId)) ?? "未登录";
         SelectedAccountIndex = current is null ? -1 : Math.Max(0, AccountOptions.ToList().FindIndex(o => o.Contains(current.UserId)));
+        // 已保存登录先按绿点显示,会话校验失败再转橙点
+        KuroLoginState = current is null ? InterfaceLoginState.NotLoggedIn : InterfaceLoginState.Ok;
         OnPropertyChanged(nameof(HasKuroLogin));
         OnPropertyChanged(nameof(HasKuroAccounts));
         RefreshSameAccountAuto();
-        RefreshTabHeaders();
     }
 
     private static string MaskMobile(string mobile)
@@ -415,8 +431,9 @@ public sealed partial class AccountViewModel : ViewModelBase
         CloudAccountText = IsCloudLoggedIn
             ? (string.IsNullOrWhiteSpace(AppServices.CloudGacha.SavedLoginName) ? "已登录" : AppServices.CloudGacha.SavedLoginName)
             : "未登录";
+        // 已保存登录先按绿点显示,会话校验失败再转橙点
+        CloudLoginState = IsCloudLoggedIn ? InterfaceLoginState.Ok : InterfaceLoginState.NotLoggedIn;
         RefreshSameAccountAuto();
-        RefreshTabHeaders();
     }
 
     partial void OnSelectedAccountIndexChanged(int value)
@@ -508,6 +525,8 @@ public sealed partial class AccountViewModel : ViewModelBase
         if (current is not null)
         {
             AppServices.KuroAccounts.Remove(current.UserId);
+            // 通知签到/角色等页同步登出态(与登录消息同源)
+            WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(current.UserId));
         }
         RefreshAccounts();
         StatusText = "已退出登录";
@@ -970,8 +989,8 @@ public sealed partial class AccountViewModel : ViewModelBase
                 GuideSmsCountdown = 0;
                 GuideSmsSending = false;
                 OnPropertyChanged(nameof(GuideLoggedIn));
+                GuideLoginState = InterfaceLoginState.Ok;
                 StatusText = "攻略站登录成功";
-                RefreshTabHeaders();
 
                 // 堆叠卡片:官方评级登录完成 → 自动切到下一个未登录的卡片(全登录完则回库街区)
                 AdvanceToNextLoginCard(2);
@@ -1007,10 +1026,10 @@ public sealed partial class AccountViewModel : ViewModelBase
         s.GuideServerId = "";
         AppServices.Settings.Save();
         OnPropertyChanged(nameof(GuideLoggedIn));
+        GuideLoginState = InterfaceLoginState.NotLoggedIn;
         GuideStatusText = "未登录(角色页将隐藏官方评级)";
         StatusText = "已退出 mcguide 登录";
         RefreshSameAccountAuto();
-        RefreshTabHeaders();
         // 退出后重新展开登录表单,便于再次登录
         IsGuideLoginOpen = true;
     }
@@ -1058,7 +1077,7 @@ public sealed partial class AccountViewModel : ViewModelBase
     /// 自动判定多个接口账号是否属于同一个账号(按登录手机号)。
     /// 纯提醒:绝不自动登出/删除任何账号。已登录接口数 ≥2 且手机号一致 → 同一账号;
     /// 手机号不一致 → 判定为不同账号(仅提醒,不强制登出);信息缺失 → 返回 Unknown 并说明。
-    /// 同时附加库街区重复账号(同 UserId/同手机号)的提示,不自动清理。
+    /// 判定结果仅在标题行右侧徽标展示(逐接口明细文字已移除,登录状态看标签后的状态点)。
     /// </summary>
     private void RefreshSameAccountAuto()
     {
@@ -1074,55 +1093,23 @@ public sealed partial class AccountViewModel : ViewModelBase
 
         try
         {
-            var lines = IdentityCheckLines;
-            lines.Clear();
-
             // 各接口登录态与手机号
             var kuro = AppServices.KuroAccounts.Current;
-            var kuroLoggedIn = kuro is not null;
             var kuroPhone = kuro?.Mobile ?? "";
-            var cloudLoggedIn = AppServices.CloudGacha.HasSavedLogin;
             var cloudPhone = AppServices.Settings.Current.CloudLoginPhone;
-            var guideLoggedIn = AppServices.Guide.HasToken;
             var guidePhone = AppServices.Settings.Current.GuidePhone;
-
-            // 库街区重复账号提示(仅提示,不自动清理)
-            var kuroAccounts = AppServices.KuroAccounts.GetAccounts().ToList();
-            var dupInfos = new List<string>();
-            for (int i = 0; i < kuroAccounts.Count; i++)
-            {
-                for (int j = i + 1; j < kuroAccounts.Count; j++)
-                {
-                    bool same = kuroAccounts[i].UserId == kuroAccounts[j].UserId ||
-                                (!string.IsNullOrEmpty(kuroAccounts[i].Mobile) &&
-                                 kuroAccounts[i].Mobile == kuroAccounts[j].Mobile);
-                    if (same)
-                    {
-                        dupInfos.Add($"检测到两条重复记录(UID {kuroAccounts[i].UserId} 与 {kuroAccounts[j].UserId}),同一账号,建议保留其一");
-                    }
-                }
-            }
-            if (dupInfos.Count > 0)
-            {
-                lines.Add("· 库街区账号存在重复记录(仅提醒,未自动删除):");
-                foreach (var d in dupInfos)
-                {
-                    lines.Add($"   - {d}");
-                }
-                lines.Add("");
-            }
 
             // 已登录的接口
             var active = new List<(string Name, string Phone)>();
-            if (kuroLoggedIn)
+            if (kuro is not null)
             {
                 active.Add(("库街区", kuroPhone));
             }
-            if (cloudLoggedIn)
+            if (AppServices.CloudGacha.HasSavedLogin)
             {
                 active.Add(("云鸣潮", cloudPhone));
             }
-            if (guideLoggedIn)
+            if (AppServices.Guide.HasToken)
             {
                 active.Add(("mcguide", guidePhone));
             }
@@ -1135,16 +1122,6 @@ public sealed partial class AccountViewModel : ViewModelBase
                     : $"仅登录 {active[0].Name},暂无需同一账号判定";
                 return;
             }
-
-            // 明细:各接口手机号
-            lines.Add("· 已登录接口账号:");
-            foreach (var (name, phone) in active)
-            {
-                lines.Add(string.IsNullOrEmpty(phone)
-                    ? $"   - {name}: 未记录手机号"
-                    : $"   - {name}: {MaskMobile(phone)}");
-            }
-            lines.Add("");
 
             var missing = active.Where(a => string.IsNullOrWhiteSpace(a.Phone)).ToList();
             if (missing.Count > 0)
@@ -1165,34 +1142,37 @@ public sealed partial class AccountViewModel : ViewModelBase
             {
                 // 不同手机号 → 完全不同或部分不同,仅提醒不强制登出
                 SameAccountVerdict = SameAccountVerdict.Different;
-                var groups = active.GroupBy(a => a.Phone).ToList();
-                foreach (var g in groups)
-                {
-                    lines.Add(g.Count() > 1
-                        ? $"   · {string.Join(" / ", g.Select(x => x.Name))} 为同一账号({MaskMobile(g.Key)})"
-                        : $"   · {g.First().Name} 为独立账号({MaskMobile(g.Key)})");
-                }
-                SameAccountStatus = $"检测到不同接口使用了不同手机号,可能不是同一个账号(已提醒,不会强制登出)";
+                SameAccountStatus = "检测到不同接口使用了不同手机号,可能不是同一个账号(已提醒,不会强制登出)";
             }
         }
         finally
         {
-            OnPropertyChanged(nameof(HasIdentityDetails));
             lock (_checkLock)
             {
                 _checking = false;
             }
         }
     }
+}
 
-    /// <summary>角色 ID 编辑即自动保存(原「保存设置」按钮已移除,无需手动保存)。</summary>
-    partial void OnRoleIdChanged(string value)
+/// <summary>接口登录状态 → 状态点颜色(绿=登录正常,橙=异常登录,灰=未登录)。</summary>
+public sealed class LoginDotBrushConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly LoginDotBrushConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
     {
-        var s = AppServices.Settings.Current;
-        if (!string.Equals(s.RoleId, value, StringComparison.Ordinal))
-        {
-            s.RoleId = value;
-            AppServices.Settings.Save();
-        }
+        var color = value is InterfaceLoginState state
+            ? state switch
+            {
+                InterfaceLoginState.Ok => Avalonia.Media.Color.Parse("#22C55E"),   // 登录正常
+                InterfaceLoginState.Error => Avalonia.Media.Color.Parse("#F59E0B"), // 异常登录
+                _ => Avalonia.Media.Color.Parse("#9CA3AF"),                        // 未登录
+            }
+            : Avalonia.Media.Color.Parse("#9CA3AF");
+        return new Avalonia.Media.SolidColorBrush(color);
     }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
 }

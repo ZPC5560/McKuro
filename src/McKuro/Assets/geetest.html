@@ -35,17 +35,25 @@
     #captcha > * {
       flex: 0 0 auto;
     }
-    /* 加载动画:Chromium 首帧即显示,盖过宿主初始化的黑色间隙 */
+    /* 加载动画:全屏覆盖层(fixed + flex 居中),与 .box 的按钮布局解耦——
+       .box 是 flex 行容器,子项会被压成内容宽导致文字折行、位置偏移 */
     #loading {
-      padding-top: 130px;
-      text-align: center;
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: #f8fafc;
       color: #667085;
       font-size: 14px;
+      text-align: center;
     }
     .spinner {
       width: 42px;
       height: 42px;
-      margin: 0 auto 18px;
       border: 4px solid #e2e8f0;
       border-top-color: #14b8c6;
       border-radius: 50%;
@@ -57,7 +65,7 @@
     html.dark #status { background: #161b22; color: #c9d1d9; border-bottom-color: #30363d; }
     html.dark #status.ok { color: #3fb950; }
     html.dark #status.err { color: #f85149; }
-    html.dark #loading { color: #8b949e; }
+    html.dark #loading { background: #10141a; color: #8b949e; }
     html.dark .spinner { border-color: #30363d; border-top-color: #14b8c6; }
   </style>
   <script>
@@ -67,11 +75,11 @@
 </head>
 <body>
 <div id="status">正在加载极验…</div>
+<div id="loading">
+  <div class="spinner"></div>
+  <div id="loadingText">正在加载验证组件…</div>
+</div>
 <div class="box">
-  <div id="loading">
-    <div class="spinner"></div>
-    <div id="loadingText">正在加载验证组件…</div>
-  </div>
   <div id="captcha"></div>
 </div>
 <script>

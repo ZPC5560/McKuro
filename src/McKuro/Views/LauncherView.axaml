@@ -10,6 +10,29 @@
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.LauncherView"
              x:DataType="vm:LauncherViewModel">
+    <UserControl.Styles>
+        <!-- 操作区胶囊按钮:常态弱玻璃,悬停强玻璃 + 强调描边(与主页 splashBtn 同方向,修正悬停/常态颠倒) -->
+        <Style Selector="Button.opBtn">
+            <Setter Property="Background" Value="{DynamicResource McKuroGlassFill}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroGlassStroke}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="Foreground" Value="{DynamicResource McKuroTextOnWallpaper}" />
+        </Style>
+        <Style Selector="Button.opBtn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource McKuroGlassFillStrong}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccentHover}" />
+        </Style>
+        <!-- 横幅关闭按钮:常态弱深色底,悬停加深(修正悬停/常态观感颠倒) -->
+        <Style Selector="Button.bannerClose">
+            <Setter Property="Background" Value="#33000000" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="Button.bannerClose:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#99000000" />
+        </Style>
+    </UserControl.Styles>
     <Grid RowDefinitions="Auto,*,Auto">
         <!-- 全屏背景图(官方启动器封面,铺满无留白,内容叠加其上) -->
         <Grid Grid.RowSpan="3">
@@ -84,11 +107,7 @@
                             <TextBlock Text="操作" FontSize="11" FontWeight="Bold"
                                        Foreground="{DynamicResource McKuroTextOnWallpaper}" />
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Button Command="{Binding OpenGameFolderCommand}"
-                                                Background="{DynamicResource McKuroGlassFillStrong}"
-                                                BorderBrush="{DynamicResource McKuroGlassStroke}" BorderThickness="1"
-                                                CornerRadius="14" Padding="12,5"
-                                                Foreground="{DynamicResource McKuroTextOnWallpaper}">
+                                        <Button Classes="opBtn" Command="{Binding OpenGameFolderCommand}">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
                                                 <ic:FluentIcon Icon="Folder" IconVariant="Regular" IconSize="Size16"
                                                                Foreground="{DynamicResource McKuroTextOnWallpaper}" VerticalAlignment="Center" />
@@ -96,13 +115,10 @@
                                                            Foreground="{DynamicResource McKuroTextOnWallpaper}" />
                                             </StackPanel>
                                         </Button>
-                                        <Button Command="{Binding RepairGameCommand}"
+                                        <Button Classes="opBtn"
+                                                Command="{Binding RepairGameCommand}"
                                                 IsEnabled="{Binding IsInstalled}"
-                                                IsVisible="{Binding ShowRepairButton}"
-                                                Background="{DynamicResource McKuroGlassFillStrong}"
-                                                BorderBrush="{DynamicResource McKuroGlassStroke}" BorderThickness="1"
-                                                CornerRadius="14" Padding="12,5"
-                                                Foreground="{DynamicResource McKuroTextOnWallpaper}">
+                                                IsVisible="{Binding ShowRepairButton}">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
                                                 <ic:FluentIcon Icon="Wrench" IconVariant="Regular" IconSize="Size16"
                                                                Foreground="{DynamicResource McKuroTextOnWallpaper}" VerticalAlignment="Center" />
@@ -152,10 +168,9 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <Button Padding="6,2" FontSize="11"
+                        <Button Classes="bannerClose" Padding="6,2" FontSize="11"
                                 HorizontalAlignment="Right" VerticalAlignment="Top"
                                 Margin="0,6,6,0"
-                                Background="#66000000" BorderThickness="0"
                                 Foreground="{DynamicResource McKuroTextOnWallpaper}"
                                 Command="{Binding ToggleSlideShowCommand}">
                             <ic:FluentIcon Icon="Dismiss" IconVariant="Regular" IconSize="Size16"

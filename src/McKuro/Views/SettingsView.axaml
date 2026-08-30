@@ -73,46 +73,118 @@
                 </Border>
             </Grid>
 
-            <!-- 平台 hero:强调色沉浸卡 + 按真实平台切换的徽标(修复原 ⌘ 固定为 Mac 图标的问题) -->
-            <Border Padding="16,14" CornerRadius="12" Background="#1F5A8DEE" BorderBrush="#3D5A8DEE" BorderThickness="1">
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                    <Border Width="36" Height="36" CornerRadius="18" Background="{DynamicResource McKuroAccent}">
-                        <Grid>
-                            <!-- Windows:四格窗格 Logo(白色扁平方格) -->
-                            <Path Data="M2 2H9V9H2Z M11 2H18V9H11Z M2 11H9V18H2Z M11 11H18V18H11Z"
-                                  Fill="White" Stretch="Uniform" Width="18" Height="18"
-                                  HorizontalAlignment="Center" VerticalAlignment="Center"
-                                  IsVisible="{Binding IsPlatformWindows}" />
-                            <!-- macOS:命令符 -->
-                            <TextBlock Text="⌘" FontSize="19" Foreground="White"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       IsVisible="{Binding IsPlatformMacOS}" />
-                            <!-- Linux 或其他:终端图标 -->
-                            <ic:FluentIcon Icon="WindowConsole" IconVariant="Regular" IconSize="Size16"
-                                           Foreground="White"
+            <!-- 当前平台(简化为单行卡:平台图标 + 平台名/系统版本 + 支持徽标,与下方分区行同款设计) -->
+            <Border Classes="section">
+                <Border Classes="row">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                        <Border Classes="tile">
+                            <Grid>
+                                <!-- Windows:四格窗格 Logo -->
+                                <Path Data="M2 2H9V9H2Z M11 2H18V9H11Z M2 11H9V18H2Z M11 11H18V18H11Z"
+                                      Fill="{DynamicResource SemiColorText2}" Stretch="Uniform" Width="18" Height="18"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      IsVisible="{Binding IsPlatformWindows}" />
+                                <!-- macOS:命令符 -->
+                                <TextBlock Text="⌘" FontSize="17" Foreground="{DynamicResource SemiColorText1}"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           IsVisible="{Binding IsPlatformLinux}" />
+                                           IsVisible="{Binding IsPlatformMacOS}" />
+                                <!-- Linux 或其他:终端图标 -->
+                                <ic:FluentIcon Icon="WindowConsole" IconVariant="Regular" IconSize="Size16"
+                                               Foreground="{DynamicResource SemiColorText2}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               IsVisible="{Binding IsPlatformLinux}" />
+                            </Grid>
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Classes="rowTitle" Text="当前平台" />
+                                <TextBlock Classes="rowTitle" Text="{Binding PlatformNameText}"
+                                           Foreground="{DynamicResource SemiColorPrimary}" />
+                            </StackPanel>
+                        </StackPanel>
+                        <Border Grid.Column="2" Padding="10,5" CornerRadius="10" VerticalAlignment="Center"
+                                Background="{DynamicResource SemiColorBg3}">
+                            <TextBlock Text="{Binding PlatformSupportBadgeText}" FontSize="12" FontWeight="Bold"
+                                       Foreground="{DynamicResource SemiColorPrimary}" />
+                        </Border>
+                    </Grid>
+                </Border>
+            </Border>
+
+            <!-- ============ 外观与界面 ============ -->
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
+                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
+                        VerticalAlignment="Center" />
+                <TextBlock Classes="sectionTitle" Text="外观与界面" VerticalAlignment="Center" />
+            </StackPanel>
+            <Border Classes="section">
+                <StackPanel>
+                    <!-- 主题 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="PaintBrush" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="主题" />
+                                <TextBlock Classes="rowDesc" Text="跟随系统 / 浅色 / 深色(选择后即时生效)" />
+                            </StackPanel>
+                            <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                                      ItemsSource="{Binding Themes}"
+                                      SelectedIndex="{Binding ThemeIndex, Mode=TwoWay}" />
                         </Grid>
                     </Border>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="当前平台" FontSize="13" Foreground="{DynamicResource SemiColorText2}"
-                                       VerticalAlignment="Center" />
-                            <TextBlock Text="{Binding PlatformNameText}" FontSize="14" FontWeight="Bold"
-                                       Foreground="{DynamicResource McKuroAccent}" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <TextBlock Text="{Binding PlatformCapabilityText}" FontSize="12"
-                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding PlatformRuntimeText}" FontSize="11"
-                                   Foreground="{DynamicResource SemiColorText3}" MaxWidth="520"
-                                   TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
-                    <Border Grid.Column="2" Padding="10,5" CornerRadius="10" VerticalAlignment="Center"
-                            Background="{DynamicResource SemiColorBg2}">
-                        <TextBlock Text="{Binding PlatformSupportBadgeText}" FontSize="12" FontWeight="Bold"
-                                   Foreground="{DynamicResource SemiColorPrimary}" />
+                    <!-- 界面语言 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="Globe" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="界面语言" />
+                                <TextBlock Classes="rowDesc" Text="重启后生效" />
+                            </StackPanel>
+                            <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                                      ItemsSource="{Binding Languages}"
+                                      SelectedIndex="{Binding LanguageIndex, Mode=TwoWay}" />
+                        </Grid>
                     </Border>
-                </Grid>
+                    <!-- 启动时打开的页面 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="WindowNew" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="启动时打开的页面" />
+                                <TextBlock Classes="rowDesc"
+                                           Text="启动软件后默认进入主页或鸣潮启动页(下次启动生效)" />
+                            </StackPanel>
+                            <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                                      ItemsSource="{Binding StartupPages}"
+                                      SelectedIndex="{Binding StartupPageIndex, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+                    <!-- 背景视频封面 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="Video" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="背景视频封面" />
+                                <TextBlock Classes="rowDesc"
+                                           Text="游戏页播放官方宣传视频;未安装 VLC 时自动回退为静态封面图" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                          IsChecked="{Binding BackgroundVideoEnabled, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
             </Border>
 
             <!-- ============ 游戏目录 ============ -->
@@ -362,131 +434,6 @@
                 </StackPanel>
             </Border>
 
-            <!-- ============ 外观与界面 ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
-                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
-                        VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="外观与界面" VerticalAlignment="Center" />
-            </StackPanel>
-            <Border Classes="section">
-                <StackPanel>
-                    <!-- 主题 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="PaintBrush" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="主题" />
-                                <TextBlock Classes="rowDesc" Text="跟随系统 / 浅色 / 深色(选择后即时生效)" />
-                            </StackPanel>
-                            <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
-                                      ItemsSource="{Binding Themes}"
-                                      SelectedIndex="{Binding ThemeIndex, Mode=TwoWay}" />
-                        </Grid>
-                    </Border>
-                    <!-- 界面语言 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="Globe" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="界面语言" />
-                                <TextBlock Classes="rowDesc" Text="重启后生效" />
-                            </StackPanel>
-                            <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
-                                      ItemsSource="{Binding Languages}"
-                                      SelectedIndex="{Binding LanguageIndex, Mode=TwoWay}" />
-                        </Grid>
-                    </Border>
-                    <!-- 背景视频封面 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="Video" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="背景视频封面" />
-                                <TextBlock Classes="rowDesc"
-                                           Text="游戏页播放官方宣传视频;未安装 VLC 时自动回退为静态封面图" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                          IsChecked="{Binding BackgroundVideoEnabled, Mode=TwoWay}" />
-                        </Grid>
-                    </Border>
-                </StackPanel>
-            </Border>
-
-            <!-- ============ 签到与更新 ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
-                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
-                        VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="签到与更新" VerticalAlignment="Center" />
-            </StackPanel>
-            <Border Classes="section">
-                <StackPanel>
-                    <!-- 自动游戏签到 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="CalendarCheckmark" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="打开软件自动签到" />
-                                <TextBlock Classes="rowDesc"
-                                           Text="启动软件后自动执行游戏签到(每天 8:00 也会自动签到;与签到页开关同步)" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                          IsChecked="{Binding AutoSignEnabled, Mode=TwoWay}" />
-                        </Grid>
-                    </Border>
-
-                    <!-- 应用自更新(对齐 Haiyu UpdateAppViewModel) -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
-                            <Border Classes="tile" VerticalAlignment="Top">
-                                <ic:FluentIcon Icon="ArrowSync" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" Spacing="10">
-                                <StackPanel Spacing="2">
-                                    <TextBlock Classes="rowTitle" Text="应用自更新" />
-                                    <TextBlock Classes="rowDesc"
-                                               Text="GitHub 仓库 (owner/repo),留空禁用;Release 需含 zip 绿色包或 exe 安装包" />
-                                </StackPanel>
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="仓库" FontSize="13" VerticalAlignment="Center" />
-                                    <TextBox Grid.Column="1" Text="{Binding AppUpdateRepo, Mode=TwoWay}"
-                                             PlaceholderText="如 ZPC5560/McKuro" />
-                                </Grid>
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Button Content="检查更新" Command="{Binding CheckAppUpdateCommand}"
-                                            IsEnabled="{Binding !AppUpdateChecking}" />
-                                    <Button Content="下载并安装" Classes="primary" Command="{Binding DownloadAppUpdateCommand}"
-                                            IsVisible="{Binding AppUpdateAvailable}"
-                                            IsEnabled="{Binding !AppUpdateDownloading}" />
-                                    <Button Content="跳过此版本" Command="{Binding SkipAppUpdateCommand}"
-                                            IsVisible="{Binding AppUpdateAvailable}" />
-                                    <ProgressBar Width="160" Height="6" VerticalAlignment="Center"
-                                                 Value="{Binding AppUpdateProgress}" Minimum="0" Maximum="100"
-                                                 IsVisible="{Binding AppUpdateDownloading}" />
-                                </StackPanel>
-                                <TextBlock Text="{Binding AppUpdateVersionText}" FontSize="13" FontWeight="Bold"
-                                           Foreground="{DynamicResource SemiColorPrimary}"
-                                           IsVisible="{Binding AppUpdateAvailable}" />
-                                <TextBlock Text="{Binding AppUpdateStatusText}" FontSize="12"
-                                           Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-                </StackPanel>
-            </Border>
-
             <!-- ============ 关于 ============ -->
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
@@ -511,6 +458,40 @@
                             <Button Grid.Column="2" VerticalAlignment="Center" Content="打开日志目录"
                                     Command="{Binding OpenLogDirCommand}"
                                     ToolTip.Tip="{Binding LogDirText}" />
+                        </Grid>
+                    </Border>
+
+                    <!-- 应用自更新(自「签到与更新」分区合并至此) -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                            <Border Classes="tile" VerticalAlignment="Top">
+                                <ic:FluentIcon Icon="ArrowSync" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Spacing="10">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Classes="rowTitle" Text="应用自更新" />
+                                    <TextBlock Classes="rowDesc"
+                                               Text="检查 GitHub Release 更新并一键安装;Release 需含 zip 绿色包或 exe 安装包" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="检查更新" Command="{Binding CheckAppUpdateCommand}"
+                                            IsEnabled="{Binding !AppUpdateChecking}" />
+                                    <Button Content="下载并安装" Classes="primary" Command="{Binding DownloadAppUpdateCommand}"
+                                            IsVisible="{Binding AppUpdateAvailable}"
+                                            IsEnabled="{Binding !AppUpdateDownloading}" />
+                                    <Button Content="跳过此版本" Command="{Binding SkipAppUpdateCommand}"
+                                            IsVisible="{Binding AppUpdateAvailable}" />
+                                    <ProgressBar Width="160" Height="6" VerticalAlignment="Center"
+                                                 Value="{Binding AppUpdateProgress}" Minimum="0" Maximum="100"
+                                                 IsVisible="{Binding AppUpdateDownloading}" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding AppUpdateVersionText}" FontSize="13" FontWeight="Bold"
+                                           Foreground="{DynamicResource SemiColorPrimary}"
+                                           IsVisible="{Binding AppUpdateAvailable}" />
+                                <TextBlock Text="{Binding AppUpdateStatusText}" FontSize="12"
+                                           Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                            </StackPanel>
                         </Grid>
                     </Border>
                 </StackPanel>
