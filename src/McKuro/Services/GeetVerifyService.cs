@@ -43,7 +43,16 @@ public sealed class GeetVerifyService
     /// </summary>
     public static string ResolveTheme()
     {
-        var setting = AppServices.Settings.Current.Theme;
+        // App 未初始化时(单元测试/极早阶段)Services 为 null:主题只是验证页外观提示,按 light 兜底
+        string setting;
+        try
+        {
+            setting = AppServices.Settings.Current.Theme;
+        }
+        catch
+        {
+            return "light";
+        }
         if (setting == "Dark")
         {
             return "dark";
