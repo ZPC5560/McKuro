@@ -42,6 +42,23 @@
                                               IsVideoEnabled="{Binding VideoEnabled}"
                                               HorizontalAlignment="Stretch"
                                               VerticalAlignment="Stretch" />
+            <!-- 版本标语(诗句):与 Haiyu 相同的 background.Slogan 资源(透明画布,诗句画在右缘)。
+                 仅用位置变换把图片左移,让诗句本体(非整幅画布)落到画面水平居中、靠上;
+                 不修改 AsyncImage 控件。RenderTransform 只影响渲染不占布局。
+                 注:必须用嵌套 TranslateTransform 形式(与 MainWindow 一致),Avalonia 对字符串
+                 translate(...) 形式在编译绑定下会运行时解析失败导致本视图空白。 -->
+            <controls:AsyncImage ImageUrl="{Binding VersionLogoUrl}"
+                                 Stretch="Uniform"
+                                 MaxWidth="840"
+                                 MaxHeight="470"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Top"
+                                 Margin="0,56,0,0"
+                                 IsHitTestVisible="False">
+                <controls:AsyncImage.RenderTransform>
+                    <TranslateTransform X="-297" Y="0" />
+                </controls:AsyncImage.RenderTransform>
+            </controls:AsyncImage>
         </Grid>
 
         <Border Grid.Row="1" Grid.Column="0" ZIndex="2" HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -104,8 +121,6 @@
                     <!-- 操作 卡片(背景全透明,仅按钮本身为半透明玻璃) -->
                     <Border CornerRadius="10" Padding="10" Margin="0,6,0,0">
                         <StackPanel Spacing="6">
-                            <TextBlock Text="操作" FontSize="11" FontWeight="Bold"
-                                       Foreground="{DynamicResource McKuroTextOnWallpaper}" />
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <Button Classes="opBtn" Command="{Binding OpenGameFolderCommand}">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
