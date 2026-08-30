@@ -122,6 +122,7 @@
                 <Border x:Name="NavPill" IsHitTestVisible="False"
                         HorizontalAlignment="Left" VerticalAlignment="Top"
                         Width="64" Height="48" CornerRadius="13"
+                        RenderTransformOrigin="50%, 50%"
                         Background="{DynamicResource McKuroGlassFillStrong}"
                         BorderBrush="#4A8CA3C4" BorderThickness="1"
                         BoxShadow="inset 0 1 0 0 #66FFFFFF, 0 3 12 0 #2E0A1428"

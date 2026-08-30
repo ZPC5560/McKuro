@@ -558,6 +558,7 @@ public partial class MainWindow : Window
     private DispatcherTimer? _pillTimer;
     private double _pillTargetX;
     private double _pillTargetY;
+    private double _pillStretch;
 
     /// <summary>目标已定但容器未就绪:挂起,LayoutUpdated 补滑(绝不直接跳位)。</summary>
     private bool _pillTargetPending;
@@ -565,89 +566,138 @@ public partial class MainWindow : Window
     /// <summary>挂接选中/尺寸/布局事件,驱动滑动胶囊。</summary>
     private void HookNavPill()
     {
-        NavList.SelectionChanged += (_, _) => UpdateNavPill(animate: true);
-        NavList.SizeChanged += (_, _) => UpdateNavPillTarget(animate: false);
-        NavList.Loaded += (_, _) => UpdateNavPillTarget(animate: false);
+        NavList.SelectionChanged += (_, _) => OnNavSelected();
+        NavList.SizeChanged += (_, _) => SnapNavPill();
+        NavList.Loaded += (_, _) => SnapNavPill();
         NavList.LayoutUpdated += (_, _) =>
         {
+            // 滑动中:逐帧实时追踪选中项,绝不干预动画,避免互相争抢
             if (_pillTimer is not null)
             {
-                // 滑动中:目标字段可能已被更新,滑行自动滑向新目标(可打断,无跳变)
                 return;
             }
             if (_pillTargetPending)
             {
                 // 容器就绪了:补上之前挂起的滑动
-                UpdateNavPillTarget(animate: true);
+                OnNavSelected();
                 return;
             }
-            // 静默贴合(窗口缩放等导致的行高变化)
-            UpdateNavPillTarget(animate: false);
+            // 空闲贴合(窗口缩放/DPI 导致的行高变化):仅当目标明显偏离当前位置才静默吸附,
+            // 避免在页面切换的布局回归里与滑动动画争夺(那正是"跳变/回弹"的来源)。
+            var info = ReadNavTarget();
+            if (info is null)
+            {
+                return;
+            }
+            bool moved = Math.Abs(info.Value.raw.X - PillTranslate.X) > 0.5
+                      || Math.Abs(info.Value.raw.Y + 3 - PillTranslate.Y) > 0.5;
+            if (moved)
+            {
+                SnapNavPill();
+            }
         };
     }
 
-    private void UpdateNavPill(bool animate) => UpdateNavPillTarget(animate);
-
-    private void UpdateNavPillTarget(bool animate)
+    /// <summary>读取当前选中项容器及其目标(相对 NavGlassPanel);容器未就绪返回 null。</summary>
+    private (ListBoxItem container, Point raw)? ReadNavTarget()
     {
         if (NavList.SelectedIndex < 0 || NavList.ItemCount == 0)
+        {
+            return null;
+        }
+        if (NavList.ContainerFromIndex(NavList.SelectedIndex) is not ListBoxItem container
+            || !container.IsLoaded)
+        {
+            return null;
+        }
+        var pt = container.TranslatePoint(new Point(0, 0), NavGlassPanel);
+        if (pt is null)
+        {
+            return null;
+        }
+        return (container, pt.Value);
+    }
+
+    private void ApplyNavPillSize(ListBoxItem container)
+    {
+        NavPill.IsVisible = true;
+        NavPill.Width = container.Bounds.Width;
+        NavPill.Height = Math.Max(36, container.Bounds.Height - 6);
+    }
+
+    /// <summary>选中项变化:定位新容器并启动滑动(容器未就绪则挂起,绝不直接跳位)。</summary>
+    private void OnNavSelected()
+    {
+        if (_pillTimer is not null)
+        {
+            // 滑动中:逐帧实时追踪会自动滑向新选中项(可打断,方向自动修正)
+            _pillTargetPending = false;
+            return;
+        }
+        var info = ReadNavTarget();
+        if (info is null)
+        {
+            _pillTargetPending = true;
+            return;
+        }
+        ApplyNavPillSize(info.Value.container);
+        _pillTargetX = info.Value.raw.X;
+        _pillTargetY = info.Value.raw.Y + 3;
+        _pillTargetPending = false;
+        StartNavGlide();
+    }
+
+    /// <summary>静默贴合:不滑动(窗口缩放/DPI/初始)。若滑动中则交由实时追踪接管。</summary>
+    private void SnapNavPill()
+    {
+        var info = ReadNavTarget();
+        if (info is null)
         {
             NavPill.IsVisible = false;
             _pillTargetPending = false;
             return;
         }
-        if (NavList.ContainerFromIndex(NavList.SelectedIndex) is not ListBoxItem container
-            || !container.IsLoaded)
-        {
-            // 容器未就绪:点击路径挂起待滑(绝不容许直接跳位);尺寸路径直接隐藏
-            if (animate)
-            {
-                _pillTargetPending = true;
-            }
-            else
-            {
-                NavPill.IsVisible = false;
-            }
-            return;
-        }
-        var pt = container.TranslatePoint(new Point(0, 0), NavGlassPanel);
-        if (pt is null)
-        {
-            return;
-        }
-        NavPill.IsVisible = true;
-        NavPill.Width = container.Bounds.Width;
-        NavPill.Height = Math.Max(36, container.Bounds.Height - 6);
-        _pillTargetX = pt.Value.X;
-        _pillTargetY = pt.Value.Y + 3;
+        ApplyNavPillSize(info.Value.container);
+        _pillTargetX = info.Value.raw.X;
+        _pillTargetY = info.Value.raw.Y + 3;
         _pillTargetPending = false;
-
         if (_pillTimer is not null)
         {
-            // 滑动中改目标:滑行 tick 直接读目标字段,自动滑向新目标(可打断)
+            // 尺寸/DPI 变化在滑动中:实时追踪会纠正,不清零动画(PillTranslate 已持有当前位)
             return;
         }
-        if (animate && NavPill.IsVisible)
-        {
-            GlidePillTo();
-        }
-        else if (!animate)
-        {
-            PillTranslate.X = _pillTargetX;
-            PillTranslate.Y = _pillTargetY;
-            PillScale.ScaleX = 1;
-            PillScale.ScaleY = 1;
-        }
+        PillTranslate.X = _pillTargetX;
+        PillTranslate.Y = _pillTargetY;
+        PillScale.ScaleX = 1;
+        PillScale.ScaleY = 1;
+        _pillStretch = 0;
     }
 
-    /// <summary>液态玻璃滑动:指数追踪 + 速度驱动的挤压/拉伸(可打断,随时改目标)。</summary>
-    private void GlidePillTo()
+    /// <summary>液态玻璃滑动:指数追踪 + 速度驱动的挤压/拉伸。
+    /// 每帧按"当前"选中容器位置重算目标(消除瞬时快照跳变);指数曲线从不超调单一目标,
+    /// 改目标时立即转向新目标(可打断、不来回摆)。0.16 收敛系数在保留玻璃缓动拖尾感的同时
+    /// 更快到达,使相邻切换通常落在静止态,避免"滑动未稳就再点"造成的回弹。</summary>
+    private void StartNavGlide()
     {
         _pillTimer?.Stop();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _pillTimer = timer;
+        const double k = 0.16;
         timer.Tick += (_, _) =>
         {
+            // 逐帧实时追踪:每帧按"当前"选中容器位置重算目标。
+            // 切换瞬间布局未稳(容器暂未就绪/位置暂偏移)时,胶囊不会冲向一个冻结的错误快照,
+            // 而是始终滑向真实位置——这就是消除"跳变"与"回弹"的关键。
+            var info = ReadNavTarget();
+            if (info is null || !NavPill.IsVisible)
+            {
+                _pillStretch = 0;
+                timer.Stop();
+                _pillTimer = null;
+                return;
+            }
+            _pillTargetX = info.Value.raw.X;
+            _pillTargetY = info.Value.raw.Y + 3;
             var dx = _pillTargetX - PillTranslate.X;
             var dy = _pillTargetY - PillTranslate.Y;
             if (Math.Abs(dx) < 0.5 && Math.Abs(dy) < 0.5)
@@ -656,29 +706,34 @@ public partial class MainWindow : Window
                 PillTranslate.Y = _pillTargetY;
                 PillScale.ScaleX = 1;
                 PillScale.ScaleY = 1;
+                _pillStretch = 0;
                 timer.Stop();
                 _pillTimer = null;
                 return;
             }
-            // 0.12 收敛系数:约 500ms 的长滑行,液态玻璃的缓动拖尾感
-            var vx = dx * 0.12;
-            var vy = dy * 0.12;
+            // 指数收敛:速度正比于剩余距离,接近目标时自然减速,无超调
+            var vx = dx * k;
+            var vy = dy * k;
             PillTranslate.X += vx;
             PillTranslate.Y += vy;
 
-            // 速度驱动的挤压/拉伸(Apple Liquid Glass squash & stretch):
-            // 沿运动方向拉伸、垂直方向等比压扁,速度衰减时形变自动归零
+            // 速度驱动的挤压/拉伸(Apple Liquid Glass squash & stretch),
+            // _pillStretch 插值平滑,避免方向/速度突变时尺寸"pop":
+            // 沿运动方向拉伸、垂直方向等比压扁,速度衰减时形变自动归零。
+            // 胶囊 RenderTransformOrigin=50%,50%,形变以中心为轴对称——否则拉伸始终从
+            // 左上角向下膨胀,向上移动时形变与运动方向相反,读起来像"回弹"。
             var speed = Math.Sqrt(vx * vx + vy * vy);
-            var stretch = Math.Min(0.28, speed * 0.018);
+            var targetStretch = Math.Min(0.28, speed * 0.018);
+            _pillStretch += (targetStretch - _pillStretch) * 0.35;
             if (Math.Abs(dx) >= Math.Abs(dy))
             {
-                PillScale.ScaleX = 1 + stretch;
-                PillScale.ScaleY = Math.Max(0.75, 1 - stretch * 0.55);
+                PillScale.ScaleX = 1 + _pillStretch;
+                PillScale.ScaleY = Math.Max(0.75, 1 - _pillStretch * 0.55);
             }
             else
             {
-                PillScale.ScaleY = 1 + stretch;
-                PillScale.ScaleX = Math.Max(0.75, 1 - stretch * 0.55);
+                PillScale.ScaleY = 1 + _pillStretch;
+                PillScale.ScaleX = Math.Max(0.75, 1 - _pillStretch * 0.55);
             }
         };
         timer.Start();
