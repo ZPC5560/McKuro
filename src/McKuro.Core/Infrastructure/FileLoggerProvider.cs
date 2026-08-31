@@ -63,11 +63,13 @@ public sealed class FileLoggerProvider : ILoggerProvider
             CategoryWriter writer;
             lock (_gate)
             {
-                if (!_writers.TryGetValue(category, out writer))
+                // out var 推断为可空(MaybeNullWhen),显式判空后再赋非空局部,免 CS8600
+                if (!_writers.TryGetValue(category, out var cached) || cached is null)
                 {
-                    writer = new CategoryWriter(category, Path.Combine(_dir, SanitizeCategory(category)));
-                    _writers[category] = writer;
+                    cached = new CategoryWriter(category, Path.Combine(_dir, SanitizeCategory(category)));
+                    _writers[category] = cached;
                 }
+                writer = cached;
             }
             writer.WriteLine(level, message, exception);
         }
