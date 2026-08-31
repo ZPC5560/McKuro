@@ -96,14 +96,15 @@ public sealed class PlayTimeWeeklyReport
 /// 计算总/今日时长与最近一周的时间区间分布。
 /// <para>只统计游玩时长,不统计操作数量(参照 WutheringWavesTool GameTime,按用户要求简化)。</para>
 /// </summary>
-public sealed class PlayTimeService
+public sealed partial class PlayTimeService
 {
-    private static readonly Regex TimestampRegex = new(
-        @"\[(\d{4})\.(\d{2})\.(\d{2})-(\d{2})\.(\d{2})\.(\d{2}):(\d{3})\]",
-        RegexOptions.Compiled);
+    // [GeneratedRegex]:NativeAOT 下 RegexOptions.Compiled 被静默忽略回退解释器,
+    // 源生成才是 AOT 真预编译(且零缓存查找)。日志解析按行循环,是本项目最热的正则路径。
+    [GeneratedRegex(@"\[(\d{4})\.(\d{2})\.(\d{2})-(\d{2})\.(\d{2})\.(\d{2}):(\d{3})\]")]
+    private static partial Regex TimestampRegex();
 
-    private static readonly Regex PlayerIdRegex = new(
-        @"SetUserId\s*\[playerId:\s*(\d+)", RegexOptions.Compiled);
+    [GeneratedRegex(@"SetUserId\s*\[playerId:\s*(\d+)")]
+    private static partial Regex PlayerIdRegex();
 
     /// <summary>连续日志活动间隔超过该分钟数即判定为空闲,结束当前游玩会话,避免把菜单/挂机/两次非连续游玩之间的空闲计入时长。</summary>
     internal const int IdleMinutes = 60;
@@ -187,8 +188,17 @@ public sealed class PlayTimeService
                 continue;
             }
 
-            var playerMatch = PlayerIdRegex.Match(line);
-            var isLogin = playerMatch.Success;
+            // 绝大多数行不含 SetUserId:先用 Ordinal 子串探测做廉价守卫,避免每行跑正则。
+            Match? playerMatch = null;
+            if (line.Contains("SetUserId", StringComparison.Ordinal))
+            {
+                var pm = PlayerIdRegex().Match(line);
+                if (pm.Success)
+                {
+                    playerMatch = pm;
+                }
+            }
+            var isLogin = playerMatch is not null;
 
             // 已有进行中的会话:遇到新账号登录,或日志活动出现长时间空闲,都应先结算当前会话。
             if (sessionStart is not null && lastSeen is not null)
@@ -206,7 +216,7 @@ public sealed class PlayTimeService
 
             if (isLogin)
             {
-                currentRole = playerMatch.Groups[1].Value;
+                currentRole = playerMatch!.Groups[1].Value;
                 sessionStart = ts.Value;
                 lastSeen = ts.Value;
             }
@@ -255,27 +265,37 @@ public sealed class PlayTimeService
 
     private static DateTime? ParseTimestamp(string line)
     {
-        var m = TimestampRegex.Match(line);
+        var m = TimestampRegex().Match(line);
         if (!m.Success)
         {
             return null;
         }
-        try
+        // 组内容直接从输入串 span 解析(InvariantCulture + None 样式只认 ASCII 数字):
+        // 避免每行 7 次 Groups[n].Value 子串分配 + 文化敏感 int.Parse(string)。
+        var s = line.AsSpan();
+        if (TryInt(s.Slice(m.Groups[1].Index, m.Groups[1].Length), out var y)
+            && TryInt(s.Slice(m.Groups[2].Index, m.Groups[2].Length), out var mo)
+            && TryInt(s.Slice(m.Groups[3].Index, m.Groups[3].Length), out var d)
+            && TryInt(s.Slice(m.Groups[4].Index, m.Groups[4].Length), out var h)
+            && TryInt(s.Slice(m.Groups[5].Index, m.Groups[5].Length), out var mi)
+            && TryInt(s.Slice(m.Groups[6].Index, m.Groups[6].Length), out var sec)
+            && TryInt(s.Slice(m.Groups[7].Index, m.Groups[7].Length), out var ms))
         {
-            int y = int.Parse(m.Groups[1].Value);
-            int mo = int.Parse(m.Groups[2].Value);
-            int d = int.Parse(m.Groups[3].Value);
-            int h = int.Parse(m.Groups[4].Value);
-            int mi = int.Parse(m.Groups[5].Value);
-            int s = int.Parse(m.Groups[6].Value);
-            int ms = int.Parse(m.Groups[7].Value);
-            return new DateTime(y, mo, d, h, mi, s, ms);
+            try
+            {
+                return new DateTime(y, mo, d, h, mi, sec, ms);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // 形如 2 月 30 日的非法时间戳:与原实现一致,视为无效行。
+                return null;
+            }
         }
-        catch (Exception)
-        {
-            return null;
-        }
+        return null;
     }
+
+    private static bool TryInt(ReadOnlySpan<char> digits, out int value) =>
+        int.TryParse(digits, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out value);
 
     private void SaveRecords(List<PlayTimeRecord> records)
     {

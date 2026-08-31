@@ -542,7 +542,7 @@ public sealed partial class AccountViewModel : ViewModelBase
     private async Task SendSmsAsync()
     {
         var mobile = MobileInput.Trim();
-        if (!Regex.IsMatch(mobile, @"^1[3-9]\d{9}$"))
+        if (!MobileRegex().IsMatch(mobile))
         {
             SmsStatusText = "请输入正确的 11 位手机号";
             return;
@@ -1153,6 +1153,9 @@ public sealed partial class AccountViewModel : ViewModelBase
             }
         }
     }
+
+    [GeneratedRegex(@"^1[3-9]\d{9}$")]
+    private static partial Regex MobileRegex();
 }
 
 /// <summary>接口登录状态 → 状态点颜色(绿=登录正常,橙=异常登录,灰=未登录)。</summary>

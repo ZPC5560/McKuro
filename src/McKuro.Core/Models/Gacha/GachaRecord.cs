@@ -30,29 +30,40 @@ public sealed class GachaRecord
     [JsonIgnore] public string PlayerId { get; set; } = "";
 
     /// <summary>卡池标识 → 枚举(分析/存储用)。优先按数字 ID 解析,再按名称包含关键词映射;
-    /// 常驻池为混合池(角色+武器),按资源类型拆分为角色常驻/武器常驻。</summary>
+    /// 常驻池为混合池(角色+武器),按资源类型拆分为角色常驻/武器常驻。
+    /// <para>结果按实例缓存:分析路径(分组/每日统计)会对同一记录多次访问 PoolType,
+    /// 且关键词匹配必须走 Ordinal(文化敏感 Contains 慢 5-10 倍)。</para></summary>
     [JsonIgnore]
     public CardPoolTypeEnum PoolType
     {
         get
         {
+            if (_poolTypeCache is { } cached)
+            {
+                return cached;
+            }
             var name = CardPoolType ?? "";
             // gmserver 对部分新卡池(联动/忆旅等)返回数字 ID 字符串(如 "10"/"12"),数值与枚举一致,直接映射。
+            CardPoolTypeEnum result;
             if (int.TryParse(name, out var poolId) && Enum.IsDefined((CardPoolTypeEnum)poolId))
             {
-                return (CardPoolTypeEnum)poolId;
+                result = (CardPoolTypeEnum)poolId;
             }
-            if (name.Contains("忆旅")) return name.Contains("武器") ? CardPoolTypeEnum.WeaponMemoryJourney : CardPoolTypeEnum.CharacterMemoryJourney;
-            if (name.Contains("联动")) return name.Contains("武器") ? CardPoolTypeEnum.WeaponCollaboration : CardPoolTypeEnum.CharacterCollaboration;
-            if (name.Contains("新手") && name.Contains("感恩")) return CardPoolTypeEnum.GratitudeOrientation;
-            if (name.Contains("新手")) return CardPoolTypeEnum.Beginner;
-            if (name.Contains("常驻")) return IsRole ? CardPoolTypeEnum.RoleResident : CardPoolTypeEnum.WeaponsResident;
-            if (name.Contains("新旅")) return name.Contains("武器") ? CardPoolTypeEnum.WeaponNovice : CardPoolTypeEnum.CharacterNovice;
-            if (name.Contains("角色")) return CardPoolTypeEnum.RoleActivity;
-            if (name.Contains("武器")) return CardPoolTypeEnum.WeaponsActivity;
-            return CardPoolTypeEnum.RoleActivity;
+            else if (name.Contains("忆旅", StringComparison.Ordinal)) result = name.Contains("武器", StringComparison.Ordinal) ? CardPoolTypeEnum.WeaponMemoryJourney : CardPoolTypeEnum.CharacterMemoryJourney;
+            else if (name.Contains("联动", StringComparison.Ordinal)) result = name.Contains("武器", StringComparison.Ordinal) ? CardPoolTypeEnum.WeaponCollaboration : CardPoolTypeEnum.CharacterCollaboration;
+            else if (name.Contains("新手", StringComparison.Ordinal) && name.Contains("感恩", StringComparison.Ordinal)) result = CardPoolTypeEnum.GratitudeOrientation;
+            else if (name.Contains("新手", StringComparison.Ordinal)) result = CardPoolTypeEnum.Beginner;
+            else if (name.Contains("常驻", StringComparison.Ordinal)) result = IsRole ? CardPoolTypeEnum.RoleResident : CardPoolTypeEnum.WeaponsResident;
+            else if (name.Contains("新旅", StringComparison.Ordinal)) result = name.Contains("武器", StringComparison.Ordinal) ? CardPoolTypeEnum.WeaponNovice : CardPoolTypeEnum.CharacterNovice;
+            else if (name.Contains("角色", StringComparison.Ordinal)) result = CardPoolTypeEnum.RoleActivity;
+            else if (name.Contains("武器", StringComparison.Ordinal)) result = CardPoolTypeEnum.WeaponsActivity;
+            else result = CardPoolTypeEnum.RoleActivity;
+            _poolTypeCache = result;
+            return result;
         }
     }
+
+    private CardPoolTypeEnum? _poolTypeCache;
 
     public bool IsFiveStar => QualityLevel >= 5;
 

@@ -89,9 +89,32 @@ public static class AppServices
     /// <summary>
     /// 稳定的设备 ID(持久化到 device-id.txt,跨启动不变)。
     /// 库街区 did 头需用稳定设备码,否则每次启动新 did + 持久 token 会触发极验风控。
+    /// <para>
+    /// 必须惰性求值:静态字段初始化早于 <see cref="Initialize"/>,此时 AppDataDir 还是空串,
+    /// 急切求值会把 device-id.txt 读写到进程当前目录(CWD),与 %AppData% 下的正式 ID 分裂
+    /// (CloudGameService 工厂用的是正确目录),恰好制造注释要避免的"每次启动 did 不稳定"。
+    /// </para>
     /// </summary>
-    public static string StableDeviceId { get; } = LoadOrCreateDeviceId(
-        AppDataDir ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "McKuro"));
+    public static string StableDeviceId
+    {
+        get
+        {
+            if (_stableDeviceId is { } id)
+            {
+                return id;
+            }
+            lock (_deviceIdGate)
+            {
+                return _stableDeviceId ??= LoadOrCreateDeviceId(
+                    string.IsNullOrEmpty(AppDataDir)
+                        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "McKuro")
+                        : AppDataDir);
+            }
+        }
+    }
+
+    private static string? _stableDeviceId;
+    private static readonly object _deviceIdGate = new();
 
     /// <summary>
     /// 跨平台打开文件管理器定位路径(Windows 用默认/explorer,macOS 用 open,Linux 用 xdg-open)。
@@ -151,13 +174,19 @@ public static class AppServices
             : Path.Combine(AppDataDir, "logs");
         LoggerFactory = loggerFactory ?? ILogLoggerFactory.Create(builder =>
         {
+#if DEBUG
+            // Debug/Console provider 仅 Debug 构建挂载:WinExe 无控制台,Release 下每条日志会被
+            // 多格式化两遍(MEL 按 provider 逐个执行 formatter),输出却进不了任何终端。
+            // MCKURO-* 启动诊断走 Console.Error 直写不受影响;Release 排查看 logs\ 文件日志。
             builder
                 .AddDebug()
                 .AddSimpleConsole(o =>
                 {
                     o.SingleLine = true;
                     o.TimestampFormat = "HH:mm:ss ";
-                })
+                });
+#endif
+            builder
                 .AddProvider(new FileLoggerProvider(LogDir))
                 .SetMinimumLevel(LogLevel.Information);
         });
@@ -186,9 +215,12 @@ public static class AppServices
         services.AddSingleton(typeof(ILogger<>), typeof(LoggerFactoryLogger<>));
 
         // ---- 基础 ----
-        services.AddSingleton(new HttpClient(new HttpClientHandler
+        // SocketsHttpHandler + 连接池生命周期(对齐 AsyncImage 的用法):
+        // CDN 域名 DNS 轮换时 5 分钟后新建连接取到新 IP,HttpClientHandler 会无限复用旧连接。
+        services.AddSingleton(new HttpClient(new System.Net.Http.SocketsHttpHandler
         {
             AutomaticDecompression = System.Net.DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
         })
         {
             Timeout = TimeSpan.FromSeconds(60),

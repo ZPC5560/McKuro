@@ -116,10 +116,6 @@ public sealed class LocalRoleDataReader
         var list = new List<RoleDetail>();
         try
         {
-            var options = new System.Text.Json.JsonSerializerOptions
-            {
-                TypeInfoResolver = RoleJsonContext.Default,
-            };
             using var doc = System.Text.Json.JsonDocument.Parse(text);
             var root = doc.RootElement;
 
@@ -153,8 +149,10 @@ public sealed class LocalRoleDataReader
             {
                 if (element.TryGetProperty("role", out _))
                 {
+                    // JsonElement 直接反序列化:旧实现 GetRawText() 先把元素再序列化回字符串
+                    // 再解析一遍,导入大文件时每个角色双重解析。
                     var detail = System.Text.Json.JsonSerializer.Deserialize(
-                        element.GetRawText(),
+                        element,
                         RoleJsonContext.Default.RoleDetail);
                     if (detail is not null)
                     {

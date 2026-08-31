@@ -17,7 +17,7 @@ namespace McKuro.Services;
 /// 不依赖 WebView2(规避 AOT/单文件发布复杂度),端口随机(普通用户无需 URLACL 权限)。
 /// 对齐 Haiyu 的 geet.html(gt4.js)与 WutheringWavesTool 的 H5 极验流程。
 /// </summary>
-public sealed class GeetVerifyService
+public sealed partial class GeetVerifyService
 {
     private const int TimeoutSeconds = 120;
 
@@ -192,7 +192,9 @@ public sealed class GeetVerifyService
                     break;
                 }
                 sb.Append(Encoding.UTF8.GetString(buffer, 0, n));
-                if (sb.ToString().Contains("\r\n\r\n", StringComparison.Ordinal))
+                // 空行若在此前已出现早就 break 了,本轮终止符只可能结束于刚追加的 n 字节内:
+                // 只搜尾部窗口,免旧实现每块复制全部已读内容再 Contains 的 O(n²)。
+                if (ContainsHeaderTerminatorAtTail(sb, n))
                 {
                     break;
                 }
@@ -292,11 +294,29 @@ public sealed class GeetVerifyService
         }
         var query = firstLine[(qIndex + 1)..];
         // [^&\s] 排除空格:请求行中 data 值到 " HTTP/1.1" 前的空格为止
-        var m = Regex.Match(query, @"(?:^|&)data=([^&\s]+)");
+        var m = CallbackDataRegex().Match(query);
         if (!m.Success)
         {
             return null;
         }
         return Uri.UnescapeDataString(m.Groups[1].Value);
+    }
+
+    [GeneratedRegex(@"(?:^|&)data=([^&\s]+)")]
+    private static partial Regex CallbackDataRegex();
+
+    /// <summary>检查 "\r\n\r\n" 是否结束于 StringBuilder 尾部最近 <paramref name="lastAppended"/> 个字符内
+    /// (终止符 4 字符,起点最晚可回溯 lastAppended+3)。</summary>
+    private static bool ContainsHeaderTerminatorAtTail(StringBuilder sb, int lastAppended)
+    {
+        var start = Math.Max(0, sb.Length - lastAppended - 3);
+        for (var i = start; i + 3 < sb.Length; i++)
+        {
+            if (sb[i] == '\r' && sb[i + 1] == '\n' && sb[i + 2] == '\r' && sb[i + 3] == '\n')
+            {
+                return true;
+            }
+        }
+        return false;
     }
 }

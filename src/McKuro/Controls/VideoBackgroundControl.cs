@@ -297,8 +297,8 @@ public sealed class VideoBackgroundControl : Grid
 
             if (!File.Exists(localPath) || new FileInfo(localPath).Length == 0)
             {
-                using var http = new HttpClient();
-                var bytes = await http.GetByteArrayAsync(url, token).ConfigureAwait(false);
+                // 复用共享 HttpClient(连接池/ decompression 统一);原每视频 new HttpClient 属多余实例。
+                var bytes = await McKuro.Services.AppServices.Http.GetByteArrayAsync(url, token).ConfigureAwait(false);
                 if (bytes.Length == 0)
                 {
                     Debug.WriteLine("[libmpv] 视频下载为空,回退静态图");

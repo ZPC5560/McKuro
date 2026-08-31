@@ -499,7 +499,12 @@ public sealed class KujiequApiClient
         using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        _logger.LogInformation("库街区数据中心请求: url={Url} body={Body} 响应前300={Resp}", url, body, Truncate(json, 300));
+        // 完整请求体可能含 token 等凭据:降为 Debug 级(默认 Information 门槛下不落盘),
+        // 且 IsEnabled 守卫避免每请求急切执行 Truncate + 多 provider 格式化。
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("库街区数据中心请求: url={Url} body={Body} 响应前300={Resp}", url, body, Truncate(json, 300));
+        }
 
         var env = JsonSerializer.Deserialize(json, KujiequJsonContext.Default.KujiequEnvelope);
         if (throwOnError && env is not null

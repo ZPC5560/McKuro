@@ -40,6 +40,7 @@ public sealed class GameProcessMonitor : IDisposable
     private readonly Func<IReadOnlyList<string>, bool> _isAlive;
     private readonly Func<DateTime> _now;
     private readonly TimeSpan _inGameWindow;
+    private readonly TimeSpan _pollInterval;
     private readonly System.Threading.Timer? _timer;
     private readonly object _gate = new();
 
@@ -83,14 +84,15 @@ public sealed class GameProcessMonitor : IDisposable
         _isAlive = isAlive ?? ProbeProcesses;
         _now = now ?? (() => DateTime.Now);
         _inGameWindow = inGameWindow ?? DefaultInGameWindow;
-        var interval = pollInterval ?? TimeSpan.FromSeconds(2);
+        _pollInterval = pollInterval ?? TimeSpan.FromSeconds(2);
         if (startTimer)
         {
+            // 空闲期不轮询:计时器挂起,BeginLaunch 才启动,回 Idle 即停(避免每 2s 空 Post 到 UI 线程)。
             _timer = new System.Threading.Timer(
                 _ => Dispatcher.UIThread.Post(Tick),
                 null,
-                interval,
-                interval);
+                Timeout.InfiniteTimeSpan,
+                _pollInterval);
         }
     }
 
@@ -111,6 +113,7 @@ public sealed class GameProcessMonitor : IDisposable
             _state = GameSessionState.Launching;
             _everAlive = false;
         }
+        _timer?.Change(_pollInterval, _pollInterval);
         StateChanged?.Invoke(GameSessionState.Launching);
     }
 
@@ -150,6 +153,7 @@ public sealed class GameProcessMonitor : IDisposable
                     _state = GameSessionState.Idle;
                     next = GameSessionState.Idle;
                     ended = GameSessionEndReason.Failed;
+                    _timer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
                 }
                 else
                 {
@@ -163,6 +167,7 @@ public sealed class GameProcessMonitor : IDisposable
                     _state = GameSessionState.Idle;
                     next = GameSessionState.Idle;
                     ended = GameSessionEndReason.Finished;
+                    _timer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
                 }
                 else
                 {
@@ -186,6 +191,7 @@ public sealed class GameProcessMonitor : IDisposable
             _state = GameSessionState.Idle;
             _names = [];
         }
+        _timer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         StateChanged?.Invoke(GameSessionState.Idle);
     }
 
@@ -194,16 +200,27 @@ public sealed class GameProcessMonitor : IDisposable
     {
         foreach (var name in names)
         {
+            Process[] procs;
             try
             {
-                if (Process.GetProcessesByName(name).Length > 0)
-                {
-                    return true;
-                }
+                procs = Process.GetProcessesByName(name);
             }
             catch (Exception)
             {
                 // 单名探测失败不影响其余进程名
+                continue;
+            }
+
+            // GetProcessesByName 返回的对象持有原生句柄:必须逐个 Dispose,
+            // 否则每轮 2 秒轮询泄漏一批句柄,只能等终结器慢慢回收。
+            var found = procs.Length > 0;
+            foreach (var p in procs)
+            {
+                p.Dispose();
+            }
+            if (found)
+            {
+                return true;
             }
         }
         return false;

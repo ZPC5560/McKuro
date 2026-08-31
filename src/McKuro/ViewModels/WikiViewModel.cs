@@ -331,7 +331,7 @@ public sealed partial class WikiViewModel : ViewModelBase
         {
             return "";
         }
-        var m = System.Text.RegularExpressions.Regex.Match(url, @"mc/post/(\d+)");
+        var m = PostIdRegex().Match(url);
         return m.Success ? m.Groups[1].Value : "";
     }
 
@@ -342,8 +342,7 @@ public sealed partial class WikiViewModel : ViewModelBase
         {
             return "";
         }
-        var m = System.Text.RegularExpressions.Regex.Match(
-            html, "<img[^>]+?src=[\"']([^\"']+)[\"']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var m = FirstImgSrcRegex().Match(html);
         var url = m.Success ? m.Groups[1].Value.Trim() : "";
         return url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
                || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
@@ -360,10 +359,23 @@ public sealed partial class WikiViewModel : ViewModelBase
         }
         if (html.Contains('<'))
         {
-            html = System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", " ");
+            html = HtmlTagRegex().Replace(html, " ");
         }
         var text = WebUtility.HtmlDecode(html);
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
+        text = WhitespaceRegex().Replace(text, " ").Trim();
         return text.Length > 60 ? text[..60] + "…" : text;
     }
+
+    // 字面量正则统一源生成:AOT 下真预编译,免运行时缓存字典查找(公告列表每次加载逐条求值)。
+    [System.Text.RegularExpressions.GeneratedRegex(@"mc/post/(\d+)")]
+    private static partial System.Text.RegularExpressions.Regex PostIdRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex("<img[^>]+?src=[\"']([^\"']+)[\"']", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex FirstImgSrcRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex("<[^>]+>")]
+    private static partial System.Text.RegularExpressions.Regex HtmlTagRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\s+")]
+    private static partial System.Text.RegularExpressions.Regex WhitespaceRegex();
 }

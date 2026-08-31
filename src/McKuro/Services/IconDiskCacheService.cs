@@ -89,17 +89,18 @@ public sealed class IconDiskCacheService
         {
             return null;
         }
+        string? path;
         lock (_lock)
         {
-            if (_index.TryGetValue(category, out var map)
-                && map.TryGetValue(name, out var path)
-                && !string.IsNullOrEmpty(path)
-                && File.Exists(path))
+            if (!_index.TryGetValue(category, out var map)
+                || !map.TryGetValue(name, out path)
+                || string.IsNullOrEmpty(path))
             {
-                return path;
+                return null;
             }
         }
-        return null;
+        // 存在性校验放锁外:File.Exists 是磁盘系统调用,不应在全局锁内串行化所有图标解析。
+        return File.Exists(path) ? path : null;
     }
 
     /// <summary>

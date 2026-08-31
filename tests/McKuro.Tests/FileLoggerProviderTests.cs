@@ -7,6 +7,17 @@ namespace McKuro.Tests;
 /// <summary>文件日志提供器测试(本地排查日志,按类型分目录 + 按日期分文件)。</summary>
 public class FileLoggerProviderTests
 {
+    /// <summary>
+    /// 共享读:provider 对日志文件持有常驻写句柄(FileShare.ReadWrite),
+    /// File.ReadAllText 的 FileShare.Read 与写访问冲突,测试须以 ReadWrite 共享模式读取。
+    /// </summary>
+    private static string ReadShared(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var sr = new StreamReader(fs, System.Text.Encoding.UTF8);
+        return sr.ReadToEnd();
+    }
+
     [Fact]
     public void Writes_Log_To_Category_Dir_With_Date_File()
     {
@@ -24,7 +35,7 @@ public class FileLoggerProviderTests
 
             // 按日期分文件:McKuro-yyyyMMdd.log
             var file = Directory.GetFiles(categoryDir, $"McKuro-{DateTime.Now:yyyyMMdd}.log").Single();
-            var content = File.ReadAllText(file);
+            var content = ReadShared(file);
             Assert.Contains("[Information]", content);
             Assert.Contains("McKuro.SmsLogin: hello world 42", content);
             Assert.Contains("[Warning", content);
@@ -52,11 +63,11 @@ public class FileLoggerProviderTests
             Assert.True(Directory.Exists(Path.Combine(dir, "GameUpdater")));
 
             Assert.Contains("sms log",
-                File.ReadAllText(Directory.GetFiles(Path.Combine(dir, "SmsLogin"), "*.log").Single()));
+                ReadShared(Directory.GetFiles(Path.Combine(dir, "SmsLogin"), "*.log").Single()));
             Assert.Contains("geet log",
-                File.ReadAllText(Directory.GetFiles(Path.Combine(dir, "GeetVerifyService"), "*.log").Single()));
+                ReadShared(Directory.GetFiles(Path.Combine(dir, "GeetVerifyService"), "*.log").Single()));
             Assert.Contains("update log",
-                File.ReadAllText(Directory.GetFiles(Path.Combine(dir, "GameUpdater"), "*.log").Single()));
+                ReadShared(Directory.GetFiles(Path.Combine(dir, "GameUpdater"), "*.log").Single()));
         }
         finally
         {
@@ -75,7 +86,7 @@ public class FileLoggerProviderTests
                 new InvalidOperationException("boom"), "failed op");
 
             var file = Directory.GetFiles(Path.Combine(dir, "Test"), "*.log").Single();
-            var content = File.ReadAllText(file);
+            var content = ReadShared(file);
             Assert.Contains("[Error", content);
             Assert.Contains("failed op", content);
             Assert.Contains("InvalidOperationException", content);
@@ -98,7 +109,7 @@ public class FileLoggerProviderTests
             logger.LogError("should appear");
 
             var file = Directory.GetFiles(Path.Combine(dir, "Test"), "*.log").Single();
-            var content = File.ReadAllText(file);
+            var content = ReadShared(file);
             Assert.DoesNotContain("should not appear", content);
             Assert.Contains("should appear", content);
         }
@@ -121,7 +132,7 @@ public class FileLoggerProviderTests
 
             var files = Directory.GetFiles(Path.Combine(dir, "Test"), "*.log");
             Assert.Single(files); // 同日只生成一个文件
-            var content = File.ReadAllText(files[0]);
+            var content = ReadShared(files[0]);
             Assert.Contains("first", content);
             Assert.Contains("second", content);
         }
@@ -151,7 +162,7 @@ public class FileLoggerProviderTests
             var categoryDir = Path.Combine(logDir, "GeetVerifyService");
             Assert.True(Directory.Exists(categoryDir), "DI 注入的 logger 应写入类型目录");
             var file = Directory.GetFiles(categoryDir, "*.log").Single();
-            Assert.Contains("di injected log line", File.ReadAllText(file));
+            Assert.Contains("di injected log line", ReadShared(file));
         }
         finally
         {

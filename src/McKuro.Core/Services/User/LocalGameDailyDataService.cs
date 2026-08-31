@@ -160,7 +160,7 @@ public sealed class LocalGameDailyDataService
             }
             var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             // 1005 重试;成功或其他错误直接返回
-            if (json.Contains("\"code\":1005") && attempt < 4)
+            if (json.Contains("\"code\":1005", StringComparison.Ordinal) && attempt < 4)
             {
                 await Task.Delay(200 * (attempt + 1), ct).ConfigureAwait(false);
                 continue;
