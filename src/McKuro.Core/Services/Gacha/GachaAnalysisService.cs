@@ -80,13 +80,18 @@ public sealed class GachaAnalysisService
         // 实际出金率(%)
         double actualRate = totalPulls > 0 ? Math.Round((double)allStarTotal / totalPulls * 100, 2) : 0;
 
-        // 抽卡跨度天数
-        var parsedTimes = allPulls
-            .Select(r => TryParseTime(r.Time))
-            .Where(t => t.HasValue)
-            .Select(t => t!.Value)
-            .ToList();
-        int days = parsedTimes.Count > 1 ? (parsedTimes[^1] - parsedTimes[0]).Days : 0;
+        // 时间只解析一次:旧实现 parsedTimes 与 dailyPulls 各跑一遍 TryParseTime,
+        // 全量分析(1 万+记录)每条记录两次 DateTime.TryParse。
+        var timed = new List<(DateTime Date, GachaRecord Rec)>(allPulls.Count);
+        foreach (var r in allPulls)
+        {
+            var t = TryParseTime(r.Time);
+            if (t.HasValue)
+            {
+                timed.Add((t.Value, r));
+            }
+        }
+        int days = timed.Count > 1 ? (timed[^1].Date - timed[0].Date).Days : 0;
 
         // 歪的次数(仅可判定 UP 的池子)
         int crookedTotal = pools
@@ -95,10 +100,8 @@ public sealed class GachaAnalysisService
             .Count(e => e.IsOffBanner == true);
 
         // 每日抽数(时间线,含各卡池明细供悬浮提示)
-        var dailyPulls = allPulls
-            .Select(r => new { Date = TryParseTime(r.Time), Rec = r })
-            .Where(x => x.Date.HasValue)
-            .GroupBy(x => DateOnly.FromDateTime(x.Date!.Value.Date))
+        var dailyPulls = timed
+            .GroupBy(x => DateOnly.FromDateTime(x.Date.Date))
             .OrderBy(g => g.Key)
             .Select(g => new DailyPull
             {

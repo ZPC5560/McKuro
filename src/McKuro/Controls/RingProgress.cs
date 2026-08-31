@@ -90,6 +90,21 @@ public sealed class RingProgress : Control
         ClipToBoundsProperty.OverrideDefaultValue<RingProgress>(true);
     }
 
+    private static readonly Typeface TextTypeface = new(FontFamily.Default);
+
+    // Render 缓存:进度每 ~200ms 重绘一次,Pen/FormattedText 按输入引用缓存,
+    // 值不变(尺寸/颜色/文本未变)时零分配。
+    private Pen? _trackPen;
+    private IBrush? _trackPenBrush;
+    private double _trackPenThickness = double.NaN;
+    private Pen? _fgPen;
+    private IBrush? _fgPenBrush;
+    private double _fgPenThickness = double.NaN;
+    private FormattedText? _formatted;
+    private string? _formattedText;
+    private IBrush? _formattedBrush;
+    private double _formattedSize = double.NaN;
+
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -102,8 +117,13 @@ public sealed class RingProgress : Control
         }
 
         // 轨道整圆
-        var trackPen = new Pen(TrackBrush, Thickness);
-        context.DrawEllipse(null, trackPen, center, radius, radius);
+        if (_trackPen is null || !ReferenceEquals(_trackPenBrush, TrackBrush) || _trackPenThickness != Thickness)
+        {
+            _trackPen = new Pen(TrackBrush, Thickness);
+            _trackPenBrush = TrackBrush;
+            _trackPenThickness = Thickness;
+        }
+        context.DrawEllipse(null, _trackPen, center, radius, radius);
 
         // 前景弧(从顶部 12 点方向顺时针,按 Value 0-100 画弧)
         var value = Math.Clamp(Value, 0, 100);
@@ -119,7 +139,13 @@ public sealed class RingProgress : Control
 
         if (sweep > 0)
         {
-            var fgPen = new Pen(ForegroundBrush, Thickness);
+            if (_fgPen is null || !ReferenceEquals(_fgPenBrush, ForegroundBrush) || _fgPenThickness != Thickness)
+            {
+                _fgPen = new Pen(ForegroundBrush, Thickness);
+                _fgPenBrush = ForegroundBrush;
+                _fgPenThickness = Thickness;
+            }
+            var fgPen = _fgPen;
             var geo = new StreamGeometry();
             using (var g = geo.Open())
             {
@@ -141,10 +167,17 @@ public sealed class RingProgress : Control
         {
             var text = $"{value:0}%";
             var brush = TextBrush ?? ForegroundBrush;
-            var ft = new Typeface(FontFamily.Default);
-            var formatted = new FormattedText(
-                text, System.Globalization.CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight, ft, FontSize, brush);
+            if (_formatted is null || _formattedText != text
+                || !ReferenceEquals(_formattedBrush, brush) || _formattedSize != FontSize)
+            {
+                _formatted = new FormattedText(
+                    text, System.Globalization.CultureInfo.CurrentCulture,
+                    FlowDirection.LeftToRight, TextTypeface, FontSize, brush);
+                _formattedText = text;
+                _formattedBrush = brush;
+                _formattedSize = FontSize;
+            }
+            var formatted = _formatted;
             var textPos = new Point(
                 center.X - formatted.Width / 2,
                 center.Y - formatted.Height / 2);

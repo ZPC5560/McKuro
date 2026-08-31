@@ -84,6 +84,10 @@ public sealed class SpeedTrendChart : Control
     {
     }
 
+    private Pen? _linePen;
+    private IBrush? _linePenBrush;
+    private readonly List<Point> _points = new();
+
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -132,7 +136,9 @@ public sealed class SpeedTrendChart : Control
         var stepX = width / Math.Max(n - 1, 1);
 
         var padLeft = 2.0;
-        var points = new List<Point>(n);
+        var points = _points;
+        points.Clear();
+        points.EnsureCapacity(n);
         for (int i = 0; i < n; i++)
         {
             var x = padLeft + i * stepX;
@@ -160,8 +166,13 @@ public sealed class SpeedTrendChart : Control
             context.DrawGeometry(FillBrush, null, geo);
         }
 
-        // 折线
-        var pen = new Pen(LineBrush, 2);
+        // 折线(Pen 按 brush 引用缓存,免每秒重绘 new Pen)
+        if (_linePen is null || !ReferenceEquals(_linePenBrush, LineBrush))
+        {
+            _linePen = new Pen(LineBrush, 2);
+            _linePenBrush = LineBrush;
+        }
+        var pen = _linePen;
         for (int i = 1; i < points.Count; i++)
         {
             context.DrawLine(pen, points[i - 1], points[i]);

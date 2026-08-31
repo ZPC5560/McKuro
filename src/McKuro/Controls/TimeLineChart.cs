@@ -159,12 +159,30 @@ public sealed class TimeLineChart : Control
 
     private static readonly Typeface LabelTypeface = new(FontFamily.Default);
 
+    // SemiBold(600) 在 Inter/系统 CJK 字体面无对应字面,会走合成字形路径——
+    // 正是 NativeAOT 启动崩溃(use-after-free)的同款诱因,axaml 侧已全量改 Bold,
+    // 代码侧 Typeface 同样必须用 Bold(700 直接匹配无合成)。
+    private static readonly Typeface BoldTypeface = new(
+        FontFamily.Default, FontStyle.Normal, FontWeight.Bold);
+
+    // 静态 Pen:brushes 均为本类静态资源,Pen 可安全共享;免每次 Render/网格线 new Pen。
+    private static readonly Pen GridPen = new(GridBrush, 1);
+    private static readonly Pen AxisPen = new(AxisTextBrush, 1);
+    private static readonly Pen CurvePen = new(CurveBrush, 2);
+    private static readonly Pen HoverDotPen = new(CurveBrush, 2);
+
+    // 文本形状化(FormattedText)缓存:悬浮重绘只随 _hoverIndex 变化,
+    // 刻度/日期标签文本不变,复用可免每帧 ~10 次文本 shaping。
+    private readonly Dictionary<int, FormattedText> _tickTexts = new();
+    private readonly Dictionary<string, FormattedText> _dateTexts = new(StringComparer.Ordinal);
+    private FormattedText? _emptyText;
+    private readonly List<Point> _points = new();
+
     private static FormattedText Text(string text, double fontSize, IBrush brush, bool bold = false)
     {
-        var typeface = bold
-            ? new Typeface(FontFamily.Default, FontStyle.Normal, FontWeight.SemiBold)
-            : LabelTypeface;
-        return new FormattedText(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, typeface, fontSize, brush);
+        return new FormattedText(
+            text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+            bold ? BoldTypeface : LabelTypeface, fontSize, brush);
     }
 
     // ---- 悬浮提示状态 ----
@@ -232,7 +250,7 @@ public sealed class TimeLineChart : Control
         var values = Values;
         if (values is null || values.Count == 0)
         {
-            var empty = Text("暂无数据", 12, EmptyBrush);
+            var empty = _emptyText ??= Text("暂无数据", 12, EmptyBrush);
             context.DrawText(empty, new Point((width - empty.Width) / 2, (height - empty.Height) / 2));
             return;
         }
@@ -255,17 +273,23 @@ public sealed class TimeLineChart : Control
         foreach (var tick in ticks)
         {
             var y = YFor(tick);
-            context.DrawLine(new Pen(GridBrush, 1), new Point(axisLeft, y), new Point(width - 8, y));
-            var label = Text(tick.ToString(CultureInfo.InvariantCulture), 10, AxisTextBrush);
+            context.DrawLine(GridPen, new Point(axisLeft, y), new Point(width - 8, y));
+            if (!_tickTexts.TryGetValue(tick, out var label))
+            {
+                label = Text(tick.ToString(CultureInfo.InvariantCulture), 10, AxisTextBrush);
+                _tickTexts[tick] = label;
+            }
             var ly = Math.Clamp(y - label.Height / 2, 1, height - label.Height - 1);
             context.DrawText(label, new Point(axisLeft - 6 - label.Width, ly));
         }
         // 底部轴线稍深
-        context.DrawLine(new Pen(AxisTextBrush, 1), new Point(axisLeft, plotBottom), new Point(width - 8, plotBottom));
+        context.DrawLine(AxisPen, new Point(axisLeft, plotBottom), new Point(width - 8, plotBottom));
 
-        // 数据点(像素坐标)
+        // 数据点(像素坐标,复用列表避免每帧分配)
         var n = values.Count;
-        var points = new List<Point>(n);
+        var points = _points;
+        points.Clear();
+        points.EnsureCapacity(n);
         for (var i = 0; i < n; i++)
         {
             var x = n == 1 ? axisLeft + plotWidth / 2 : axisLeft + i * (plotWidth / (n - 1));
@@ -319,7 +343,7 @@ public sealed class TimeLineChart : Control
         {
             SmoothFigure(g, false);
         }
-        context.DrawGeometry(null, new Pen(CurveBrush, 2), line);
+        context.DrawGeometry(null, CurvePen, line);
 
         // 底部稀疏日期(最多 6 个,避免拥挤重叠)
         if (Labels is not null && Labels.Count > 0)
@@ -327,7 +351,12 @@ public sealed class TimeLineChart : Control
             var step = Math.Max(1, (int)Math.Ceiling(n / 6.0));
             for (var i = 0; i < n; i += step)
             {
-                var label = Text(Labels[Math.Min(i, Labels.Count - 1)] ?? "", 10, AxisDateBrush);
+                var key = Labels[Math.Min(i, Labels.Count - 1)] ?? "";
+                if (!_dateTexts.TryGetValue(key, out var label))
+                {
+                    label = Text(key, 10, AxisDateBrush);
+                    _dateTexts[key] = label;
+                }
                 var x = Math.Clamp(points[i].X - label.Width / 2, 0, width - label.Width);
                 context.DrawText(label, new Point(x, plotBottom + 8));
             }
@@ -337,7 +366,7 @@ public sealed class TimeLineChart : Control
         if (_hoverIndex >= 0 && _hoverIndex < n)
         {
             var pt = points[_hoverIndex];
-            context.DrawEllipse(Brushes.White, new Pen(CurveBrush, 2), pt, 4.5, 4.5);
+            context.DrawEllipse(Brushes.White, HoverDotPen, pt, 4.5, 4.5);
 
             var tip = Tips is not null && _hoverIndex < Tips.Count
                 ? Tips[_hoverIndex]

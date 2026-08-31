@@ -66,6 +66,9 @@ public partial class App : Application
                 DataContext = vm,
             };
 
+            // 单实例:主窗口就绪后开始监听「唤起」信号(次实例启动→本实例显示并聚焦)。
+            SingleInstanceGuard.StartActivationListener();
+
             // 自测模式:自动导航(默认抽卡分析页,验证 AOT 下图表页渲染),4 秒后退出
             // McKuro_SMOKE_NAV 可指到其他页(如 Settings/Launcher)用于页面级验证
             if (Environment.GetEnvironmentVariable("McKuro_SMOKE") == "1")

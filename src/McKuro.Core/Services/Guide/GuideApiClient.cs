@@ -142,7 +142,11 @@ public sealed class GuideApiClient
         ApplyHeaders(request, xToken);
         using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
         var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        _logger.LogInformation("mcguide 请求: GET {Path} 响应前300={Resp}", path, Truncate(json));
+        // 每请求完整响应降 Debug + IsEnabled 守卫(默认 Information 门槛不落盘,免急切 Truncate)。
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("mcguide 请求: GET {Path} 响应前300={Resp}", path, Truncate(json));
+        }
         return json;
     }
 
@@ -158,7 +162,11 @@ public sealed class GuideApiClient
         ApplyHeaders(request, xToken);
         using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
         var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        _logger.LogInformation("mcguide 请求: POST {Path} body={Body} 响应前300={Resp}", path, payload, Truncate(json));
+        // POST body 含登录手机号等凭据:降 Debug,默认不落盘(对齐 KujiequApiClient 的处理)。
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("mcguide 请求: POST {Path} body={Body} 响应前300={Resp}", path, payload, Truncate(json));
+        }
         return json;
     }
 
