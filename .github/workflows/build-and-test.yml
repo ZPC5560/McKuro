@@ -113,7 +113,15 @@ jobs:
           path: src/McKuro/bin/Release/net10.0/win-x64/publish
 
       - name: Install Inno Setup
-        run: choco install innosetup -y --no-progress
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress --params '"/LANG=ChineseSimplified"'
+          # choco 静默安装可能不含可选语言组件,缺失时从 issrc 官方仓库补(与 6.7.x 编译器匹配)
+          $isl = "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl"
+          if (-not (Test-Path $isl)) {
+            Write-Host "ChineseSimplified.isl missing, downloading from jrsoftware/issrc..."
+            Invoke-WebRequest 'https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl' -OutFile $isl
+          }
 
       - name: Compile installer
         shell: pwsh
