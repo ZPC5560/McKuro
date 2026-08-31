@@ -1,0 +1,140 @@
+name: build-and-test
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      publish_win:
+        description: "发布 Windows AOT 版本 (win-x64)"
+        type: boolean
+        default: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-test:
+    name: Build & Test (Linux)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.*') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore McKuro.slnx
+
+      - name: Build (Release)
+        run: dotnet build McKuro.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/McKuro.Tests/McKuro.Tests.csproj -c Release --no-build --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/*.trx
+          if-no-files-found: ignore
+
+  publish-win:
+    name: Publish Windows AOT (win-x64)
+    # 手动触发(勾选 publish_win)或 tag v* 发布时运行
+    if: (github.event_name == 'workflow_dispatch' && inputs.publish_win == true) || startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-win-${{ hashFiles('**/*.csproj', '**/Directory.*') }}
+          restore-keys: |
+            nuget-win-
+
+      - name: Publish (AOT, self-contained)
+        run: dotnet publish src/McKuro/McKuro.csproj -c Release -r win-x64 --self-contained -p:PublishAot=true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: McKuro-win-x64
+          path: src/McKuro/bin/Release/net10.0/win-x64/publish/
+
+  setup:
+    name: Build installer (Inno Setup)
+    needs: publish-win
+    if: (github.event_name == 'workflow_dispatch' && inputs.publish_win == true) || startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    permissions:
+      contents: write   # tag 发布时把安装包附加到 GitHub Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 复用 publish-win 的 AOT 产物,不再重复 10 分钟链接构建;
+      # 落到 setup.iss 的 MyAppPublishDir 默认路径
+      - name: Download publish artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: McKuro-win-x64
+          path: src/McKuro/bin/Release/net10.0/win-x64/publish
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          # tag 触发取 tag 版本号;dispatch 从 csproj 读(避免硬编码回退到旧版本)
+          if ($env:GITHUB_REF -match '^refs/tags/v(.+)$') {
+            $version = $Matches[1]
+          } else {
+            $version = (Select-String -Path src/McKuro/McKuro.csproj -Pattern '<Version>([^<]+)</Version>').Matches[0].Groups[1].Value
+          }
+          Write-Host "installer version: $version"
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\setup.iss /DMyAppVersion=$version
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: McKuro-setup
+          path: artifacts/setup/*.exe
+
+      - name: Attach installer to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" artifacts/setup/*.exe --clobber

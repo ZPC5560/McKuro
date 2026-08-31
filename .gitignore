@@ -21,8 +21,8 @@ TestResults/
 *.coverage
 coverage*.xml
 
-# GitHub Actions workflow(当前 token 无 workflow scope,暂不追踪)
-.github/
+# GitHub Actions workflow 纳入版本管理(推送需 token 带 workflow scope)
+# .github/ 曾被忽略导致 CI 从未启用,2026-08 修复
 
 # 本地开发文档(不上传 GitHub)
 docs/
