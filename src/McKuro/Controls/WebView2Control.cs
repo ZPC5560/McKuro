@@ -187,6 +187,15 @@ public sealed class WebView2Control : NativeControlHost
     /// </summary>
     private void StartEnvironmentCreation()
     {
+        // NativeAOT 不支持 Assembly.LoadFrom 加载外置托管程序集,直接走 CreationFailed → 系统浏览器回退。
+        // 判据必须用运行时信号(AOT 下 Assembly.Location 为空):csproj 无条件 PublishAot=true
+        // 会让 RuntimeFeature.IsDynamicCodeSupported 被 Roslyn 编译期折叠为 false,JIT 构建也误判
+        if (string.IsNullOrEmpty(typeof(WebView2Control).Assembly.Location))
+        {
+            Log?.LogInformation("内置 WebView2 不可用(NativeAOT 不支持运行时加载包装器),回退系统浏览器");
+            PostToNativeThread(OnCreationFailed);
+            return;
+        }
         // 快路径:环境已就绪(预热或前次验证创建),直接复用
         if (s_sharedEnv is not null)
         {
@@ -210,9 +219,9 @@ public sealed class WebView2Control : NativeControlHost
             }, TaskScheduler.Default);
             return;
         }
-        // 首次:发起创建(平台线程),完成后回到平台线程继续
-        StartEnvironmentCreationCore();
-        s_envTcs!.Task.ContinueWith(t =>
+        // 首次:发起创建(平台线程),完成后回到平台线程继续。
+        // 用返回值而非回读 s_envTcs:失败路径会立即把静态槽置 null(允许重试),回读会 NRE。
+        StartEnvironmentCreationCore().Task.ContinueWith(t =>
         {
             if (!t.IsCompletedSuccessfully)
             {
@@ -249,16 +258,30 @@ public sealed class WebView2Control : NativeControlHost
             Log?.LogInformation("WebView2 预热跳过(已就绪或进行中)");
             return;
         }
+        // NativeAOT 下包装器不可加载(判据同 StartEnvironmentCreation:Assembly.Location 运行时信号,
+        // 勿用 IsDynamicCodeSupported——PublishAot=true 使其在 JIT 构建也被折叠为 false)
+        if (string.IsNullOrEmpty(typeof(WebView2Control).Assembly.Location))
+        {
+            Log?.LogInformation("WebView2 预热跳过(NativeAOT 不支持运行时加载托管包装器)");
+            return;
+        }
         Log?.LogInformation("WebView2 环境预热开始");
         // 锚点窗口:隐藏的顶级窗口,承载常驻 Controller(须在本线程创建,消息经本线程泵投递)
         s_anchorHwnd = Win32.CreateHiddenAnchorWindow();
-        StartEnvironmentCreationCore();
-        s_envTcs!.Task.ContinueWith(t =>
+        // 用返回值挂续体:失败路径会把 s_envTcs 静态槽置 null,回读会 NRE(2026-09 崩溃修复)
+        StartEnvironmentCreationCore().Task.ContinueWith(t =>
         {
             if (!t.IsCompletedSuccessfully)
             {
                 Log?.LogError("预热失败(浏览器进程未常驻): {Ex}", t.Exception?.GetBaseException().Message);
                 s_envTcs = null; // 允许下次重试
+                // 环境未就绪,锚点窗口不能白留;窗口属主线程创建,销毁必须 Post 回属主线程泵
+                var anchor = s_anchorHwnd;
+                if (anchor != nint.Zero)
+                {
+                    PostToAnchorThread(() => Win32.DestroyWindow(anchor));
+                    s_anchorHwnd = nint.Zero;
+                }
                 return;
             }
             Log?.LogInformation("环境就绪,创建常驻锚点 Controller");
@@ -345,10 +368,12 @@ public sealed class WebView2Control : NativeControlHost
         Win32.PostActionMessage(s_anchorHwnd, WmAppRunAction);
     }
 
-    /// <summary>发起环境创建(平台线程调用,完成回调经该线程消息循环投递)。</summary>
+    /// <summary>发起环境创建(平台线程调用,完成回调经该线程消息循环投递)。
+    /// 返回本次创建的 tcs(恒非空;失败路径会把 s_envTcs 静态槽置 null 允许重试,
+    /// 调用方必须用返回值挂续体,不得回读静态槽——曾因此 NRE)。</summary>
     [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026", Justification = ReflJustification)]
     [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
-    private static void StartEnvironmentCreationCore()
+    private static TaskCompletionSource<object?> StartEnvironmentCreationCore()
     {
         var tcs = s_envTcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         try
@@ -388,6 +413,7 @@ public sealed class WebView2Control : NativeControlHost
             s_envTcs = null;
             tcs.SetException(ex);
         }
+        return tcs;
     }
 
     /// <summary>在原生线程上发起 Controller 创建(官方环境对象绑定该线程套间,不得跨线程调用)。</summary>
@@ -577,10 +603,13 @@ public sealed class WebView2Control : NativeControlHost
     /// <summary>失败收尾:清理托管引用并触发回退事件。</summary>
     private void OnCreationFailed()
     {
+        // 必须在 Teardown 前捕获存活状态:Teardown 会把 _hwnd 置零,若事后再判"窗口已关闭"
+        // 恒为真,CreationFailed 回退事件永远不触发(2026-09 AOT 冒烟暴露;此前被 8s 看门狗掩盖)
+        var windowWasAlive = _hwnd != nint.Zero;
         Teardown();
         // 窗口已关闭(用户取消/窗口销毁后,在途异步创建才完成):不再触发回退,
         // 否则用户明明取消了验证,系统浏览器还会弹出验证页
-        if (_hwnd == nint.Zero)
+        if (!windowWasAlive)
         {
             Log?.LogInformation("窗口已关闭,跳过 CreationFailed 回退");
             return;

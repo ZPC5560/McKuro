@@ -74,7 +74,7 @@ Windows 发布会按 RID 条件带上 `Endpne.LibMPV.Windows`(libmpv-2.dll),不�
 
 `installer/setup.iss` 为 Inno Setup 脚本,由 GitHub Actions 的 `setup` job 在发布 tag(v*) 或手动触发时编译为 `McKuro-setup-<version>.exe`(中文/英文向导、桌面快捷方式、卸载)。
 
-**应用自更新**:设置页检查 GitHub Release(默认仓库 `ZPC5560/McKuro`),**优先下载 zip 绿色包**(解压替换安装目录并重启);exe 安装包走**静默自动更新**(`/VERYSILENT` + `/DIR` 锁定当前目录,安装完由监视脚本自动拉起新版),全程零向导;手动双击 setup.exe 时自动定位既有安装目录(应用启动自注册 `HKCU\Software\McKuro\InstallPath`,覆盖无卸载注册表项的 zip 便携版);支持跳过指定版本。
+**应用自更新**:设置页检查 GitHub Release(默认仓库 `ZPC5560/McKuro`),**优先下载 zip 绿色包**(解压替换安装目录并重启);exe 安装包走**静默自动更新**(`/VERYSILENT` + `/DIR` 锁定当前目录,目录可写时 `/CURRENTUSER` 免 UAC,安装完由监视脚本自动拉起新版),全程零向导。**启动后自动检查更新**(默认开,延迟 5 秒静默检查):发现新版可**自动下载安装并重启**(零点击,默认关)或弹窗询问(立即更新/稍后/跳过此版本);手动双击 setup.exe 时自动定位既有安装目录(应用启动自注册 `HKCU\Software\McKuro\InstallPath`,覆盖无卸载注册表项的 zip 便携版);支持跳过指定版本。
 
 ```bash
 # 本地编译安装包(需安装 Inno Setup 6)

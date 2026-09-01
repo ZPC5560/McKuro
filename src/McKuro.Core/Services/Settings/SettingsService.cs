@@ -147,6 +147,12 @@ public sealed class AppSettings
 
     /// <summary>跳过的应用版本(不再提示该版本更新)。</summary>
     public string SkipAppVersion { get; set; } = "";
+
+    /// <summary>启动后自动检查应用更新(延迟静默检查;发现新版按 AutoInstall 决定直接升级或弹窗询问)。</summary>
+    public bool AppUpdateAutoCheck { get; set; } = true;
+
+    /// <summary>自动下载并安装更新(零点击:下载→替换→重启新版;关闭则弹窗由用户确认)。</summary>
+    public bool AppUpdateAutoInstall { get; set; }
 }
 
 /// <summary>设置持久化服务(JSON 文件,支持原子写入与异步合并落盘)。</summary>

@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using FluentIcons.Common;
 using McKuro.Services;
@@ -44,6 +45,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public List<NavigationItem> NavigationItems { get; }
 
+    /// <summary>设置页实例(自更新状态与命令供主窗口更新弹窗绑定;子 VM 全部启动即建,天然单例)。</summary>
+    public SettingsViewModel SettingsPage => _settings;
+
+    /// <summary>发现新版本的询问弹窗(自动检查触发;AutoInstall 开启时不弹,直接升级)。</summary>
+    [ObservableProperty]
+    private bool _appUpdatePromptVisible;
+
+    private readonly SettingsViewModel _settings;
     private readonly Dictionary<string, NavigationItem> _navByKey;
     private readonly IMessenger _messenger;
 
@@ -81,7 +90,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var playTime = new PlayTimeViewModel();
         var tower = new TowerViewModel();
         var account = new AccountViewModel();
-        var settings = new SettingsViewModel();
+        var settings = _settings = new SettingsViewModel();
 
         NavigationItems =
         [
@@ -115,6 +124,61 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 recipient.NavigateTo(nav);
             }
         });
+
+        // 启动自动检查应用更新(冒烟模式跳过,保持冒烟无网络副作用)
+        if (AppServices.Settings.Current.AppUpdateAutoCheck
+            && Environment.GetEnvironmentVariable("McKuro_SMOKE") != "1")
+        {
+            _ = AutoCheckAppUpdateAsync();
+        }
+    }
+
+    /// <summary>启动延迟自动检查:发现新版按 AutoInstall 直接静默升级,或弹窗询问。</summary>
+    private async Task AutoCheckAppUpdateAsync()
+    {
+        try
+        {
+            // 延迟让启动页视频/账号头像等先走,不抢带宽与 UI
+            await Task.Delay(5000);
+            await _settings.CheckAppUpdateAsync();
+            Console.Error.WriteLine($"MCKURO-UPDATE auto: available={_settings.AppUpdateAvailable} autoInstall={AppServices.Settings.Current.AppUpdateAutoInstall} status={_settings.AppUpdateStatusText}");
+            if (!_settings.AppUpdateAvailable)
+            {
+                return;
+            }
+            if (AppServices.Settings.Current.AppUpdateAutoInstall)
+            {
+                await _settings.DownloadAppUpdateAsync();
+            }
+            else
+            {
+                AppUpdatePromptVisible = true;
+            }
+        }
+        catch (Exception)
+        {
+            // 自动检查失败静默(离线/限流等):设置页手动检查仍可用
+        }
+    }
+
+    /// <summary>弹窗「立即更新」:隐藏弹窗并走完整自动链(下载→替换→重启)。</summary>
+    [RelayCommand]
+    private async Task UpdateNowAsync()
+    {
+        AppUpdatePromptVisible = false;
+        await _settings.DownloadAppUpdateAsync();
+    }
+
+    /// <summary>弹窗「稍后再说」:本次启动不再提示(下次启动会再问)。</summary>
+    [RelayCommand]
+    private void UpdateLater() => AppUpdatePromptVisible = false;
+
+    /// <summary>弹窗「跳过此版本」:持久跳过(该版本不再提示)。</summary>
+    [RelayCommand]
+    private void UpdateSkip()
+    {
+        _settings.SkipAppUpdateCommand.Execute(null);
+        AppUpdatePromptVisible = false;
     }
 
     partial void OnSelectedNavigationItemChanged(NavigationItem? value)

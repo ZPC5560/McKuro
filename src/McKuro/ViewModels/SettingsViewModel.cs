@@ -329,6 +329,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         _languageIndex = Math.Max(0, Languages.IndexOf(LanguageLabel(s.Language)));
         _startupPageIndex = s.StartupPage == "Launcher" ? 1 : 0;
+        _appUpdateAutoCheck = s.AppUpdateAutoCheck;
+        _appUpdateAutoInstall = s.AppUpdateAutoInstall;
         _themeIndex = s.Theme switch
         {
             "Light" => 1,
@@ -484,9 +486,29 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     // ---------- 应用自更新(对齐 Haiyu UpdateAppViewModel) ----------
 
-    /// <summary>检查应用更新(GitHub Releases latest;跳过已跳过的版本)。</summary>
+    /// <summary>启动后自动检查应用更新(主窗口启动延迟触发,见 MainWindowViewModel)。</summary>
+    [ObservableProperty]
+    private bool _appUpdateAutoCheck;
+
+    partial void OnAppUpdateAutoCheckChanged(bool value)
+    {
+        AppServices.Settings.Current.AppUpdateAutoCheck = value;
+        AppServices.Settings.Save();
+    }
+
+    /// <summary>自动下载并安装更新(零点击升级;关闭则发现新版时弹窗询问)。</summary>
+    [ObservableProperty]
+    private bool _appUpdateAutoInstall;
+
+    partial void OnAppUpdateAutoInstallChanged(bool value)
+    {
+        AppServices.Settings.Current.AppUpdateAutoInstall = value;
+        AppServices.Settings.Save();
+    }
+
+    /// <summary>检查应用更新(GitHub Releases latest;跳过已跳过的版本)。public:供主窗口启动自动检查调用。</summary>
     [RelayCommand]
-    private async Task CheckAppUpdateAsync()
+    public async Task CheckAppUpdateAsync()
     {
         // 仓库由配置提供(默认 ZPC5560/McKuro),设置页不再提供输入框
         var repo = AppServices.Settings.Current.AppUpdateRepo.Trim();
@@ -529,7 +551,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
             _pendingUpdate = info;
             AppUpdateAvailable = true;
             AppUpdateVersionText = $"发现新版本 {info.Version}";
-            AppUpdateStatusText = $"大小 {FormatAppUpdateSize(info.AssetSize)} · {info.AssetName}";
+            // HTML 回退通道拿不到文件大小(AssetSize=0),省略大小段
+            AppUpdateStatusText = info.AssetSize > 0
+                ? $"大小 {FormatAppUpdateSize(info.AssetSize)} · {info.AssetName}"
+                : info.AssetName;
         }
         catch (Exception ex)
         {
@@ -541,9 +566,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
     }
 
-    /// <summary>下载并安装应用更新(zip 绿色包解压替换;exe 安装包以管理员启动)。</summary>
+    /// <summary>下载并安装应用更新(zip 绿色包解压替换;exe 安装包静默安装)。public:供主窗口自动升级调用。</summary>
     [RelayCommand]
-    private async Task DownloadAppUpdateAsync()
+    public async Task DownloadAppUpdateAsync()
     {
         if (_pendingUpdate is null || AppUpdateDownloading)
         {
@@ -585,12 +610,29 @@ public sealed partial class SettingsViewModel : ViewModelBase
             {
                 silentArgs += $" /DIR=\"{appDir}\"";
             }
+            // 提权启发:安装目录可写(zip 便携版/自定义目录)→ 用户态静默更新,连 UAC 都不弹;
+            // Program Files 等不可写 → runas 提权(安装器仍需管理员)。
+            var writable = false;
+            try
+            {
+                if (!string.IsNullOrEmpty(appDir))
+                {
+                    var probe = Path.Combine(appDir, $".writetest-{Environment.ProcessId}.tmp");
+                    File.WriteAllText(probe, "");
+                    File.Delete(probe);
+                    writable = true;
+                }
+            }
+            catch (Exception)
+            {
+                // 探测失败按不可写处理,走提权路径
+            }
             var installer = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = localPath,
-                Arguments = silentArgs,
+                Arguments = writable ? silentArgs + " /CURRENTUSER" : silentArgs,
                 UseShellExecute = true,
-                Verb = "runas", // 管理员安装(对齐 Haiyu)
+                Verb = writable ? string.Empty : "runas",
             });
             if (installer is null)
             {
