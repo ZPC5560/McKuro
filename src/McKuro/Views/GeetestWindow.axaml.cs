@@ -28,7 +28,8 @@ public partial class GeetestWindow : Window
     private DispatcherTimer? _spinnerTimer;
     private double _spinnerAngle;
 
-    private GeetestWindow()
+    // 公共无参构造器为 XAML 运行时加载器要求(AVLN3001);外部调用方仍应使用 ShowAsync 工厂。
+    public GeetestWindow()
     {
         InitializeComponent();
         ApplyTheme();

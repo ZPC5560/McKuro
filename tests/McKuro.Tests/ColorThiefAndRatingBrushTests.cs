@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Avalonia.Media;
 using McKuro.Core.Services.Roles;
@@ -128,7 +129,7 @@ public class RatingBrushConverterTests
     public void EchoRatingLevel_SSS_Returns_DarkYellow_In_Light()
     {
         var c = new EchoRatingLevelBrushConverter();
-        var brush = Assert.IsType<SolidColorBrush>(c.Convert(EchoRatingLevel.SSS, typeof(IBrush), null, null));
+        var brush = Assert.IsType<SolidColorBrush>(c.Convert(EchoRatingLevel.SSS, typeof(IBrush), null, CultureInfo.InvariantCulture));
         Assert.Equal(Color.Parse("#a88400"), brush.Color);
     }
 
@@ -136,7 +137,7 @@ public class RatingBrushConverterTests
     public void EchoRatingLevel_Ace_Returns_Red()
     {
         var c = new EchoRatingLevelBrushConverter();
-        var brush = Assert.IsType<SolidColorBrush>(c.Convert(EchoRatingLevel.Ace, typeof(IBrush), null, null));
+        var brush = Assert.IsType<SolidColorBrush>(c.Convert(EchoRatingLevel.Ace, typeof(IBrush), null, CultureInfo.InvariantCulture));
         Assert.Equal(Color.Parse("#e33737"), brush.Color);
     }
 
@@ -144,7 +145,7 @@ public class RatingBrushConverterTests
     public void PropLevel_3_Returns_DarkYellow_In_Light()
     {
         var c = new PropLevelBrushConverter();
-        var brush = Assert.IsType<SolidColorBrush>(c.Convert(3, typeof(IBrush), null, null));
+        var brush = Assert.IsType<SolidColorBrush>(c.Convert(3, typeof(IBrush), null, CultureInfo.InvariantCulture));
         Assert.Equal(Color.Parse("#a88400"), brush.Color);
     }
 
@@ -152,7 +153,7 @@ public class RatingBrushConverterTests
     public void PropLevel_0_Returns_Gray()
     {
         var c = new PropLevelBrushConverter();
-        var brush = Assert.IsType<SolidColorBrush>(c.Convert(0, typeof(IBrush), null, null));
+        var brush = Assert.IsType<SolidColorBrush>(c.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture));
         Assert.Equal(Color.Parse("#9e9e9e"), brush.Color);
     }
 }

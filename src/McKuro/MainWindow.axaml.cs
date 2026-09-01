@@ -485,7 +485,12 @@ public partial class MainWindow : Window
         }
         if (_hwnd == IntPtr.Zero)
         {
-            _hwnd = FindWindow(null, Title);
+            // Title 为空时 FindWindow(null, null) 会匹配任意无标题窗口(可能拿到别人的句柄),必须显式跳过
+            var title = Title;
+            if (!string.IsNullOrEmpty(title))
+            {
+                _hwnd = FindWindow(null, title);
+            }
         }
         if (_hwnd == IntPtr.Zero)
         {

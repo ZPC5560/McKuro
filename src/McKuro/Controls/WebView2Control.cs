@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Avalonia;
@@ -46,9 +47,6 @@ public sealed class WebView2Control : NativeControlHost
     /// <summary>内置 WebView 不可用(包装器加载失败/浏览器子进程被拦截):通知宿主窗口回退外部浏览器。</summary>
     public event Action? CreationFailed;
 
-    /// <summary>渲染子窗口出现(WebView2 开始绘制页面):宿主可隐藏加载遮罩。</summary>
-    public event Action? RenderStarted;
-
     /// <summary>页面加载完成(成功或失败):宿主可隐藏加载遮罩。</summary>
     public event Action? PageLoadCompleted;
 
@@ -63,7 +61,6 @@ public sealed class WebView2Control : NativeControlHost
     private object? _managedEnv;   // 官方 CoreWebView2Environment(保活原生环境)
     private object? _managedCtrl;  // 官方 CoreWebView2Controller
     private bool _ctrlStarted;
-    private bool _navigated;
     private bool _boundsFailLogged;
     private (int L, int T, int R, int B) _lastAppliedBounds;
     private readonly System.Collections.Concurrent.ConcurrentQueue<Action> _nativeActions = new();
@@ -227,11 +224,24 @@ public sealed class WebView2Control : NativeControlHost
         }, TaskScheduler.Default);
     }
 
+    // ─── 反射区(至 SetMember 尾部)───────────────────────────────────────────────
+    // 官方 WebView2 托管包装器 Microsoft.Web.WebView2.Core.dll 以随包外置 IL 形式
+    // 经 Assembly.LoadFrom + 晚绑定调用:目标成员不在本程序集的裁剪/AOT 编译边界内,
+    // 分析器无法静态验证,IL2026/IL2072/IL2075 为设计固有噪声。
+    // 安全性:任何反射失败都走 CreationFailed → 系统浏览器回退,不存在静默损坏路径。
+#pragma warning disable IL2026, IL2072, IL2075
+
+    // 反射区各方法 UnconditionalSuppressMessage 共用理由(持久进 IL,ILC 裁剪阶段生效)
+    private const string ReflJustification =
+        "官方 WebView2 托管包装器为随包外置 IL 程序集(Assembly.LoadFrom 晚绑定)," +
+        "目标成员不在本程序集裁剪边界内;反射失败有 CreationFailed→系统浏览器回退,无静默损坏路径。";
+
     /// <summary>
     /// 预热 WebView2 环境与浏览器进程(须在平台线程调用,App 初始化即在该线程)。
     /// 无库街区账号时由 App 启动调用,使后续应用内验证秒开;已有账号则不调用,避免每次启动空耗资源。
     /// 已预热/已就绪时为空操作。预热包含:环境创建 + 隐藏锚点窗口 + 常驻锚点 Controller(保活浏览器进程)。
     /// </summary>
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
     public static void PrewarmEnvironment()
     {
         if (s_sharedEnv is not null || s_envTcs is not null)
@@ -286,6 +296,7 @@ public sealed class WebView2Control : NativeControlHost
 
     /// <summary>锚点 Controller 预载真实极验页:让浏览器渲染器初始化与极验 CDN 资源
     /// (static.geetest.com)在启动阶段就完成加载并落入磁盘缓存,首次验证即秒开。</summary>
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
     private static void PrewarmAnchorNavigation()
     {
         try
@@ -305,14 +316,17 @@ public sealed class WebView2Control : NativeControlHost
             var argsType = navEvent.EventHandlerType!.GetMethod("Invoke")!.GetParameters()[1].ParameterType;
             var maker = typeof(WebView2Control).GetMethod(nameof(MakeEventHandler), BindingFlags.NonPublic | BindingFlags.Static)!
                 .MakeGenericMethod(argsType);
-            navEvent.AddEventHandler(webview, (Delegate)maker.Invoke(null, new object[]
-            {
-                (Action<object?>)(e =>
+            if (maker.Invoke(null, new object[]
                 {
-                    var ok = e?.GetType().GetProperty("IsSuccess")?.GetValue(e);
-                    Log?.LogInformation("锚点预载完成 IsSuccess={S}", ok);
-                }),
-            }));
+                    (Action<object?>)(e =>
+                    {
+                        var ok = e?.GetType().GetProperty("IsSuccess")?.GetValue(e);
+                        Log?.LogInformation("锚点预载完成 IsSuccess={S}", ok);
+                    }),
+                }) is Delegate handler)
+            {
+                navEvent.AddEventHandler(webview, handler);
+            }
             var htmlPath = Path.Combine(AppContext.BaseDirectory, "Assets", "geetest.html");
             webview.GetType().GetMethod("Navigate", new[] { typeof(string) })!
                 .Invoke(webview, new object?[] { $"file:///{htmlPath.Replace('\\', '/')}" });
@@ -332,6 +346,8 @@ public sealed class WebView2Control : NativeControlHost
     }
 
     /// <summary>发起环境创建(平台线程调用,完成回调经该线程消息循环投递)。</summary>
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026", Justification = ReflJustification)]
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
     private static void StartEnvironmentCreationCore()
     {
         var tcs = s_envTcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -375,6 +391,7 @@ public sealed class WebView2Control : NativeControlHost
     }
 
     /// <summary>在原生线程上发起 Controller 创建(官方环境对象绑定该线程套间,不得跨线程调用)。</summary>
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
     private void TryCreateControllerOnPlatformThread()
     {
         if (_managedEnv is null || _hwnd == nint.Zero || _ctrlStarted)
@@ -412,6 +429,7 @@ public sealed class WebView2Control : NativeControlHost
     }
 
     /// <summary>在原生线程上使用 Controller:Bounds 覆盖客户区、可见、导航;随后启动看门狗。</summary>
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
     private void UseControllerOnPlatformThread()
     {
         if (_managedCtrl is null || _hwnd == nint.Zero)
@@ -449,7 +467,7 @@ public sealed class WebView2Control : NativeControlHost
         var argsType = navEvent.EventHandlerType!.GetMethod("Invoke")!.GetParameters()[1].ParameterType;
         var maker = GetType().GetMethod(nameof(MakeEventHandler), BindingFlags.NonPublic | BindingFlags.Static)!
             .MakeGenericMethod(argsType);
-        _navigationCompletedHandler = (Delegate)maker.Invoke(null, new object[]
+        _navigationCompletedHandler = maker.Invoke(null, new object[]
         {
             (Action<object?>)(e =>
             {
@@ -458,8 +476,11 @@ public sealed class WebView2Control : NativeControlHost
                 Services.GeetVerifyService.TimingLog($"NavigationCompleted IsSuccess={isSuccess}");
                 PageLoadCompleted?.Invoke();
             }),
-        });
-        navEvent.AddEventHandler(webview, _navigationCompletedHandler);
+        }) as Delegate;
+        if (_navigationCompletedHandler is { } completedHandler)
+        {
+            navEvent.AddEventHandler(webview, completedHandler);
+        }
         if (!string.IsNullOrWhiteSpace(_pendingUrl))
         {
             webview.GetType().GetMethod("Navigate", new[] { typeof(string) })!
@@ -495,6 +516,8 @@ public sealed class WebView2Control : NativeControlHost
     }
 
     /// <summary>同步 WebView2 到容器 HWND 的物理客户区。必须在原生线程调用(WM_SIZE/WM_APP 驱动)。</summary>
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2072", Justification = ReflJustification)]
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
     private void UpdateBounds()
     {
         if (_managedCtrl is null || _hwnd == nint.Zero || !Win32.TryGetClientRect(_hwnd, out var rc))
@@ -526,12 +549,14 @@ public sealed class WebView2Control : NativeControlHost
         }
     }
 
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
     private static object? GetMember(object target, string name)
     {
         var type = target.GetType();
         return type.GetProperty(name)?.GetValue(target) ?? type.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)?.GetValue(target);
     }
 
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
     private static void SetMember(object target, string name, object? value)
     {
         var type = target.GetType();
@@ -545,6 +570,9 @@ public sealed class WebView2Control : NativeControlHost
             type.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)?.SetValue(target, value);
         }
     }
+
+#pragma warning restore IL2026, IL2072, IL2075
+    // ─── 反射区结束 ──────────────────────────────────────────────────────────────
 
     /// <summary>失败收尾:清理托管引用并触发回退事件。</summary>
     private void OnCreationFailed()

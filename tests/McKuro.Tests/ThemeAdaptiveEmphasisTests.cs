@@ -1,3 +1,4 @@
+using System.Globalization;
 using Avalonia.Media;
 using McKuro.ViewModels;
 
@@ -11,7 +12,7 @@ public class ThemeAdaptiveEmphasisBrushTests
     {
         var c = new ThemeAdaptiveEmphasisBrushConverter();
         // 无 Avalonia Application 时走默认:RequestedThemeVariant 为 null → 非 dark → 返回深琥珀
-        var brush = Assert.IsType<SolidColorBrush>(c.Convert(null, typeof(IBrush), null, null));
+        var brush = Assert.IsType<SolidColorBrush>(c.Convert(null, typeof(IBrush), null, CultureInfo.InvariantCulture));
         Assert.Equal(Color.Parse("#8a6d1f"), brush.Color);
     }
 
@@ -19,7 +20,7 @@ public class ThemeAdaptiveEmphasisBrushTests
     public void Cyan_Parameter_Returns_DarkCyan_In_Light()
     {
         var c = new ThemeAdaptiveEmphasisBrushConverter();
-        var brush = Assert.IsType<SolidColorBrush>(c.Convert(null, typeof(IBrush), "cyan", null));
+        var brush = Assert.IsType<SolidColorBrush>(c.Convert(null, typeof(IBrush), "cyan", CultureInfo.InvariantCulture));
         Assert.Equal(Color.Parse("#007a85"), brush.Color);
     }
 
@@ -27,6 +28,6 @@ public class ThemeAdaptiveEmphasisBrushTests
     public void ConvertBack_Throws()
     {
         var c = new ThemeAdaptiveEmphasisBrushConverter();
-        Assert.Throws<NotSupportedException>(() => c.ConvertBack(null, typeof(IBrush), null, null));
+        Assert.Throws<NotSupportedException>(() => c.ConvertBack(null, typeof(IBrush), null, CultureInfo.InvariantCulture));
     }
 }
