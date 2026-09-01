@@ -22,6 +22,8 @@ class Program
             SingleInstanceGuard.SignalExistingInstance();
             return 0;
         }
+        // 主实例:注册当前安装目录,供 Inno 安装器自动定位既有安装(见 InstallLocationRegistry)
+        InstallLocationRegistry.TryRegister();
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         return 0;
     }

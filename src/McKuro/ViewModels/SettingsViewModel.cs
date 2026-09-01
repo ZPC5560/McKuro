@@ -576,14 +576,50 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 return;
             }
 
-            AppUpdateStatusText = "下载完成,正在启动安装程序…";
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            AppUpdateStatusText = "下载完成,正在静默安装(自动替换并重启)…";
+            // /DIR 显式锁定当前安装目录:自更新链路零选择、零歧义(zip 便携版无卸载注册表项,
+            // 不能依赖 Inno 的 UsePreviousAppDir;手动双击 setup.exe 才走注册表自动定位)。
+            var appDir = Path.GetDirectoryName(Environment.ProcessPath);
+            var silentArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART";
+            if (!string.IsNullOrEmpty(appDir))
+            {
+                silentArgs += $" /DIR=\"{appDir}\"";
+            }
+            var installer = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = localPath,
+                Arguments = silentArgs,
                 UseShellExecute = true,
                 Verb = "runas", // 管理员安装(对齐 Haiyu)
             });
-            // 主程序退出,等待安装完成后重新打开
+            if (installer is null)
+            {
+                AppUpdateStatusText = "安装程序启动失败";
+                return;
+            }
+
+            // 重启兜底:Inno 的 RestartApplications 只重启"优雅退出"的应用,被 Restart Manager
+            // 强杀的(本应用有关闭隐藏到托盘逻辑)不会拉起。用监视脚本等安装器进程退出后启动新版,
+            // 本进程随即主动退出(安装器无文件锁,替换干净)。
+            if (!string.IsNullOrEmpty(appDir))
+            {
+                var watcher = Path.Combine(destDir, "relaunch.cmd");
+                File.WriteAllText(watcher, $$"""
+                    @echo off
+                    :wait
+                    timeout /t 1 /nobreak >nul
+                    tasklist /nh /fi "PID eq {{installer.Id}}" | find "{{installer.Id}}" >nul && goto wait
+                    start "" "{{Path.Combine(appDir, "McKuro.exe")}}"
+                    del "%~f0"
+                    """, System.Text.Encoding.UTF8);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c \"\"{watcher}\"\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                });
+            }
             if (Avalonia.Application.Current?.ApplicationLifetime
                 is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
             {
