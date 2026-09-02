@@ -185,12 +185,19 @@ public sealed class WebView2Control : NativeControlHost
     /// 反射加载官方托管包装器并创建环境:CreateAsync(null, userDataFolder, null)。
     /// 完成回调可能在墙尾线程,后续 Controller 创建经 WM_APP 队列转回原生线程。
     /// </summary>
+    /// <summary>
+    /// 是否 NativeAOT 产物:文档保证 AOT 下 Assembly.Location 为空字符串,框架构建非空。
+    /// 勿用 RuntimeFeature.IsDynamicCodeSupported——本项目 csproj 无条件 PublishAot=true,
+    /// 该内在常量被 Roslyn 编译期折叠为 false,JIT 构建也误判(2026-09 实测)。
+    /// IL3000(单文件下 Location 恒空)正是本判据依赖的语义;本项目不做框架单文件发布,信号可靠。
+    /// </summary>
+    [UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "有意依赖 AOT/单文件下 Location 为空的文档语义作运行时形态判据。")]
+    private static bool IsNativeAot => string.IsNullOrEmpty(typeof(WebView2Control).Assembly.Location);
+
     private void StartEnvironmentCreation()
     {
-        // NativeAOT 不支持 Assembly.LoadFrom 加载外置托管程序集,直接走 CreationFailed → 系统浏览器回退。
-        // 判据必须用运行时信号(AOT 下 Assembly.Location 为空):csproj 无条件 PublishAot=true
-        // 会让 RuntimeFeature.IsDynamicCodeSupported 被 Roslyn 编译期折叠为 false,JIT 构建也误判
-        if (string.IsNullOrEmpty(typeof(WebView2Control).Assembly.Location))
+        // NativeAOT 不支持 Assembly.LoadFrom 加载外置托管程序集,直接走 CreationFailed → 系统浏览器回退
+        if (IsNativeAot)
         {
             Log?.LogInformation("内置 WebView2 不可用(NativeAOT 不支持运行时加载包装器),回退系统浏览器");
             PostToNativeThread(OnCreationFailed);
@@ -258,9 +265,8 @@ public sealed class WebView2Control : NativeControlHost
             Log?.LogInformation("WebView2 预热跳过(已就绪或进行中)");
             return;
         }
-        // NativeAOT 下包装器不可加载(判据同 StartEnvironmentCreation:Assembly.Location 运行时信号,
-        // 勿用 IsDynamicCodeSupported——PublishAot=true 使其在 JIT 构建也被折叠为 false)
-        if (string.IsNullOrEmpty(typeof(WebView2Control).Assembly.Location))
+        // NativeAOT 下包装器不可加载(判据见 IsNativeAot),预热无意义且会白建锚点窗口
+        if (IsNativeAot)
         {
             Log?.LogInformation("WebView2 预热跳过(NativeAOT 不支持运行时加载托管包装器)");
             return;

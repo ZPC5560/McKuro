@@ -10,6 +10,7 @@ using Avalonia.Platform;
 using Avalonia.Threading;
 using HanumanInstitute.LibMpv;
 using HanumanInstitute.LibMpv.Core;
+using McKuro.Services;
 
 namespace McKuro.Controls;
 
@@ -72,6 +73,14 @@ public sealed class VideoBackgroundControl : Grid
 
     // 播放启动看门狗:规定时间内没有首帧(网络卡死/解码失败无事件)则回退静态图。
     private CancellationTokenSource? _timeoutCts;
+
+    // ── 挂起(最小化/隐藏/游戏运行中)──────────────────────────────────────────
+    // 软件解码 + 2048x1216 帧拷贝常驻约 1~2 核;不挂起时,点「启动游戏」后(最小化主窗口
+    // 或留在启动页)会与 UE 的着色器编译/资源加载抢 CPU 与磁盘,游戏启动明显慢于官方
+    // 启动器(官方启动后会自行退出让出资源)。挂起=暂停 mpv 解码并跳过渲染,恢复原位续播。
+    private volatile bool _suspended;
+    private bool _mpvPausedApplied; // 仅渲染线程读写
+    private Window? _watchedWindow;
 
     /// <summary>播放会话代号:每次 TryStartVideo 自增,异步回调只对当前会话生效(防旧会话串台)。</summary>
     private long _imageGeneration;
@@ -172,15 +181,54 @@ public sealed class VideoBackgroundControl : Grid
         AttachedToVisualTree -= OnAttached;
         _attached = true;
         _fallback!.ImageUrl = FallbackImageUrl;
+
+        // 挂起源①:宿主窗口最小化/隐藏(覆盖「启动游戏后最小化到任务栏/托盘」场景)
+        _watchedWindow = TopLevel.GetTopLevel(this) as Window;
+        if (_watchedWindow is not null)
+        {
+            _watchedWindow.PropertyChanged += OnWatchedWindowPropertyChanged;
+        }
+        // 挂起源②:游戏会话进行中(启动中/游戏中),让出 CPU 与磁盘给游戏本体
+        AppServices.GameMonitor.StateChanged += OnGameStateChanged;
+        UpdateSuspendState();
+
         TryStartVideo();
     }
 
     private void OnDetached(object? sender, VisualTreeAttachmentEventArgs e)
     {
         _attached = false;
+        if (_watchedWindow is not null)
+        {
+            _watchedWindow.PropertyChanged -= OnWatchedWindowPropertyChanged;
+            _watchedWindow = null;
+        }
+        AppServices.GameMonitor.StateChanged -= OnGameStateChanged;
         DisposePlayer();
         AttachedToVisualTree -= OnAttached;
         AttachedToVisualTree += OnAttached;
+    }
+
+    private void OnWatchedWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == Window.WindowStateProperty || e.Property == IsVisibleProperty)
+        {
+            UpdateSuspendState();
+        }
+    }
+
+    private void OnGameStateChanged(GameSessionState state)
+    {
+        UpdateSuspendState();
+    }
+
+    private void UpdateSuspendState()
+    {
+        var minimized = _watchedWindow?.WindowState == WindowState.Minimized;
+        var hidden = _watchedWindow is { IsVisible: false };
+        var gameActive = AppServices.GameMonitor.State != GameSessionState.Idle;
+        _suspended = minimized || hidden || gameActive;
+        _frameSignal.Set(); // 唤醒渲染线程立即应用(否则最多延迟一个 33ms 节拍)
     }
 
     private void TryStartVideo()
@@ -470,6 +518,24 @@ public sealed class VideoBackgroundControl : Grid
             if (!_renderThreadRunning || _disposed)
             {
                 break;
+            }
+
+            // 挂起:同步 mpv 暂停标志(停解码器线程),跳过渲染与帧拷贝;恢复后原位续播
+            if (_suspended != _mpvPausedApplied)
+            {
+                try
+                {
+                    _mpv?.SetPropertyFlag("pause", _suspended);
+                }
+                catch
+                {
+                    // mpv 已销毁/属性不可写:忽略,下个节拍重试
+                }
+                _mpvPausedApplied = _suspended;
+            }
+            if (_suspended)
+            {
+                continue;
             }
 
             try
