@@ -338,6 +338,27 @@ public sealed class VideoBackgroundControl : Grid
     {
         try
         {
+            // 本地文件(自定义动态壁纸:本地视频 / Wallpaper Engine 包内视频)无需预下载,直接交给 mpv。
+            // 此路径必须在 HttpClient 之前分支:本地路径不是合法 http URI,GetByteArrayAsync 会抛异常回退静态图。
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                if (File.Exists(url))
+                {
+                    lock (_sync)
+                    {
+                        _pendingVideoPath = url;
+                    }
+                    _frameSignal.Set();
+                }
+                else
+                {
+                    // 文件被移动/删除:回退静态封面(与官方视频网络失败同路径)
+                    ShowFallback();
+                }
+                return;
+            }
+
             var cacheDir = Path.Combine(Path.GetTempPath(), "McKuroVideo");
             Directory.CreateDirectory(cacheDir);
             var hash = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(url)));
