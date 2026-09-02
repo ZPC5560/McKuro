@@ -46,8 +46,10 @@
                  仅用位置变换把图片左移,让诗句本体(非整幅画布)落到画面水平居中、靠上;
                  不修改 AsyncImage 控件。RenderTransform 只影响渲染不占布局。
                  注:必须用嵌套 TranslateTransform 形式(与 MainWindow 一致),Avalonia 对字符串
-                 translate(...) 形式在编译绑定下会运行时解析失败导致本视图空白。 -->
+                 translate(...) 形式在编译绑定下会运行时解析失败导致本视图空白。
+                 自定义动态壁纸生效时隐藏:官方诗句美术与自定义视频不匹配。 -->
             <controls:AsyncImage ImageUrl="{Binding VersionLogoUrl}"
+                                 IsVisible="{Binding !IsCustomVideoActive}"
                                  Stretch="Uniform"
                                  MaxWidth="840"
                                  MaxHeight="470"

@@ -238,6 +238,14 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [ObservableProperty]
     private bool _videoEnabled = true;
 
+    /// <summary>
+    /// 自定义动态壁纸是否生效(视频开启 + mode=1 + 文件存在)。
+    /// 官方版本标语(诗句文案图)是为官方宣传视频定制的美术叠加,与自定义壁纸不匹配 → 生效时隐藏。
+    /// 由 <see cref="ApplyCustomVideoOverride"/> 在页面刷新/官方背景加载后同步。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isCustomVideoActive;
+
     public bool NativeGameManagementSupported => AppServices.Capabilities.SupportsNativeGameManagement;
 
     public string PlatformGameNotice => AppServices.Capabilities.GameSupportText;
@@ -354,11 +362,15 @@ public sealed partial class LauncherViewModel : ViewModelBase
     private void ApplyCustomVideoOverride()
     {
         var s = AppServices.Settings.Current;
-        if (s.BackgroundVideoMode == 1 && File.Exists(s.CustomBackgroundVideoPath))
+        var customActive = s.BackgroundVideoEnabled
+                           && s.BackgroundVideoMode == 1
+                           && File.Exists(s.CustomBackgroundVideoPath);
+        if (customActive)
         {
             BackgroundVideoUrl = s.CustomBackgroundVideoPath;
-            VideoEnabled = s.BackgroundVideoEnabled;
+            VideoEnabled = true;
         }
+        IsCustomVideoActive = customActive;
     }
 
     private GameServerType SelectedServerType => SelectedServerIndex switch
