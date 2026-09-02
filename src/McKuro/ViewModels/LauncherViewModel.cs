@@ -339,10 +339,25 @@ public sealed partial class LauncherViewModel : ViewModelBase
         {
             VideoEnabled = wantVideo;
         }
+        ApplyCustomVideoOverride();
 
         if (IsInstalled && !IsBusy)
         {
             _ = CheckUpdateAsync();
+        }
+    }
+
+    /// <summary>
+    /// 自定义动态壁纸覆盖:mode=1 且文件存在 → 用本地/Wallpaper Engine 视频替代官方 URL;
+    /// 文件被移动或删除时保持官方背景(不白屏)。官方背景异步加载完成后与页面刷新时各应用一次。
+    /// </summary>
+    private void ApplyCustomVideoOverride()
+    {
+        var s = AppServices.Settings.Current;
+        if (s.BackgroundVideoMode == 1 && File.Exists(s.CustomBackgroundVideoPath))
+        {
+            BackgroundVideoUrl = s.CustomBackgroundVideoPath;
+            VideoEnabled = s.BackgroundVideoEnabled;
         }
     }
 
@@ -441,6 +456,9 @@ public sealed partial class LauncherViewModel : ViewModelBase
                     VersionLogoUrl = background.Slogan;
                 }
             }
+
+            // 官方背景就绪后再叠加自定义覆盖(异步完成时机可能晚于用户在设置页的选择)
+            ApplyCustomVideoOverride();
         }
         catch (Exception)
         {

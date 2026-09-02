@@ -65,6 +65,15 @@ public sealed class AppSettings
     /// <summary>背景封面视频(默认开启;无 LibVLC native 库时自动回退首帧图)。</summary>
     public bool BackgroundVideoEnabled { get; set; } = true;
 
+    /// <summary>启动页视频来源:0=官方宣传视频(随公告接口),1=自定义动态壁纸(本地视频或 Wallpaper Engine 视频壁纸)。</summary>
+    public int BackgroundVideoMode { get; set; }
+
+    /// <summary>自定义动态壁纸视频绝对路径(BackgroundVideoMode=1 时生效;文件缺失自动回退官方视频)。</summary>
+    public string CustomBackgroundVideoPath { get; set; } = "";
+
+    /// <summary>上次扫描的 Wallpaper Engine 内容目录(记忆用,如 steamapps\workshop\content\431960)。</summary>
+    public string WallpaperEngineDir { get; set; } = "";
+
     // ---------- 游戏修复(对齐 Haiyu 的跳过校验文件) ----------
 
     /// <summary>修复游戏时跳过的文件相对路径列表(如 Client/Saved/Logs/Client.log)。</summary>

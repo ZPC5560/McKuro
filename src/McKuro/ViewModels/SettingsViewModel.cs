@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Core.Services.Game;
 using McKuro.Core.Services.Update;
+using McKuro.Core.Services.Wallpaper;
 using McKuro.Services;
 
 namespace McKuro.ViewModels;
@@ -150,6 +151,162 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         AppServices.Settings.Current.BackgroundVideoEnabled = value;
         AppServices.Settings.Save();
+    }
+
+    // ---------- 启动页视频自定义(本地视频 / Wallpaper Engine 动态壁纸) ----------
+
+    /// <summary>视频来源:0=官方宣传视频,1=自定义动态壁纸(即时保存)。</summary>
+    [ObservableProperty]
+    private int _backgroundVideoMode;
+
+    partial void OnBackgroundVideoModeChanged(int value)
+    {
+        AppServices.Settings.Current.BackgroundVideoMode = value;
+        AppServices.Settings.Save();
+        OnPropertyChanged(nameof(IsCustomVideoMode));
+    }
+
+    /// <summary>是否自定义模式(控制自定义区块显隐)。</summary>
+    public bool IsCustomVideoMode => BackgroundVideoMode == 1;
+
+    /// <summary>视频来源下拉项(索引即 BackgroundVideoMode)。</summary>
+    public ObservableCollection<string> VideoSources { get; } = ["官方宣传视频", "自定义动态壁纸(本地 / Wallpaper Engine)"];
+
+    /// <summary>当前自定义视频绝对路径(即时保存)。</summary>
+    [ObservableProperty]
+    private string _customBackgroundVideoPath = "";
+
+    partial void OnCustomBackgroundVideoPathChanged(string value)
+    {
+        AppServices.Settings.Current.CustomBackgroundVideoPath = value;
+        AppServices.Settings.Save();
+        OnPropertyChanged(nameof(HasCustomVideoPath));
+    }
+
+    /// <summary>已选择自定义视频(控制预览区块显隐)。</summary>
+    public bool HasCustomVideoPath => !string.IsNullOrWhiteSpace(CustomBackgroundVideoPath);
+
+    /// <summary>自定义视频封面路径(WE 包的 preview.jpg;本地文件选择时为空,设置页直接实时预览)。</summary>
+    [ObservableProperty]
+    private string _customVideoCoverPath = "";
+
+    /// <summary>扫描到的 Wallpaper Engine 视频壁纸条目(选择面板数据源)。</summary>
+    public ObservableCollection<WallpaperVideoEntry> WallpaperEntries { get; } = [];
+
+    [ObservableProperty]
+    private bool _hasWallpaperEntries;
+
+    /// <summary>扫描/选择状态提示。</summary>
+    [ObservableProperty]
+    private string _wallpaperScanStatus = "";
+
+    /// <summary>上次扫描的 WE 内容目录(即时保存,记忆用)。</summary>
+    [ObservableProperty]
+    private string _wallpaperEngineDir = "";
+
+    partial void OnWallpaperEngineDirChanged(string value)
+    {
+        AppServices.Settings.Current.WallpaperEngineDir = value;
+        AppServices.Settings.Save();
+    }
+
+    /// <summary>直接选择本地视频文件作为动态壁纸。</summary>
+    [RelayCommand]
+    private async Task BrowseCustomVideoAsync()
+    {
+        var topLevel = (Avalonia.Application.Current?.ApplicationLifetime
+            as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        if (topLevel is null)
+        {
+            return;
+        }
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+        {
+            Title = "选择动态壁纸视频",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new Avalonia.Platform.Storage.FilePickerFileType("视频文件")
+                {
+                    Patterns = ["*.mp4", "*.webm", "*.mkv", "*.avi", "*.mov", "*.wmv"],
+                },
+            ],
+        });
+        if (files.Count == 0)
+        {
+            return;
+        }
+        CustomVideoCoverPath = ""; // 本地文件无封面,设置页用实时预览
+        CustomBackgroundVideoPath = files[0].Path.LocalPath;
+        BackgroundVideoMode = 1;
+        WallpaperScanStatus = "已选择本地视频";
+    }
+
+    /// <summary>选择 Wallpaper Engine 内容目录并扫描视频壁纸(工坊 431960 目录或单个壁纸包目录)。</summary>
+    [RelayCommand]
+    private async Task BrowseWallpaperEngineAsync()
+    {
+        var topLevel = (Avalonia.Application.Current?.ApplicationLifetime
+            as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        if (topLevel is null)
+        {
+            return;
+        }
+        var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
+        {
+            Title = "选择 Wallpaper Engine 内容目录(如 steamapps\\workshop\\content\\431960)",
+            AllowMultiple = false,
+        });
+        if (folders.Count == 0)
+        {
+            return;
+        }
+        var dir = folders[0].Path.LocalPath;
+        WallpaperEngineDir = dir;
+        WallpaperScanStatus = "正在扫描…";
+        // 大目录(几十个包 + IO)不卡 UI 线程
+        var entries = await Task.Run(() => WallpaperEngineScanner.Scan(dir));
+        WallpaperEntries.Clear();
+        foreach (var e in entries)
+        {
+            WallpaperEntries.Add(e);
+        }
+        HasWallpaperEntries = WallpaperEntries.Count > 0;
+        WallpaperScanStatus = entries.Count > 0
+            ? $"扫描到 {entries.Count} 个视频壁纸,点击封面选用"
+            : "未找到视频类壁纸(scene/web 类型由 WE 私有引擎渲染,无视频文件可复用)";
+    }
+
+    /// <summary>点选扫描结果条目 → 设为自定义壁纸(带封面)。</summary>
+    [RelayCommand]
+    private void SelectWallpaper(WallpaperVideoEntry? entry)
+    {
+        if (entry is null)
+        {
+            return;
+        }
+        CustomVideoCoverPath = entry.CoverPath ?? "";
+        CustomBackgroundVideoPath = entry.VideoPath;
+        BackgroundVideoMode = 1;
+        WallpaperScanStatus = $"已选择「{entry.Title}」";
+    }
+
+    /// <summary>为已保存的自定义视频找回 WE 封面(视频同目录 preview.*;本地任意文件则无)。</summary>
+    private static string FindCoverForVideo(string videoPath)
+    {
+        if (string.IsNullOrWhiteSpace(videoPath))
+        {
+            return "";
+        }
+        try
+        {
+            var dir = Path.GetDirectoryName(videoPath);
+            return string.IsNullOrEmpty(dir) ? "" : WallpaperEngineScanner.FindCoverIn(dir) ?? "";
+        }
+        catch (Exception)
+        {
+            return "";
+        }
     }
 
     // 游戏修复:跳过校验文件(对齐 Haiyu SkipVerifyFiles)
@@ -322,6 +479,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
             _ => 0,
         };
         _backgroundVideoEnabled = s.BackgroundVideoEnabled;
+        _backgroundVideoMode = s.BackgroundVideoMode;
+        _customBackgroundVideoPath = s.CustomBackgroundVideoPath;
+        _customVideoCoverPath = FindCoverForVideo(s.CustomBackgroundVideoPath);
+        _wallpaperEngineDir = s.WallpaperEngineDir;
         _autoSkipVerifyDelete = s.AutoSkipVerifyDelete;
         foreach (var p in s.SkipVerifyFiles)
         {

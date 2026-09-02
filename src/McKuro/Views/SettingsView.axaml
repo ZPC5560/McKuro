@@ -4,6 +4,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:McKuro.ViewModels"
              xmlns:ic="using:FluentIcons.Avalonia"
+             xmlns:controls="clr-namespace:McKuro.Controls"
+             xmlns:wp="clr-namespace:McKuro.Core.Services.Wallpaper;assembly=McKuro.Core"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
@@ -178,11 +180,82 @@
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                 <TextBlock Classes="rowTitle" Text="背景视频封面" />
                                 <TextBlock Classes="rowDesc"
-                                           Text="游戏页播放官方宣传视频;未安装 VLC 时自动回退为静态封面图" />
+                                           Text="游戏页播放宣传视频(官方或自定义动态壁纸);视频不可用时自动回退静态封面图" />
                             </StackPanel>
                             <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
                                           IsChecked="{Binding BackgroundVideoEnabled, Mode=TwoWay}" />
                         </Grid>
+                    </Border>
+                    <!-- 视频来源:官方 / 自定义动态壁纸 -->
+                    <Border Classes="row" IsVisible="{Binding BackgroundVideoEnabled}">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="VideoClip" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="视频来源" />
+                                <TextBlock Classes="rowDesc"
+                                           Text="自定义模式可加载本地视频或 Wallpaper Engine 视频壁纸作为启动页动态壁纸" />
+                            </StackPanel>
+                            <ComboBox Grid.Column="2" Width="280" VerticalAlignment="Center"
+                                      ItemsSource="{Binding VideoSources}"
+                                      SelectedIndex="{Binding BackgroundVideoMode, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+                    <!-- 自定义动态壁纸:选择 / 扫描 / 预览 / 封面网格 -->
+                    <Border Classes="row" IsVisible="{Binding BackgroundVideoEnabled}">
+                        <StackPanel IsVisible="{Binding IsCustomVideoMode}" Spacing="12">
+                            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="10">
+                                <Button Command="{Binding BrowseCustomVideoCommand}" Content="选择视频文件…" />
+                                <Button Grid.Column="1" Command="{Binding BrowseWallpaperEngineCommand}"
+                                        Content="Wallpaper Engine 文件夹…" />
+                                <TextBlock Grid.Column="2" Classes="rowDesc" VerticalAlignment="Center" Margin="6,0,0,0"
+                                           TextTrimming="CharacterEllipsis" Text="{Binding WallpaperScanStatus}" />
+                            </Grid>
+                            <TextBlock Classes="rowDesc" FontSize="11" Opacity="0.75"
+                                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                                       IsVisible="{Binding HasCustomVideoPath}"
+                                       Text="{Binding CustomBackgroundVideoPath}" />
+                            <!-- 实时预览:选中视频自动播放,WE 封面作首帧兜底 -->
+                            <Border Width="336" Height="189" CornerRadius="8" ClipToBounds="True"
+                                    HorizontalAlignment="Left" Background="Black"
+                                    IsVisible="{Binding HasCustomVideoPath}">
+                                <controls:VideoBackgroundControl VideoUrl="{Binding CustomBackgroundVideoPath}"
+                                                                 FallbackImageUrl="{Binding CustomVideoCoverPath}"
+                                                                 IsVideoEnabled="True" />
+                            </Border>
+                            <!-- WE 扫描结果:封面网格,点击选用 -->
+                            <ScrollViewer MaxHeight="380" IsVisible="{Binding HasWallpaperEntries}"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding WallpaperEntries}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="wp:WallpaperVideoEntry">
+                                            <Button Padding="0" Margin="0,0,10,10" Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Command="{Binding $parent[ItemsControl].((vm:SettingsViewModel)DataContext).SelectWallpaperCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <StackPanel Width="172">
+                                                    <Border Height="97" CornerRadius="6" ClipToBounds="True"
+                                                            Background="{DynamicResource SemiColorBg3}">
+                                                        <controls:AsyncImage ImageUrl="{Binding CoverPath}"
+                                                                             Stretch="UniformToFill" />
+                                                    </Border>
+                                                    <TextBlock Text="{Binding Title}" FontSize="12" Margin="2,5,2,0"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </StackPanel>
                     </Border>
                 </StackPanel>
             </Border>
