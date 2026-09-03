@@ -153,6 +153,16 @@ jobs:
           (cd "src/McKuro/bin/Release/net10.0/${{ matrix.rid }}/publish" && zip -qr "$GITHUB_WORKSPACE/$zip" .)
           gh release upload "$GITHUB_REF_NAME" "$GITHUB_WORKSPACE/$zip" --clobber
 
+      # .app 包:应用图标 + Info.plist + ad-hoc 签名(双击启动/Dock 图标正常)
+      - name: Build .app bundle & attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          appzip="McKuro-${{ matrix.rid }}-$ver.app.zip"
+          bash packaging/make-mac-app.sh "src/McKuro/bin/Release/net10.0/${{ matrix.rid }}/publish" "$ver" "$GITHUB_WORKSPACE/$appzip"
+          gh release upload "$GITHUB_REF_NAME" "$GITHUB_WORKSPACE/$appzip" --clobber
+
   publish-linux:
     name: Publish Linux AOT (linux-x64)
     if: startsWith(github.ref, 'refs/tags/v')
@@ -188,6 +198,19 @@ jobs:
           tar="McKuro-linux-x64-$ver.tar.gz"
           tar -czf "$GITHUB_WORKSPACE/$tar" -C "src/McKuro/bin/Release/net10.0/linux-x64/publish" .
           gh release upload "$GITHUB_REF_NAME" "$GITHUB_WORKSPACE/$tar" --clobber
+
+      - name: Install rpm tooling
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      # .deb(dpkg-deb)+ .rpm(rpmbuild 预置树直装):/opt/McKuro + 桌面项 + 图标
+      - name: Build deb/rpm & attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          bash packaging/make-linux-packages.sh "src/McKuro/bin/Release/net10.0/linux-x64/publish" "$ver" dist
+          gh release upload "$GITHUB_REF_NAME" "dist/mckuro_${ver}_amd64.deb" "dist/mckuro-$ver-1.x86_64.rpm" --clobber
 
   setup:
     name: Build installer (Inno Setup)

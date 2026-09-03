@@ -1,0 +1,3 @@
+# 打包/构建脚本必须在 Linux/macOS runner 上以 LF 运行(CRLF 会让 bash 报错)
+*.sh text eol=lf
+*.bash text eol=lf
