@@ -3,7 +3,7 @@
 ; 本地调试: 安装 Inno Setup 6 后运行 ISCC.exe setup.iss
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.1.0"
+  #define MyAppVersion "1.2.0"
 #endif
 #ifndef MyAppPublishDir
   #define MyAppPublishDir "..\src\McKuro\bin\Release\net10.0\win-x64\publish"

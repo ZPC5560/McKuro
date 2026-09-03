@@ -64,7 +64,7 @@ jobs:
     if: (github.event_name == 'workflow_dispatch' && inputs.publish_win == true) || startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
     permissions:
-      contents: read
+      contents: write   # tag 发布时把 zip 绿色包附加到 GitHub Release
 
     steps:
       - name: Checkout
@@ -91,6 +91,95 @@ jobs:
         with:
           name: McKuro-win-x64
           path: src/McKuro/bin/Release/net10.0/win-x64/publish/
+
+      # zip 绿色包附加到 Release(应用内自更新的"优先 zip"通道依赖此资产;版本号取 tag)
+      - name: Attach zip to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ver = $env:GITHUB_REF_NAME.TrimStart('v')
+          $zip = "McKuro-win-x64-$ver.zip"
+          Compress-Archive -Path src/McKuro/bin/Release/net10.0/win-x64/publish/* -DestinationPath $zip
+          gh release upload $env:GITHUB_REF_NAME $zip --clobber
+
+  publish-macos:
+    name: Publish macOS AOT (${{ matrix.rid }})
+    # 仅 tag 发布时运行;AOT 无法交叉编译,macOS 产物必须 macOS runner
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        rid: [osx-arm64, osx-x64]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-osx-${{ matrix.rid }}-${{ hashFiles('**/*.csproj', '**/Directory.*') }}
+          restore-keys: |
+            nuget-osx-${{ matrix.rid }}-
+
+      - name: Publish (AOT, self-contained)
+        run: dotnet publish src/McKuro/McKuro.csproj -c Release -r ${{ matrix.rid }} --self-contained -p:PublishAot=true
+
+      - name: Zip & attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          zip="McKuro-${{ matrix.rid }}-$ver.zip"
+          # 平铺打包(zip 根即程序目录,解压后 chmod +x 即可运行)
+          (cd "src/McKuro/bin/Release/net10.0/${{ matrix.rid }}/publish" && zip -qr "$GITHUB_WORKSPACE/$zip" .)
+          gh release upload "$GITHUB_REF_NAME" "$GITHUB_WORKSPACE/$zip" --clobber
+
+  publish-linux:
+    name: Publish Linux AOT (linux-x64)
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-linux-${{ hashFiles('**/*.csproj', '**/Directory.*') }}
+          restore-keys: |
+            nuget-linux-
+
+      - name: Publish (AOT, self-contained)
+        run: dotnet publish src/McKuro/McKuro.csproj -c Release -r linux-x64 --self-contained -p:PublishAot=true
+
+      - name: Tar & attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          tar="McKuro-linux-x64-$ver.tar.gz"
+          tar -czf "$GITHUB_WORKSPACE/$tar" -C "src/McKuro/bin/Release/net10.0/linux-x64/publish" .
+          gh release upload "$GITHUB_REF_NAME" "$GITHUB_WORKSPACE/$tar" --clobber
 
   setup:
     name: Build installer (Inno Setup)

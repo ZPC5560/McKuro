@@ -1,6 +1,6 @@
 # McKuro · 鸣潮启动器
 
-基于 **.NET 10 + Avalonia 12 + Semi Design** 的《鸣潮》(Wuthering Waves)桌面启动器,支持原生 AOT 发布。当前版本 **1.1.0**。
+基于 **.NET 10 + Avalonia 12 + Semi Design** 的《鸣潮》(Wuthering Waves)桌面启动器,支持原生 AOT 发布。当前版本 **1.2.0**。
 
 ## 功能
 
@@ -78,7 +78,7 @@ Windows 发布会按 RID 条件带上 `Endpne.LibMPV.Windows`(libmpv-2.dll),不�
 
 ```bash
 # 本地编译安装包(需安装 Inno Setup 6)
-ISCC.exe installer\setup.iss /DMyAppVersion=1.1.0
+ISCC.exe installer\setup.iss /DMyAppVersion=1.2.0
 ```
 
 > **AOT 说明**:项目已启用 `PublishAot`。AOT 无法跨平台交叉编译,win-x64 必须在 Windows 上发布;osx-arm64 可在 macOS 本地验证。

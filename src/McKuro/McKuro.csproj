@@ -17,7 +17,7 @@
     <!-- Native AOT 发布 (win-x64 需在 Windows 上发布;osx-arm64 可本地验证) -->
     <PublishAot>true</PublishAot>
     <StripSymbols>true</StripSymbols>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <!-- 注意:不要启用 InvariantGlobalization —— Semi 主题需要 zh-CN 文化支持 -->
     <!-- IL2104: 第三方 HanumanInstitute.LibMpv 自身产生的裁剪警告;本项目仅用其
          原生库加载/符号解析路径(无反射),该警告对本用法不适用 -->
