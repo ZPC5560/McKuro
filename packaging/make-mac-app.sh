@@ -69,3 +69,13 @@ codesign --force --deep --sign - "$APP" 2>/dev/null || echo "make-app: 警告 co
 # ---- zip 打包(-y 保留符号链接,unix 权限位随 zip 保留) ----
 (cd "$WORK" && zip -qry "$OUT" McKuro.app)
 echo "make-app: $OUT ($(du -sh "$OUT" | awk '{print $1}'))"
+
+# ---- .dmg 拖拽安装盘(同前缀输出:xxx.app.zip → xxx.dmg;含 /Applications 快捷方式) ----
+DMG="${OUT%.app.zip}.dmg"
+if [ "$DMG" = "$OUT" ]; then DMG="${OUT%.zip}.dmg"; fi
+DMG_ROOT="$WORK/dmg"
+mkdir -p "$DMG_ROOT"
+cp -R "$APP" "$DMG_ROOT/McKuro.app"
+ln -s /Applications "$DMG_ROOT/Applications"
+hdiutil create -volname "McKuro $VER" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG" >/dev/null
+echo "make-app: $DMG ($(du -sh "$DMG" | awk '{print $1}'))"

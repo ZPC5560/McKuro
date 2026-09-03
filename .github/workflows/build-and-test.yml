@@ -153,15 +153,16 @@ jobs:
           (cd "src/McKuro/bin/Release/net10.0/${{ matrix.rid }}/publish" && zip -qr "$GITHUB_WORKSPACE/$zip" .)
           gh release upload "$GITHUB_REF_NAME" "$GITHUB_WORKSPACE/$zip" --clobber
 
-      # .app 包:应用图标 + Info.plist + ad-hoc 签名(双击启动/Dock 图标正常)
+      # .app 包:应用图标 + Info.plist + ad-hoc 签名(双击启动/Dock 图标正常)+ 拖拽安装 .dmg
       - name: Build .app bundle & attach to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           ver="${GITHUB_REF_NAME#v}"
           appzip="McKuro-${{ matrix.rid }}-$ver.app.zip"
+          dmg="McKuro-${{ matrix.rid }}-$ver.dmg"
           bash packaging/make-mac-app.sh "src/McKuro/bin/Release/net10.0/${{ matrix.rid }}/publish" "$ver" "$GITHUB_WORKSPACE/$appzip"
-          gh release upload "$GITHUB_REF_NAME" "$GITHUB_WORKSPACE/$appzip" --clobber
+          gh release upload "$GITHUB_REF_NAME" "$GITHUB_WORKSPACE/$appzip" "$GITHUB_WORKSPACE/$dmg" --clobber
 
   publish-linux:
     name: Publish Linux AOT (linux-x64)
