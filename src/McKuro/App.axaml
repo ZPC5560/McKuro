@@ -35,6 +35,8 @@
                     <SolidColorBrush x:Key="McKuroAccentGlow" Color="#565A8DEE" />
                     <SolidColorBrush x:Key="McKuroNavFill" Color="#C611192D" />
                     <SolidColorBrush x:Key="McKuroContentTint" Color="#9E050A18" />
+                    <!-- 浮层弹窗面:不透明(半透明 ContentTint 叠在页面文字上会透出,且 Avalonia 12.1 无窗口内 backdrop 模糊 API) -->
+                    <SolidColorBrush x:Key="McKuroDialogFill" Color="#FF18223A" />
                     <SolidColorBrush x:Key="McKuroHomeScrim" Color="#48070C18" />
                     <!-- 桥接 Semi 基础表面/主色，让业务页半透明玻璃与 McKuro 语义一致(对齐原 ThemePaletteService) -->
                     <SolidColorBrush x:Key="SemiColorBg0" Color="#070C18" />
@@ -65,6 +67,8 @@
                     <SolidColorBrush x:Key="McKuroAccentGlow" Color="#345A8DEE" />
                     <SolidColorBrush x:Key="McKuroNavFill" Color="#DAFFFFFF" />
                     <SolidColorBrush x:Key="McKuroContentTint" Color="#94F6F9FD" />
+                    <!-- 浮层弹窗面:不透明(半透明 ContentTint 叠在页面文字上会透出,且 Avalonia 12.1 无窗口内 backdrop 模糊 API) -->
+                    <SolidColorBrush x:Key="McKuroDialogFill" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="McKuroHomeScrim" Color="#26EEF3FA" />
                     <SolidColorBrush x:Key="SemiColorBg0" Color="#EEF3FA" />
                     <SolidColorBrush x:Key="SemiColorBg1" Color="#ACFFFFFF" />

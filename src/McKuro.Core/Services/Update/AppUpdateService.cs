@@ -16,7 +16,8 @@ public sealed class AppUpdateInfo
 /// <summary>
 /// 应用自更新服务(对齐 Haiyu 的 IUpdateService + UpdateAppViewModel):
 /// 检查 GitHub Releases 最新版、下载安装包;版本比较复用 GameUpdater.IsVersionOlder 语义。
-/// 资产规则:优先 zip 绿色包(McKuro-win-x64-*.zip,解压替换),其次 exe 安装包(静默安装)。
+/// 资产规则:<see cref="PickAsset"/>——先按当前平台过滤(win/osx 各自的 zip 优先,
+/// Windows 回退 setup exe 静默安装;Linux 无自动更新资产不提示),防止跨平台误下(如 Windows 下到 osx 包)。
 /// 检查通道:API 优先(匿名限 60 次/小时/IP),失败自动回退 HTML 通道(302 取 tag +
 /// expanded_assets 取资产),共享 IP 配额耗尽或部分网络 api.github.com 不可达时仍可更新。
 /// </summary>
@@ -68,12 +69,10 @@ public sealed class AppUpdateService
                 return null;
             }
 
-            var asset = release.Assets?
-                .Where(a => !string.IsNullOrWhiteSpace(a.Name) &&
-                            (a.Name!.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
-                             a.Name!.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)))
-                .OrderByDescending(a => a.Name!.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-                .FirstOrDefault();
+            var picked = PickAsset(release.Assets?.Select(a => a.Name) ?? []);
+            var asset = picked is null
+                ? null
+                : release.Assets!.FirstOrDefault(a => string.Equals(a.Name, picked, StringComparison.Ordinal));
             if (asset is null || string.IsNullOrWhiteSpace(asset.BrowserDownloadUrl))
             {
                 return null;
@@ -122,11 +121,8 @@ public sealed class AppUpdateService
                 .ConfigureAwait(false);
             var names = Regex.Matches(fragment, $"href=\"/{Regex.Escape(trimmed)}/releases/download/[^\"/]+/([^\"?]+)\"")
                 .Select(m => Uri.UnescapeDataString(m.Groups[1].Value))
-                .Where(n => n.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-                            || n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            var asset = names.FirstOrDefault(n => n.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-                ?? names.FirstOrDefault();
+            var asset = PickAsset(names);
             if (asset is null)
             {
                 return null;
@@ -145,6 +141,45 @@ public sealed class AppUpdateService
             return null;
         }
     }
+
+    /// <summary>
+    /// 从资产名集合挑选当前平台可自动更新的资产(API 与 HTML 通道共用规则)。
+    /// 命名约定:McKuro-win-x64-*.zip / McKuro-setup-*.exe / McKuro-osx-{arm64,x64}[-app].zip / McKuro-linux-x64-*.tar.gz。
+    /// 规则:先按当前平台过滤(修复:Windows 曾误选 osx 包);zip 优先于 exe;
+    /// mac 平铺 zip 优先于 .app.zip(后者解压会把 McKuro.app 嵌套进安装目录);
+    /// Linux 无 zip 资产(tar.gz 需手动安装)→ 返回 null 不提示自动更新。
+    /// platform/arch 参数仅供单测注入("win"/"osx"/"linux" + "x64"/"arm64")。
+    /// </summary>
+    public static string? PickAsset(IEnumerable<string?> names, string? platform = null, string? arch = null)
+    {
+        platform ??= System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
+            ? "win"
+            : System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX)
+                ? "osx"
+                : "linux";
+        arch ??= System.Runtime.InteropServices.RuntimeInformation.OSArchitecture
+            == System.Runtime.InteropServices.Architecture.Arm64 ? "arm64" : "x64";
+
+        var candidates = names
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Where(n => IsPlatformAsset(n!, platform, arch))
+            .ToList();
+
+        return candidates.FirstOrDefault(n => n!.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                                              && !n.Contains(".app.", StringComparison.OrdinalIgnoreCase))
+               ?? candidates.FirstOrDefault(n => n!.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+               ?? (platform == "win"
+                   ? candidates.FirstOrDefault(n => n!.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                   : null);
+    }
+
+    private static bool IsPlatformAsset(string name, string platform, string arch) => platform switch
+    {
+        "win" => name.StartsWith("McKuro-win-", StringComparison.OrdinalIgnoreCase)
+                 || name.StartsWith("McKuro-setup-", StringComparison.OrdinalIgnoreCase),
+        "osx" => name.StartsWith($"McKuro-osx-{arch}", StringComparison.OrdinalIgnoreCase),
+        _ => false, // linux:无自动更新资产
+    };
 
     /// <summary>下载安装包到目标目录,返回本地路径;失败返回 null。</summary>
     public async Task<string?> DownloadAsync(

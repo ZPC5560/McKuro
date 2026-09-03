@@ -19,6 +19,59 @@ public class AppUpdateServiceTests
     }
 
     [Fact]
+    public void PickAsset_NoMatchingAsset_ReturnsNull()
+    {
+        Assert.Null(AppUpdateService.PickAsset(["README.txt", "source.zip"], "win"));
+        Assert.Null(AppUpdateService.PickAsset([], "win"));
+        Assert.Null(AppUpdateService.PickAsset([null, ""], "win"));
+    }
+
+    // v1.2.0 真实资产清单(全平台发布后,Windows 曾误选 osx 包 → PickAsset 平台过滤回归)
+    private static readonly string[] V120Assets =
+    [
+        "mckuro-1.2.0-1.x86_64.rpm",
+        "McKuro-linux-x64-1.2.0.tar.gz",
+        "McKuro-osx-arm64-1.2.0.app.zip",
+        "McKuro-osx-arm64-1.2.0.dmg",
+        "McKuro-osx-arm64-1.2.0.zip",
+        "McKuro-osx-x64-1.2.0.app.zip",
+        "McKuro-osx-x64-1.2.0.dmg",
+        "McKuro-osx-x64-1.2.0.zip",
+        "McKuro-setup-1.2.0.exe",
+        "McKuro-win-x64-1.2.0.zip",
+        "mckuro_1.2.0_amd64.deb",
+    ];
+
+    [Fact]
+    public void PickAsset_Windows_PrefersWinZip_IgnoresForeignPlatforms()
+    {
+        Assert.Equal("McKuro-win-x64-1.2.0.zip", AppUpdateService.PickAsset(V120Assets, "win"));
+    }
+
+    [Fact]
+    public void PickAsset_Windows_FallsBackToSetupExe()
+    {
+        var names = new[] { "McKuro-osx-arm64-1.2.0.zip", "McKuro-setup-1.2.0.exe" };
+        Assert.Equal("McKuro-setup-1.2.0.exe", AppUpdateService.PickAsset(names, "win"));
+    }
+
+    [Theory]
+    [InlineData("arm64", "McKuro-osx-arm64-1.2.0.zip")]
+    [InlineData("x64", "McKuro-osx-x64-1.2.0.zip")]
+    public void PickAsset_Mac_PrefersFlatZipOverAppZip(string arch, string expected)
+    {
+        // .app.zip 解压会把 McKuro.app 嵌套进 Contents/MacOS,平铺 zip 才与安装目录布局一致
+        Assert.Equal(expected, AppUpdateService.PickAsset(V120Assets, "osx", arch));
+    }
+
+    [Fact]
+    public void PickAsset_Linux_HasNoAutoUpdateAsset()
+    {
+        // tar.gz 无法走 zip 解压替换流程 → 不提示自动更新(手动下载)
+        Assert.Null(AppUpdateService.PickAsset(V120Assets, "linux"));
+    }
+
+    [Fact]
     public void GitHub_Release_Json_Deserializes_With_SourceGen_Context()
     {
         var json = """
