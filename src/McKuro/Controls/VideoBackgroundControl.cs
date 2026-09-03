@@ -165,6 +165,18 @@ public sealed class VideoBackgroundControl : Grid
             return;
         }
         var child = _videoImage ?? (_fallback as Avalonia.Controls.Control);
+        // v4 GL 路径:_videoImage 恒为 null(无位图),vid/src 无意义 → 报 gl=1 供区分两条渲染路径
+        if (_glRenderer is not null)
+        {
+            var glSample = $"MCKURO-VIDEO gl=1 self=[{Bounds.Width:F0}x{Bounds.Height:F0}] vis={child?.IsEffectivelyVisible}";
+            if (glSample != _diagPrev)
+            {
+                _diagPrev = glSample;
+                _diagCnt++;
+                System.Console.Error.WriteLine(glSample);
+            }
+            return;
+        }
         var sample = child is null
             ? "MCKURO-VIDEO noChild"
             : $"MCKURO-VIDEO self=[{Bounds.Width:F0}x{Bounds.Height:F0}] " +
