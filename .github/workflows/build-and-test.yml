@@ -135,6 +135,14 @@ jobs:
       - name: Publish (AOT, self-contained)
         run: dotnet publish src/McKuro/McKuro.csproj -c Release -r ${{ matrix.rid }} --self-contained -p:PublishAot=true
 
+      # 把 libmpv 依赖树打包进 publish/libmpv(启动页视频开箱可用)。
+      # 仅 arm64:runner 是 Apple Silicon,brew 只有 arm64 dylib,x64 包混入会加载失败(回退静态封面)。
+      - name: Bundle libmpv into publish dir
+        if: matrix.rid == 'osx-arm64'
+        run: |
+          brew install mpv
+          bash src/McKuro/bundle-mpv-macos.sh "src/McKuro/bin/Release/net10.0/${{ matrix.rid }}/publish"
+
       - name: Zip & attach to release
         env:
           GH_TOKEN: ${{ github.token }}
