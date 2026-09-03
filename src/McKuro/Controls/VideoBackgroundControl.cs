@@ -6,6 +6,8 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.OpenGL;
+using Avalonia.OpenGL.Controls;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using HanumanInstitute.LibMpv;
@@ -25,9 +27,19 @@ namespace McKuro.Controls;
 /// 不创建任何 native 子窗口 —— 托管 Image 参与正常 ZIndex 层叠,视频在背景层、UI 在上层,两者同时可见。
 /// </para>
 /// <para>
-/// 线程模型:mpv 的 update 回调只唤醒专用视频线程,视频线程固定频率执行 LoadFile、解码和
-/// <see cref="MpvContextBase.SoftwareRender"/>;UI 线程只负责把最新帧拷贝到位图。资源释放会先等待视频线程退出,
-/// 再销毁 <see cref="MpvContext"/>,避免跨线程访问 native render context。
+/// v4(2026):新增 GPU 渲染路径 —— 优先使用 <c>MPV_RENDER_API_TYPE_OPENGL</c>
+/// (<see cref="MpvContextBase.StartOpenGlRendering"/> + <see cref="MpvContextBase.OpenGlRender"/>),
+/// 通过 Avalonia 的 <see cref="OpenGlControlBase"/> 把视频直接渲染到 OpenGL framebuffer,解码/渲染全在 GPU
+/// (hwdec=auto-safe:macOS videotoolbox / Windows d3d11va / Linux vaapi)。GL 初始化失败时自动回退 v3 的
+/// 软件渲染路径。仍不创建 native 子窗口 —— OpenGlControlBase 是普通托管控件,参与正常 ZIndex 层叠。
+/// </para>
+/// <para>
+/// 线程模型(v4 GL 路径):<see cref="OpenGlControlBase.OnOpenGlInit"/> 在 Avalonia 渲染线程持有 GL 上下文时
+/// 调用 <see cref="MpvContextBase.StartOpenGlRendering"/>;此后 <see cref="OpenGlControlBase.OnOpenGlRender"/>
+/// 每帧调用 <see cref="MpvContextBase.OpenGlRender"/> 由 mpv 直接绘制到当前 framebuffer。mpv 的 update 回调
+/// 只负责请求下一帧渲染(UI 线程 RequestNextFrameRendering),无专用视频线程、无托管位图拷贝。
+/// 资源释放会先移除 GL 控件(触发 OnOpenGlDeinit),再销毁 <see cref="MpvContext"/>,避免跨线程访问 native
+/// render context。
 /// </para>
 /// <para>
 /// Native AOT 安全:libmpv 绑定走 LoadLibrary/dlopen + GetProcAddress/dlsym →
@@ -41,6 +53,10 @@ namespace McKuro.Controls;
 /// 完整依赖树打包进输出 <c>libmpv/</c> 子目录(全部改写为 @loader_path 相对加载路径,
 /// 自带播放环境,目标机器无需安装 Homebrew/mpv)。打包副本缺失时再回退系统/Homebrew 路径。
 /// </para>
+/// <para>
+/// 前提(Program.cs):GL 渲染需要 Avalonia 运行在 OpenGL 系渲染模式 —— Windows ANGLE、
+/// macOS 原生 OpenGL、Linux EGL/GLX,均已配置,且都保留 Software 回退。
+/// </para>
 /// </summary>
 public sealed class VideoBackgroundControl : Grid
 {
@@ -50,6 +66,7 @@ public sealed class VideoBackgroundControl : Grid
     private Image? _videoImage;
     private WriteableBitmap? _bitmap;
     private AsyncImage? _fallback;
+    private VideoGlRenderer? _glRenderer;
     private bool _initialized;
     private bool _attached;
     private volatile bool _disposed;
@@ -228,7 +245,16 @@ public sealed class VideoBackgroundControl : Grid
         var hidden = _watchedWindow is { IsVisible: false };
         var gameActive = AppServices.GameMonitor.State != GameSessionState.Idle;
         _suspended = minimized || hidden || gameActive;
-        _frameSignal.Set(); // 唤醒渲染线程立即应用(否则最多延迟一个 33ms 节拍)
+
+        if (_glRenderer is not null)
+        {
+            // GL 路径:直接同步 mpv 暂停标志(无渲染线程,不能依赖 _frameSignal 唤醒)
+            _glRenderer.ApplySuspend(_suspended);
+        }
+        else
+        {
+            _frameSignal.Set(); // 唤醒渲染线程立即应用(否则最多延迟一个 33ms 节拍)
+        }
     }
 
     private void TryStartVideo()
@@ -269,15 +295,6 @@ public sealed class VideoBackgroundControl : Grid
         try
         {
             _mpv = new BackgroundMpvContext();
-            _videoImage = new Image
-            {
-                Stretch = Stretch.UniformToFill,
-                IsHitTestVisible = false,
-                Opacity = 0,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-            };
-            Children.Add(_videoImage);
 
             // 错误/失败 → 回退静态图(EndFile 的 Error reason,含加载/网络/解码失败)
             _mpv.EndFile += (_, e) =>
@@ -297,6 +314,149 @@ public sealed class VideoBackgroundControl : Grid
             };
             _mpv.RequestLogMessages("warn");
 
+            // 看门狗:15s 内无首帧 → 回退静态图
+            _timeoutCts = new CancellationTokenSource();
+            var token = _timeoutCts.Token;
+            _ = WatchdogAsync(token);
+
+            // v4:优先 OpenGL GPU 渲染(GPU 解码 + GPU 呈现,见 VideoGlRenderer);
+            // 平台无 GL 后端/初始化失败时自动回退 v3 软件渲染路径。
+            _ = TryGlOrFallbackAsync(token);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"视频背景播放失败(回退首帧图): {ex.Message}");
+            DisposePlayer();
+            _fallback!.ImageUrl = FallbackImageUrl;
+        }
+    }
+
+    /// <summary>
+    /// 尝试 OpenGL GPU 渲染路径:创建 <see cref="VideoGlRenderer"/> 加入视觉树并等待 GL 就绪。
+    /// 初始化成功 → GL 路径(GPU 解码+渲染);失败/超时/已释放 → 回退软件渲染路径。
+    /// </summary>
+    private async Task TryGlOrFallbackAsync(CancellationToken token)
+    {
+        VideoGlRenderer? gl = null;
+        try
+        {
+            if (_mpv is null || _disposed)
+            {
+                return;
+            }
+
+            // 利用 TaskCompletionSource 在 OnOpenGlInit 完成时通知 —— Avalonia 12 的
+            // OpenGlControlBase 无外部可调用的公开 InitializeAsync,只能通过视觉树自动初始化。
+            var glReadyTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            gl = new VideoGlRenderer(this, glReadyTcs)
+            {
+                Opacity = 0,
+                IsHitTestVisible = false,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+            };
+            Children.Add(gl);
+
+            // 等 GL 初始化完成(自动初始化,OnOpenGlInit 设 tcs)或超时
+            bool ok;
+            try
+            {
+                ok = await glReadyTcs.Task.WaitAsync(TimeSpan.FromSeconds(5), token).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                ok = false; // 超时或已取消 → 回退
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[libmpv] GL 初始化异常: {ex.Message}");
+                ok = false;
+            }
+
+            if (!ok || _disposed || _mpv is null)
+            {
+                if (!_disposed && gl is not null && Children.Contains(gl))
+                {
+                    Children.Remove(gl);
+                }
+                if (!_disposed)
+                {
+                    StartSoftwareRenderingPath();
+                }
+                return;
+            }
+
+            // GL 路径成功:渲染器接管显示;首个文件加载完成后取消看门狗并显示视频
+            _glRenderer = gl;
+            _mpv.FileLoaded += OnGlFileLoaded;
+            try
+            {
+                // 铺满渲染目标(=UniformToFill 的裁切行为;仅 GL 路径生效)
+                _mpv.SetOptionString("panscan", "1.0");
+            }
+            catch (Exception)
+            {
+            }
+
+            _ = LoadLocalVideoAndPlayAsync(VideoUrl, token);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[libmpv] GL 渲染路径失败,回退软件渲染: {ex.Message}");
+            if (!_disposed)
+            {
+                if (gl is not null && Children.Contains(gl))
+                {
+                    Children.Remove(gl);
+                }
+                StartSoftwareRenderingPath();
+            }
+        }
+    }
+
+    /// <summary>GL 路径的首帧信号:文件加载完成 → 取消看门狗、显示 GL 视频层。</summary>
+    private void OnGlFileLoaded(object? sender, EventArgs e)
+    {
+        _timeoutCts?.Cancel();
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_glRenderer is not null && !_disposed)
+            {
+                _glRenderer.Opacity = 1;
+            }
+        });
+    }
+
+    /// <summary>GL 渲染线程获取当前 mpv 上下文(渲染器初始化/渲染时调用;可能为 null:已释放)。</summary>
+    private BackgroundMpvContext? GetMpvForGl()
+    {
+        lock (_sync)
+        {
+            return _disposed ? null : _mpv;
+        }
+    }
+
+    /// <summary>软件渲染路径(v3 回退):位图呈现 + 专用渲染线程。</summary>
+    private void StartSoftwareRenderingPath()
+    {
+        try
+        {
+            if (_mpv is null)
+            {
+                _fallback!.ImageUrl = FallbackImageUrl;
+                return;
+            }
+
+            _videoImage = new Image
+            {
+                Stretch = Stretch.UniformToFill,
+                IsHitTestVisible = false,
+                Opacity = 0,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+            };
+            Children.Add(_videoImage);
+
             // mpv 更新回调来自 native 线程，只唤醒专用视频线程；不在回调里做 UI 或渲染。
             _mpv.StartSoftwareRendering(() =>
             {
@@ -315,25 +475,91 @@ public sealed class VideoBackgroundControl : Grid
             // 启动独立渲染线程:每帧 SoftwareRender 写入 pin 缓冲,UI 只做轻量拷贝
             StartRenderThread();
 
-            // 看门狗:15s 内无首帧 → 回退静态图
-            _timeoutCts = new CancellationTokenSource();
-            var token = _timeoutCts.Token;
-            _ = WatchdogAsync(token);
-
             // 预下载视频到本地缓存目录再播放:CDN 流式缓冲不可靠(只播一秒),本地文件最稳。
             // 缓存按 URL 哈希命名,重复进入启动页直接用缓存,不重复下载。
             var url = VideoUrl;
-            _ = LoadLocalVideoAsync(url, token);
+            _ = LoadLocalVideoAsync(url, _timeoutCts?.Token ?? CancellationToken.None);
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"视频背景播放失败(回退首帧图): {ex.Message}");
+            Debug.WriteLine($"软件渲染启动失败(回退首帧图): {ex.Message}");
             DisposePlayer();
             _fallback!.ImageUrl = FallbackImageUrl;
         }
     }
 
-    /// <summary>下载视频到本地缓存目录,完成后用本地文件播放(CDN 流式缓冲不可靠)。</summary>
+    /// <summary>GL 路径:下载视频到本地缓存目录,完成后直接 LoadFile(mpv 命令 API 线程安全,任意线程可调)。</summary>
+    private async Task LoadLocalVideoAndPlayAsync(string url, CancellationToken token)
+    {
+        try
+        {
+            var localPath = await EnsureVideoCachedAsync(url, token).ConfigureAwait(false);
+            if (localPath is null || token.IsCancellationRequested || _disposed)
+            {
+                return;
+            }
+
+            lock (_sync)
+            {
+                if (_mpv is null || _disposed)
+                {
+                    return;
+                }
+                _mpv.LoadFile(localPath).Invoke();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 已释放/取消:忽略
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[libmpv] 视频预下载失败(回退静态图): {ex.Message}");
+            Dispatcher.UIThread.Post(ShowFallback);
+        }
+    }
+
+    /// <summary>
+    /// 解析视频源为本地文件路径(GPU 渲染路径专用):
+    /// 本地文件(自定义动态壁纸:本地视频 / Wallpaper Engine 包内视频)直接返回;
+    /// http(s) 下载到本地缓存目录(CDN 流式缓冲不可靠,本地文件最稳);缓存命中直接复用。
+    /// </summary>
+    private async Task<string?> EnsureVideoCachedAsync(string url, CancellationToken token)
+    {
+        // 本地文件分支必须在 HttpClient 之前:本地路径不是合法 http URI,GetByteArrayAsync 会抛异常。
+        if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            if (File.Exists(url))
+            {
+                return url;
+            }
+            Dispatcher.UIThread.Post(ShowFallback);
+            return null;
+        }
+
+        var cacheDir = Path.Combine(Path.GetTempPath(), "McKuroVideo");
+        Directory.CreateDirectory(cacheDir);
+        var hash = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(url)));
+        var localPath = Path.Combine(cacheDir, hash + ".mp4");
+
+        if (File.Exists(localPath) && new FileInfo(localPath).Length > 0)
+        {
+            return localPath; // 缓存命中,直接使用本地文件
+        }
+
+        // 复用共享 HttpClient(连接池/ decompression 统一)
+        var bytes = await McKuro.Services.AppServices.Http.GetByteArrayAsync(url, token).ConfigureAwait(false);
+        if (bytes.Length == 0)
+        {
+            Dispatcher.UIThread.Post(ShowFallback);
+            return null;
+        }
+        await File.WriteAllBytesAsync(localPath, bytes, token).ConfigureAwait(false);
+        return localPath;
+    }
+
+    /// <summary>下载视频到本地缓存目录,完成后用本地文件播放(软件渲染路径专用:排队给渲染线程)。</summary>
     private async Task LoadLocalVideoAsync(string url, CancellationToken token)
     {
         try
@@ -359,29 +585,8 @@ public sealed class VideoBackgroundControl : Grid
                 return;
             }
 
-            var cacheDir = Path.Combine(Path.GetTempPath(), "McKuroVideo");
-            Directory.CreateDirectory(cacheDir);
-            var hash = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(url)));
-            var localPath = Path.Combine(cacheDir, hash + ".mp4");
-
-            if (!File.Exists(localPath) || new FileInfo(localPath).Length == 0)
-            {
-                // 复用共享 HttpClient(连接池/ decompression 统一);原每视频 new HttpClient 属多余实例。
-                var bytes = await McKuro.Services.AppServices.Http.GetByteArrayAsync(url, token).ConfigureAwait(false);
-                if (bytes.Length == 0)
-                {
-                    Debug.WriteLine("[libmpv] 视频下载为空,回退静态图");
-                    Dispatcher.UIThread.Post(ShowFallback);
-                    return;
-                }
-                await File.WriteAllBytesAsync(localPath, bytes, token).ConfigureAwait(false);
-            }
-            else
-            {
-                // 缓存命中,直接使用本地文件
-            }
-
-            if (token.IsCancellationRequested || _disposed)
+            var localPath = await EnsureVideoCachedAsync(url, token).ConfigureAwait(false);
+            if (localPath is null || token.IsCancellationRequested || _disposed)
             {
                 return;
             }
@@ -423,6 +628,17 @@ public sealed class VideoBackgroundControl : Grid
         _timeoutCts?.Cancel();
         _timeoutCts?.Dispose();
         _timeoutCts = null;
+
+        // 先停 GL 渲染器(与 OnOpenGlRender 互斥,等待在途帧完成),再移除控件
+        if (_glRenderer is not null)
+        {
+            _glRenderer.BeginShutdown();
+            if (Children.Contains(_glRenderer))
+            {
+                Children.Remove(_glRenderer);
+            }
+            _glRenderer = null;
+        }
 
         // 先停渲染线程,避免它还在用 mpv render context 时 Dispose
         StopRenderThread();
@@ -467,6 +683,11 @@ public sealed class VideoBackgroundControl : Grid
             if (_videoImage is not null)
             {
                 _videoImage.Opacity = 0;
+            }
+
+            if (_glRenderer is not null)
+            {
+                _glRenderer.Opacity = 0;
             }
 
             if (_fallback is not null)
@@ -885,7 +1106,10 @@ public sealed class VideoBackgroundControl : Grid
             // 渲染 API 要求 vo=libmpv 在 initialize 前设置
             SetOptionString("vo", "libmpv");
             SetOptionString("audio", "no");
-            SetOptionString("hwdec", "no");
+            // v4:硬件解码(GPU 解码)。auto-safe = 白名单 hwdec:macOS videotoolbox /
+            // Windows d3d11va / Linux vaapi-nvdec;失败自动回退软件解码。
+            // GL 渲染路径下解码帧留在 GPU 侧直接互操作;软件渲染路径下 mpv 自动降级软解。
+            SetOptionString("hwdec", "auto-safe");
             SetOptionString("loop-file", "inf");
             SetOptionString("volume", "0");
             // 网络缓冲:CDN 视频首次缓冲耗尽后卡住"只动了一下",增大 demuxer 缓冲
@@ -896,6 +1120,149 @@ public sealed class VideoBackgroundControl : Grid
             // CDN 可能校验请求头(库洛游戏静态资源 CDN)
             SetOptionString("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
             SetOptionString("referrer", "https://kurogame.com");
+        }
+    }
+
+    /// <summary>
+    /// OpenGL GPU 渲染器(v4):继承 Avalonia 的 <see cref="OpenGlControlBase"/>,由 Avalonia 渲染线程
+    /// 持有 GL 上下文时调用 libmpv 的 <c>MPV_RENDER_API_TYPE_OPENGL</c> 渲染 API。
+    /// <list type="bullet">
+    /// <item><see cref="OnOpenGlInit"/>:渲染线程 → <see cref="MpvContextBase.StartOpenGlRendering"/>
+    /// (用 Avalonia 的 <c>GlInterface.GetProcAddress</c> 解析 GL 函数,mpv 直接绘制到当前 framebuffer)。</item>
+    /// <item><see cref="OnOpenGlRender"/>:每帧 → <see cref="MpvContextBase.OpenGlRender"/>,
+    /// 视频在 GPU 上完成解码(含 hwdec 互操作)与呈现,无 CPU 帧拷贝。</item>
+    /// <item>mpv update 回调 → UI 线程 <see cref="RequestNextFrameRendering"/>,驱动下一帧。</item>
+    /// </list>
+    /// 线程安全:<c>_sync</c> 保证 OnOpenGlRender 与 <see cref="BeginShutdown"/> 互斥
+    /// (释放时等待在途帧完成,避免 mpv render context 跨线程释放)。
+    /// </summary>
+    private sealed class VideoGlRenderer : OpenGlControlBase
+    {
+        private readonly VideoBackgroundControl _owner;
+        private readonly TaskCompletionSource<bool> _glReadyTcs;
+        private readonly object _sync = new();
+        private bool _glReady;
+        private BackgroundMpvContext? _mpv;
+
+        public VideoGlRenderer(VideoBackgroundControl owner, TaskCompletionSource<bool> glReadyTcs)
+        {
+            _owner = owner;
+            _glReadyTcs = glReadyTcs;
+        }
+
+        protected override void OnOpenGlInit(GlInterface gl)
+        {
+            var ctx = _owner.GetMpvForGl();
+            if (ctx is null)
+            {
+                _glReadyTcs.TrySetResult(false);
+                return; // 已释放/未就绪:保持不可渲染
+            }
+
+            lock (_sync)
+            {
+                if (_owner._disposed)
+                {
+                    _glReadyTcs.TrySetResult(false);
+                    return;
+                }
+                _mpv = ctx;
+                // GL 函数解析:直接用 Avalonia 的 GlInterface.GetProcAddress(IntPtr (string) 签名一致)
+                ctx.StartOpenGlRendering(
+                    getProcAddress: gl.GetProcAddress,
+                    updateCallback: () => Dispatcher.UIThread.Post(RequestNextFrameRendering),
+                    x11Display: IntPtr.Zero,
+                    waylandDisplay: IntPtr.Zero);
+                _glReady = true;
+            }
+
+            _glReadyTcs.TrySetResult(true);
+        }
+
+        protected override void OnOpenGlRender(GlInterface gl, int fb)
+        {
+            lock (_sync)
+            {
+                if (!_glReady || _mpv is null)
+                {
+                    return;
+                }
+
+                // 渲染目标 = 控件像素尺寸(物理像素)
+                var scale = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
+                var w = (int)Math.Ceiling(Bounds.Width * scale);
+                var h = (int)Math.Ceiling(Bounds.Height * scale);
+                if (w <= 0 || h <= 0)
+                {
+                    return;
+                }
+
+                // 挂起(最小化/隐藏/游戏进行中):跳过 GPU 渲染,mpv 已暂停
+                if (_owner._suspended)
+                {
+                    return;
+                }
+
+                try
+                {
+                    // flipY=1:Avalonia 的 GL surface FBO 原点在左上(Y 翻转),mpv 默认按
+                    // 左下原点渲染;不翻转会导致画面上下颠倒(实测 macOS)。
+                    _mpv.OpenGlRender(w, h, fb, 1);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[libmpv] GL 渲染帧失败: {ex.Message}");
+                }
+            }
+        }
+
+        protected override void OnOpenGlDeinit(GlInterface gl)
+        {
+            lock (_sync)
+            {
+                _glReady = false;
+                _mpv = null;
+            }
+            _glReadyTcs.TrySetResult(false);
+        }
+
+        protected override void OnOpenGlLost()
+        {
+            lock (_sync)
+            {
+                _glReady = false;
+            }
+        }
+
+        /// <summary>挂起/恢复:同步 mpv 暂停标志(停解码器线程)。与 SW 路径渲染线程的 pause 逻辑一致。</summary>
+        public void ApplySuspend(bool suspend)
+        {
+            lock (_sync)
+            {
+                if (_mpv is null || !_glReady)
+                {
+                    return;
+                }
+                try
+                {
+                    _mpv.SetPropertyFlag("pause", suspend);
+                }
+                catch
+                {
+                    // mpv 已销毁/属性不可写:忽略
+                }
+            }
+        }
+
+        /// <summary>释放前调用:停止渲染并等待在途帧完成(与 OnOpenGlRender 互斥)。</summary>
+        public void BeginShutdown()
+        {
+            lock (_sync)
+            {
+                _glReady = false;
+                _mpv = null;
+            }
+            _glReadyTcs.TrySetResult(false);
         }
     }
 }

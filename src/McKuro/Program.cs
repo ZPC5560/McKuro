@@ -1,5 +1,8 @@
 using Avalonia;
 using System;
+using System.Runtime.InteropServices;
+using Avalonia.Platform;
+using Avalonia.Native;
 using McKuro.Services;
 
 namespace McKuro;
@@ -30,11 +33,34 @@ class Program
 
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()
-        => AppBuilder.Configure<App>()
-            .UsePlatformDetect()
+    {
+        var builder = AppBuilder.Configure<App>()
+            .UsePlatformDetect();
+
+        // 启用 OpenGL 渲染模式 —— libmpv 的 GPU 渲染(StartOpenGlRendering)需要 OpenGL 上下文:
+        // Windows: ANGLE(OpenGL ES over D3D11) + 软件回退
+        // macOS: 原生 OpenGL(Apple 已弃用但现行可用,实际是 Metal 兼容层) + 软件回退
+        // Linux: EGL/GLX + 软件回退
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            builder.With(new Win32PlatformOptions
+            {
+                RenderingMode = [Win32RenderingMode.AngleEgl, Win32RenderingMode.Software]
+            });
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            builder.With(new AvaloniaNativePlatformOptions
+            {
+                RenderingMode = [AvaloniaNativeRenderingMode.OpenGl, AvaloniaNativeRenderingMode.Software]
+            });
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            builder.With(new X11PlatformOptions
+            {
+                RenderingMode = [X11RenderingMode.Egl, X11RenderingMode.Glx, X11RenderingMode.Software]
+            });
+
 #if DEBUG
-            .WithDeveloperTools()
+        builder.WithDeveloperTools();
 #endif
-            .WithInterFont()
+        return builder.WithInterFont()
             .LogToTrace();
+    }
 }
