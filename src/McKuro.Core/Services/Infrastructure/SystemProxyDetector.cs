@@ -7,11 +7,13 @@ namespace McKuro.Core.Services.Infrastructure;
 /// <summary>
 /// 系统网络代理自动检测。
 /// <para>
-/// .NET 的 HttpClient.DefaultProxy 在 Windows 读系统设置、Linux 读环境变量,
-/// 但 macOS 上返回空代理 —— 直连 GitHub 等站点会卡死/超时。
+/// .NET 的 HttpClient.DefaultProxy 在 Windows 读系统设置(WinINET 注册表,含手动代理)、
+/// Linux 读环境变量,但 macOS 上返回空代理 —— 直连 GitHub 等站点会卡死/超时。
 /// 本探测器在 macOS 上解析 `scutil --proxy`(系统代理字典,含 Clash/V2Ray 等代理工具写入的值),
-/// 其余平台返回 null 交给默认解析。结果进程内缓存一次。
+/// 在 Windows 上向 DefaultProxy 探测 github 的代理解析结果(命中即显式注入,行为与默认一致但可诊断),
+/// Linux 交给默认解析(环境变量原生支持)。结果进程内缓存一次。
 /// </para>
+/// <para>注意:各平台的 PAC/WPAD 自动配置脚本模式 .NET 均不支持,代理工具请使用手动代理或 TUN 模式。</para>
 /// </summary>
 public static class SystemProxyDetector
 {
@@ -32,8 +34,15 @@ public static class SystemProxyDetector
             {
                 if (OperatingSystem.IsMacOS())
                 {
-                    _cached = ParseScutil(ReadScutilProxy());
+                    // macOS:DefaultProxy 不读系统代理,scutil 解析为主,DefaultProxy 探测兜底
+                    _cached = ParseScutil(ReadScutilProxy()) ?? DetectViaDefaultProxy();
                 }
+                else if (OperatingSystem.IsWindows())
+                {
+                    // Windows:DefaultProxy 原生读 WinINET 注册表,探测命中即显式注入
+                    _cached = DetectViaDefaultProxy();
+                }
+                // Linux:环境变量由 DefaultProxy 原生处理,保持默认
             }
             catch
             {
@@ -42,6 +51,18 @@ public static class SystemProxyDetector
             _detected = true;
             return _cached;
         }
+    }
+
+    /// <summary>
+    /// 向平台默认代理解析器询问"https://github.com 该走什么代理":
+    /// 返回非目标地址即存在系统代理 → 显式返回 DefaultProxy 本身(与默认行为完全一致,含绕过列表);
+    /// 无代理时 IWebProxy 约定返回目标地址自身。
+    /// </summary>
+    private static IWebProxy? DetectViaDefaultProxy()
+    {
+        var target = new Uri("https://github.com");
+        var via = HttpClient.DefaultProxy.GetProxy(target);
+        return via is null || via.Equals(target) ? null : HttpClient.DefaultProxy;
     }
 
     /// <summary>读取 macOS 系统代理字典(scutil --proxy;路径固定 /usr/sbin/scutil)。</summary>
