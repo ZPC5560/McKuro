@@ -56,13 +56,16 @@
         </Grid>
 
         <!-- 签到设置(自设置页迁移到功能页;常显,执行时自行校验登录)。
-             AutoSignEnabled 控制 DailyTaskScheduler 的每日定时执行(时间可在本行调整,当天只执行一次) -->
+             AutoSignEnabled 控制 DailyTaskScheduler 的每日自动执行;触发时机二选一:
+             启动后立即(勾选「启动后立即执行」,不看时间)或每日定时(按下方执行时间,当天只执行一次) -->
         <Border Grid.Row="1" Margin="20,0,20,10" Padding="16" CornerRadius="12"
                 Background="{DynamicResource SemiColorBg2}">
             <StackPanel Orientation="Horizontal" Spacing="16">
-                <CheckBox Content="自动游戏签到(每日定时)" IsChecked="{Binding AutoSignEnabled}" />
+                <CheckBox Content="自动游戏签到(每日自动)" IsChecked="{Binding AutoSignEnabled}" />
                 <CheckBox Content="自动执行库街区每日任务" IsChecked="{Binding AutoKuroClientTaskEnabled}" />
-                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <CheckBox Content="启动后立即执行(忽略执行时间)" IsChecked="{Binding AutoSignOnStartup}" />
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                            IsVisible="{Binding !AutoSignOnStartup}">
                     <TextBlock Text="执行时间" FontSize="13" VerticalAlignment="Center" />
                     <ComboBox ItemsSource="{Binding DailyRunTimeOptions}"
                               SelectedItem="{Binding DailyAutoRunTime}"

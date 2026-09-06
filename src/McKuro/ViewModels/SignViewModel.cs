@@ -55,7 +55,11 @@ public sealed partial class SignViewModel : ViewModelBase
     [ObservableProperty]
     private bool _autoKuroClientTaskEnabled;
 
-    /// <summary>每日自动执行时间("HH:mm",与 DailyTaskScheduler 共用设置)。</summary>
+    /// <summary>启动软件后立即执行每日任务(忽略执行时间;当天已执行过仍跳过)。</summary>
+    [ObservableProperty]
+    private bool _autoSignOnStartup;
+
+    /// <summary>每日自动执行时间("HH:mm",与 DailyTaskScheduler 共用设置;启动模式下不生效)。</summary>
     [ObservableProperty]
     private string _dailyAutoRunTime = DailyAutoRunSchedule.DefaultTimeText;
 
@@ -89,6 +93,7 @@ public sealed partial class SignViewModel : ViewModelBase
     {
         _autoSignEnabled = AppServices.Settings.Current.AutoSignEnabled;
         _autoKuroClientTaskEnabled = AppServices.Settings.Current.AutoKuroClientTaskEnabled;
+        _autoSignOnStartup = AppServices.Settings.Current.DailyAutoRunOnStartup;
         _dailyAutoRunTime = NormalizeRunTimeOption(AppServices.Settings.Current.DailyAutoRunTime);
         RefreshNextAutoRunText();
         RefreshAccount();
@@ -110,6 +115,13 @@ public sealed partial class SignViewModel : ViewModelBase
     {
         AppServices.Settings.Current.AutoKuroClientTaskEnabled = value;
         AppServices.Settings.Save();
+    }
+
+    partial void OnAutoSignOnStartupChanged(bool value)
+    {
+        AppServices.Settings.Current.DailyAutoRunOnStartup = value;
+        AppServices.Settings.Save();
+        RefreshNextAutoRunText();
     }
 
     /// <summary>执行时间选项归一化:非法值回退默认;自定义值(不在预设中)插入最前,保证 ComboBox 能选中显示。</summary>
@@ -142,7 +154,8 @@ public sealed partial class SignViewModel : ViewModelBase
             ? parsed
             : TimeSpan.FromHours(8);
         NextAutoRunText = "下次自动执行:" + DailyAutoRunSchedule.DescribeNext(
-            DateTime.Now, time, AppServices.Settings.Current.LastDailyAutoRunDate);
+            DateTime.Now, time, AppServices.Settings.Current.LastDailyAutoRunDate,
+            AppServices.Settings.Current.DailyAutoRunOnStartup);
     }
 
     private void RefreshAccount()

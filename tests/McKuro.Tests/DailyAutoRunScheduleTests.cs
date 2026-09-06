@@ -69,6 +69,30 @@ public class DailyAutoRunScheduleTests
     }
 
     [Fact]
+    public void ShouldRunNow_OnStartup_Ignores_Time()
+    {
+        // 启动模式:未到设定时间也立即执行
+        var now = new DateTime(2026, 9, 6, 7, 0, 0);
+        Assert.True(DailyAutoRunSchedule.ShouldRunNow(now, new TimeSpan(8, 0, 0), lastRunDate: "", onStartup: true));
+        // 当天已执行过仍跳过
+        Assert.False(DailyAutoRunSchedule.ShouldRunNow(now, new TimeSpan(8, 0, 0), lastRunDate: "2026-09-06", onStartup: true));
+    }
+
+    [Fact]
+    public void DescribeNext_OnStartup_Today_Not_Ran()
+    {
+        var now = new DateTime(2026, 9, 6, 7, 0, 0);
+        Assert.Equal("启动后立即执行", DailyAutoRunSchedule.DescribeNext(now, new TimeSpan(8, 0, 0), lastRunDate: "", onStartup: true));
+    }
+
+    [Fact]
+    public void DescribeNext_OnStartup_Today_Ran()
+    {
+        var now = new DateTime(2026, 9, 6, 7, 0, 0);
+        Assert.Equal("启动后立即执行(今天已执行)", DailyAutoRunSchedule.DescribeNext(now, new TimeSpan(8, 0, 0), "2026-09-06", onStartup: true));
+    }
+
+    [Fact]
     public void DescribeNext_Before_Time_Today()
     {
         var now = new DateTime(2026, 9, 6, 7, 0, 0);

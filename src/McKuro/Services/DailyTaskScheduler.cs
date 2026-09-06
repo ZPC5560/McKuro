@@ -4,9 +4,12 @@ using McKuro.Services;
 namespace McKuro.Services;
 
 /// <summary>
-/// 每日自动任务调度器:每天到达设定时间(设置 DailyAutoRunTime,默认 08:00)后执行一次
-/// 游戏签到与库街区每日任务;当天已执行过则跳过(反复重启不重复),应用错过设定时间时
-/// 下次启动补执行一次。每 30 秒轮询检查,修改执行时间后自动生效。
+/// 每日自动任务调度器:每天执行一次游戏签到与库街区每日任务。
+/// 触发时机二选一(设置 DailyAutoRunOnStartup):
+/// 启动模式 —— 应用启动后(15 秒待初始化)立即执行,不看设定时间;
+/// 定时模式 —— 到达设定时间(设置 DailyAutoRunTime,默认 08:00)后执行,
+/// 应用错过设定时间则下次启动补执行。
+/// 当天已执行过则跳过(反复重启不重复),每 30 秒轮询检查,修改配置后自动生效。
 /// </summary>
 public sealed class DailyTaskScheduler : IDisposable
 {
@@ -54,10 +57,11 @@ public sealed class DailyTaskScheduler : IDisposable
             return;
         }
 
+        var onStartup = settings.DailyAutoRunOnStartup;
         var time = DailyAutoRunSchedule.TryParseTime(settings.DailyAutoRunTime, out var parsed)
             ? parsed
             : TimeSpan.FromHours(8);
-        if (!DailyAutoRunSchedule.ShouldRunNow(DateTime.Now, time, settings.LastDailyAutoRunDate))
+        if (!DailyAutoRunSchedule.ShouldRunNow(DateTime.Now, time, settings.LastDailyAutoRunDate, onStartup))
         {
             return;
         }
@@ -66,7 +70,7 @@ public sealed class DailyTaskScheduler : IDisposable
         settings.LastDailyAutoRunDate = DateTime.Now.ToString("yyyy-MM-dd");
         AppServices.Settings.Save();
         System.Console.Error.WriteLine(
-            $"MCKURO-DAILY auto: start at {settings.DailyAutoRunTime} sign={settings.AutoSignEnabled} bbsTask={settings.AutoKuroClientTaskEnabled}");
+            $"MCKURO-DAILY auto: start mode={(onStartup ? "startup" : settings.DailyAutoRunTime)} sign={settings.AutoSignEnabled} bbsTask={settings.AutoKuroClientTaskEnabled}");
 
         if (settings.AutoSignEnabled)
         {

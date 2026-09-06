@@ -2,8 +2,9 @@ namespace McKuro.Core.Services.Settings;
 
 /// <summary>
 /// 每日自动执行时间与当日去重判定(纯函数,便于测试)。
-/// 语义:每天(本地时区)最多自动执行一次 —— 当天尚未执行过且已到达当日设定时间即触发;
-/// 应用启动晚于设定时间时补执行一次(错过不跳过),当天反复重启不会重复执行。
+/// 语义:每天(本地时区)最多自动执行一次 —— 当天尚未执行过即触发;
+/// 定时模式需已到达当日设定时间,启动模式(OnStartup)启动即执行、不看时间;
+/// 定时模式下应用启动晚于设定时间时补执行一次(错过不跳过)。
 /// </summary>
 public static class DailyAutoRunSchedule
 {
@@ -34,24 +35,26 @@ public static class DailyAutoRunSchedule
     /// <summary>当日的执行时刻(now 所在日期 + 设定时间)。</summary>
     public static DateTime TodayRunAt(DateTime now, TimeSpan time) => now.Date + time;
 
-    /// <summary>现在是否应自动执行:今天尚未执行过 且 已到达当日设定时刻。</summary>
-    public static bool ShouldRunNow(DateTime now, TimeSpan time, string? lastRunDate)
+    /// <summary>现在是否应自动执行:今天尚未执行过,且(启动模式启动即算,或定时模式已到达当日设定时刻)。</summary>
+    public static bool ShouldRunNow(DateTime now, TimeSpan time, string? lastRunDate, bool onStartup = false)
     {
         if (lastRunDate == now.ToString("yyyy-MM-dd"))
         {
             return false;
         }
-        return now >= TodayRunAt(now, time);
+        return onStartup || now >= TodayRunAt(now, time);
     }
 
-    /// <summary>下次自动执行描述(供界面展示,如 "今天 08:00" / "明天 08:00" / "今天 08:00 已执行")。</summary>
-    public static string DescribeNext(DateTime now, TimeSpan time, string? lastRunDate)
+    /// <summary>
+    /// 下次自动执行描述(供界面展示,如 "今天 08:00" / "明天 08:00" / "今天 08:00 已执行";
+    /// 启动模式为 "启动后立即执行" / "启动后立即执行(今天已执行)")。
+    /// </summary>
+    public static string DescribeNext(DateTime now, TimeSpan time, string? lastRunDate, bool onStartup = false)
     {
-        var hhmm = time.ToString(@"hh\:mm");
         if (lastRunDate == now.ToString("yyyy-MM-dd"))
         {
-            return $"今天 {hhmm} 已执行";
+            return onStartup ? "启动后立即执行(今天已执行)" : $"今天 {time:hh\\:mm} 已执行";
         }
-        return now < TodayRunAt(now, time) ? $"今天 {hhmm}" : $"明天 {hhmm}";
+        return onStartup ? "启动后立即执行" : (now < TodayRunAt(now, time) ? $"今天 {time:hh\\:mm}" : $"明天 {time:hh\\:mm}");
     }
 }

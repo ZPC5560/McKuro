@@ -102,6 +102,9 @@ public sealed class AppSettings
     /// <summary>每日自动执行时间("HH:mm",默认 08:00;到达时间且当天未执行时触发)。</summary>
     public string DailyAutoRunTime { get; set; } = "08:00";
 
+    /// <summary>启动软件后立即执行每日任务(忽略 DailyAutoRunTime;当天已执行过仍会跳过)。</summary>
+    public bool DailyAutoRunOnStartup { get; set; }
+
     /// <summary>最近一次每日自动执行日期("yyyy-MM-dd";防止同一天反复重启重复执行,手动一键完成后也会记录)。</summary>
     public string LastDailyAutoRunDate { get; set; } = "";
 
