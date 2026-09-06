@@ -101,9 +101,9 @@
 
             <!-- 游戏公告(左,高度跟随轮播控件) | 封面主图轮播(右) -->
             <Grid ColumnDefinitions="1*,3*" ColumnSpacing="14">
-                <!-- 游戏公告(启动器同源:活动/公告/新闻 三页签,封面卡片):高度按内容自然展开(不强制与轮播对齐),
-                     允许向下延伸占据快捷入口的空间 -->
-                <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18"
+                <!-- 游戏公告(启动器同源:活动/公告/新闻 三页签,封面卡片):高度按内容自然展开,
+                     右侧轮播区高度反向跟随本卡对齐 -->
+                <Border x:Name="NoticeHost" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18"
                         ClipToBounds="True">
                     <Grid RowDefinitions="Auto,*">
                         <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*">

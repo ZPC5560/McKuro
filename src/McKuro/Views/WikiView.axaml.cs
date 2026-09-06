@@ -8,13 +8,11 @@ namespace McKuro.Views;
 /// <summary>
 /// 资讯页:B站视频的内嵌播放器实例由本代码后置按平台注入(WkWebView/WebView2),
 /// 仅当前轮播项为B站视频时创建;直接视频文件由 XAML 中的 VideoBackgroundControl 播放。
-/// 视频分辨率解析后轮播控件按比例自适应高度(下方内容自动下移)。
+/// 轮播区高度不按视频比例走,而是反向跟随左侧游戏公告卡的自然高度(左右对齐,
+/// 下方内容随公告卡高度自动上移/下移)。
 /// </summary>
 public partial class WikiView : UserControl
 {
-    /// <summary>当前视频宽高比(w/h,分辨率解析后记录;切走视频项时清空)。</summary>
-    private double? _videoAspect;
-
     /// <summary>当前已注入的B站内嵌播放器对应的 BV 号(切换视频项时重建 WebView)。</summary>
     private string? _biliEmbedBvid;
 
@@ -36,12 +34,8 @@ public partial class WikiView : UserControl
     {
         InitializeComponent();
 
-        BannerVideo.VideoAspectRatioResolved += (w, h) =>
-        {
-            _videoAspect = h > 0 ? (double)w / h : null;
-            UpdateBannerHeight();
-        };
-        BannerHost.SizeChanged += (_, _) => UpdateBannerHeight();
+        // 轮播区高度跟随左列公告卡(公告卡图片加载/页签切换都会改变其自然高度)
+        NoticeHost.SizeChanged += (_, _) => SyncBannerHeight();
 
         DataContextChanged += (_, _) =>
         {
@@ -59,6 +53,13 @@ public partial class WikiView : UserControl
             }
             UpdateVideoOverlay();
         };
+    }
+
+    /// <summary>轮播区高度 = 左列公告卡自然高度(下限 220 防加载期塌陷);公告卡加载完图片后升高,此处跟随。</summary>
+    private void SyncBannerHeight()
+    {
+        var h = NoticeHost.Bounds.Height;
+        BannerHost.Height = h > 220 ? h : 220;
     }
 
     /// <summary>按当前轮播项维护视频覆盖层:直接视频交给 XAML 控件;B站视频注入平台 WebView。</summary>
@@ -93,13 +94,6 @@ public partial class WikiView : UserControl
             StartBiliMuteInjection();
         }
         _biliEmbedBvid = bvid;
-
-        // 切走直接视频项时清空比例,恢复默认高度
-        if (vm?.CurrentBannerIsDirectVideo != true)
-        {
-            _videoAspect = null;
-        }
-        UpdateBannerHeight();
     }
 
     /// <summary>启动B站播放器静音注入:2/5/9 秒三次(覆盖页面加载与播放器延迟创建 video 元素的时序)。</summary>
@@ -126,30 +120,5 @@ public partial class WikiView : UserControl
             }
         };
         _biliMuteTimer.Start();
-    }
-
-    /// <summary>
-    /// 轮播控件高度自适应:视频模式按视频比例(宽度已知 → 高 = 宽/比例,钳制 180-560 防止极端比例撑爆页面),
-    /// 其余恢复默认 220。高度变化时页面布局自动把下方内容向下让位。
-    /// </summary>
-    private void UpdateBannerHeight()
-    {
-        var vm = DataContext as WikiViewModel;
-        var isDirect = vm?.CurrentBannerIsDirectVideo == true;
-        var isBili = vm?.CurrentBannerIsBili == true;
-
-        double? aspect = isDirect ? _videoAspect : isBili ? 16.0 / 9.0 : null;
-        if (aspect is null || aspect <= 0)
-        {
-            BannerHost.Height = 220;
-            return;
-        }
-        var width = BannerHost.Bounds.Width;
-        if (width <= 0)
-        {
-            return;
-        }
-        // 高度严格按视频显示比例自适应(无黑边);钳制 160-640 防极端比例
-        BannerHost.Height = Math.Clamp(width / aspect.Value, 160, 640);
     }
 }
