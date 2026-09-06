@@ -854,23 +854,56 @@ public sealed partial class SettingsViewModel : ViewModelBase
             System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractDir);
 
             var appDir = Path.GetDirectoryName(Environment.ProcessPath) ?? ".";
-            var script = Path.Combine(destDir, "update.cmd");
-            File.WriteAllText(script, $"""
-                @echo off
-                chcp 65001 >nul
-                timeout /t 2 /nobreak >nul
-                taskkill /im McKuro.exe /f >nul 2>&1
-                timeout /t 1 /nobreak >nul
-                xcopy /e /y /q "{extractDir}\*" "{appDir}\"
-                start "" "{Path.Combine(appDir, "McKuro.exe")}"
-                """, System.Text.Encoding.UTF8);
-
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            if (OperatingSystem.IsWindows())
             {
-                FileName = script,
-                UseShellExecute = true,
-                WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
-            });
+                var script = Path.Combine(destDir, "update.cmd");
+                File.WriteAllText(script, $$"""
+                    @echo off
+                    chcp 65001 >nul
+                    timeout /t 2 /nobreak >nul
+                    taskkill /im McKuro.exe /f >nul 2>&1
+                    timeout /t 1 /nobreak >nul
+                    xcopy /e /y /q "{extractDir}\*" "{appDir}\"
+                    start "" "{Path.Combine(appDir, "McKuro.exe")}"
+                    """, System.Text.Encoding.UTF8);
+
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = script,
+                    UseShellExecute = true,
+                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
+                });
+            }
+            else
+            {
+                // macOS/Linux:cmd/xcopy/taskkill 均为 Windows 专用,走等价 shell 流程
+                var processPath = Environment.ProcessPath ?? "";
+                if (processPath.EndsWith("/dotnet", StringComparison.OrdinalIgnoreCase))
+                {
+                    // dotnet 宿主运行(开发模式):进程是 dotnet 本身,"替换安装目录"语义不成立
+                    AppUpdateStatusText = "开发模式运行,无法自动替换 —— 请手动下载更新包覆盖安装目录";
+                    return false;
+                }
+                var exeName = Path.GetFileName(processPath);
+                var script = Path.Combine(destDir, "update.sh");
+                File.WriteAllText(script, $"""
+                    #!/bin/bash
+                    sleep 2
+                    kill {Environment.ProcessId} 2>/dev/null
+                    sleep 2
+                    cp -R "{extractDir}/." "{appDir}/"
+                    chmod +x "{Path.Combine(appDir, exeName)}"
+                    nohup "{Path.Combine(appDir, exeName)}" >/dev/null 2>&1 &
+                    rm -f -- "$0"
+                    """);
+
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "/bin/bash",
+                    Arguments = $"\"{script}\"",
+                    UseShellExecute = false,
+                });
+            }
             // 主程序退出,等待脚本完成替换后重新打开
             if (Avalonia.Application.Current?.ApplicationLifetime
                 is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
