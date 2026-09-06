@@ -58,9 +58,11 @@
                                                 Background="{Binding Valid, Converter={StaticResource ValidBrush}}" />
                                         <StackPanel Grid.Column="1" Spacing="3">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <Border CornerRadius="6" Background="{DynamicResource SemiColorBg2}" Padding="9,2">
+                                                <!-- 固定宽度兑换码框:兑换码长短不一,保证右侧有效/已过期徽章跨卡片纵向对齐 -->
+                                                <Border Width="170" HorizontalAlignment="Left"
+                                                        CornerRadius="6" Background="{DynamicResource SemiColorBg2}" Padding="9,2">
                                                     <TextBlock Text="{Binding Key}" FontSize="14" FontWeight="Bold"
-                                                               FontFamily="Consolas" />
+                                                               FontFamily="Consolas" TextTrimming="CharacterEllipsis" />
                                                 </Border>
                                                 <Border CornerRadius="4" Padding="5,1"
                                                         Background="{Binding Valid, Converter={StaticResource ValidBrush}}">
@@ -115,9 +117,11 @@
                                                 Background="{Binding Valid, Converter={StaticResource ValidBrush}}" />
                                         <StackPanel Grid.Column="1" Spacing="3">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <Border CornerRadius="6" Background="{DynamicResource SemiColorBg2}" Padding="9,2">
+                                                <!-- 固定宽度兑换码框:兑换码长短不一,保证右侧有效/已过期徽章跨卡片纵向对齐 -->
+                                                <Border Width="170" HorizontalAlignment="Left"
+                                                        CornerRadius="6" Background="{DynamicResource SemiColorBg2}" Padding="9,2">
                                                     <TextBlock Text="{Binding Key}" FontSize="14" FontWeight="Bold"
-                                                               FontFamily="Consolas" />
+                                                               FontFamily="Consolas" TextTrimming="CharacterEllipsis" />
                                                 </Border>
                                                 <Border CornerRadius="4" Padding="5,1"
                                                         Background="{Binding Valid, Converter={StaticResource ValidBrush}}">

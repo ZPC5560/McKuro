@@ -5,7 +5,9 @@ using CommunityToolkit.Mvvm.Input;
 using McKuro.Core.Models.Game;
 using McKuro.Core.Models.Wiki;
 using McKuro.Core.Services.Game;
+using McKuro.Core.Services.Launcher;
 using McKuro.Services;
+using McKuro.Views;
 
 namespace McKuro.ViewModels;
 
@@ -124,13 +126,32 @@ public sealed partial class WikiViewModel : ViewModelBase
         _ = LoadAsync();
     }
 
-    /// <summary>在默认浏览器中打开网页。</summary>
+    /// <summary>
+    /// 打开链接:B站视频(bilibili 页面链接或 b23.tv 短链)用应用内播放窗口,
+    /// 自动播放免浏览器加载;其余链接在默认浏览器打开。
+    /// </summary>
     [RelayCommand]
-    private void OpenLink(string? url)
+    private async Task OpenLink(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
         {
             return;
+        }
+        if (BiliVideoHelper.IsBiliVideoUrl(url) && BiliVideoWindow.IsPlatformSupported)
+        {
+            try
+            {
+                var bvid = await BiliVideoHelper.ResolveBvIdAsync(url, AppServices.Http);
+                if (bvid is not null)
+                {
+                    new BiliVideoWindow(bvid).Show();
+                    return;
+                }
+            }
+            catch (Exception)
+            {
+                // 短链解析失败:回退系统浏览器
+            }
         }
         try
         {
