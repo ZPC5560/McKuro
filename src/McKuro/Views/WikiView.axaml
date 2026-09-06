@@ -102,9 +102,10 @@
             <!-- 游戏公告(左,高度跟随轮播控件) | 封面主图轮播(右) -->
             <Grid ColumnDefinitions="1*,3*" ColumnSpacing="14">
                 <!-- 游戏公告(启动器同源:活动/公告/新闻 三页签,封面卡片,内部滚动) -->
-                <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18"
+                <Border x:Name="NoticeHost" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18"
+                        ClipToBounds="True"
                         Height="{Binding #BannerHost.Height}">
-                    <Grid RowDefinitions="Auto,Auto,*">
+                    <Grid RowDefinitions="Auto,*">
                         <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*">
                             <ic:FluentIcon Grid.Column="0" Icon="Megaphone" IconVariant="Regular" IconSize="Size20" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Margin="8,0,0,0" Text="游戏公告" FontSize="17" FontWeight="Bold" VerticalAlignment="Center" />
