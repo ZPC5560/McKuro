@@ -14,8 +14,8 @@ namespace McKuro;
 
 public partial class MainWindow : Window
 {
-    /// <summary>固定纵横比 = 启动页视频(2048x1216)内容区比例,缩放窗口时保持。</summary>
-    private const double AspectRatio = 2048.0 / 1216.0;
+    /// <summary>启动页视频内容区宽高比(默认 2048x1216,视频加载后自动更新)。</summary>
+    private double _targetAspectRatio = 2048.0 / 1216.0;
 
     /// <summary>内容区左侧导航栏宽度(DIP);宽高比以内容区(去掉导航栏/非客户区)为准。</summary>
     private const double ContentNavWidth = 76;
@@ -289,14 +289,14 @@ public partial class MainWindow : Window
             {
                 return;
             }
-            var h = cw / AspectRatio;
+            var h = cw / _targetAspectRatio;
             if (h < MinHeight)
             {
                 h = MinHeight;
-                cw = h * AspectRatio;
+                cw = h * _targetAspectRatio;
             }
             // 仅在偏离比例超过阈值时纠正,避免抖动
-            if (Math.Abs(cw / size.Height - AspectRatio) > 0.01)
+            if (Math.Abs(cw / size.Height - _targetAspectRatio) > 0.01)
             {
                 Width = Math.Max(MinWidth, cw + ContentNavWidth);
                 Height = Math.Max(MinHeight, h);
@@ -306,6 +306,20 @@ public partial class MainWindow : Window
         {
             _applyingAspect = false;
         }
+    }
+
+    /// <summary>
+    /// 启动页视频解析到实际分辨率后调用:把窗口比例切换到视频内容区比例,
+    /// 并按当前宽度立刻重新计算高度。非法输入忽略(保持现有比例)。
+    /// </summary>
+    public void SetContentAspectRatio(double videoWidth, double videoHeight)
+    {
+        if (videoWidth <= 0 || videoHeight <= 0 || _targetAspectRatio == videoWidth / videoHeight)
+        {
+            return;
+        }
+        _targetAspectRatio = videoWidth / videoHeight;
+        ApplyAspectCorrection();
     }
 
     // ---- Win32 专用:WM_SIZING 子类化,拖动边框时窗口矩形按视频比例同步钳制 ----
@@ -369,7 +383,7 @@ public partial class MainWindow : Window
             ? SetWindowLongPtr64(platformHandle.Handle, GWL_WNDPROC, procPtr)
             : SetWindowLong32(platformHandle.Handle, GWL_WNDPROC, procPtr);
         System.Console.Error.WriteLine(
-            $"MCKURO-SIZE hook=1 ncx={_nonClientX} ncy={_nonClientY} scale={_renderScale:F2} ratio={AspectRatio:F4}");
+            $"MCKURO-SIZE hook=1 ncx={_nonClientX} ncy={_nonClientY} scale={_renderScale:F2} ratio={_targetAspectRatio:F4}");
     }
 
     private IntPtr WindowProcProxy(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
@@ -421,21 +435,21 @@ public partial class MainWindow : Window
         if (heightFollowsWidth)
         {
             targetW = cw;
-            targetH = cw / AspectRatio;
+            targetH = cw / _targetAspectRatio;
             if (targetH < minCh)
             {
                 targetH = minCh;
-                targetW = targetH * AspectRatio;
+                targetW = targetH * _targetAspectRatio;
             }
         }
         else
         {
             targetH = ch;
-            targetW = ch * AspectRatio;
+            targetW = ch * _targetAspectRatio;
             if (targetW < minCw)
             {
                 targetW = minCw;
-                targetH = targetW / AspectRatio;
+                targetH = targetW / _targetAspectRatio;
             }
         }
 

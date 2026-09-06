@@ -223,7 +223,8 @@
                                     IsVisible="{Binding HasCustomVideoPath}">
                                 <controls:VideoBackgroundControl VideoUrl="{Binding CustomBackgroundVideoPath}"
                                                                  FallbackImageUrl="{Binding CustomVideoCoverPath}"
-                                                                 IsVideoEnabled="True" />
+                                                                 IsVideoEnabled="True"
+                                                                 SyncWindowAspect="False" />
                             </Border>
                             <!-- WE 扫描结果:封面网格,点击选用 -->
                             <ScrollViewer MaxHeight="380" IsVisible="{Binding HasWallpaperEntries}"

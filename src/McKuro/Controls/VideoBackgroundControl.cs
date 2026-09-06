@@ -114,6 +114,11 @@ public sealed class VideoBackgroundControl : Grid
     public static readonly StyledProperty<bool> IsVideoEnabledProperty =
         AvaloniaProperty.Register<VideoBackgroundControl, bool>(nameof(IsVideoEnabled));
 
+    /// <summary>是否把视频分辨率同步给宿主窗口比例(启动页全屏背景用 true;
+    /// 设置页小尺寸预览用 false,避免预览视频把窗口比例改掉)。默认 true。</summary>
+    public static readonly StyledProperty<bool> SyncWindowAspectProperty =
+        AvaloniaProperty.Register<VideoBackgroundControl, bool>(nameof(SyncWindowAspect), defaultValue: true);
+
     /// <summary>宣传视频 URL(空则不尝试播放)。</summary>
     public string VideoUrl
     {
@@ -133,6 +138,13 @@ public sealed class VideoBackgroundControl : Grid
     {
         get => GetValue(IsVideoEnabledProperty);
         set => SetValue(IsVideoEnabledProperty, value);
+    }
+
+    /// <summary>是否把视频分辨率同步给宿主窗口比例(设置页预览设 false)。</summary>
+    public bool SyncWindowAspect
+    {
+        get => GetValue(SyncWindowAspectProperty);
+        set => SetValue(SyncWindowAspectProperty, value);
     }
 
     public VideoBackgroundControl()
@@ -426,7 +438,7 @@ public sealed class VideoBackgroundControl : Grid
         }
     }
 
-    /// <summary>GL 路径的首帧信号:文件加载完成 → 取消看门狗、显示 GL 视频层。</summary>
+    /// <summary>GL 路径的首帧信号:文件加载完成 → 取消看门狗、显示 GL 视频层、更新窗口比例。</summary>
     private void OnGlFileLoaded(object? sender, EventArgs e)
     {
         _timeoutCts?.Cancel();
@@ -435,6 +447,23 @@ public sealed class VideoBackgroundControl : Grid
             if (_glRenderer is not null && !_disposed)
             {
                 _glRenderer.Opacity = 1;
+            }
+            // 查询 mpv 视频实际尺寸并同步到窗口比例
+            if (_mpv is not null && !_disposed)
+            {
+                try
+                {
+                    int w = _mpv.GetProperty<int>("video-params/w");
+                    int h = _mpv.GetProperty<int>("video-params/h");
+                    if (w > 0 && h > 0)
+                    {
+                        PropagateVideoAspectRatio(w, h);
+                    }
+                }
+                catch
+                {
+                    // 视频参数尚未就绪:忽略,窗口保持默认比例
+                }
             }
         });
     }
@@ -981,11 +1010,34 @@ public sealed class VideoBackgroundControl : Grid
             _videoWidth = w;
             _videoHeight = h;
             _sizeResolved = true;
+            // 软件渲染线程内解析:派发到 UI 线程同步窗口比例
+            Dispatcher.UIThread.Post(() => PropagateVideoAspectRatio(w, h));
             return true;
         }
         catch (Exception)
         {
             return false;
+        }
+    }
+
+    /// <summary>把视频实际分辨率同步给宿主窗口,自动切换窗口内容区比例(仅启动页/视频壁纸页)。</summary>
+    private void PropagateVideoAspectRatio(int videoWidth, int videoHeight)
+    {
+        if (videoWidth <= 0 || videoHeight <= 0 || _disposed || !SyncWindowAspect)
+        {
+            return;
+        }
+        // 宿主窗口可能是 MainWindow(启动页);非窗口宿主(测试/预览)忽略
+        if (TopLevel.GetTopLevel(this) is MainWindow win)
+        {
+            try
+            {
+                win.SetContentAspectRatio(videoWidth, videoHeight);
+            }
+            catch (Exception)
+            {
+                // 窗口尺寸调整失败不影响视频播放
+            }
         }
     }
 
