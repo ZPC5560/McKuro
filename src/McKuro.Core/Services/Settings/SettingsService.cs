@@ -99,6 +99,12 @@ public sealed class AppSettings
     /// <summary>库街区每日任务(签到+浏览+点赞+分享,默认关闭,可在签到页手动执行)。</summary>
     public bool AutoKuroClientTaskEnabled { get; set; }
 
+    /// <summary>每日自动执行时间("HH:mm",默认 08:00;到达时间且当天未执行时触发)。</summary>
+    public string DailyAutoRunTime { get; set; } = "08:00";
+
+    /// <summary>最近一次每日自动执行日期("yyyy-MM-dd";防止同一天反复重启重复执行,手动一键完成后也会记录)。</summary>
+    public string LastDailyAutoRunDate { get; set; } = "";
+
     // ---------- mcguide 攻略站 ----------
 
     /// <summary>mcguide x-token(攻略站登录后服务端返回)。</summary>

@@ -5,6 +5,8 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Core.Models.Kuro;
 using McKuro.Core.Services.Kuro;
+using McKuro.Core.Services.Settings;
+using McKuro.Core.Services.User;
 using McKuro.Services;
 
 namespace McKuro.ViewModels;
@@ -53,6 +55,20 @@ public sealed partial class SignViewModel : ViewModelBase
     [ObservableProperty]
     private bool _autoKuroClientTaskEnabled;
 
+    /// <summary>每日自动执行时间("HH:mm",与 DailyTaskScheduler 共用设置)。</summary>
+    [ObservableProperty]
+    private string _dailyAutoRunTime = DailyAutoRunSchedule.DefaultTimeText;
+
+    /// <summary>下次自动执行描述(如 "下次自动执行:今天 08:00")。</summary>
+    [ObservableProperty]
+    private string _nextAutoRunText = "";
+
+    /// <summary>今日日常完成度摘要(仅任务型条目;体力等资源项见主页每日数据)。</summary>
+    public ObservableCollection<DailyChecklistEntry> DailySummary { get; } = [];
+
+    /// <summary>自动执行时间预设(设置里的自定义值不在预设中时自动插入到最前)。</summary>
+    public List<string> DailyRunTimeOptions { get; } = ["04:30", "08:00", "10:00", "12:00", "18:00", "20:00", "22:00"];
+
     public ObservableCollection<RoleSignItem> Roles { get; } = [];
 
     /// <summary>签到奖励格子(主角色的签到奖励配置,参照 WutheringWavesTool goodsView)。</summary>
@@ -73,6 +89,8 @@ public sealed partial class SignViewModel : ViewModelBase
     {
         _autoSignEnabled = AppServices.Settings.Current.AutoSignEnabled;
         _autoKuroClientTaskEnabled = AppServices.Settings.Current.AutoKuroClientTaskEnabled;
+        _dailyAutoRunTime = NormalizeRunTimeOption(AppServices.Settings.Current.DailyAutoRunTime);
+        RefreshNextAutoRunText();
         RefreshAccount();
 
         // 账号页登录/切号/移除后自动刷新本页(与 RolesViewModel 同一消息源)
@@ -92,6 +110,39 @@ public sealed partial class SignViewModel : ViewModelBase
     {
         AppServices.Settings.Current.AutoKuroClientTaskEnabled = value;
         AppServices.Settings.Save();
+    }
+
+    /// <summary>执行时间选项归一化:非法值回退默认;自定义值(不在预设中)插入最前,保证 ComboBox 能选中显示。</summary>
+    private string NormalizeRunTimeOption(string value)
+    {
+        if (!DailyAutoRunSchedule.TryParseTime(value, out _))
+        {
+            return DailyAutoRunSchedule.DefaultTimeText;
+        }
+        if (!DailyRunTimeOptions.Contains(value))
+        {
+            DailyRunTimeOptions.Insert(0, value);
+        }
+        return value;
+    }
+
+    partial void OnDailyAutoRunTimeChanged(string value)
+    {
+        if (DailyAutoRunSchedule.TryParseTime(value, out _))
+        {
+            AppServices.Settings.Current.DailyAutoRunTime = value;
+            AppServices.Settings.Save();
+        }
+        RefreshNextAutoRunText();
+    }
+
+    private void RefreshNextAutoRunText()
+    {
+        var time = DailyAutoRunSchedule.TryParseTime(DailyAutoRunTime, out var parsed)
+            ? parsed
+            : TimeSpan.FromHours(8);
+        NextAutoRunText = "下次自动执行:" + DailyAutoRunSchedule.DescribeNext(
+            DateTime.Now, time, AppServices.Settings.Current.LastDailyAutoRunDate);
     }
 
     private void RefreshAccount()
@@ -194,6 +245,9 @@ public sealed partial class SignViewModel : ViewModelBase
             StatusText = removed.Count > 0
                 ? $"共 {Roles.Count} 个角色(已移除失效账号:{string.Join("; ", removed)}) → 请重新登录"
                 : $"共 {Roles.Count} 个角色";
+
+            // 角色就绪后拉取今日日常完成度摘要(独立流程,失败静默)
+            _ = RefreshDailySummaryAsync();
         }
         finally
         {
@@ -353,6 +407,42 @@ public sealed partial class SignViewModel : ViewModelBase
         return grouped;
     }
 
+    /// <summary>
+    /// 拉取数据中心每日数据,生成「今日日常」完成度摘要(任务型条目:
+    /// 游戏签到/库街区任务/活跃度/周本/终焉矩阵/冥歌海墟/千道门扉/周度游历)。
+    /// 拉取失败清空摘要(不弹错误,不影响签到主流程)。
+    /// </summary>
+    private async Task RefreshDailySummaryAsync()
+    {
+        // 序号令牌:并发刷新(消息/按钮/角色刷新竞态)时只让最新一次落盘,避免 Clear/Add 交错产生重复条目
+        var seq = ++_summarySeq;
+        try
+        {
+            var data = await AppServices.DailyData.GetDailyDataAsync();
+            var entries = DailyChecklistFactory.Build(data)
+                .Where(static e => !e.IsResource)
+                .ToList();
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (seq != _summarySeq)
+                {
+                    return;
+                }
+                DailySummary.Clear();
+                foreach (var entry in entries)
+                {
+                    DailySummary.Add(entry);
+                }
+            });
+        }
+        catch (Exception)
+        {
+            // 摘要拉取失败不影响签到主流程
+        }
+    }
+
+    private int _summarySeq;
+
     /// <summary>对所有角色执行游戏签到。</summary>
     [RelayCommand]
     private async Task SignAllAsync()
@@ -383,6 +473,58 @@ public sealed partial class SignViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// 一键日常:依次执行游戏签到与库街区每日任务。
+    /// 全部成功时记录当日已完成(DailyTaskScheduler 当天不再重复执行)。
+    /// </summary>
+    [RelayCommand]
+    private async Task RunAllDailyAsync()
+    {
+        var account = AppServices.KuroAccounts.Current;
+        if (account is null)
+        {
+            StatusText = "请先登录库街区账号";
+            return;
+        }
+        if (IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        var allOk = true;
+        try
+        {
+            StatusText = "一键日常:正在执行游戏签到…";
+            var sign = await AppServices.KuroSign.SignAllGamesAsync(account);
+            allOk &= sign.TotalCount > 0 && sign.FailedCount == 0;
+            StatusText = $"一键日常:{sign.Message}";
+
+            StatusText = "一键日常:正在执行库街区每日任务…";
+            var bbsOk = await AppServices.KuroSign.ExecuteDailyTasksAsync(account);
+            allOk &= bbsOk;
+            StatusText = allOk
+                ? "一键日常完成,今日自动执行已完成"
+                : "一键日常完成(部分失败,可稍后单独重试)";
+
+            if (allOk)
+            {
+                AppServices.Settings.Current.LastDailyAutoRunDate = DateTime.Now.ToString("yyyy-MM-dd");
+                AppServices.Settings.Save();
+            }
+            await RefreshDailySummaryAsync();
+            RefreshNextAutoRunText();
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"一键日常失败: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     /// <summary>执行库街区每日任务(签到+浏览+点赞+分享)。</summary>
     [RelayCommand]
     private async Task ExecuteDailyAsync()
@@ -400,6 +542,8 @@ public sealed partial class SignViewModel : ViewModelBase
         {
             var ok = await AppServices.KuroSign.ExecuteDailyTasksAsync(account);
             StatusText = ok ? "库街区每日任务完成" : "每日任务执行失败(请查看网络或稍后重试)";
+            // 任务进度(库洛币)与数据中心签到状态有变化,刷新今日日常摘要
+            await RefreshDailySummaryAsync();
         }
         catch (Exception ex)
         {

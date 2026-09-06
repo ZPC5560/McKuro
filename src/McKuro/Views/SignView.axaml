@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:McKuro.ViewModels"
              xmlns:kuro="using:McKuro.Core.Models.Kuro"
+             xmlns:core="using:McKuro.Core.Services.User"
              xmlns:controls="using:McKuro.Controls"
              xmlns:ic="using:FluentIcons.Avalonia"
              mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="700"
@@ -13,7 +14,7 @@
         <vm:SignedOpacityConverter x:Key="SignedOpacity" />
         <vm:SerialNumPlusOneConverter x:Key="SerialNumPlusOne" />
     </UserControl.Resources>
-    <Grid RowDefinitions="Auto,Auto,Auto,*">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
         <!-- 标题行:左标题 + 右侧账号信息与操作(账号信息按需求移至标题栏右边) -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="20,16,20,8">
             <StackPanel Spacing="2">
@@ -35,7 +36,12 @@
                 <Button Content="刷新角色" Command="{Binding RefreshRolesCommand}"
                         FontSize="12" Padding="8,2"
                         IsVisible="{Binding IsLoggedIn}" />
-                <Button Content="游戏签到" Classes="primary"
+                <!-- 一键日常 = 游戏签到 + 库街区每日任务(完成自动执行后当日不再重复) -->
+                <Button Content="一键日常" Classes="primary"
+                        Command="{Binding RunAllDailyCommand}"
+                        IsEnabled="{Binding !IsBusy}"
+                        IsVisible="{Binding IsLoggedIn}" />
+                <Button Content="游戏签到"
                         Command="{Binding SignAllCommand}"
                         IsEnabled="{Binding !IsBusy}"
                         IsVisible="{Binding IsLoggedIn}" />
@@ -50,17 +56,60 @@
         </Grid>
 
         <!-- 签到设置(自设置页迁移到功能页;常显,执行时自行校验登录)。
-             AutoSignEnabled 同时控制启动后与每日 8:00 两个时机(DailyTaskScheduler),故只留一个开关 -->
+             AutoSignEnabled 控制 DailyTaskScheduler 的每日定时执行(时间可在本行调整,当天只执行一次) -->
         <Border Grid.Row="1" Margin="20,0,20,10" Padding="16" CornerRadius="12"
                 Background="{DynamicResource SemiColorBg2}">
             <StackPanel Orientation="Horizontal" Spacing="16">
-                <CheckBox Content="自动游戏签到(启动后 + 每日 8:00)" IsChecked="{Binding AutoSignEnabled}" />
+                <CheckBox Content="自动游戏签到(每日定时)" IsChecked="{Binding AutoSignEnabled}" />
                 <CheckBox Content="自动执行库街区每日任务" IsChecked="{Binding AutoKuroClientTaskEnabled}" />
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <TextBlock Text="执行时间" FontSize="13" VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{Binding DailyRunTimeOptions}"
+                              SelectedItem="{Binding DailyAutoRunTime}"
+                              Width="92" FontSize="13" />
+                </StackPanel>
+                <TextBlock Text="{Binding NextAutoRunText}" FontSize="12"
+                           Foreground="{DynamicResource SemiColorText2}"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
+
+        <!-- 今日日常完成度摘要(数据中心每日数据;体力/结晶单质等资源进度见主页,不在此重复) -->
+        <Border Grid.Row="2" Margin="20,0,20,10" Padding="16,10" CornerRadius="12"
+                Background="{DynamicResource SemiColorBg2}"
+                IsVisible="{Binding IsLoggedIn}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <ic:FluentIcon Icon="CheckmarkCircle" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
+                    <TextBlock Text="今日日常" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" />
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding DailySummary}" VerticalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="core:DailyChecklistEntry">
+                            <Border CornerRadius="6" Padding="8,3" Margin="0,0,0,4"
+                                    Background="{DynamicResource SemiColorBg3}">
+                                <Panel>
+                                    <TextBlock Text="{Binding SummaryText}" FontSize="12"
+                                               Foreground="{DynamicResource SemiColorPrimary}"
+                                               IsVisible="{Binding IsDone}" />
+                                    <TextBlock Text="{Binding SummaryText}" FontSize="12"
+                                               Foreground="{DynamicResource SemiColorText2}"
+                                               IsVisible="{Binding !IsDone}" />
+                                </Panel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
         </Border>
 
         <!-- 签到奖励格子 + 今日状态(参照 WutheringWavesTool goodsView) -->
-        <Border Grid.Row="2" Margin="20,0,20,10" Padding="16" CornerRadius="12"
+        <Border Grid.Row="3" Margin="20,0,20,10" Padding="16" CornerRadius="12"
                 Background="{DynamicResource SemiColorBg2}"
                 IsVisible="{Binding IsLoggedIn}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
@@ -159,7 +208,7 @@
         </Border>
 
         <!-- 角色列表 -->
-        <Grid Grid.Row="3" Margin="20,0,20,16" IsVisible="{Binding IsLoggedIn}">
+        <Grid Grid.Row="4" Margin="20,0,20,16" IsVisible="{Binding IsLoggedIn}">
             <ListBox ItemsSource="{Binding Roles}" Background="Transparent" BorderThickness="0">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:RoleSignItem">
@@ -196,7 +245,7 @@
         </Grid>
 
         <!-- 未登录空状态 -->
-        <StackPanel Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
+        <StackPanel Grid.Row="2" Grid.RowSpan="3" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
                     IsVisible="{Binding !IsLoggedIn}">
             <TextBlock Text="登录后即可一键签到鸣潮全部角色(登录入口在「账号」页)" FontSize="16"
                        Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
