@@ -22,6 +22,9 @@ public partial class WikiView : UserControl
     /// <summary>B站播放器静音注入定时器(页面加载有先后,分多次注入)。</summary>
     private DispatcherTimer? _biliMuteTimer;
 
+    /// <summary>当前直接视频的显示比例(w/h,分辨率解析后记录)。</summary>
+    private double? _videoAspect;
+
     /// <summary>静音脚本:幂等注入,持续把页面内 video/audio 静音(B站播放器音量控件不反操作时保持无声)。</summary>
     private const string BiliMuteScript =
         "(function(){if(window.__mckuroMuted)return;window.__mckuroMuted=1;" +
@@ -34,8 +37,13 @@ public partial class WikiView : UserControl
     {
         InitializeComponent();
 
-        // 轮播区高度跟随左列公告卡(公告卡图片加载/页签切换都会改变其自然高度)
-        NoticeHost.SizeChanged += (_, _) => SyncBannerHeight();
+        // 视频区按比例自适应:分辨率解析后高度 = 宽度/显示比例(剩余空间由官方资讯区填满)
+        BannerVideo.VideoAspectRatioResolved += (w, h) =>
+        {
+            _videoAspect = h > 0 ? (double)w / h : null;
+            UpdateBannerHeight();
+        };
+        BannerHost.SizeChanged += (_, _) => UpdateBannerHeight();
 
         DataContextChanged += (_, _) =>
         {
@@ -55,11 +63,19 @@ public partial class WikiView : UserControl
         };
     }
 
-    /// <summary>轮播区高度 = 左列公告卡自然高度(下限 220 防加载期塌陷);公告卡加载完图片后升高,此处跟随。</summary>
-    private void SyncBannerHeight()
+    /// <summary>视频区高度:直接视频按显示比例、B站嵌入按 16:9、图片保持默认 220;
+    /// 右列总高跟随左列(整体高度绑定),官方资讯区填满视频以下剩余空间。</summary>
+    private void UpdateBannerHeight()
     {
-        var h = NoticeHost.Bounds.Height;
-        BannerHost.Height = h > 220 ? h : 220;
+        var vm = DataContext as WikiViewModel;
+        double? aspect = vm?.CurrentBannerIsDirectVideo == true ? _videoAspect
+            : vm?.CurrentBannerIsBili == true ? 16.0 / 9.0
+            : null;
+        if (aspect is null or <= 0 || BannerHost.Bounds.Width <= 0)
+        {
+            return;
+        }
+        BannerHost.Height = Math.Clamp(BannerHost.Bounds.Width / aspect.Value, 160, 640);
     }
 
     /// <summary>按当前轮播项维护视频覆盖层:直接视频交给 XAML 控件;B站视频注入平台 WebView。</summary>

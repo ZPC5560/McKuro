@@ -99,10 +99,10 @@
                         IsEnabled="{Binding !IsBusy}" VerticalAlignment="Center" />
             </Grid>
 
-            <!-- 游戏公告(左,高度跟随轮播控件) | 封面主图轮播(右) -->
+            <!-- 左列:游戏公告(自然高)+快捷入口 | 右列:视频(比例高)+库街区官方资讯(填满剩余,总高跟随左列) -->
             <Grid ColumnDefinitions="1*,3*" ColumnSpacing="14">
-                <!-- 游戏公告(启动器同源:活动/公告/新闻 三页签,封面卡片):高度按内容自然展开,
-                     右侧轮播区高度反向跟随本卡对齐 -->
+                <StackPanel x:Name="NoticeColumn" Spacing="14">
+                <!-- 游戏公告(启动器同源:活动/公告/新闻 三页签,封面卡片):高度按内容自然展开,卡片完整显示 -->
                 <Border x:Name="NoticeHost" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18"
                         ClipToBounds="True">
                     <Grid RowDefinitions="Auto,*">
@@ -155,9 +155,46 @@
                     </Grid>
                 </Border>
 
-                <!-- 封面主图轮播(点击跳转):图片保持原样式;视频项(直接视频/B站视频)在原控件内自动播放,
-                     轮播控件按视频比例自适应高度,下方内容自动下移 -->
-                <Border x:Name="BannerHost" Grid.Column="1" CornerRadius="14" ClipToBounds="True" Height="220">
+                <!-- 快捷入口按键(2x2,原视频左侧按键) -->
+                <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                    <ItemsControl ItemsSource="{Binding WebLinks}" HorizontalAlignment="Stretch"
+                                  VerticalAlignment="Stretch">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Rows="2" Columns="2" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:WikiLinkItem">
+                                <Button Margin="4,0,4,8" Padding="10,7" CornerRadius="10"
+                                        Background="{DynamicResource SemiColorBg3}"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                        VerticalAlignment="Stretch" VerticalContentAlignment="Center"
+                                        Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
+                                        CommandParameter="{Binding Url}">
+                                    <Grid>
+                                        <StackPanel Spacing="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="Bold"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Description}" FontSize="9.5"
+                                                       Foreground="{DynamicResource SemiColorText3}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <TextBlock Text="↗" FontSize="12" HorizontalAlignment="Right"
+                                                   VerticalAlignment="Top" Foreground="{DynamicResource SemiColorText2}" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+                </StackPanel>
+
+                <!-- 右列:封面主图轮播/视频(顶,比例高度) + 库街区官方资讯(填满剩余,总高跟随左列) -->
+                <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="14"
+                      Height="{Binding #NoticeColumn.Bounds.Height}">
+                <!-- 封面主图轮播(点击跳转):图片保持原样式;视频项(直接视频/B站视频)在原控件内自动播放 -->
+                <Border x:Name="BannerHost" Grid.Row="0" CornerRadius="14" ClipToBounds="True" Height="220">
                     <Panel>
                         <Carousel ItemsSource="{Binding Banners}" SelectedIndex="{Binding SelectedBannerIndex, Mode=TwoWay}">
                             <Carousel.ItemTemplate>
@@ -209,46 +246,9 @@
                         </Border>
                     </Panel>
                 </Border>
-            </Grid>
 
-            <!-- 快捷入口按键(2x2,左) | 库街区官方资讯(右):卡片区内部滚动 -->
-            <Grid ColumnDefinitions="1*,3*" ColumnSpacing="14">
-                <!-- 快捷入口(原视频左侧 2x2 按键,与视频右侧互换至此) -->
-                <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
-                    <ItemsControl ItemsSource="{Binding WebLinks}" HorizontalAlignment="Stretch"
-                                  VerticalAlignment="Stretch">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <UniformGrid Rows="2" Columns="2" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:WikiLinkItem">
-                                <Button Margin="4,0,4,8" Padding="10,7" CornerRadius="10"
-                                        Background="{DynamicResource SemiColorBg3}"
-                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                        VerticalAlignment="Stretch" VerticalContentAlignment="Center"
-                                        Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
-                                        CommandParameter="{Binding Url}">
-                                    <Grid>
-                                        <StackPanel Spacing="1" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="Bold"
-                                                       TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding Description}" FontSize="9.5"
-                                                       Foreground="{DynamicResource SemiColorText3}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
-                                        <TextBlock Text="↗" FontSize="12" HorizontalAlignment="Right"
-                                                   VerticalAlignment="Top" Foreground="{DynamicResource SemiColorText2}" />
-                                    </Grid>
-                                </Button>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Border>
-
-                <!-- 库街区官方资讯(资讯/公告/活动 三页签,封面卡片,内部滚动默认两行) -->
-                <Border Grid.Column="1" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
+                <!-- 库街区官方资讯(资讯/公告/活动 三页签,内部滚动,填满视频以下区域) -->
+                <Border Grid.Row="1" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                     <StackPanel Spacing="12">
                         <Grid ColumnDefinitions="Auto,Auto,*">
                             <ic:FluentIcon Grid.Column="0" Icon="News" IconVariant="Regular" IconSize="Size20" VerticalAlignment="Center" />
@@ -260,7 +260,7 @@
                         <TabControl SelectedIndex="{Binding SelectedKurobbsTab}" Background="Transparent"
                                     Padding="0" Margin="0">
                             <TabItem Header="资讯">
-                                <ScrollViewer Height="506" VerticalScrollBarVisibility="Auto">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <ItemsControl ItemsSource="{Binding KurobbsNews}"
                                                   ItemTemplate="{StaticResource KurobbsCard}">
                                         <ItemsControl.ItemsPanel>
@@ -272,7 +272,7 @@
                                 </ScrollViewer>
                             </TabItem>
                             <TabItem Header="公告">
-                                <ScrollViewer Height="506" VerticalScrollBarVisibility="Auto">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <ItemsControl ItemsSource="{Binding KurobbsAnnouncements}"
                                                   ItemTemplate="{StaticResource KurobbsCard}">
                                         <ItemsControl.ItemsPanel>
@@ -284,7 +284,7 @@
                                 </ScrollViewer>
                             </TabItem>
                             <TabItem Header="活动">
-                                <ScrollViewer Height="506" VerticalScrollBarVisibility="Auto">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <ItemsControl ItemsSource="{Binding KurobbsActivities}"
                                                   ItemTemplate="{StaticResource KurobbsCard}">
                                         <ItemsControl.ItemsPanel>
@@ -298,6 +298,7 @@
                         </TabControl>
                     </StackPanel>
                 </Border>
+                </Grid>
             </Grid>
         </StackPanel>
     </ScrollViewer>
