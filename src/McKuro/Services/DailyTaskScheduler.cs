@@ -4,12 +4,9 @@ using McKuro.Services;
 namespace McKuro.Services;
 
 /// <summary>
-/// 每日自动任务调度器:每天执行一次游戏签到与库街区每日任务。
-/// 触发时机二选一(设置 DailyAutoRunOnStartup):
-/// 启动模式 —— 应用启动后(15 秒待初始化)立即执行,不看设定时间;
-/// 定时模式 —— 到达设定时间(设置 DailyAutoRunTime,默认 08:00)后执行,
-/// 应用错过设定时间则下次启动补执行。
-/// 当天已执行过则跳过(反复重启不重复),每 30 秒轮询检查,修改配置后自动生效。
+/// 每日自动任务调度器:应用启动 15 秒后(待网络与账号初始化)执行一次
+/// 游戏签到与库街区每日任务,按天去重 —— 当天已执行过则跳过(反复重启不重复)。
+/// 手动执行不受限制(签到页「一键日常」)。
 /// </summary>
 public sealed class DailyTaskScheduler : IDisposable
 {
@@ -22,20 +19,15 @@ public sealed class DailyTaskScheduler : IDisposable
         {
             return;
         }
-        _loop = Task.Run(() => RunLoopAsync(_cts.Token));
+        _loop = Task.Run(() => RunOnceAfterStartupAsync(_cts.Token));
     }
 
-    private async Task RunLoopAsync(CancellationToken ct)
+    private async Task RunOnceAfterStartupAsync(CancellationToken ct)
     {
         try
         {
-            // 启动后延迟 15 秒再开始检查(等网络与账号初始化完成)
             await Task.Delay(TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
-            while (!ct.IsCancellationRequested)
-            {
-                await TryRunDailyTasksAsync(ct).ConfigureAwait(false);
-                await Task.Delay(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
-            }
+            await TryRunDailyTasksAsync(ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -57,20 +49,17 @@ public sealed class DailyTaskScheduler : IDisposable
             return;
         }
 
-        var onStartup = settings.DailyAutoRunOnStartup;
-        var time = DailyAutoRunSchedule.TryParseTime(settings.DailyAutoRunTime, out var parsed)
-            ? parsed
-            : TimeSpan.FromHours(8);
-        if (!DailyAutoRunSchedule.ShouldRunNow(DateTime.Now, time, settings.LastDailyAutoRunDate, onStartup))
+        var today = DailyAutoRunSchedule.TodayText(DateTime.Now);
+        if (!DailyAutoRunSchedule.ShouldRunNow(DateTime.Now, settings.LastDailyAutoRunDate))
         {
             return;
         }
 
         // 先记录执行日期再执行:保证一天最多一次,失败也不在当日反复重试轰炸接口
-        settings.LastDailyAutoRunDate = DateTime.Now.ToString("yyyy-MM-dd");
+        settings.LastDailyAutoRunDate = today;
         AppServices.Settings.Save();
         System.Console.Error.WriteLine(
-            $"MCKURO-DAILY auto: start mode={(onStartup ? "startup" : settings.DailyAutoRunTime)} sign={settings.AutoSignEnabled} bbsTask={settings.AutoKuroClientTaskEnabled}");
+            $"MCKURO-DAILY auto: start sign={settings.AutoSignEnabled} bbsTask={settings.AutoKuroClientTaskEnabled}");
 
         if (settings.AutoSignEnabled)
         {

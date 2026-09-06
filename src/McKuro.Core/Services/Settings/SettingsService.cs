@@ -93,17 +93,11 @@ public sealed class AppSettings
     /// <summary>稳定设备 ID(首次生成持久化,库街区 did 头需跨启动不变,否则触发极验风控)。</summary>
     public string StableDeviceId { get; set; } = "";
 
-    /// <summary>自动游戏签到(默认开启)。</summary>
+    /// <summary>自动游戏签到(默认开启;每次启动软件后自动执行一次,当天去重)。</summary>
     public bool AutoSignEnabled { get; set; } = true;
 
     /// <summary>库街区每日任务(签到+浏览+点赞+分享,默认关闭,可在签到页手动执行)。</summary>
     public bool AutoKuroClientTaskEnabled { get; set; }
-
-    /// <summary>每日自动执行时间("HH:mm",默认 08:00;到达时间且当天未执行时触发)。</summary>
-    public string DailyAutoRunTime { get; set; } = "08:00";
-
-    /// <summary>启动软件后立即执行每日任务(忽略 DailyAutoRunTime;当天已执行过仍会跳过)。</summary>
-    public bool DailyAutoRunOnStartup { get; set; }
 
     /// <summary>最近一次每日自动执行日期("yyyy-MM-dd";防止同一天反复重启重复执行,手动一键完成后也会记录)。</summary>
     public string LastDailyAutoRunDate { get; set; } = "";

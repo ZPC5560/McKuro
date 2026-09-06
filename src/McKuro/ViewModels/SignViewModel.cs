@@ -55,23 +55,12 @@ public sealed partial class SignViewModel : ViewModelBase
     [ObservableProperty]
     private bool _autoKuroClientTaskEnabled;
 
-    /// <summary>启动软件后立即执行每日任务(忽略执行时间;当天已执行过仍跳过)。</summary>
+    /// <summary>今日自动任务状态(已完成 / 待执行)。</summary>
     [ObservableProperty]
-    private bool _autoSignOnStartup;
-
-    /// <summary>每日自动执行时间("HH:mm",与 DailyTaskScheduler 共用设置;启动模式下不生效)。</summary>
-    [ObservableProperty]
-    private string _dailyAutoRunTime = DailyAutoRunSchedule.DefaultTimeText;
-
-    /// <summary>下次自动执行描述(如 "下次自动执行:今天 08:00")。</summary>
-    [ObservableProperty]
-    private string _nextAutoRunText = "";
+    private string _autoRunStatusText = "";
 
     /// <summary>今日日常完成度摘要(仅任务型条目;体力等资源项见主页每日数据)。</summary>
     public ObservableCollection<DailyChecklistEntry> DailySummary { get; } = [];
-
-    /// <summary>自动执行时间预设(设置里的自定义值不在预设中时自动插入到最前)。</summary>
-    public List<string> DailyRunTimeOptions { get; } = ["04:30", "08:00", "10:00", "12:00", "18:00", "20:00", "22:00"];
 
     public ObservableCollection<RoleSignItem> Roles { get; } = [];
 
@@ -93,9 +82,7 @@ public sealed partial class SignViewModel : ViewModelBase
     {
         _autoSignEnabled = AppServices.Settings.Current.AutoSignEnabled;
         _autoKuroClientTaskEnabled = AppServices.Settings.Current.AutoKuroClientTaskEnabled;
-        _autoSignOnStartup = AppServices.Settings.Current.DailyAutoRunOnStartup;
-        _dailyAutoRunTime = NormalizeRunTimeOption(AppServices.Settings.Current.DailyAutoRunTime);
-        RefreshNextAutoRunText();
+        RefreshAutoRunStatusText();
         RefreshAccount();
 
         // 账号页登录/切号/移除后自动刷新本页(与 RolesViewModel 同一消息源)
@@ -117,45 +104,10 @@ public sealed partial class SignViewModel : ViewModelBase
         AppServices.Settings.Save();
     }
 
-    partial void OnAutoSignOnStartupChanged(bool value)
+    private void RefreshAutoRunStatusText()
     {
-        AppServices.Settings.Current.DailyAutoRunOnStartup = value;
-        AppServices.Settings.Save();
-        RefreshNextAutoRunText();
-    }
-
-    /// <summary>执行时间选项归一化:非法值回退默认;自定义值(不在预设中)插入最前,保证 ComboBox 能选中显示。</summary>
-    private string NormalizeRunTimeOption(string value)
-    {
-        if (!DailyAutoRunSchedule.TryParseTime(value, out _))
-        {
-            return DailyAutoRunSchedule.DefaultTimeText;
-        }
-        if (!DailyRunTimeOptions.Contains(value))
-        {
-            DailyRunTimeOptions.Insert(0, value);
-        }
-        return value;
-    }
-
-    partial void OnDailyAutoRunTimeChanged(string value)
-    {
-        if (DailyAutoRunSchedule.TryParseTime(value, out _))
-        {
-            AppServices.Settings.Current.DailyAutoRunTime = value;
-            AppServices.Settings.Save();
-        }
-        RefreshNextAutoRunText();
-    }
-
-    private void RefreshNextAutoRunText()
-    {
-        var time = DailyAutoRunSchedule.TryParseTime(DailyAutoRunTime, out var parsed)
-            ? parsed
-            : TimeSpan.FromHours(8);
-        NextAutoRunText = "下次自动执行:" + DailyAutoRunSchedule.DescribeNext(
-            DateTime.Now, time, AppServices.Settings.Current.LastDailyAutoRunDate,
-            AppServices.Settings.Current.DailyAutoRunOnStartup);
+        AutoRunStatusText = DailyAutoRunSchedule.DescribeToday(
+            DateTime.Now, AppServices.Settings.Current.LastDailyAutoRunDate);
     }
 
     private void RefreshAccount()
@@ -475,62 +427,12 @@ public sealed partial class SignViewModel : ViewModelBase
             StatusText = summary.Message;
             await RefreshRolesAsync();
             StatusText = summary.Message;
+            // 签到状态影响「今日日常」摘要,一并刷新
+            await RefreshDailySummaryAsync();
         }
         catch (Exception ex)
         {
             StatusText = $"签到失败: {ex.Message}";
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    /// <summary>
-    /// 一键日常:依次执行游戏签到与库街区每日任务。
-    /// 全部成功时记录当日已完成(DailyTaskScheduler 当天不再重复执行)。
-    /// </summary>
-    [RelayCommand]
-    private async Task RunAllDailyAsync()
-    {
-        var account = AppServices.KuroAccounts.Current;
-        if (account is null)
-        {
-            StatusText = "请先登录库街区账号";
-            return;
-        }
-        if (IsBusy)
-        {
-            return;
-        }
-
-        IsBusy = true;
-        var allOk = true;
-        try
-        {
-            StatusText = "一键日常:正在执行游戏签到…";
-            var sign = await AppServices.KuroSign.SignAllGamesAsync(account);
-            allOk &= sign.TotalCount > 0 && sign.FailedCount == 0;
-            StatusText = $"一键日常:{sign.Message}";
-
-            StatusText = "一键日常:正在执行库街区每日任务…";
-            var bbsOk = await AppServices.KuroSign.ExecuteDailyTasksAsync(account);
-            allOk &= bbsOk;
-            StatusText = allOk
-                ? "一键日常完成,今日自动执行已完成"
-                : "一键日常完成(部分失败,可稍后单独重试)";
-
-            if (allOk)
-            {
-                AppServices.Settings.Current.LastDailyAutoRunDate = DateTime.Now.ToString("yyyy-MM-dd");
-                AppServices.Settings.Save();
-            }
-            await RefreshDailySummaryAsync();
-            RefreshNextAutoRunText();
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"一键日常失败: {ex.Message}";
         }
         finally
         {
