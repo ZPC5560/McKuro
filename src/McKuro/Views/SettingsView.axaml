@@ -566,9 +566,9 @@
                                             IsEnabled="{Binding !AppUpdateDownloading}" />
                                     <Button Content="跳过此版本" Command="{Binding SkipAppUpdateCommand}"
                                             IsVisible="{Binding AppUpdateAvailable}" />
-                                    <ProgressBar Width="160" Height="6" VerticalAlignment="Center"
+                                    <ProgressBar Width="200" Height="6" VerticalAlignment="Center"
                                                  Value="{Binding AppUpdateProgress}" Minimum="0" Maximum="100"
-                                                 IsVisible="{Binding AppUpdateDownloading}" />
+                                                 IsVisible="{Binding AppUpdateBusy}" />
                                 </StackPanel>
                                 <TextBlock Text="{Binding AppUpdateVersionText}" FontSize="13" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorPrimary}"

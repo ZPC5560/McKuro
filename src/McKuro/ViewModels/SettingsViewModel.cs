@@ -367,6 +367,17 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _appUpdateDownloading;
 
+    /// <summary>解压安装进行中(下载完成后的替换阶段)。</summary>
+    [ObservableProperty]
+    private bool _appUpdateInstalling;
+
+    /// <summary>更新全流程进行中(下载或安装)→ 控制进度条可见性。</summary>
+    public bool AppUpdateBusy => AppUpdateDownloading || AppUpdateInstalling;
+
+    partial void OnAppUpdateDownloadingChanged(bool value) => OnPropertyChanged(nameof(AppUpdateBusy));
+
+    partial void OnAppUpdateInstallingChanged(bool value) => OnPropertyChanged(nameof(AppUpdateBusy));
+
     [ObservableProperty]
     private double _appUpdateProgress;
 
@@ -753,9 +764,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
             var fileName = Path.GetFileName(localPath);
             if (fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
-                // zip 绿色包:解压到 updates\&lt;版本&gt;\ 后延迟替换当前安装目录并重启(本进程退出后再执行)
-                AppUpdateStatusText = "下载完成,正在准备替换…";
-                if (!TryApplyZipUpdate(localPath, destDir))
+                // zip 绿色包:解压(带进度)到 updates\<版本>\ 后延迟替换当前安装目录并重启(本进程退出后再执行)
+                AppUpdateStatusText = "下载完成,正在解压安装…";
+                AppUpdateInstalling = true;
+                AppUpdateProgress = 0;
+                var installProgress = new Progress<double>(p =>
+                {
+                    AppUpdateProgress = p * 100;
+                    AppUpdateStatusText = $"解压安装中 {p * 100:0}%…";
+                });
+                if (!await TryApplyZipUpdateAsync(localPath, destDir, installProgress))
                 {
                     AppUpdateStatusText = "替换失败(请关闭程序后手动解压 zip 到安装目录覆盖)";
                 }
@@ -763,6 +781,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             }
 
             AppUpdateStatusText = "下载完成,正在静默安装(自动替换并重启)…";
+            AppUpdateInstalling = true;
             // /DIR 显式锁定当前安装目录:自更新链路零选择、零歧义(zip 便携版无卸载注册表项,
             // 不能依赖 Inno 的 UsePreviousAppDir;手动双击 setup.exe 才走注册表自动定位)。
             var appDir = Path.GetDirectoryName(Environment.ProcessPath);
@@ -836,11 +855,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
         finally
         {
             AppUpdateDownloading = false;
+            AppUpdateInstalling = false;
         }
     }
 
     /// <summary>解压 zip 绿色包并生成延迟替换脚本(等待本进程退出后 xcopy 替换安装目录并重启)。</summary>
-    private bool TryApplyZipUpdate(string zipPath, string destDir)
+    private async Task<bool> TryApplyZipUpdateAsync(string zipPath, string destDir, IProgress<double>? progress)
     {
         try
         {
@@ -851,7 +871,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 Directory.Delete(extractDir, true);
             }
             Directory.CreateDirectory(extractDir);
-            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractDir);
+            await ExtractZipWithProgressAsync(zipPath, extractDir, progress);
 
             var appDir = Path.GetDirectoryName(Environment.ProcessPath) ?? ".";
             if (OperatingSystem.IsWindows())
@@ -917,6 +937,37 @@ public sealed partial class SettingsViewModel : ViewModelBase
             AppUpdateStatusText = $"替换失败: {ex.Message}";
             return false;
         }
+    }
+
+    /// <summary>逐条目解压更新包并上报进度(后台线程;Progress&lt;T&gt; 自动编排回 UI 线程)。
+    /// 含 zip-slip 防护:目标路径必须位于解压目录内。</summary>
+    private static async Task ExtractZipWithProgressAsync(string zipPath, string destDir, IProgress<double>? progress)
+    {
+        await Task.Run(() =>
+        {
+            using var archive = System.IO.Compression.ZipFile.OpenRead(zipPath);
+            var entries = archive.Entries.Where(static e => !string.IsNullOrEmpty(e.Name)).ToList();
+            var total = Math.Max(1, entries.Count);
+            var done = 0;
+            var fullDest = Path.GetFullPath(destDir);
+            Directory.CreateDirectory(fullDest);
+            foreach (var entry in entries)
+            {
+                var target = Path.GetFullPath(Path.Combine(fullDest, entry.FullName));
+                if (!target.StartsWith(fullDest, StringComparison.Ordinal))
+                {
+                    continue; // zip-slip:跳过越界条目
+                }
+                var targetDir = Path.GetDirectoryName(target);
+                if (!string.IsNullOrEmpty(targetDir))
+                {
+                    Directory.CreateDirectory(targetDir);
+                }
+                entry.ExtractToFile(target, overwrite: true);
+                done++;
+                progress?.Report(done * 100.0 / total);
+            }
+        }).ConfigureAwait(false);
     }
 
     /// <summary>跳过当前版本(对齐 Haiyu SkipAppUpdate)。</summary>
