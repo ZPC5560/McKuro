@@ -25,13 +25,12 @@ public partial class WikiView : UserControl
     /// <summary>当前直接视频的显示比例(w/h,分辨率解析后记录)。</summary>
     private double? _videoAspect;
 
-    /// <summary>静音脚本:幂等注入,持续把页面内 video/audio 静音(B站播放器音量控件不反操作时保持无声)。</summary>
+    /// <summary>静音脚本:把当前页面内 video/audio 静音(幂等,单次执行,不持续干预);
+    /// 由注入定时器分多次调用以覆盖播放器延迟创建 video 元素的时序,
+    /// 注入结束后用户可通过播放器音量控制手动恢复声音。</summary>
     private const string BiliMuteScript =
-        "(function(){if(window.__mckuroMuted)return;window.__mckuroMuted=1;" +
-        "function mute(){var els=document.querySelectorAll('video,audio');for(var i=0;i<els.length;i++){" +
-        "try{els[i].muted=true;els[i].volume=0;els[i].defaultMuted=true;}catch(e){}}}" +
-        "mute();new MutationObserver(mute).observe(document.documentElement,{childList:true,subtree:true});" +
-        "setInterval(mute,1000);})()";
+        "(function(){var els=document.querySelectorAll('video,audio');" +
+        "for(var i=0;i<els.length;i++){try{els[i].muted=true;els[i].volume=0;}catch(e){}}})()";
 
     public WikiView()
     {
@@ -112,7 +111,8 @@ public partial class WikiView : UserControl
         _biliEmbedBvid = bvid;
     }
 
-    /// <summary>启动B站播放器静音注入:2/5/9 秒三次(覆盖页面加载与播放器延迟创建 video 元素的时序)。</summary>
+    /// <summary>启动B站播放器静音注入:2/4/6/8/10 秒各一次,覆盖页面加载与播放器延迟创建 video 元素的时序;
+    /// 注入窗口结束后不再干预 —— 用户可通过播放器自带音量控制手动恢复声音。</summary>
     private void StartBiliMuteInjection()
     {
         _biliMuteTimer?.Stop();
@@ -121,7 +121,7 @@ public partial class WikiView : UserControl
         _biliMuteTimer.Tick += (_, _) =>
         {
             attempts++;
-            if (attempts >= 3)
+            if (attempts >= 5)
             {
                 _biliMuteTimer?.Stop();
             }
