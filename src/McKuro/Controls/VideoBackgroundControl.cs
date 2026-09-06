@@ -477,24 +477,59 @@ public sealed class VideoBackgroundControl : Grid
             {
                 _glRenderer.Opacity = 1;
             }
-            // 查询 mpv 视频实际尺寸并同步到窗口比例
+            if (_mpv is not null && !_disposed)
+            {
+                _ = PollVideoAspectAndPropagateAsync();
+            }
+        });
+    }
+
+    /// <summary>
+    /// 轮询读取视频显示比例并传播:优先 video-params/aspect(显示比例 DAR,含变形宽银幕),
+    /// 回退 w/h(编码像素尺寸);参数在首帧解码后才可用,FileLoaded 时刻可能尚未就绪,
+    /// 最多重试 8 次×500ms。宿主按该比例自适应高度后 mpv 画面恰好填满、无黑边。
+    /// </summary>
+    private async Task PollVideoAspectAndPropagateAsync()
+    {
+        for (var attempt = 0; attempt < 8 && !_disposed; attempt++)
+        {
             if (_mpv is not null && !_disposed)
             {
                 try
                 {
+                    double dar = _mpv.GetProperty<double>("video-params/aspect");
+                    if (dar is > 0.01 and < 10)
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (!_disposed)
+                            {
+                                PropagateVideoAspectRatio((int)Math.Round(dar * 1000), 1000);
+                            }
+                        });
+                        return;
+                    }
                     int w = _mpv.GetProperty<int>("video-params/w");
                     int h = _mpv.GetProperty<int>("video-params/h");
                     if (w > 0 && h > 0)
                     {
-                        PropagateVideoAspectRatio(w, h);
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (!_disposed)
+                            {
+                                PropagateVideoAspectRatio(w, h);
+                            }
+                        });
+                        return;
                     }
                 }
                 catch
                 {
-                    // 视频参数尚未就绪:忽略,窗口保持默认比例
+                    // 参数尚未就绪:稍后重试
                 }
             }
-        });
+            await Task.Delay(500).ConfigureAwait(false);
+        }
     }
 
     /// <summary>GL 渲染线程获取当前 mpv 上下文(渲染器初始化/渲染时调用;可能为 null:已释放)。</summary>

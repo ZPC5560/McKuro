@@ -150,7 +150,8 @@ public partial class WikiView : UserControl
         {
             return;
         }
-        var height = Math.Clamp(width / aspect.Value, 180, 560);
+        // 高度严格按视频显示比例自适应(无黑边);钳制 160-640 防极端比例
+        var height = Math.Clamp(width / aspect.Value, 160, 640);
         BannerHost.Height = height;
         // 游戏公告卡与轮播控件等高(XAML 元素绑定之外的双重保险)
         NoticeHost.Height = height;
