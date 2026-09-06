@@ -6,7 +6,6 @@ using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Core.Models.Kuro;
 using McKuro.Core.Services.Kuro;
 using McKuro.Core.Services.Settings;
-using McKuro.Core.Services.User;
 using McKuro.Services;
 
 namespace McKuro.ViewModels;
@@ -58,9 +57,6 @@ public sealed partial class SignViewModel : ViewModelBase
     /// <summary>今日自动任务状态(已完成 / 待执行)。</summary>
     [ObservableProperty]
     private string _autoRunStatusText = "";
-
-    /// <summary>今日日常完成度摘要(仅任务型条目;体力等资源项见主页每日数据)。</summary>
-    public ObservableCollection<DailyChecklistEntry> DailySummary { get; } = [];
 
     public ObservableCollection<RoleSignItem> Roles { get; } = [];
 
@@ -210,9 +206,6 @@ public sealed partial class SignViewModel : ViewModelBase
             StatusText = removed.Count > 0
                 ? $"共 {Roles.Count} 个角色(已移除失效账号:{string.Join("; ", removed)}) → 请重新登录"
                 : $"共 {Roles.Count} 个角色";
-
-            // 角色就绪后拉取今日日常完成度摘要(独立流程,失败静默)
-            _ = RefreshDailySummaryAsync();
         }
         finally
         {
@@ -372,42 +365,6 @@ public sealed partial class SignViewModel : ViewModelBase
         return grouped;
     }
 
-    /// <summary>
-    /// 拉取数据中心每日数据,生成「今日日常」完成度摘要(任务型条目:
-    /// 游戏签到/库街区任务/活跃度/周本/终焉矩阵/冥歌海墟/千道门扉/周度游历)。
-    /// 拉取失败清空摘要(不弹错误,不影响签到主流程)。
-    /// </summary>
-    private async Task RefreshDailySummaryAsync()
-    {
-        // 序号令牌:并发刷新(消息/按钮/角色刷新竞态)时只让最新一次落盘,避免 Clear/Add 交错产生重复条目
-        var seq = ++_summarySeq;
-        try
-        {
-            var data = await AppServices.DailyData.GetDailyDataAsync();
-            var entries = DailyChecklistFactory.Build(data)
-                .Where(static e => !e.IsResource)
-                .ToList();
-            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                if (seq != _summarySeq)
-                {
-                    return;
-                }
-                DailySummary.Clear();
-                foreach (var entry in entries)
-                {
-                    DailySummary.Add(entry);
-                }
-            });
-        }
-        catch (Exception)
-        {
-            // 摘要拉取失败不影响签到主流程
-        }
-    }
-
-    private int _summarySeq;
-
     /// <summary>对所有角色执行游戏签到。</summary>
     [RelayCommand]
     private async Task SignAllAsync()
@@ -427,8 +384,6 @@ public sealed partial class SignViewModel : ViewModelBase
             StatusText = summary.Message;
             await RefreshRolesAsync();
             StatusText = summary.Message;
-            // 签到状态影响「今日日常」摘要,一并刷新
-            await RefreshDailySummaryAsync();
         }
         catch (Exception ex)
         {
@@ -457,8 +412,6 @@ public sealed partial class SignViewModel : ViewModelBase
         {
             var ok = await AppServices.KuroSign.ExecuteDailyTasksAsync(account);
             StatusText = ok ? "库街区每日任务完成" : "每日任务执行失败(请查看网络或稍后重试)";
-            // 任务进度(库洛币)与数据中心签到状态有变化,刷新今日日常摘要
-            await RefreshDailySummaryAsync();
         }
         catch (Exception ex)
         {

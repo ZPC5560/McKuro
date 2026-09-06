@@ -9,13 +9,33 @@ using McKuro.Services;
 
 namespace McKuro.ViewModels;
 
-/// <summary>封面主图条目(启动器轮播优先,wiki banner 兜底),可带跳转链接。</summary>
+/// <summary>封面主图条目(启动器轮播优先,wiki banner 兜底),可带跳转链接;链接为视频时自动播放。</summary>
 public sealed class WikiBannerItem
 {
     public required string Url { get; init; }
     public string Title { get; init; } = "";
     public string JumpUrl { get; init; } = "";
     public bool HasJump => !string.IsNullOrWhiteSpace(JumpUrl);
+
+    /// <summary>链接是否为视频(按扩展名识别;视频用 libmpv 自动播放,图片保持原样式)。</summary>
+    public bool IsVideo => IsVideoUrl(Url);
+
+    /// <summary>按扩展名判断是否视频链接(mp4/webm/mov/m3u8/mkv 等)。</summary>
+    public static bool IsVideoUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+        var path = url.Contains('?') ? url[..url.IndexOf('?')] : url;
+        return path.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".m4v", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".webm", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".mov", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".avi", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 /// <summary>启动器公告组件(活动/公告/新闻)的条目(封面 + 标题 + 日期),点击跳转网页。</summary>

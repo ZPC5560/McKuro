@@ -153,8 +153,19 @@
                                         </Style>
                                     </Button.Styles>
                                     <Grid>
-                                        <controls:AsyncImage x:Name="img" ImageUrl="{Binding Url}" Stretch="UniformToFill" />
-                                        <ContentControl Content="{Binding #img}" ContentTemplate="{StaticResource ImagePlaceholder}" />
+                                        <Panel>
+                                            <!-- 视频链接:libmpv 自动播放(静音) -->
+                                            <controls:VideoBackgroundControl VideoUrl="{Binding Url}"
+                                                                             IsVideoEnabled="True"
+                                                                             IsMuted="True"
+                                                                             SyncWindowAspect="False"
+                                                                             IsVisible="{Binding IsVideo}" />
+                                            <!-- 图片链接:保持原样式 -->
+                                            <Panel IsVisible="{Binding !IsVideo}">
+                                                <controls:AsyncImage x:Name="img" ImageUrl="{Binding Url}" Stretch="UniformToFill" />
+                                                <ContentControl Content="{Binding #img}" ContentTemplate="{StaticResource ImagePlaceholder}" />
+                                            </Panel>
+                                        </Panel>
                                         <!-- 底部渐隐遮罩 + 标题(有标题时显示) -->
                                         <Border IsVisible="{Binding Title.Length}" VerticalAlignment="Bottom"
                                                 Background="#80000000" Padding="14,8">

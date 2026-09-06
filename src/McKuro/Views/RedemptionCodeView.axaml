@@ -83,10 +83,9 @@
                                                 <Run Text="{Binding EndTime}" />
                                             </TextBlock>
                                         </StackPanel>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                                            <Button Content="复制" Padding="12,3" FontSize="12"
-                                                    Command="{Binding $parent[ItemsControl].((vm:RedemptionCodeViewModel)DataContext).CopyMainlandCommand}" />
-                                        </StackPanel>
+                                        <Button Grid.Column="2" Content="复制" Padding="12,3" FontSize="12"
+                                                VerticalAlignment="Center"
+                                                Command="{Binding $parent[ItemsControl].((vm:RedemptionCodeViewModel)DataContext).CopyMainlandCommand}" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
@@ -144,7 +143,7 @@
                                                 <Run Text="{Binding EndTime}" />
                                             </TextBlock>
                                         </StackPanel>
-                                        <Button Grid.Column="1" Content="复制" Padding="12,3" FontSize="12"
+                                        <Button Grid.Column="2" Content="复制" Padding="12,3" FontSize="12"
                                                 VerticalAlignment="Center"
                                                 Command="{Binding $parent[ItemsControl].((vm:RedemptionCodeViewModel)DataContext).CopyGlobalCommand}" />
                                     </Grid>

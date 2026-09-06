@@ -134,19 +134,33 @@
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="vm:ActivityGanttItem">
-                                                <StackPanel Orientation="Horizontal" Spacing="8" Width="230" Height="40">
+                                                <Grid ColumnDefinitions="40,*,Auto" ColumnSpacing="8" Width="230" Height="40">
                                                     <Border Width="40" Height="40" CornerRadius="6" ClipToBounds="True"
                                                             Background="{DynamicResource SemiColorBg3}">
                                                         <controls:AsyncImage ImageUrl="{Binding ImageUrl}"
                                                                              Width="40" Height="40" Stretch="UniformToFill" />
                                                     </Border>
-                                                    <StackPanel Spacing="2" VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Bold"
-                                                                   TextTrimming="CharacterEllipsis" MaxWidth="170" />
+                                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                                        <Panel>
+                                                            <!-- 临期(≤3天)且未忽略:标题标红并附带剩余时间 -->
+                                                            <TextBlock Text="{Binding AlertTitle}" FontSize="13" FontWeight="Bold"
+                                                                       Foreground="#e33737"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       IsVisible="{Binding IsAlertVisible}" />
+                                                            <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Bold"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       IsVisible="{Binding !IsAlertVisible}" />
+                                                        </Panel>
                                                         <TextBlock Text="{Binding TimeRangeText}" FontSize="11"
                                                                    Foreground="{DynamicResource SemiColorText3}" />
                                                     </StackPanel>
-                                                </StackPanel>
+                                                    <!-- 忽略/取消忽略:仅临期活动显示 -->
+                                                    <Button Grid.Column="2" VerticalAlignment="Center" Padding="6,2" FontSize="10"
+                                                            Content="{Binding IgnoreButtonText}"
+                                                            IsVisible="{Binding IsExpiringSoon}"
+                                                            Command="{Binding $parent[ItemsControl].((vm:ActivityViewModel)DataContext).ToggleActivityIgnoreCommand}"
+                                                            CommandParameter="{Binding}" />
+                                                </Grid>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>

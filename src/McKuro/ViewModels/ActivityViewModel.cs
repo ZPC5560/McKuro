@@ -7,9 +7,11 @@ using McKuro.Services;
 namespace McKuro.ViewModels;
 
 /// <summary>甘特图活动条目(当前版本活动,过期已剔除)。</summary>
-public sealed class ActivityGanttItem
+public sealed partial class ActivityGanttItem : ObservableObject
 {
     public required string Title { get; init; }
+    /// <summary>活动唯一 Key(标题+起止时间,临期忽略提醒的持久化标识)。</summary>
+    public required string Key { get; init; }
     public required string TimeRangeText { get; init; }  // MM-dd ~ MM-dd
     public required DateTime Start { get; init; }
     public required DateTime End { get; init; }
@@ -27,6 +29,26 @@ public sealed class ActivityGanttItem
     public required double ProgressWidthPercent { get; init; }
     /// <summary>活动图 URL(甘特图左列 logo)。</summary>
     public string? ImageUrl { get; init; }
+    /// <summary>是否临期(距结束 ≤3 天,进行中);临期且未忽略时标题标红提醒。</summary>
+    public required bool IsExpiringSoon { get; init; }
+    /// <summary>临期标题文本(标题 + 剩余时间,标红显示;非临期与 Title 相同)。</summary>
+    public required string AlertTitle { get; init; }
+
+    /// <summary>用户是否已忽略该活动的临期提醒(点击忽略/取消忽略切换,持久化到设置)。</summary>
+    [ObservableProperty]
+    private bool _isIgnored;
+
+    /// <summary>标题是否标红(临期且未忽略)。</summary>
+    public bool IsAlertVisible => IsExpiringSoon && !IsIgnored;
+
+    /// <summary>忽略按钮文本(忽略 ↔ 取消忽略)。</summary>
+    public string IgnoreButtonText => IsIgnored ? "取消忽略" : "忽略";
+
+    partial void OnIsIgnoredChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsAlertVisible));
+        OnPropertyChanged(nameof(IgnoreButtonText));
+    }
 }
 
 /// <summary>换取活动(卡池)条目,带倒计时。</summary>
@@ -159,9 +181,11 @@ public sealed partial class ActivityViewModel : ViewModelBase
                 var leftPos = Math.Clamp((item.Start - GanttStart).TotalSeconds / windowSpan * 100, 0, 100);
                 var rightPos = Math.Clamp((item.End - GanttStart).TotalSeconds / windowSpan * 100, 0, 100);
                 var widthPct = Math.Max(0.5, rightPos - leftPos);
+                var expiringSoon = item.IsOngoing && (item.End - now).TotalDays <= ExpiringSoonDays;
                 VersionActivities.Add(new ActivityGanttItem
                 {
                     Title = item.Title,
+                    Key = $"{item.Title}|{item.Start:yyyyMMddHHmm}|{item.End:yyyyMMddHHmm}",
                     TimeRangeText = $"{item.Start:MM-dd} ~ {item.End:MM-dd}",
                     Start = item.Start,
                     End = item.End,
@@ -173,7 +197,23 @@ public sealed partial class ActivityViewModel : ViewModelBase
                     // 进度层相对条自身宽度绘制(条宽×进度)
                     ProgressWidthPercent = widthPct * item.Progress / 100,
                     ImageUrl = item.ImageUrl,
+                    IsExpiringSoon = expiringSoon,
+                    AlertTitle = expiringSoon ? $"{item.Title} · 剩{FormatRemaining(item.End - now)}" : item.Title,
                 });
+            }
+
+            // 恢复已忽略的临期提醒(仅保留当前仍展示的活动 Key:新活动刷新后旧忽略项自动失效)
+            var ignoredIds = AppServices.Settings.Current.IgnoredEndingActivityIds ?? [];
+            var currentKeys = VersionActivities.Select(a => a.Key).ToHashSet();
+            foreach (var gantt in VersionActivities)
+            {
+                gantt.IsIgnored = ignoredIds.Contains(gantt.Key);
+            }
+            var prunedIds = ignoredIds.Where(currentKeys.Contains).ToList();
+            if (prunedIds.Count != ignoredIds.Count)
+            {
+                AppServices.Settings.Current.IgnoredEndingActivityIds = prunedIds;
+                AppServices.Settings.Save();
             }
 
             // 2. 换取活动(events-side:角色池 / 武器池,每个 events-side 一个池)
@@ -280,6 +320,42 @@ public sealed partial class ActivityViewModel : ViewModelBase
             return true;
         }
         return false;
+    }
+
+    /// <summary>临期提醒阈值:距结束 ≤3 天的进行中活动标题标红。</summary>
+    private const double ExpiringSoonDays = 3;
+
+    /// <summary>临期剩余时间短文本(如 "3天" / "14小时")。</summary>
+    private static string FormatRemaining(TimeSpan remaining)
+    {
+        if (remaining.TotalDays >= 1)
+        {
+            return $"{remaining.Days}天";
+        }
+        if (remaining.TotalHours >= 1)
+        {
+            return $"{(int)remaining.TotalHours}小时";
+        }
+        return $"{Math.Max(1, (int)remaining.TotalMinutes)}分钟";
+    }
+
+    /// <summary>
+    /// 切换活动临期提醒的忽略状态(忽略 ↔ 取消忽略,持久化到设置)。
+    /// 仅保留当前展示活动的 Key:新版本活动刷新后旧忽略项自动失效。
+    /// </summary>
+    [RelayCommand]
+    private void ToggleActivityIgnore(ActivityGanttItem? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+        item.IsIgnored = !item.IsIgnored;
+        AppServices.Settings.Current.IgnoredEndingActivityIds = VersionActivities
+            .Where(static a => a.IsIgnored)
+            .Select(static a => a.Key)
+            .ToList();
+        AppServices.Settings.Save();
     }
 
     private static string FormatCountdown(TimeSpan remaining)

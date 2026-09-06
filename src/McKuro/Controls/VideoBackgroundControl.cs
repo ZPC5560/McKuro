@@ -114,6 +114,10 @@ public sealed class VideoBackgroundControl : Grid
     public static readonly StyledProperty<bool> IsVideoEnabledProperty =
         AvaloniaProperty.Register<VideoBackgroundControl, bool>(nameof(IsVideoEnabled));
 
+    /// <summary>是否静音播放(资讯页轮播视频等自动播放场景使用;默认关闭保持原有行为)。</summary>
+    public static readonly StyledProperty<bool> IsMutedProperty =
+        AvaloniaProperty.Register<VideoBackgroundControl, bool>(nameof(IsMuted));
+
     /// <summary>是否把视频分辨率同步给宿主窗口比例(启动页全屏背景用 true;
     /// 设置页小尺寸预览用 false,避免预览视频把窗口比例改掉)。默认 true。</summary>
     public static readonly StyledProperty<bool> SyncWindowAspectProperty =
@@ -145,6 +149,30 @@ public sealed class VideoBackgroundControl : Grid
     {
         get => GetValue(SyncWindowAspectProperty);
         set => SetValue(SyncWindowAspectProperty, value);
+    }
+
+    /// <summary>是否静音播放(资讯页轮播视频等自动播放场景使用;默认关闭保持原有行为)。</summary>
+    public bool IsMuted
+    {
+        get => GetValue(IsMutedProperty);
+        set => SetValue(IsMutedProperty, value);
+    }
+
+    /// <summary>按 IsMuted 配置设置 mpv 静音(创建播放器后调用;失败不影响播放)。</summary>
+    private void ApplyMuteIfConfigured(BackgroundMpvContext ctx)
+    {
+        if (!IsMuted)
+        {
+            return;
+        }
+        try
+        {
+            ctx.SetPropertyFlag("mute", true);
+        }
+        catch (Exception)
+        {
+            // 静音设置失败不影响播放
+        }
     }
 
     public VideoBackgroundControl()
@@ -319,6 +347,7 @@ public sealed class VideoBackgroundControl : Grid
         try
         {
             _mpv = new BackgroundMpvContext();
+            ApplyMuteIfConfigured(_mpv);
 
             // 错误/失败 → 回退静态图(EndFile 的 Error reason,含加载/网络/解码失败)
             _mpv.EndFile += (_, e) =>
@@ -1231,6 +1260,7 @@ public sealed class VideoBackgroundControl : Grid
                     return;
                 }
                 _mpv = ctx;
+                _owner.ApplyMuteIfConfigured(ctx);
                 // GL 函数解析:直接用 Avalonia 的 GlInterface.GetProcAddress(IntPtr (string) 签名一致)
                 ctx.StartOpenGlRendering(
                     getProcAddress: gl.GetProcAddress,

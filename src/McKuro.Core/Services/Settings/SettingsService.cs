@@ -102,6 +102,9 @@ public sealed class AppSettings
     /// <summary>最近一次每日自动执行日期("yyyy-MM-dd";防止同一天反复重启重复执行,手动一键完成后也会记录)。</summary>
     public string LastDailyAutoRunDate { get; set; } = "";
 
+    /// <summary>活动页已忽略临期提醒的活动 Key(标题+起止时间;版本活动刷新后仅保留仍存在的 Key)。</summary>
+    public List<string> IgnoredEndingActivityIds { get; set; } = [];
+
     // ---------- mcguide 攻略站 ----------
 
     /// <summary>mcguide x-token(攻略站登录后服务端返回)。</summary>
