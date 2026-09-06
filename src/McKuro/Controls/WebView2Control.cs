@@ -100,6 +100,30 @@ public sealed class WebView2Control : NativeControlHost
     /// <summary>窗口关闭前调用:在原生线程上关闭 WebView2,赶在 HWND 销毁之前。</summary>
     public void CloseWebView() => PostToNativeThread(Teardown);
 
+    /// <summary>在当前页面执行 JS(无回调;用于注入B站播放器静音等页面操作)。未就绪时忽略。</summary>
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
+    public void EvaluateJavaScript(string script)
+    {
+        if (_managedCtrl is null)
+        {
+            return;
+        }
+        PostToNativeThread(() =>
+        {
+            try
+            {
+                var webview = GetMember(_managedCtrl, "CoreWebView2");
+                webview?.GetType()
+                    .GetMethod("ExecuteScriptAsync", new[] { typeof(string) })?
+                    .Invoke(webview, new[] { script });
+            }
+            catch (Exception)
+            {
+                // 注入失败忽略(页面尚未加载完成等)
+            }
+        });
+    }
+
     private static nint OuterWndProc(nint hwnd, uint msg, nint wParam, nint lParam)
     {
         // 锚点窗口(预热用):只承载动作队列

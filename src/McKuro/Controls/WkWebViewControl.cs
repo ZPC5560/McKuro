@@ -75,6 +75,15 @@ public sealed class WkWebViewControl : NativeControlHost
         }
     }
 
+    /// <summary>在当前页面执行 JS(无回调;用于注入B站播放器静音等页面操作)。未创建时忽略。</summary>
+    public void EvaluateJavaScript(string script)
+    {
+        if (_webView != IntPtr.Zero)
+        {
+            Objc.EvaluateJavaScript(_webView, script);
+        }
+    }
+
     private sealed class NSViewHandle(IntPtr handle) : IPlatformHandle
     {
         public IntPtr Handle { get; } = handle;
@@ -202,8 +211,7 @@ public sealed class WkWebViewControl : NativeControlHost
 
         /// <summary>在 WKWebView 中加载指定 URL。</summary>
         public static void LoadUrl(IntPtr webView, string url)
-        {
-            try
+        {            try
             {
                 if (_clsNSURL == IntPtr.Zero || _clsNSURLRequest == IntPtr.Zero)
                 {
@@ -235,9 +243,33 @@ public sealed class WkWebViewControl : NativeControlHost
             }
         }
 
-        private static IntPtr CreateNsString(string value)
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate IntPtr MsgSendPtr2(IntPtr self, IntPtr sel, IntPtr arg1, IntPtr arg2);
+
+        private static MsgSendPtr2? _sendPtr2;
+        private static MsgSendPtr2 SendPtr2 => _sendPtr2 ??= GetDelegate<MsgSendPtr2>();
+
+        /// <summary>在 WKWebView 中执行 JS(evaluateJavaScript:completionHandler: 的回调可传 nil,无需 OC block)。</summary>
+        public static void EvaluateJavaScript(IntPtr webView, string script)
         {
-            if (_clsNSString == IntPtr.Zero)
+            try
+            {
+                var nsStr = CreateNsString(script);
+                if (nsStr == IntPtr.Zero)
+                {
+                    return;
+                }
+                SendPtr2(webView, Sel("evaluateJavaScript:completionHandler:"), nsStr, IntPtr.Zero);
+                CFRelease(nsStr);
+            }
+            catch (Exception)
+            {
+                // 注入失败忽略(页面未加载完成等)
+            }
+        }
+
+        private static IntPtr CreateNsString(string value)
+        {            if (_clsNSString == IntPtr.Zero)
             {
                 return IntPtr.Zero;
             }

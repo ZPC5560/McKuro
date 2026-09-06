@@ -21,6 +21,17 @@ public partial class WikiView : UserControl
     /// <summary>当前注入的 WebView2 实例(换视频项/离开时需 CloseWebView 回收)。</summary>
     private WebView2Control? _biliWebView2;
 
+    /// <summary>B站播放器静音注入定时器(页面加载有先后,分多次注入)。</summary>
+    private DispatcherTimer? _biliMuteTimer;
+
+    /// <summary>静音脚本:幂等注入,持续把页面内 video/audio 静音(B站播放器音量控件不反操作时保持无声)。</summary>
+    private const string BiliMuteScript =
+        "(function(){if(window.__mckuroMuted)return;window.__mckuroMuted=1;" +
+        "function mute(){var els=document.querySelectorAll('video,audio');for(var i=0;i<els.length;i++){" +
+        "try{els[i].muted=true;els[i].volume=0;els[i].defaultMuted=true;}catch(e){}}}" +
+        "mute();new MutationObserver(mute).observe(document.documentElement,{childList:true,subtree:true});" +
+        "setInterval(mute,1000);})()";
+
     public WikiView()
     {
         InitializeComponent();
@@ -56,9 +67,11 @@ public partial class WikiView : UserControl
         var vm = DataContext as WikiViewModel;
         var bvid = vm?.CurrentBannerIsBili == true ? vm.CurrentBanner?.Bvid : null;
 
-        // 离开B站视频项(或 BV 号变化):回收旧 WebView
+        // 离开B站视频项(或 BV 号变化):回收旧 WebView,停止静音注入
         if (bvid is null || bvid != _biliEmbedBvid)
         {
+            _biliMuteTimer?.Stop();
+            _biliMuteTimer = null;
             (_biliEmbedBvid is null ? null : BiliEmbedHost.Content as WebView2Control)?.CloseWebView();
             BiliEmbedHost.Content = null;
             _biliWebView2 = null;
@@ -75,6 +88,9 @@ public partial class WikiView : UserControl
                 _biliWebView2 = new WebView2Control { Url = playerUrl };
                 BiliEmbedHost.Content = _biliWebView2;
             }
+            // B站播放器不支持可靠的 URL 静音参数:页面加载后分多次注入 JS 静音
+            // (脚本自身 MutationObserver + 定时器持续保持静音,一次成功注入即长期有效)
+            StartBiliMuteInjection();
         }
         _biliEmbedBvid = bvid;
 
@@ -84,6 +100,32 @@ public partial class WikiView : UserControl
             _videoAspect = null;
         }
         UpdateBannerHeight();
+    }
+
+    /// <summary>启动B站播放器静音注入:2/5/9 秒三次(覆盖页面加载与播放器延迟创建 video 元素的时序)。</summary>
+    private void StartBiliMuteInjection()
+    {
+        _biliMuteTimer?.Stop();
+        var attempts = 0;
+        _biliMuteTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        _biliMuteTimer.Tick += (_, _) =>
+        {
+            attempts++;
+            if (attempts >= 3)
+            {
+                _biliMuteTimer?.Stop();
+            }
+            switch (BiliEmbedHost.Content)
+            {
+                case WkWebViewControl wk:
+                    wk.EvaluateJavaScript(BiliMuteScript);
+                    break;
+                case WebView2Control wv2:
+                    wv2.EvaluateJavaScript(BiliMuteScript);
+                    break;
+            }
+        };
+        _biliMuteTimer.Start();
     }
 
     /// <summary>
