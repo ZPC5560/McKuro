@@ -114,9 +114,9 @@ public sealed class VideoBackgroundControl : Grid
     public static readonly StyledProperty<bool> IsVideoEnabledProperty =
         AvaloniaProperty.Register<VideoBackgroundControl, bool>(nameof(IsVideoEnabled));
 
-    /// <summary>是否静音播放(资讯页轮播视频等自动播放场景使用;默认关闭保持原有行为)。</summary>
+    /// <summary>是否静音播放(默认静音;需要声音的场景显式设 false)。</summary>
     public static readonly StyledProperty<bool> IsMutedProperty =
-        AvaloniaProperty.Register<VideoBackgroundControl, bool>(nameof(IsMuted));
+        AvaloniaProperty.Register<VideoBackgroundControl, bool>(nameof(IsMuted), defaultValue: true);
 
     /// <summary>是否把视频分辨率同步给宿主窗口比例(启动页全屏背景用 true;
     /// 设置页小尺寸预览用 false,避免预览视频把窗口比例改掉)。默认 true。</summary>

@@ -65,7 +65,7 @@ public partial class WikiView : UserControl
         }
         if (bvid is not null && bvid != _biliEmbedBvid)
         {
-            var playerUrl = $"https://player.bilibili.com/player.html?bvid={Uri.EscapeDataString(bvid)}&autoplay=1&danmaku=0";
+            var playerUrl = $"https://player.bilibili.com/player.html?bvid={Uri.EscapeDataString(bvid)}&autoplay=1&danmaku=0&mute=1";
             if (WkWebViewControl.IsSupported)
             {
                 BiliEmbedHost.Content = new WkWebViewControl { Url = playerUrl };
