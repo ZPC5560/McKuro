@@ -72,16 +72,13 @@
                                             <TextBlock Text="{Binding Description}" FontSize="12"
                                                        FontWeight="Bold"
                                                        Foreground="{DynamicResource SemiColorPrimary}"
-                                                       TextTrimming="CharacterEllipsis" MaxWidth="360"
+                                                       TextTrimming="CharacterEllipsis"
                                                        IsVisible="{Binding Description, Converter={StaticResource StringNotEmpty}}" />
                                             <TextBlock Text="{Binding Reward}" FontSize="12"
                                                        Foreground="{DynamicResource SemiColorText2}"
-                                                       TextTrimming="CharacterEllipsis" MaxWidth="360" />
-                                            <TextBlock FontSize="11" Foreground="{DynamicResource SemiColorText3}">
-                                                <Run Text="{Binding StartTime}" />
-                                                <Run Text=" ~ " />
-                                                <Run Text="{Binding EndTime}" />
-                                            </TextBlock>
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding TimeRangeText}" FontSize="11"
+                                                       Foreground="{DynamicResource SemiColorText3}" />
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="复制" Padding="12,3" FontSize="12"
                                                 VerticalAlignment="Center"
@@ -132,16 +129,13 @@
                                             <TextBlock Text="{Binding Description}" FontSize="12"
                                                        FontWeight="Bold"
                                                        Foreground="{DynamicResource SemiColorPrimary}"
-                                                       TextTrimming="CharacterEllipsis" MaxWidth="360"
+                                                       TextTrimming="CharacterEllipsis"
                                                        IsVisible="{Binding Description, Converter={StaticResource StringNotEmpty}}" />
                                             <TextBlock Text="{Binding Reward}" FontSize="12"
                                                        Foreground="{DynamicResource SemiColorText2}"
-                                                       TextTrimming="CharacterEllipsis" MaxWidth="360" />
-                                            <TextBlock FontSize="11" Foreground="{DynamicResource SemiColorText3}">
-                                                <Run Text="{Binding StartTime}" />
-                                                <Run Text=" ~ " />
-                                                <Run Text="{Binding EndTime}" />
-                                            </TextBlock>
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding TimeRangeText}" FontSize="11"
+                                                       Foreground="{DynamicResource SemiColorText3}" />
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="复制" Padding="12,3" FontSize="12"
                                                 VerticalAlignment="Center"

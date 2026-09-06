@@ -166,10 +166,10 @@
                                     </ItemsControl>
                                 </StackPanel>
 
-                                <!-- 右列:时间轴 + 甘特条 -->
+                                <!-- 右列:时间轴 + 甘特条(表头高 28 与左列"活动"标签对齐) -->
                                 <Grid Grid.Column="1">
                                     <Grid.RowDefinitions>
-                                        <RowDefinition Height="16" />
+                                        <RowDefinition Height="28" />
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     <!-- 当前日期竖线(跨整列) -->
@@ -177,13 +177,14 @@
                                             HorizontalAlignment="Left"
                                             Margin="{Binding GanttTodayPercent, Converter={StaticResource GanttMargin}}"
                                             IsHitTestVisible="False" />
-                                    <!-- 时间轴刻度 -->
-                                    <Grid Grid.Row="0" ColumnDefinitions="*,*" Margin="0,0,0,4">
+                                    <!-- 时间轴刻度(文本顶对齐,与左列"活动"标签同基线) -->
+                                    <Grid Grid.Row="0" ColumnDefinitions="*,*">
                                         <TextBlock Text="{Binding GanttStartText}" FontSize="10"
+                                                   VerticalAlignment="Top"
                                                    Foreground="{DynamicResource SemiColorText3}" />
                                         <TextBlock Grid.Column="1" Text="{Binding GanttEndText}" FontSize="10"
                                                    Foreground="{DynamicResource SemiColorText3}"
-                                                   HorizontalAlignment="Right" />
+                                                   HorizontalAlignment="Right" VerticalAlignment="Top" />
                                     </Grid>
                                         <!-- 今天日期标注(红色,在今日竖线位置) -->
                                         <Border Background="#e33737" CornerRadius="3" Padding="4,1"
@@ -192,11 +193,11 @@
                                             <TextBlock Text="{Binding GanttTodayLabel}" FontSize="9" Foreground="White"
                                                        FontWeight="Bold" />
                                         </Border>
-                                    <!-- 甘特条区(带背景轨) -->
+                                    <!-- 甘特条区(带背景轨):行距 8 与左列一致(每行 40+8=48,保证左右对齐) -->
                                     <ItemsControl Grid.Row="1" ItemsSource="{Binding VersionActivities}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
-                                                <StackPanel Spacing="6" />
+                                                <StackPanel Spacing="8" />
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>

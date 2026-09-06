@@ -13,6 +13,9 @@ public sealed class RedemptionCodeItem
     [JsonPropertyName("contributors")] public string? Contributors { get; set; }
     [JsonPropertyName("valid")] public bool Valid { get; set; }
     [JsonPropertyName("gameName")] public string? GameName { get; set; }
+
+    /// <summary>起止时间单行文本(供列表对齐排版;替代多 Run 内联拼接,避免行内空白造成的缩进偏差)。</summary>
+    public string TimeRangeText => $"{StartTime} ~ {EndTime}";
 }
 
 /// <summary>兑换码列表接口响应(data 内层)。</summary>
