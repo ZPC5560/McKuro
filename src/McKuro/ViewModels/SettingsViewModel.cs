@@ -878,7 +878,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
             if (OperatingSystem.IsWindows())
             {
                 var script = Path.Combine(destDir, "update.cmd");
-                File.WriteAllText(script, $$"""
+                // 注意:必须用单 $ 原始字符串 —— $$ 会让 {extractDir}/{appDir} 变成字面量(xcopy 永远失败)
+                File.WriteAllText(script, $"""
                     @echo off
                     chcp 65001 >nul
                     timeout /t 2 /nobreak >nul
@@ -907,14 +908,28 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 }
                 var exeName = Path.GetFileName(processPath);
                 var script = Path.Combine(destDir, "update.sh");
+                var log = Path.Combine(destDir, "update.log");
+                // 注意:单 $ 原始字符串(单花括号即插值;$$ 会把 {xxx} 变成字面量,脚本全废)。
+                // macOS 自带 bash 3.2:不能用 &>> / 等 bash4 语法,统一 POSIX 写法
                 File.WriteAllText(script, $"""
                     #!/bin/bash
+                    exec >>"{log}" 2>&1
+                    echo "$(date '+%F %T') update.sh 启动:目标进程 {Environment.ProcessId} → {appDir}"
                     sleep 2
                     kill {Environment.ProcessId} 2>/dev/null
-                    sleep 2
-                    cp -R "{extractDir}/." "{appDir}/"
+                    for i in 1 2 3 4 5; do
+                        kill -0 {Environment.ProcessId} 2>/dev/null || break
+                        sleep 1
+                    done
+                    kill -9 {Environment.ProcessId} 2>/dev/null
+                    sleep 1
+                    echo "$(date '+%F %T') 旧进程已退出,开始替换"
+                    cp -R "{extractDir}/." "{appDir}/" || echo "cp 失败"
                     chmod +x "{Path.Combine(appDir, exeName)}"
-                    nohup "{Path.Combine(appDir, exeName)}" >/dev/null 2>&1 &
+                    echo "$(date '+%F %T') 替换完成,拉起新版本"
+                    nohup "{Path.Combine(appDir, exeName)}" >>"{log}" 2>&1 &
+                    sleep 1
+                    echo "$(date '+%F %T') 已拉起新版本"
                     rm -f -- "$0"
                     """);
 

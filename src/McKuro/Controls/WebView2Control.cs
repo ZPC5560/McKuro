@@ -284,6 +284,11 @@ public sealed class WebView2Control : NativeControlHost
     [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
     public static void PrewarmEnvironment()
     {
+        // WebView2 为 Windows 专属:macOS/Linux 走 WkWebViewControl,预热只会撞 gdi32 等 Win32 依赖直接崩溃
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
         if (s_sharedEnv is not null || s_envTcs is not null)
         {
             Log?.LogInformation("WebView2 预热跳过(已就绪或进行中)");

@@ -217,13 +217,23 @@ public static class AppServices
         // ---- 基础 ----
         // SocketsHttpHandler + 连接池生命周期(对齐 AsyncImage 的用法):
         // CDN 域名 DNS 轮换时 5 分钟后新建连接取到新 IP,HttpClientHandler 会无限复用旧连接。
-        services.AddSingleton(new HttpClient(new System.Net.Http.SocketsHttpHandler
+        // 系统代理自动检测:macOS 上 HttpClient.DefaultProxy 不读系统代理,显式注入(见 SystemProxyDetector)。
+        var systemProxy = McKuro.Core.Services.Infrastructure.SystemProxyDetector.Detect();
+        services.AddSingleton(sp =>
         {
-            AutomaticDecompression = System.Net.DecompressionMethods.All,
-            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-        })
-        {
-            Timeout = TimeSpan.FromSeconds(60),
+            var handler = new System.Net.Http.SocketsHttpHandler
+            {
+                AutomaticDecompression = System.Net.DecompressionMethods.All,
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+            };
+            if (systemProxy is not null)
+            {
+                handler.Proxy = systemProxy;
+            }
+            return new HttpClient(handler)
+            {
+                Timeout = TimeSpan.FromSeconds(60),
+            };
         });
         services.AddSingleton(sp => new SettingsService(dataDir,
             sp.GetRequiredService<ILoggerFactory>().CreateLogger<SettingsService>()));

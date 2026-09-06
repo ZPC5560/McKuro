@@ -181,13 +181,17 @@ public sealed class AppUpdateService
         _ => false, // linux:无自动更新资产
     };
 
-    /// <summary>下载安装包到目标目录,返回本地路径;失败返回 null。</summary>
+    /// <summary>下载安装包到目标目录,返回本地路径;失败返回 null。
+    /// 可靠性:独立长超时 HttpClient(共享客户端 60s 超时对大文件/慢速代理不够);
+    /// 系统代理自动注入(macOS 上 DefaultProxy 不读系统设置);
+    /// 断点续传(.part 分块 + HTTP Range)+ 卡死重试(单次读取 60s 无数据即断,最多 4 次)。</summary>
     public async Task<string?> DownloadAsync(
         string url,
         string destDir,
         IProgress<double>? progress = null,
         CancellationToken ct = default)
     {
+        const int maxAttempts = 4;
         try
         {
             Directory.CreateDirectory(destDir);
@@ -197,30 +201,91 @@ public sealed class AppUpdateService
                 fileName = "McKuro-Setup.exe";
             }
             var destPath = Path.Combine(destDir, fileName);
+            var partPath = destPath + ".part";
 
-            using var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct)
-                .ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-            var total = response.Content.Headers.ContentLength ?? -1;
-
-            await using var source = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            await using var target = new FileStream(destPath, FileMode.Create, FileAccess.Write,
-                FileShare.None, 128 * 1024, useAsync: true);
-            var buffer = new byte[128 * 1024];
-            long downloaded = 0;
-            while (true)
+            for (var attempt = 1; ; attempt++)
             {
-                int read = await source.ReadAsync(buffer, ct).ConfigureAwait(false);
-                if (read == 0)
+                try
                 {
-                    break;
+                    var resumeFrom = File.Exists(partPath) ? new FileInfo(partPath).Length : 0;
+                    var detectedProxy = McKuro.Core.Services.Infrastructure.SystemProxyDetector.Detect();
+                    System.Console.Error.WriteLine(
+                        $"MCKURO-UPDATE dl: 第 {attempt}/{maxAttempts} 次 resume={resumeFrom} proxy={(detectedProxy is null ? "默认" : detectedProxy.ToString())}");
+                    using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                    if (resumeFrom > 0)
+                    {
+                        request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(resumeFrom, null);
+                    }
+                    using var downloader = new HttpClient(new SocketsHttpHandler
+                    {
+                        PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+                        UseProxy = true,
+                        // 显式注入系统代理(macOS 上 DefaultProxy 不读系统设置;未检测到时保留默认解析)
+                        Proxy = detectedProxy ?? HttpClient.DefaultProxy,
+                    })
+                    {
+                        Timeout = TimeSpan.FromMinutes(15),
+                    };
+                    using var response = await downloader
+                        .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
+                        .ConfigureAwait(false);
+                    response.EnsureSuccessStatusCode();
+                    var resumed = (int)response.StatusCode == 206 && resumeFrom > 0;
+                    var total = response.Content.Headers.ContentLength.HasValue
+                        ? response.Content.Headers.ContentLength.Value + (resumed ? resumeFrom : 0)
+                        : -1;
+                    if (!resumed)
+                    {
+                        resumeFrom = 0;
+                    }
+
+                    await using var source = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                    await using (var target = new FileStream(partPath, resumed ? FileMode.Append : FileMode.Create,
+                        FileAccess.Write, FileShare.None, 128 * 1024, useAsync: true))
+                    {
+                        var buffer = new byte[128 * 1024];
+                        var downloaded = resumeFrom;
+                        while (true)
+                        {
+                            // 单次读取 60 秒无数据视为连接卡死 → 抛出重试(断点续传)
+                            using var readCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                            readCts.CancelAfter(TimeSpan.FromSeconds(60));
+                            int read;
+                            try
+                            {
+                                read = await source.ReadAsync(buffer, readCts.Token).ConfigureAwait(false);
+                            }
+                            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                            {
+                                throw new TimeoutException("下载连接 60 秒无数据");
+                            }
+                            if (read == 0)
+                            {
+                                break;
+                            }
+                            await target.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                            downloaded += read;
+                            progress?.Report(total > 0 ? (double)downloaded / total : 0);
+                        }
+                    }
+                    File.Move(partPath, destPath, true);
+                    return destPath;
                 }
-                await target.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
-                downloaded += read;
-                progress?.Report(total > 0 ? (double)downloaded / total : 0);
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    System.Console.Error.WriteLine(
+                        $"MCKURO-UPDATE dl: 第 {attempt}/{maxAttempts} 次失败: {ex.GetType().Name} {ex.Message}");
+                    if (attempt >= maxAttempts)
+                    {
+                        return null;
+                    }
+                    await Task.Delay(TimeSpan.FromSeconds(attempt * 2), CancellationToken.None).ConfigureAwait(false);
+                }
             }
-            await target.FlushAsync(ct).ConfigureAwait(false);
-            return destPath;
         }
         catch (Exception)
         {

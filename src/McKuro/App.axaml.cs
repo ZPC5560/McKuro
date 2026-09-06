@@ -23,7 +23,8 @@ public partial class App : Application
         System.Console.Error.WriteLine(
             $"MCKURO-THREAD app-init tid={Environment.CurrentManagedThreadId} apt={Thread.CurrentThread.GetApartmentState()}");
 
-        AppServices.Initialize();
+        // 数据目录可经 McKuro_DATA_DIR 重定向(自更新流程模拟测试/多实例隔离用;默认 %AppData%/McKuro)
+        AppServices.Initialize(Environment.GetEnvironmentVariable("McKuro_DATA_DIR"));
 
         // WebView2 环境预热:仅当库街区账号未登录时(登录验证需要极验;已有账号则无需每次启动加载)。
         // 当前线程即平台线程(STA),环境对象绑定此线程,后续验证窗口的 Controller 创建与之同套间。
