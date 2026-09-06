@@ -1049,10 +1049,25 @@ public sealed class VideoBackgroundControl : Grid
         }
     }
 
-    /// <summary>把视频实际分辨率同步给宿主窗口,自动切换窗口内容区比例(仅启动页/视频壁纸页)。</summary>
+    /// <summary>视频分辨率已解析(宽,高,UI 线程触发);宿主可据此做比例自适应布局(无论 SyncWindowAspect 开关)。</summary>
+    public event Action<double, double>? VideoAspectRatioResolved;
+
     private void PropagateVideoAspectRatio(int videoWidth, int videoHeight)
     {
-        if (videoWidth <= 0 || videoHeight <= 0 || _disposed || !SyncWindowAspect)
+        if (videoWidth <= 0 || videoHeight <= 0 || _disposed)
+        {
+            return;
+        }
+        // 先通知宿主做比例自适应(如资讯页轮播控件按视频比例改变高度),再按需同步窗口比例
+        try
+        {
+            VideoAspectRatioResolved?.Invoke(videoWidth, videoHeight);
+        }
+        catch (Exception)
+        {
+            // 宿主布局失败不影响播放
+        }
+        if (!SyncWindowAspect)
         {
             return;
         }

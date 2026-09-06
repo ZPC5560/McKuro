@@ -7,11 +7,10 @@ using McKuro.Core.Models.Wiki;
 using McKuro.Core.Services.Game;
 using McKuro.Core.Services.Launcher;
 using McKuro.Services;
-using McKuro.Views;
 
 namespace McKuro.ViewModels;
 
-/// <summary>封面主图条目(启动器轮播优先,wiki banner 兜底),可带跳转链接;链接为视频时自动播放。</summary>
+    /// <summary>封面主图条目(启动器轮播优先,wiki banner 兜底);视频在原轮播控件内播放(直接视频=mpv,B站视频=内嵌播放器)。</summary>
 public sealed class WikiBannerItem
 {
     public required string Url { get; init; }
@@ -19,10 +18,14 @@ public sealed class WikiBannerItem
     public string JumpUrl { get; init; } = "";
     public bool HasJump => !string.IsNullOrWhiteSpace(JumpUrl);
 
-    /// <summary>链接是否为视频(按扩展名识别;视频用 libmpv 自动播放,图片保持原样式)。</summary>
-    public bool IsVideo => IsVideoUrl(Url);
+    /// <summary>跳转链接为B站视频时解析出的 BV 号(非空 = 在原控件内嵌B站播放器自动播放)。</summary>
+    public string? Bvid { get; init; }
+    public bool IsBiliVideo => !string.IsNullOrEmpty(Bvid);
 
-    /// <summary>按扩展名判断是否视频链接(mp4/webm/mov/m3u8/mkv 等)。</summary>
+    /// <summary>链接本身是直接视频文件(按扩展名识别,mp4/webm/mov/m3u8 等)→ mpv 原地播放。</summary>
+    public bool IsVideo => WikiBannerItem.IsVideoUrl(Url);
+
+    /// <summary>按扩展名判断是否视频文件链接。</summary>
     public static bool IsVideoUrl(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
@@ -87,6 +90,38 @@ public sealed partial class WikiViewModel : ViewModelBase
     /// <summary>封面主图轮播。</summary>
     public ObservableCollection<WikiBannerItem> Banners { get; } = [];
 
+    /// <summary>当前轮播索引(视频覆盖层跟随当前项切换)。</summary>
+    [ObservableProperty]
+    private int _selectedBannerIndex;
+
+    /// <summary>当前轮播项(无数据为 null)。</summary>
+    public WikiBannerItem? CurrentBanner =>
+        SelectedBannerIndex >= 0 && SelectedBannerIndex < Banners.Count ? Banners[SelectedBannerIndex] : null;
+
+    /// <summary>当前项是直接视频文件(mp4 等)→ mpv 原地自动播放。</summary>
+    public bool CurrentBannerIsDirectVideo => CurrentBanner?.IsVideo == true;
+
+    /// <summary>当前项是B站视频 → 原控件内嵌B站播放器自动播放。</summary>
+    public bool CurrentBannerIsBili => CurrentBanner?.IsBiliVideo == true;
+
+    public string CurrentBannerTitle => CurrentBanner?.Title ?? "";
+    public bool CurrentBannerHasTitle => CurrentBannerTitle.Length > 0;
+    public string CurrentBannerJumpUrl => CurrentBanner?.JumpUrl ?? "";
+    public bool CurrentBannerHasJump => CurrentBannerJumpUrl.Length > 0;
+
+    private void RaiseCurrentBannerChanged()
+    {
+        OnPropertyChanged(nameof(CurrentBanner));
+        OnPropertyChanged(nameof(CurrentBannerIsDirectVideo));
+        OnPropertyChanged(nameof(CurrentBannerIsBili));
+        OnPropertyChanged(nameof(CurrentBannerTitle));
+        OnPropertyChanged(nameof(CurrentBannerHasTitle));
+        OnPropertyChanged(nameof(CurrentBannerJumpUrl));
+        OnPropertyChanged(nameof(CurrentBannerHasJump));
+    }
+
+    partial void OnSelectedBannerIndexChanged(int value) => RaiseCurrentBannerChanged();
+
     /// <summary>库街区·资讯(eventType=2)。</summary>
     public ObservableCollection<OfficialEventCard> KurobbsNews { get; } = [];
 
@@ -126,32 +161,13 @@ public sealed partial class WikiViewModel : ViewModelBase
         _ = LoadAsync();
     }
 
-    /// <summary>
-    /// 打开链接:B站视频(bilibili 页面链接或 b23.tv 短链)用应用内播放窗口,
-    /// 自动播放免浏览器加载;其余链接在默认浏览器打开。
-    /// </summary>
+    /// <summary>在默认浏览器中打开网页。</summary>
     [RelayCommand]
-    private async Task OpenLink(string? url)
+    private void OpenLink(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
         {
             return;
-        }
-        if (BiliVideoHelper.IsBiliVideoUrl(url) && BiliVideoWindow.IsPlatformSupported)
-        {
-            try
-            {
-                var bvid = await BiliVideoHelper.ResolveBvIdAsync(url, AppServices.Http);
-                if (bvid is not null)
-                {
-                    new BiliVideoWindow(bvid).Show();
-                    return;
-                }
-            }
-            catch (Exception)
-            {
-                // 短链解析失败:回退系统浏览器
-            }
         }
         try
         {
@@ -204,6 +220,9 @@ public sealed partial class WikiViewModel : ViewModelBase
             _coverByTitle.Clear();
 
             int banners = await LoadBannersAsync();
+            // 重置轮播到首项并刷新视频覆盖层状态(Banners 重建后索引不变也要通知)
+            SelectedBannerIndex = 0;
+            RaiseCurrentBannerChanged();
             var (news, anns, acts) = await LoadKurobbsEventsAsync();
             int notices = await LoadLauncherGuidanceAsync();
 
@@ -219,19 +238,39 @@ public sealed partial class WikiViewModel : ViewModelBase
         }
     }
 
-    /// <summary>封面主图:官方启动器轮播图优先(带跳转),失败回退 wiki 首页 banner。返回数量。</summary>
+    /// <summary>封面主图:官方启动器轮播图优先(带跳转),失败回退 wiki 首页 banner。返回数量。
+    /// 跳转链接为B站视频(页面/短链)时并行解析出 BV 号,供原控件内嵌播放器播放。</summary>
     private async Task<int> LoadBannersAsync()
     {
         var info = await AppServices.LauncherInfo.GetLauncherInfoAsync(ServerType);
         if (info?.Slideshow is { Count: > 0 })
         {
-            foreach (var slide in info.Slideshow.Where(s => !string.IsNullOrWhiteSpace(s.Url)))
+            var slides = info.Slideshow.Where(s => !string.IsNullOrWhiteSpace(s.Url)).ToList();
+            // 并行解析B站视频链接(含 b23.tv 短链重定向)→ BV 号
+            var bvids = new string?[slides.Count];
+            await Task.WhenAll(slides.Select(async (slide, i) =>
+            {
+                if (!BiliVideoHelper.IsBiliVideoUrl(slide.JumpUrl))
+                {
+                    return;
+                }
+                try
+                {
+                    bvids[i] = await BiliVideoHelper.ResolveBvIdAsync(slide.JumpUrl, AppServices.Http);
+                }
+                catch (Exception)
+                {
+                    // 解析失败:该轮播项按普通图片展示
+                }
+            }));
+            for (var i = 0; i < slides.Count; i++)
             {
                 Banners.Add(new WikiBannerItem
                 {
-                    Url = slide.Url,
-                    Title = slide.CarouselNotes ?? "",
-                    JumpUrl = slide.JumpUrl ?? "",
+                    Url = slides[i].Url,
+                    Title = slides[i].CarouselNotes ?? "",
+                    JumpUrl = slides[i].JumpUrl ?? "",
+                    Bvid = bvids[i],
                 });
             }
             return Banners.Count;

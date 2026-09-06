@@ -132,57 +132,59 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <!-- 封面主图轮播(点击跳转) -->
-                <Border Grid.Column="1" CornerRadius="14" ClipToBounds="True" Height="220">
-                    <Carousel ItemsSource="{Binding Banners}">
-                        <Carousel.ItemTemplate>
-                            <DataTemplate x:DataType="vm:WikiBannerItem">
-                                <Button Padding="0" CornerRadius="0" HorizontalContentAlignment="Stretch"
-                                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                                        Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
-                                        CommandParameter="{Binding JumpUrl}">
-                                    <Button.Styles>
-                                        <Style Selector="Button">
-                                            <Setter Property="Background" Value="Transparent" />
-                                        </Style>
-                                        <Style Selector="Button:pointerover /template/ ContentPresenter">
-                                            <Setter Property="Background" Value="Transparent" />
-                                        </Style>
-                                        <Style Selector="Button:pressed /template/ ContentPresenter">
-                                            <Setter Property="Background" Value="Transparent" />
-                                        </Style>
-                                    </Button.Styles>
-                                    <Grid>
-                                        <Panel>
-                                            <!-- 视频链接:libmpv 自动播放(静音) -->
-                                            <controls:VideoBackgroundControl VideoUrl="{Binding Url}"
-                                                                             IsVideoEnabled="True"
-                                                                             IsMuted="True"
-                                                                             SyncWindowAspect="False"
-                                                                             IsVisible="{Binding IsVideo}" />
-                                            <!-- 图片链接:保持原样式 -->
-                                            <Panel IsVisible="{Binding !IsVideo}">
-                                                <controls:AsyncImage x:Name="img" ImageUrl="{Binding Url}" Stretch="UniformToFill" />
-                                                <ContentControl Content="{Binding #img}" ContentTemplate="{StaticResource ImagePlaceholder}" />
-                                            </Panel>
-                                        </Panel>
-                                        <!-- 底部渐隐遮罩 + 标题(有标题时显示) -->
-                                        <Border IsVisible="{Binding Title.Length}" VerticalAlignment="Bottom"
-                                                Background="#80000000" Padding="14,8">
-                                            <TextBlock Text="{Binding Title}" FontSize="14" Foreground="White"
-                                                       TextTrimming="CharacterEllipsis" />
-                                        </Border>
-                                        <!-- 可跳转角标 -->
-                                        <Border IsVisible="{Binding HasJump}" HorizontalAlignment="Right"
-                                                VerticalAlignment="Top" Margin="10"
-                                                CornerRadius="8" Background="#66000000" Padding="8,3">
-                                            <TextBlock Text="查看详情 ↗" FontSize="11" Foreground="White" />
-                                        </Border>
-                                    </Grid>
-                                </Button>
-                            </DataTemplate>
-                        </Carousel.ItemTemplate>
-                    </Carousel>
+                <!-- 封面主图轮播(点击跳转):图片保持原样式;视频项(直接视频/B站视频)在原控件内自动播放,
+                     轮播控件按视频比例自适应高度,下方内容自动下移 -->
+                <Border x:Name="BannerHost" Grid.Column="1" CornerRadius="14" ClipToBounds="True" Height="220">
+                    <Panel>
+                        <Carousel ItemsSource="{Binding Banners}" SelectedIndex="{Binding SelectedBannerIndex, Mode=TwoWay}">
+                            <Carousel.ItemTemplate>
+                                <DataTemplate x:DataType="vm:WikiBannerItem">
+                                    <Button Padding="0" CornerRadius="0" HorizontalContentAlignment="Stretch"
+                                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                            Command="{Binding $parent[ItemsControl].((vm:WikiViewModel)DataContext).OpenLinkCommand}"
+                                            CommandParameter="{Binding JumpUrl}">
+                                        <Button.Styles>
+                                            <Style Selector="Button">
+                                                <Setter Property="Background" Value="Transparent" />
+                                            </Style>
+                                            <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                                <Setter Property="Background" Value="Transparent" />
+                                            </Style>
+                                            <Style Selector="Button:pressed /template/ ContentPresenter">
+                                                <Setter Property="Background" Value="Transparent" />
+                                            </Style>
+                                        </Button.Styles>
+                                        <Grid>
+                                            <controls:AsyncImage x:Name="img" ImageUrl="{Binding Url}" Stretch="UniformToFill" />
+                                            <ContentControl Content="{Binding #img}" ContentTemplate="{StaticResource ImagePlaceholder}" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </Carousel.ItemTemplate>
+                        </Carousel>
+                        <!-- 直接视频文件:libmpv 在原控件内自动播放(静音) -->
+                        <Panel IsVisible="{Binding CurrentBannerIsDirectVideo}" Background="Transparent">
+                            <controls:VideoBackgroundControl x:Name="BannerVideo"
+                                                             VideoUrl="{Binding CurrentBanner.Url}"
+                                                             IsVideoEnabled="{Binding CurrentBannerIsDirectVideo}"
+                                                             IsMuted="True"
+                                                             SyncWindowAspect="False" />
+                        </Panel>
+                        <!-- B站视频:内嵌B站官方播放器(WebView 实例由代码后置按平台注入) -->
+                        <ContentControl x:Name="BiliEmbedHost" IsVisible="{Binding CurrentBannerIsBili}" Background="Transparent" />
+                        <!-- 底部标题遮罩(视频/图片通用) -->
+                        <Border IsVisible="{Binding CurrentBannerHasTitle}" VerticalAlignment="Bottom"
+                                Background="#80000000" Padding="14,8">
+                            <TextBlock Text="{Binding CurrentBannerTitle}" FontSize="14" Foreground="White"
+                                       TextTrimming="CharacterEllipsis" />
+                        </Border>
+                        <!-- 可跳转角标 -->
+                        <Border IsVisible="{Binding CurrentBannerHasJump}" HorizontalAlignment="Right"
+                                VerticalAlignment="Top" Margin="10"
+                                CornerRadius="8" Background="#66000000" Padding="8,3">
+                            <TextBlock Text="查看详情 ↗" FontSize="11" Foreground="White" />
+                        </Border>
+                    </Panel>
                 </Border>
             </Grid>
 
