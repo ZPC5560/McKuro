@@ -294,6 +294,209 @@ public sealed partial class SettingsViewModel : ViewModelBase
         WallpaperScanStatus = LanguageService.Format("Settings.PickedWallpaper", entry.Title);
     }
 
+    // ---------- 首页 Live2D 模型(仅 Windows x64;Sparkle.Live2DView 渲染) ----------
+
+    /// <summary>平台是否支持 Live2D 渲染(当前仅 Windows x64;不支持时整块只读展示指引)。</summary>
+    public bool IsLive2DSupported => Live2DLocator.IsSupported;
+
+    /// <summary>Cubism Core 是否已就绪(用户放置 Live2DCubismCore.dll 后即时反映)。</summary>
+    [ObservableProperty]
+    private bool _isLive2DCoreAvailable;
+
+    [ObservableProperty]
+    private bool _live2DEnabled;
+
+    /// <summary>导入的模型文件夹绝对路径。</summary>
+    [ObservableProperty]
+    private string _live2DModelDir = "";
+
+    /// <summary>模型下拉选项(扫描到的 *.model3.json 文件名,不含扩展名)。</summary>
+    public ObservableCollection<string> Live2DModelOptions { get; } = [];
+
+    [ObservableProperty]
+    private int _selectedLive2DModelIndex = -1;
+
+    [ObservableProperty]
+    private float _live2DZoom = 1f;
+
+    [ObservableProperty]
+    private float _live2DPositionX;
+
+    [ObservableProperty]
+    private float _live2DPositionY;
+
+    [ObservableProperty]
+    private float _live2DOpacity = 1f;
+
+    /// <summary>扫描/导入状态提示。</summary>
+    [ObservableProperty]
+    private string _live2DScanStatus = "";
+
+    /// <summary>设置页实时预览是否显示(平台支持 + 已启用 + Core 就绪 + 已选模型)。</summary>
+    public bool IsLive2DPreviewVisible =>
+        IsLive2DSupported && Live2DEnabled && IsLive2DCoreAvailable
+        && Live2DModelDir.Length > 0 && SelectedLive2DModelIndex >= 0;
+
+    /// <summary>是否有可选模型(供下拉框 IsEnabled 绑定;int→bool 无隐式转换)。</summary>
+    public bool HasLive2DModels => Live2DModelOptions.Count > 0;
+
+    /// <summary>已导入模型目录(供 IsVisible 绑定)。</summary>
+    public bool HasLive2DModelDir => Live2DModelDir.Length > 0;
+
+    /// <summary>当前选中的模型名(不含扩展名;未选为空)。</summary>
+    public string SelectedLive2DModelName =>
+        SelectedLive2DModelIndex >= 0 && SelectedLive2DModelIndex < Live2DModelOptions.Count
+            ? Live2DModelOptions[SelectedLive2DModelIndex]
+            : "";
+
+    partial void OnLive2DModelDirChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasLive2DModelDir));
+    }
+
+    partial void OnLive2DEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.Live2DEnabled = value;
+        AppServices.Settings.Save();
+        OnPropertyChanged(nameof(IsLive2DPreviewVisible));
+        WeakReferenceMessenger.Default.Send(new Live2DSettingsChangedMessage(value));
+    }
+
+    partial void OnSelectedLive2DModelIndexChanged(int value)
+    {
+        if (value < 0 || value >= Live2DModelOptions.Count)
+        {
+            return;
+        }
+        AppServices.Settings.Current.Live2DModelName = Live2DModelOptions[value];
+        AppServices.Settings.Save();
+        OnPropertyChanged(nameof(SelectedLive2DModelName));
+        OnPropertyChanged(nameof(IsLive2DPreviewVisible));
+        WeakReferenceMessenger.Default.Send(new Live2DSettingsChangedMessage(Live2DEnabled));
+    }
+
+    partial void OnLive2DZoomChanged(float value)
+        => SaveLive2DFloat(v => AppServices.Settings.Current.Live2DZoom = Math.Clamp(v, 0.5f, 3f), Math.Clamp(value, 0.5f, 3f));
+
+    partial void OnLive2DPositionXChanged(float value)
+        => SaveLive2DFloat(v => AppServices.Settings.Current.Live2DPositionX = Math.Clamp(v, -2f, 2f), Math.Clamp(value, -2f, 2f));
+
+    partial void OnLive2DPositionYChanged(float value)
+        => SaveLive2DFloat(v => AppServices.Settings.Current.Live2DPositionY = Math.Clamp(v, -2f, 2f), Math.Clamp(value, -2f, 2f));
+
+    partial void OnLive2DOpacityChanged(float value)
+        => SaveLive2DFloat(v => AppServices.Settings.Current.Live2DOpacity = Math.Clamp(v, 0f, 1f), Math.Clamp(value, 0f, 1f));
+
+    private void SaveLive2DFloat(Action<float> apply, float clamped)
+    {
+        apply(clamped);
+        AppServices.Settings.Save();
+        OnPropertyChanged(nameof(IsLive2DPreviewVisible));
+        WeakReferenceMessenger.Default.Send(new Live2DSettingsChangedMessage(Live2DEnabled));
+    }
+
+    /// <summary>打开(必要时创建)用户 Live2D 目录,引导放置 Cubism Core 与模型;刷新 Core 检测。</summary>
+    [RelayCommand]
+    private void OpenLive2DDir()
+    {
+        var dir = Live2DLocator.UserDir;
+        try
+        {
+            Directory.CreateDirectory(dir);
+        }
+        catch (Exception)
+        {
+        }
+        AppServices.OpenInFileManager(dir);
+        RefreshLive2DStatus();
+    }
+
+    /// <summary>打开 Live2D 官方 SDK 下载页(Cubism Core 需从官方 SDK 获取,许可原因不随包分发)。</summary>
+    [RelayCommand]
+    private void OpenCoreDownload()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "https://www.live2d.com/sdk/download/native/",
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    /// <summary>导入模型文件夹:扫描 *.model3.json(递归),填入模型下拉并选中已保存/第一个。</summary>
+    [RelayCommand]
+    private async Task ImportLive2DModelAsync()
+    {
+        var topLevel = (Avalonia.Application.Current?.ApplicationLifetime
+            as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        if (topLevel is null)
+        {
+            return;
+        }
+        var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
+        {
+            Title = LanguageService.Format("Live2D.PickModelTitle"),
+            AllowMultiple = false,
+        });
+        if (folders.Count == 0)
+        {
+            return;
+        }
+        var dir = folders[0].Path.LocalPath;
+        Live2DModelDir = dir;
+        AppServices.Settings.Current.Live2DModelDir = dir;
+        AppServices.Settings.Save();
+        ScanLive2DModels();
+    }
+
+    /// <summary>扫描模型目录并按已保存设置恢复选中;状态写入 Live2DScanStatus。</summary>
+    private void ScanLive2DModels()
+    {
+        Live2DModelOptions.Clear();
+        var dir = Live2DModelDir;
+        if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+        {
+            OnPropertyChanged(nameof(IsLive2DPreviewVisible));
+            return;
+        }
+        try
+        {
+            var models = Directory.EnumerateFiles(dir, "*.model3.json", SearchOption.AllDirectories)
+                .Select(Path.GetFileNameWithoutExtension)
+                .Where(n => !string.IsNullOrEmpty(n))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            foreach (var name in models)
+            {
+                Live2DModelOptions.Add(name);
+            }
+        }
+        catch (Exception)
+        {
+        }
+        var saved = AppServices.Settings.Current.Live2DModelName;
+        var idx = Live2DModelOptions.IndexOf(saved);
+        SelectedLive2DModelIndex = idx >= 0 ? idx : (Live2DModelOptions.Count > 0 ? 0 : -1);
+        Live2DScanStatus = Live2DModelOptions.Count > 0
+            ? LanguageService.Format("Live2D.Imported", Live2DModelOptions.Count)
+            : LanguageService.Format("Live2D.ImportNone");
+        OnPropertyChanged(nameof(HasLive2DModels));
+        OnPropertyChanged(nameof(IsLive2DPreviewVisible));
+    }
+
+    /// <summary>刷新 Core 探测状态(打开目录/页面导航后调用)。</summary>
+    public void RefreshLive2DStatus()
+    {
+        IsLive2DCoreAvailable = Live2DLocator.IsCoreAvailable;
+        OnPropertyChanged(nameof(IsLive2DPreviewVisible));
+    }
+
     /// <summary>为已保存的自定义视频找回 WE 封面(视频同目录 preview.*;本地任意文件则无)。</summary>
     private static string FindCoverForVideo(string videoPath)
     {
@@ -501,6 +704,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _customBackgroundVideoPath = s.CustomBackgroundVideoPath;
         _customVideoCoverPath = FindCoverForVideo(s.CustomBackgroundVideoPath);
         _wallpaperEngineDir = s.WallpaperEngineDir;
+        _live2DEnabled = s.Live2DEnabled;
+        _live2DModelDir = s.Live2DModelDir;
+        _live2DZoom = Math.Clamp(s.Live2DZoom, 0.5f, 3f);
+        _live2DPositionX = Math.Clamp(s.Live2DPositionX, -2f, 2f);
+        _live2DPositionY = Math.Clamp(s.Live2DPositionY, -2f, 2f);
+        _live2DOpacity = Math.Clamp(s.Live2DOpacity, 0f, 1f);
+        IsLive2DCoreAvailable = Live2DLocator.IsCoreAvailable;
+        ScanLive2DModels();
         _autoSkipVerifyDelete = s.AutoSkipVerifyDelete;
         foreach (var p in s.SkipVerifyFiles)
         {
@@ -643,6 +854,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             _ => "KeepCurrent",
         };
         s.BackgroundVideoEnabled = BackgroundVideoEnabled;
+        s.Live2DModelDir = Live2DModelDir;
         s.SkipVerifyFiles = [.. SkipVerifyFiles];
         s.AutoSkipVerifyDelete = AutoSkipVerifyDelete;
         s.Language = LanguageIndex == 1 ? "en-US" : "zh-Hans";

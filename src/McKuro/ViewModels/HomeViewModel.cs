@@ -138,6 +138,57 @@ public sealed partial class HomeViewModel : ViewModelBase
     [ObservableProperty]
     private double _revealOpacity;
 
+    // ---------- 首页 Live2D 模型(仅 Windows x64;设置页导入/配置,此处只读应用) ----------
+
+    /// <summary>平台支持 Live2D 渲染(当前仅 Windows x64)。</summary>
+    public bool IsLive2DSupported => Live2DLocator.IsSupported;
+
+    /// <summary>首页是否应显示 Live2D 模型(设置开启 + 平台支持 + Cubism Core 可用 + 模型有效)。</summary>
+    [ObservableProperty]
+    private bool _live2DShow;
+
+    /// <summary>Live2D 模型文件夹。</summary>
+    [ObservableProperty]
+    private string _live2DModelDir = "";
+
+    /// <summary>Live2D 模型名(不含扩展名)。</summary>
+    [ObservableProperty]
+    private string _live2DModelName = "";
+
+    /// <summary>模型缩放(0.5~3)。</summary>
+    [ObservableProperty]
+    private float _live2DZoom = 1f;
+
+    /// <summary>模型水平位置(-2~2)。</summary>
+    [ObservableProperty]
+    private float _live2DPositionX;
+
+    /// <summary>模型垂直位置(-2~2)。</summary>
+    [ObservableProperty]
+    private float _live2DPositionY;
+
+    /// <summary>模型不透明度(0~1)。</summary>
+    [ObservableProperty]
+    private float _live2DOpacity = 1f;
+
+    /// <summary>从设置同步 Live2D 显示状态(构造时与收到 Live2DSettingsChangedMessage 时调用)。</summary>
+    public void RefreshLive2D()
+    {
+        var s = AppServices.Settings.Current;
+        var valid = !string.IsNullOrWhiteSpace(s.Live2DModelDir)
+                    && !string.IsNullOrWhiteSpace(s.Live2DModelName)
+                    && File.Exists(Path.Combine(s.Live2DModelDir, s.Live2DModelName + ".model3.json"));
+        Live2DModelDir = valid ? s.Live2DModelDir : "";
+        Live2DModelName = valid ? s.Live2DModelName : "";
+        Live2DZoom = Math.Clamp(s.Live2DZoom, 0.5f, 3f);
+        Live2DPositionX = Math.Clamp(s.Live2DPositionX, -2f, 2f);
+        Live2DPositionY = Math.Clamp(s.Live2DPositionY, -2f, 2f);
+        Live2DOpacity = Math.Clamp(s.Live2DOpacity, 0f, 1f);
+        // Core 缺失时显示层置 false(设置页有指引);DLL 搜索路径仍要就位,模型加载才能解析 Core
+        Live2DLocator.EnsureDllSearchPath();
+        Live2DShow = IsLive2DSupported && s.Live2DEnabled && valid && Live2DLocator.IsCoreAvailable;
+    }
+
     /// <summary>每日数据项(体力/结晶单质/活跃度/周本/终焉矩阵/冥歌海墟/千道门扉/周度游历/战令)。</summary>
     public ObservableCollection<DailyItem> DailyItems { get; } = [];
 
@@ -199,7 +250,11 @@ public sealed partial class HomeViewModel : ViewModelBase
                     _ = recipient.RefreshDailyAsync();
                 }
             });
+        // 设置页 Live2D 开关/导入/参数调整后即时同步(模型显示层由视图订阅属性变化重建)
+        WeakReferenceMessenger.Default.Register<HomeViewModel, Live2DSettingsChangedMessage>(this,
+            static (recipient, _) => recipient.RefreshLive2D());
         RefreshState();
+        RefreshLive2D();
         _ = RefreshDailyAsync();
         _ = RevealAsync();
     }

@@ -67,6 +67,16 @@ public sealed class GameSessionEndedMessage : ValueChangedMessage<GameSessionEnd
     }
 }
 /// <summary>
+/// Live2D 设置变更消息(设置页开关/导入/参数调整后发送,主页接收并即时更新/卸载模型)。
+/// </summary>
+public sealed class Live2DSettingsChangedMessage : ValueChangedMessage<bool>
+{
+    public Live2DSettingsChangedMessage(bool enabled) : base(enabled)
+    {
+    }
+}
+
+/// <summary>
 /// 账号头像已解析(本地磁盘缓存路径)。
 /// 主页拉取每日数据后把头像落盘缓存(icon_cache/avatar,按 userId),
 /// 导航栏左上角账号头像订阅此消息即时切换为真实头像。

@@ -74,6 +74,29 @@ public sealed class AppSettings
     /// <summary>上次扫描的 Wallpaper Engine 内容目录(记忆用,如 steamapps\workshop\content\431960)。</summary>
     public string WallpaperEngineDir { get; set; } = "";
 
+    // ---------- 首页 Live2D 模型(仅 Windows x64;依赖 Sparkle.Live2DView + Cubism Core) ----------
+
+    /// <summary>首页显示 Live2D 模型(需平台支持 + Cubism Core + 已导入模型)。</summary>
+    public bool Live2DEnabled { get; set; }
+
+    /// <summary>Live2D 模型文件夹绝对路径(内含 *.model3.json)。</summary>
+    public string Live2DModelDir { get; set; } = "";
+
+    /// <summary>选中的模型名(不含扩展名,如 Hiyori;对应 <模型名>.model3.json)。</summary>
+    public string Live2DModelName { get; set; } = "";
+
+    /// <summary>模型缩放(0.5~3,默认 1)。</summary>
+    public float Live2DZoom { get; set; } = 1f;
+
+    /// <summary>模型水平位置(-2~2,默认 0)。</summary>
+    public float Live2DPositionX { get; set; }
+
+    /// <summary>模型垂直位置(-2~2,默认 0)。</summary>
+    public float Live2DPositionY { get; set; }
+
+    /// <summary>模型不透明度(0~1,默认 1)。</summary>
+    public float Live2DOpacity { get; set; } = 1f;
+
     // ---------- 游戏修复(对齐 Haiyu 的跳过校验文件) ----------
 
     /// <summary>修复游戏时跳过的文件相对路径列表(如 Client/Saved/Logs/Client.log)。</summary>

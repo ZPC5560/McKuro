@@ -262,6 +262,174 @@
                 </StackPanel>
             </Border>
 
+            <!-- ============ Live2D 模型(仅 Windows x64;Cubism Core 与模型由用户放置/导入) ============ -->
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
+                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
+                        VerticalAlignment="Center" />
+                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Live2D.Title}" VerticalAlignment="Center" />
+                <Border Padding="8,3" CornerRadius="8" VerticalAlignment="Center"
+                        Background="{DynamicResource SemiColorBg3}"
+                        IsVisible="{Binding !IsLive2DSupported}">
+                    <TextBlock Text="{loc:Localize Key=Live2D.PlatformUnsupported}" FontSize="11"
+                               Foreground="{DynamicResource SemiColorText3}" />
+                </Border>
+            </StackPanel>
+            <Border Classes="section" IsEnabled="{Binding IsLive2DSupported}">
+                <StackPanel>
+                    <!-- Cubism Core 状态 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="Cube" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.CoreRowTitle}" />
+                                <TextBlock Classes="rowDesc"
+                                           Text="{loc:Localize Key=Live2D.CoreHint}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Border Padding="10,5" CornerRadius="10" VerticalAlignment="Center"
+                                        Background="{DynamicResource SemiColorBg3}">
+                                    <Panel>
+                                        <TextBlock FontSize="12" FontWeight="Bold"
+                                                   Foreground="{DynamicResource SemiColorPrimary}"
+                                                   IsVisible="{Binding IsLive2DCoreAvailable}"
+                                                   Text="{loc:Localize Key=Live2D.CoreFound}" />
+                                        <TextBlock FontSize="12" FontWeight="Bold"
+                                                   Foreground="{DynamicResource SemiColorText3}"
+                                                   IsVisible="{Binding !IsLive2DCoreAvailable}"
+                                                   Text="{loc:Localize Key=Live2D.CoreMissing}" />
+                                    </Panel>
+                                </Border>
+                                <Button Content="{loc:Localize Key=Live2D.OpenDir}" Command="{Binding OpenLive2DDirCommand}" />
+                                <Button Content="{loc:Localize Key=Live2D.GetSdk}" Command="{Binding OpenCoreDownloadCommand}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- 显示开关 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="Person" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.Enable}" />
+                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Live2D.EnableDesc}" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                          IsChecked="{Binding Live2DEnabled, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+
+                    <!-- 导入模型 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="FolderArrowUp" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.ImportRowTitle}" />
+                                    <TextBlock Classes="rowDesc" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding HasLive2DModelDir}"
+                                               Text="{Binding Live2DModelDir}" />
+                                </StackPanel>
+                                <TextBlock Classes="rowDesc" Text="{Binding Live2DScanStatus}"
+                                           IsVisible="{Binding Live2DScanStatus}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <ComboBox Width="170" VerticalAlignment="Center"
+                                          ItemsSource="{Binding Live2DModelOptions}"
+                                          SelectedIndex="{Binding SelectedLive2DModelIndex, Mode=TwoWay}"
+                                          IsEnabled="{Binding HasLive2DModels}" />
+                                <Button Content="{loc:Localize Key=Live2D.Import}" Command="{Binding ImportLive2DModelCommand}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- 实时预览(可拖动/滚轮缩放;参数写回下方滑条) -->
+                    <Border Classes="row" IsVisible="{Binding IsLive2DPreviewVisible}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.Preview}" />
+                                <TextBlock Classes="rowDesc" VerticalAlignment="Center"
+                                           Text="{loc:Localize Key=Live2D.PreviewHint}" />
+                            </StackPanel>
+                            <Border Height="320" CornerRadius="10" ClipToBounds="True"
+                                    Background="{DynamicResource SemiColorBg3}" HorizontalAlignment="Left"
+                                    Width="460">
+                                <controls:Live2DModelHost Show="True"
+                                                          ModelDirectory="{Binding Live2DModelDir}"
+                                                          ModelName="{Binding SelectedLive2DModelName}"
+                                                          Zoom="{Binding Live2DZoom, Mode=TwoWay}"
+                                                          PositionX="{Binding Live2DPositionX, Mode=TwoWay}"
+                                                          PositionY="{Binding Live2DPositionY, Mode=TwoWay}"
+                                                          ModelOpacity="{Binding Live2DOpacity, Mode=TwoWay}"
+                                                          FramesPerSecond="30"
+                                                          HorizontalAlignment="Stretch"
+                                                          VerticalAlignment="Stretch" />
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 显示参数 -->
+                    <Border Classes="row">
+                        <StackPanel Spacing="10">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                                <Border Classes="tile">
+                                    <ic:FluentIcon Icon="Wand" IconVariant="Regular" IconSize="Size20"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.DisplayRowTitle}" />
+                                    <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Live2D.DisplayDesc}" />
+                                </StackPanel>
+                            </Grid>
+                            <StackPanel Margin="54,0,0,0" Spacing="10">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                    <TextBlock Text="{loc:Localize Key=Live2D.Zoom}" FontSize="13" VerticalAlignment="Center" />
+                                    <Slider Grid.Column="1" Minimum="0.5" Maximum="3" Value="{Binding Live2DZoom, Mode=TwoWay}"
+                                            VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Live2DZoom, StringFormat={}{0:0.0##}x}"
+                                               FontSize="12" Foreground="{DynamicResource SemiColorText2}" Width="52"
+                                               TextAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                    <TextBlock Text="{loc:Localize Key=Live2D.PositionX}" FontSize="13" VerticalAlignment="Center" />
+                                    <Slider Grid.Column="1" Minimum="-2" Maximum="2" Value="{Binding Live2DPositionX, Mode=TwoWay}"
+                                            VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Live2DPositionX, StringFormat={}{0:0.00}}"
+                                               FontSize="12" Foreground="{DynamicResource SemiColorText2}" Width="52"
+                                               TextAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                    <TextBlock Text="{loc:Localize Key=Live2D.PositionY}" FontSize="13" VerticalAlignment="Center" />
+                                    <Slider Grid.Column="1" Minimum="-2" Maximum="2" Value="{Binding Live2DPositionY, Mode=TwoWay}"
+                                            VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Live2DPositionY, StringFormat={}{0:0.00}}"
+                                               FontSize="12" Foreground="{DynamicResource SemiColorText2}" Width="52"
+                                               TextAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                    <TextBlock Text="{loc:Localize Key=Live2D.Opacity}" FontSize="13" VerticalAlignment="Center" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="1" Value="{Binding Live2DOpacity, Mode=TwoWay}"
+                                            VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Live2DOpacity, StringFormat={}{0:P0}}"
+                                               FontSize="12" Foreground="{DynamicResource SemiColorText2}" Width="52"
+                                               TextAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+
             <!-- ============ 游戏目录 ============ -->
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"

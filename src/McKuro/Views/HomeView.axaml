@@ -54,6 +54,20 @@
             </Ellipse>
         </Panel>
 
+        <!-- ═══ Live2D 模型(仅 Windows x64;设置页导入/配置;纯展示层,不挡下方按钮) ═══ -->
+        <controls:Live2DModelHost Show="{Binding Live2DShow}"
+                                  ModelDirectory="{Binding Live2DModelDir}"
+                                  ModelName="{Binding Live2DModelName}"
+                                  Zoom="{Binding Live2DZoom}"
+                                  PositionX="{Binding Live2DPositionX}"
+                                  PositionY="{Binding Live2DPositionY}"
+                                  ModelOpacity="{Binding Live2DOpacity}"
+                                  FramesPerSecond="30"
+                                  AllowInteraction="False"
+                                  IsHitTestVisible="False"
+                                  HorizontalAlignment="Stretch"
+                                  VerticalAlignment="Stretch" />
+
         <!-- ═══ 主内容 ═══ -->
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
             <Grid Margin="96,0,40,0" Opacity="{Binding RevealOpacity}">
