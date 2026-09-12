@@ -105,6 +105,17 @@ public sealed class VideoBackgroundControl : Grid
     /// <summary>已入队的 UI 重绘请求所属会话。</summary>
     private long _postedGeneration;
 
+    /// <summary>当前播放会话代号。</summary>
+    private long Generation => Interlocked.Read(ref _imageGeneration);
+
+    /// <summary>
+    /// 异步续体守卫:gen 非当前会话即过期。只查 _disposed 不够 —— TryStartVideo 会把它重置为
+    /// false,旧会话在途的续体(GL 初始化等待/看门狗/下载回调)醒来后会误判为当前会话,在
+    /// 新 mpv 上建第二个渲染上下文(mpv 只允许一个,第二个失败 → GL 层显示未初始化 FBO 垃圾
+    /// 帧/整个会话被异常杀死),自定义壁纸启动时官方 URL → 自定义路径连续两次切换必触发。
+    /// </summary>
+    private bool Stale(long gen) => _disposed || Interlocked.Read(ref _imageGeneration) != gen;
+
     public static readonly StyledProperty<string> VideoUrlProperty =
         AvaloniaProperty.Register<VideoBackgroundControl, string>(nameof(VideoUrl));
 
@@ -314,6 +325,7 @@ public sealed class VideoBackgroundControl : Grid
         DisposePlayer();
         _disposed = false;
         _imageGeneration = Interlocked.Increment(ref _imageGeneration);
+        var gen = Generation; // 本会话代号:所有异步回调以此判断是否已过期(见 Stale)
 
         if (!IsVideoEnabled || string.IsNullOrWhiteSpace(VideoUrl))
         {
@@ -340,7 +352,7 @@ public sealed class VideoBackgroundControl : Grid
         if (!IsLibMpvAvailable())
         {
             Debug.WriteLine("[libmpv] native 库不可用,回退静态图");
-            ShowFallback();
+            ShowFallback(gen);
             return;
         }
 
@@ -354,7 +366,7 @@ public sealed class VideoBackgroundControl : Grid
             {
                 if (e.Reason == MpvEndFileReason.Error)
                 {
-                    ShowFallback();
+                    ShowFallback(gen);
                 }
             };
             // 可选诊断日志
@@ -370,11 +382,11 @@ public sealed class VideoBackgroundControl : Grid
             // 看门狗:15s 内无首帧 → 回退静态图
             _timeoutCts = new CancellationTokenSource();
             var token = _timeoutCts.Token;
-            _ = WatchdogAsync(token);
+            _ = WatchdogAsync(gen, token);
 
             // v4:优先 OpenGL GPU 渲染(GPU 解码 + GPU 呈现,见 VideoGlRenderer);
             // 平台无 GL 后端/初始化失败时自动回退 v3 软件渲染路径。
-            _ = TryGlOrFallbackAsync(token);
+            _ = TryGlOrFallbackAsync(gen, token);
         }
         catch (Exception ex)
         {
@@ -386,14 +398,14 @@ public sealed class VideoBackgroundControl : Grid
 
     /// <summary>
     /// 尝试 OpenGL GPU 渲染路径:创建 <see cref="VideoGlRenderer"/> 加入视觉树并等待 GL 就绪。
-    /// 初始化成功 → GL 路径(GPU 解码+渲染);失败/超时/已释放 → 回退软件渲染路径。
+    /// 初始化成功 → GL 路径(GPU 解码+渲染);失败/超时/会话已过期 → 回退软件渲染路径。
     /// </summary>
-    private async Task TryGlOrFallbackAsync(CancellationToken token)
+    private async Task TryGlOrFallbackAsync(long gen, CancellationToken token)
     {
         VideoGlRenderer? gl = null;
         try
         {
-            if (_mpv is null || _disposed)
+            if (_mpv is null || Stale(gen))
             {
                 return;
             }
@@ -426,22 +438,29 @@ public sealed class VideoBackgroundControl : Grid
                 ok = false;
             }
 
-            if (!ok || _disposed || _mpv is null)
+            // 过期或失败都要先拆除未接管的渲染器:DisposePlayer 只拆 _glRenderer 字段指向的实例,
+            // 若本渲染器已完成 GL 初始化但续体尚未运行(字段还没指向它),它会残留视觉树,
+            // 每帧继续用已 Dispose 的 mpv 句柄调用 OpenGlRender(use-after-free)。
+            // 会话过期则到此为止(绝不能落到 StartSoftwareRenderingPath —— 那会拿当前会话的
+            // _mpv 建第二个渲染上下文,mpv 只允许一个,第二个失败 → GL 层垃圾帧/会话被杀)。
+            if (!ok || Stale(gen))
             {
-                if (!_disposed && gl is not null && Children.Contains(gl))
+                if (gl is not null && !ReferenceEquals(_glRenderer, gl) && Children.Contains(gl))
                 {
+                    gl.BeginShutdown();
                     Children.Remove(gl);
                 }
-                if (!_disposed)
+                if (Stale(gen))
                 {
-                    StartSoftwareRenderingPath();
+                    return;
                 }
+                StartSoftwareRenderingPath(gen);
                 return;
             }
 
             // GL 路径成功:渲染器接管显示;首个文件加载完成后取消看门狗并显示视频
             _glRenderer = gl;
-            _mpv.FileLoaded += OnGlFileLoaded;
+            _mpv.FileLoaded += (_, _) => OnGlFileLoaded(gen);
             try
             {
                 // 铺满渲染目标(=UniformToFill 的裁切行为;仅 GL 路径生效)
@@ -451,35 +470,51 @@ public sealed class VideoBackgroundControl : Grid
             {
             }
 
-            _ = LoadLocalVideoAndPlayAsync(VideoUrl, token);
+            _ = LoadLocalVideoAndPlayAsync(gen, VideoUrl, token);
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[libmpv] GL 渲染路径失败,回退软件渲染: {ex.Message}");
-            if (!_disposed)
+            if (!Stale(gen))
             {
-                if (gl is not null && Children.Contains(gl))
+                if (gl is not null && !ReferenceEquals(_glRenderer, gl) && Children.Contains(gl))
                 {
+                    gl.BeginShutdown();
                     Children.Remove(gl);
                 }
-                StartSoftwareRenderingPath();
+                StartSoftwareRenderingPath(gen);
+            }
+            else if (gl is not null && !ReferenceEquals(_glRenderer, gl) && Children.Contains(gl))
+            {
+                // 过期会话的渲染器同样不能残留(见上方注释)
+                gl.BeginShutdown();
+                Children.Remove(gl);
             }
         }
     }
 
-    /// <summary>GL 路径的首帧信号:文件加载完成 → 取消看门狗、显示 GL 视频层、更新窗口比例。</summary>
-    private void OnGlFileLoaded(object? sender, EventArgs e)
+    /// <summary>GL 路径的首帧信号:文件加载完成 → 取消看门狗、显示 GL 视频层、更新窗口比例。
+    /// 带会话代号:过期会话的事件(Dispose 竞态窗口内已入队)不得作用于新会话的渲染器。</summary>
+    private void OnGlFileLoaded(long gen)
     {
+        if (Stale(gen))
+        {
+            return;
+        }
         _timeoutCts?.Cancel();
         Dispatcher.UIThread.Post(() =>
         {
-            if (_glRenderer is not null && !_disposed)
+            if (Stale(gen))
+            {
+                return;
+            }
+            if (_glRenderer is not null)
             {
                 _glRenderer.Opacity = 1;
             }
-            if (_mpv is not null && !_disposed)
+            if (_mpv is not null)
             {
-                _ = PollVideoAspectAndPropagateAsync();
+                _ = PollVideoAspectAndPropagateAsync(gen);
             }
         });
     }
@@ -489,11 +524,11 @@ public sealed class VideoBackgroundControl : Grid
     /// 回退 w/h(编码像素尺寸);参数在首帧解码后才可用,FileLoaded 时刻可能尚未就绪,
     /// 最多重试 8 次×500ms。宿主按该比例自适应高度后 mpv 画面恰好填满、无黑边。
     /// </summary>
-    private async Task PollVideoAspectAndPropagateAsync()
+    private async Task PollVideoAspectAndPropagateAsync(long gen)
     {
-        for (var attempt = 0; attempt < 8 && !_disposed; attempt++)
+        for (var attempt = 0; attempt < 8 && !Stale(gen); attempt++)
         {
-            if (_mpv is not null && !_disposed)
+            if (_mpv is not null)
             {
                 try
                 {
@@ -502,7 +537,7 @@ public sealed class VideoBackgroundControl : Grid
                     {
                         Dispatcher.UIThread.Post(() =>
                         {
-                            if (!_disposed)
+                            if (!Stale(gen))
                             {
                                 PropagateVideoAspectRatio((int)Math.Round(dar * 1000), 1000);
                             }
@@ -515,7 +550,7 @@ public sealed class VideoBackgroundControl : Grid
                     {
                         Dispatcher.UIThread.Post(() =>
                         {
-                            if (!_disposed)
+                            if (!Stale(gen))
                             {
                                 PropagateVideoAspectRatio(w, h);
                             }
@@ -541,26 +576,28 @@ public sealed class VideoBackgroundControl : Grid
         }
     }
 
-    /// <summary>软件渲染路径(v3 回退):位图呈现 + 专用渲染线程。</summary>
-    private void StartSoftwareRenderingPath()
+    /// <summary>软件渲染路径(v3 回退):位图呈现 + 专用渲染线程。调用方已验证会话未过期。</summary>
+    private void StartSoftwareRenderingPath(long gen)
     {
         try
         {
-            if (_mpv is null)
+            if (_mpv is null || Stale(gen))
             {
-                _fallback!.ImageUrl = FallbackImageUrl;
                 return;
             }
 
-            _videoImage = new Image
+            if (_videoImage is null)
             {
-                Stretch = Stretch.UniformToFill,
-                IsHitTestVisible = false,
-                Opacity = 0,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-            };
-            Children.Add(_videoImage);
+                _videoImage = new Image
+                {
+                    Stretch = Stretch.UniformToFill,
+                    IsHitTestVisible = false,
+                    Opacity = 0,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    VerticalAlignment = VerticalAlignment.Stretch,
+                };
+                Children.Add(_videoImage);
+            }
 
             // mpv 更新回调来自 native 线程，只唤醒专用视频线程；不在回调里做 UI 或渲染。
             _mpv.StartSoftwareRendering(() =>
@@ -583,7 +620,7 @@ public sealed class VideoBackgroundControl : Grid
             // 预下载视频到本地缓存目录再播放:CDN 流式缓冲不可靠(只播一秒),本地文件最稳。
             // 缓存按 URL 哈希命名,重复进入启动页直接用缓存,不重复下载。
             var url = VideoUrl;
-            _ = LoadLocalVideoAsync(url, _timeoutCts?.Token ?? CancellationToken.None);
+            _ = LoadLocalVideoAsync(gen, url, _timeoutCts?.Token ?? CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -594,12 +631,12 @@ public sealed class VideoBackgroundControl : Grid
     }
 
     /// <summary>GL 路径:下载视频到本地缓存目录,完成后直接 LoadFile(mpv 命令 API 线程安全,任意线程可调)。</summary>
-    private async Task LoadLocalVideoAndPlayAsync(string url, CancellationToken token)
+    private async Task LoadLocalVideoAndPlayAsync(long gen, string url, CancellationToken token)
     {
         try
         {
-            var localPath = await EnsureVideoCachedAsync(url, token).ConfigureAwait(false);
-            if (localPath is null || token.IsCancellationRequested || _disposed)
+            var localPath = await EnsureVideoCachedAsync(gen, url, token).ConfigureAwait(false);
+            if (Stale(gen) || localPath is null || token.IsCancellationRequested)
             {
                 return;
             }
@@ -620,7 +657,7 @@ public sealed class VideoBackgroundControl : Grid
         catch (Exception ex)
         {
             Debug.WriteLine($"[libmpv] 视频预下载失败(回退静态图): {ex.Message}");
-            Dispatcher.UIThread.Post(ShowFallback);
+            ShowFallback(gen);
         }
     }
 
@@ -629,7 +666,7 @@ public sealed class VideoBackgroundControl : Grid
     /// 本地文件(自定义动态壁纸:本地视频 / Wallpaper Engine 包内视频)直接返回;
     /// http(s) 下载到本地缓存目录(CDN 流式缓冲不可靠,本地文件最稳);缓存命中直接复用。
     /// </summary>
-    private async Task<string?> EnsureVideoCachedAsync(string url, CancellationToken token)
+    private async Task<string?> EnsureVideoCachedAsync(long gen, string url, CancellationToken token)
     {
         // 本地文件分支必须在 HttpClient 之前:本地路径不是合法 http URI,GetByteArrayAsync 会抛异常。
         if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
@@ -639,7 +676,7 @@ public sealed class VideoBackgroundControl : Grid
             {
                 return url;
             }
-            Dispatcher.UIThread.Post(ShowFallback);
+            ShowFallback(gen);
             return null;
         }
 
@@ -655,9 +692,13 @@ public sealed class VideoBackgroundControl : Grid
 
         // 复用共享 HttpClient(连接池/ decompression 统一)
         var bytes = await McKuro.Services.AppServices.Http.GetByteArrayAsync(url, token).ConfigureAwait(false);
+        if (Stale(gen))
+        {
+            return null; // 下载期间会话已过期:丢弃,不落盘不播放
+        }
         if (bytes.Length == 0)
         {
-            Dispatcher.UIThread.Post(ShowFallback);
+            ShowFallback(gen);
             return null;
         }
         await File.WriteAllBytesAsync(localPath, bytes, token).ConfigureAwait(false);
@@ -665,7 +706,7 @@ public sealed class VideoBackgroundControl : Grid
     }
 
     /// <summary>下载视频到本地缓存目录,完成后用本地文件播放(软件渲染路径专用:排队给渲染线程)。</summary>
-    private async Task LoadLocalVideoAsync(string url, CancellationToken token)
+    private async Task LoadLocalVideoAsync(long gen, string url, CancellationToken token)
     {
         try
         {
@@ -685,13 +726,13 @@ public sealed class VideoBackgroundControl : Grid
                 else
                 {
                     // 文件被移动/删除:回退静态封面(与官方视频网络失败同路径)
-                    ShowFallback();
+                    ShowFallback(gen);
                 }
                 return;
             }
 
-            var localPath = await EnsureVideoCachedAsync(url, token).ConfigureAwait(false);
-            if (localPath is null || token.IsCancellationRequested || _disposed)
+            var localPath = await EnsureVideoCachedAsync(gen, url, token).ConfigureAwait(false);
+            if (Stale(gen) || localPath is null || token.IsCancellationRequested)
             {
                 return;
             }
@@ -710,16 +751,20 @@ public sealed class VideoBackgroundControl : Grid
         catch (Exception ex)
         {
             Debug.WriteLine($"[libmpv] 视频预下载失败(回退静态图): {ex.Message}");
-            Dispatcher.UIThread.Post(ShowFallback);
+            ShowFallback(gen);
         }
     }
 
-    private async Task WatchdogAsync(CancellationToken token)
+    /// <summary>播放启动看门狗:15s 内无首帧则回退静态图;会话过期时静默退出(不作用于新会话)。</summary>
+    private async Task WatchdogAsync(long gen, CancellationToken token)
     {
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(15), token).ConfigureAwait(false);
-            ShowFallback();
+            if (!Stale(gen))
+            {
+                ShowFallback(gen);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -781,10 +826,17 @@ public sealed class VideoBackgroundControl : Grid
         }
     }
 
-    private void ShowFallback()
+    /// <summary>回退静态封面。带会话代号:过期会话的失败回调(Dispose 竞态窗口内已入队)
+    /// 不得隐藏新会话正在播放的视频(旧实现无差别作用于当前 _glRenderer/_videoImage)。</summary>
+    private void ShowFallback(long gen)
     {
         Dispatcher.UIThread.Post(() =>
         {
+            if (Stale(gen))
+            {
+                return;
+            }
+
             if (_videoImage is not null)
             {
                 _videoImage.Opacity = 0;
@@ -1074,8 +1126,15 @@ public sealed class VideoBackgroundControl : Grid
             _videoWidth = w;
             _videoHeight = h;
             _sizeResolved = true;
-            // 软件渲染线程内解析:派发到 UI 线程同步窗口比例
-            Dispatcher.UIThread.Post(() => PropagateVideoAspectRatio(w, h));
+            // 软件渲染线程内解析:派发到 UI 线程同步窗口比例(带会话守卫,过期会话不改窗口)
+            var gen = Generation;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!Stale(gen))
+                {
+                    PropagateVideoAspectRatio(w, h);
+                }
+            });
             return true;
         }
         catch (Exception)
@@ -1311,13 +1370,26 @@ public sealed class VideoBackgroundControl : Grid
                 }
                 _mpv = ctx;
                 _owner.ApplyMuteIfConfigured(ctx);
-                // GL 函数解析:直接用 Avalonia 的 GlInterface.GetProcAddress(IntPtr (string) 签名一致)
-                ctx.StartOpenGlRendering(
-                    getProcAddress: gl.GetProcAddress,
-                    updateCallback: () => Dispatcher.UIThread.Post(RequestNextFrameRendering),
-                    x11Display: IntPtr.Zero,
-                    waylandDisplay: IntPtr.Zero);
-                _glReady = true;
+                try
+                {
+                    // GL 函数解析:直接用 Avalonia 的 GlInterface.GetProcAddress(IntPtr (string) 签名一致)
+                    ctx.StartOpenGlRendering(
+                        getProcAddress: gl.GetProcAddress,
+                        updateCallback: () => Dispatcher.UIThread.Post(RequestNextFrameRendering),
+                        x11Display: IntPtr.Zero,
+                        waylandDisplay: IntPtr.Zero);
+                    _glReady = true;
+                }
+                catch (Exception ex)
+                {
+                    // 渲染上下文创建失败(mpv 只允许一个 render context;重复创建返回错误):
+                    // 不能把异常抛进 Avalonia 渲染线程 —— 保持未就绪,让上层 5s 超时后回退软件渲染。
+                    Debug.WriteLine($"[libmpv] GL 渲染上下文创建失败: {ex.Message}");
+                    _mpv = null;
+                    _glReady = false;
+                    _glReadyTcs.TrySetResult(false);
+                    return;
+                }
             }
 
             _glReadyTcs.TrySetResult(true);
