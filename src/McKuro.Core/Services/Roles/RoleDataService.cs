@@ -79,11 +79,11 @@ public sealed class RoleDataService : IRoleDataService
     {
         if (string.IsNullOrWhiteSpace(token))
         {
-            return new RoleDataLoadResult { Source = RoleDataSource.None, Message = "未配置库街区 Token" };
+            return new RoleDataLoadResult { Source = RoleDataSource.None, Message = CoreStrings.T("Core.Roles.NoToken", "未配置库街区 Token") };
         }
         if (string.IsNullOrWhiteSpace(roleId))
         {
-            return new RoleDataLoadResult { Source = RoleDataSource.None, Message = "未配置角色 ID" };
+            return new RoleDataLoadResult { Source = RoleDataSource.None, Message = CoreStrings.T("Core.Roles.NoRoleId", "未配置角色 ID") };
         }
 
         try
@@ -105,7 +105,7 @@ public sealed class RoleDataService : IRoleDataService
                 return new RoleDataLoadResult
                 {
                     Source = RoleDataSource.None,
-                    Message = $"登录已失效(账号可能已在其他设备登录),请重新登录 ({gamer.Msg ?? $"code={gamer.Code}"})",
+                    Message = CoreStrings.F("Core.Roles.LoginExpired", $"登录已失效(账号可能已在其他设备登录),请重新登录 ({gamer.Msg ?? $"code={gamer.Code}"})", gamer.Msg ?? $"code={gamer.Code}"),
                 };
             }
             var item = gamer?.Data?.FirstOrDefault(r => r.RoleId == roleId);
@@ -115,7 +115,7 @@ public sealed class RoleDataService : IRoleDataService
                 return new RoleDataLoadResult
                 {
                     Source = RoleDataSource.None,
-                    Message = "未找到该角色条目(请确认角色 ID 与当前账号一致)",
+                    Message = CoreStrings.T("Core.Roles.RoleNotFound", "未找到该角色条目(请确认角色 ID 与当前账号一致)"),
                 };
             }
             _userId = item.UserId ?? _accounts.Current?.UserId ?? "";
@@ -129,7 +129,7 @@ public sealed class RoleDataService : IRoleDataService
                 return new RoleDataLoadResult
                 {
                     Source = RoleDataSource.None,
-                    Message = "获取角色数据访问令牌失败(Token 可能已失效,请重新登录)",
+                    Message = CoreStrings.T("Core.Roles.TokenFailed", "获取角色数据访问令牌失败(Token 可能已失效,请重新登录)"),
                 };
             }
             _accessToken = accessToken;
@@ -147,7 +147,7 @@ public sealed class RoleDataService : IRoleDataService
             {
                 Source = RoleDataSource.Kujiequ,
                 Roles = list,
-                Message = list.Count == 0 ? "角色列表为空(接口返回空数据)" : null,
+                Message = list.Count == 0 ? CoreStrings.T("Core.Roles.EmptyList", "角色列表为空(接口返回空数据)") : null,
             };
         }
         catch (OperationCanceledException)
@@ -160,7 +160,7 @@ public sealed class RoleDataService : IRoleDataService
             return new RoleDataLoadResult
             {
                 Source = RoleDataSource.None,
-                Message = $"库街区请求失败: {ex.Message}",
+                Message = CoreStrings.F("Core.Roles.RequestFailed", $"库街区请求失败: {ex.Message}", ex.Message),
             };
         }
     }
@@ -378,7 +378,7 @@ public sealed class RoleDataService : IRoleDataService
         {
             return new RoleDataLoadResult { Source = RoleDataSource.Local, Roles = roles };
         }
-        return new RoleDataLoadResult { Source = RoleDataSource.None, Message = "本地未找到角色数据" };
+        return new RoleDataLoadResult { Source = RoleDataSource.None, Message = CoreStrings.T("Core.Roles.NoLocalData", "本地未找到角色数据") };
     }
 
     /// <inheritdoc/>
@@ -386,7 +386,7 @@ public sealed class RoleDataService : IRoleDataService
     {
         if (string.IsNullOrWhiteSpace(playerId))
         {
-            return new RoleDataLoadResult { Source = RoleDataSource.None, Message = "未配置角色 ID" };
+            return new RoleDataLoadResult { Source = RoleDataSource.None, Message = CoreStrings.T("Core.Roles.NoRoleId", "未配置角色 ID") };
         }
         try
         {
@@ -401,11 +401,11 @@ public sealed class RoleDataService : IRoleDataService
                     {
                         return new RoleDataLoadResult
                         {
-                            Source = RoleDataSource.Local, Roles = legacy, Message = "来自本地完整缓存(旧版账号键)",
+                            Source = RoleDataSource.Local, Roles = legacy, Message = CoreStrings.T("Core.Roles.FromLegacyCache", "来自本地完整缓存(旧版账号键)"),
                         };
                     }
                 }
-                return new RoleDataLoadResult { Source = RoleDataSource.Local, Roles = roles, Message = "来自本地缓存" };
+                return new RoleDataLoadResult { Source = RoleDataSource.Local, Roles = roles, Message = CoreStrings.T("Core.Roles.FromCache", "来自本地缓存") };
             }
 
             // 兼容旧版:早期账号登录态未持久化时缓存以空账号键保存,同一玩家数据仍有效
@@ -414,14 +414,14 @@ public sealed class RoleDataService : IRoleDataService
             {
                 return new RoleDataLoadResult
                 {
-                    Source = RoleDataSource.Local, Roles = legacyRow, Message = "来自本地完整缓存(旧版账号键)",
+                    Source = RoleDataSource.Local, Roles = legacyRow, Message = CoreStrings.T("Core.Roles.FromLegacyCache", "来自本地完整缓存(旧版账号键)"),
                 };
             }
-            return new RoleDataLoadResult { Source = RoleDataSource.None, Message = "无缓存(或账号不一致)" };
+            return new RoleDataLoadResult { Source = RoleDataSource.None, Message = CoreStrings.T("Core.Roles.NoCache", "无缓存(或账号不一致)") };
         }
         catch (Exception)
         {
-            return new RoleDataLoadResult { Source = RoleDataSource.None, Message = "缓存读取失败" };
+            return new RoleDataLoadResult { Source = RoleDataSource.None, Message = CoreStrings.T("Core.Roles.CacheReadFailed", "缓存读取失败") };
         }
     }
 

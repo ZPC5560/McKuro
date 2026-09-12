@@ -148,7 +148,7 @@ public sealed class GameUpdater : IGameUpdater
             return new UpdateCheckResult
             {
                 Success = false,
-                Message = "请先在设置中指定游戏安装目录",
+                Message = CoreStrings.T("Core.Updater.NoGameDirSet", "请先在设置中指定游戏安装目录"),
             };
         }
 
@@ -156,14 +156,14 @@ public sealed class GameUpdater : IGameUpdater
         var load = await _loader.LoadKuroAsync(indexUrl, preDownload: false, ct).ConfigureAwait(false);
         if (!load.Success || load.Manifest is null)
         {
-            return new UpdateCheckResult { Success = false, Message = load.Message ?? "获取更新清单失败" };
+            return new UpdateCheckResult { Success = false, Message = load.Message ?? CoreStrings.T("Core.Updater.ManifestFailed", "获取更新清单失败") };
         }
 
         var manifest = load.Manifest;
         // 防御:服务端版本缺失视为拉取失败(避免空版本强制"有更新")
         if (string.IsNullOrWhiteSpace(manifest.Version))
         {
-            return new UpdateCheckResult { Success = false, Message = "更新清单缺少版本号" };
+            return new UpdateCheckResult { Success = false, Message = CoreStrings.T("Core.Updater.ManifestNoVersion", "更新清单缺少版本号") };
         }
         var installedVersion = ReadInstalledVersion(root);
         var notInstalled = !_paths.IsGameInstalled;
@@ -306,7 +306,7 @@ public sealed class GameUpdater : IGameUpdater
         var root = _paths.GameRootDir;
         if (string.IsNullOrEmpty(root))
         {
-            return (false, null, "未设置游戏目录");
+            return (false, null, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
         }
 
         var indexUrl = _indexUrlProvider(serverType);
@@ -320,7 +320,7 @@ public sealed class GameUpdater : IGameUpdater
         var targetVersion = load.Predownload?.Version;
         if (string.IsNullOrWhiteSpace(targetVersion))
         {
-            return (false, null, "当前没有可用的预载版本");
+            return (false, null, CoreStrings.T("Core.Updater.NoPredownload", "当前没有可用的预载版本"));
         }
         // 本地安装版本
         var installedVersion = ReadInstalledVersion(root);
@@ -334,7 +334,7 @@ public sealed class GameUpdater : IGameUpdater
         if (string.IsNullOrWhiteSpace(patchUrl) || patchConfig is null)
         {
             // Haiyu 只接受从当前本地版本精确匹配到的预载补丁,不能误把默认版本差异当未来版本预载。
-            return (false, null, "未找到与本地版本匹配的官方预载补丁");
+            return (false, null, CoreStrings.T("Core.Updater.PredownloadNotFound", "未找到与本地版本匹配的官方预载补丁"));
         }
 
         var patchLoad = await _loader.LoadPatchAsync(
@@ -344,7 +344,7 @@ public sealed class GameUpdater : IGameUpdater
             ct: ct).ConfigureAwait(false);
         if (!patchLoad.Success || patchLoad.Manifest is null || patchLoad.Manifest.Files.Count == 0)
         {
-            return (false, null, patchLoad.Message ?? "预载补丁清单不可用");
+            return (false, null, patchLoad.Message ?? CoreStrings.T("Core.Updater.PredownloadManifestUnavailable", "预载补丁清单不可用"));
         }
 
         // 为补丁文件补全下载地址(CDN + FromFolder + dest,与 Haiyu GetBaseUrl 一致)
@@ -353,12 +353,12 @@ public sealed class GameUpdater : IGameUpdater
         var downloadBytes = patchFiles.Sum(f => f.Size);
         if (!HasFreeSpace(_appDataDir, downloadBytes))
         {
-            return (false, null, $"预载下载盘空间不足: {FormatBytes(downloadBytes)}");
+            return (false, null, CoreStrings.F("Core.Updater.DownloadDiskFull", $"预载下载盘空间不足: {FormatBytes(downloadBytes)}", FormatBytes(downloadBytes)));
         }
         var requiredBytes = patchConfig.Ext?.RequiredDiskSpace ?? patchConfig.UnCompressSize ?? 0;
         if (!HasFreeSpace(root, requiredBytes))
         {
-            return (false, null, $"游戏盘空间不足: {FormatBytes(requiredBytes)}");
+            return (false, null, CoreStrings.F("Core.Updater.GameDiskFull", $"游戏盘空间不足: {FormatBytes(requiredBytes)}", FormatBytes(requiredBytes)));
         }
         var staging = Path.Combine(_appDataDir, "predownload", targetVersion);
         Directory.CreateDirectory(staging);
@@ -397,7 +397,7 @@ public sealed class GameUpdater : IGameUpdater
             BytesDownloaded = 0,
             BytesTotal = patchFiles.Sum(f => f.Size),
             SpeedBps = 0,
-            CurrentFile = $"发现 {patchFiles.Count} 个待下载文件,开始下载…",
+            CurrentFile = CoreStrings.F("Core.Updater.FilesFound", $"发现 {patchFiles.Count} 个待下载文件,开始下载…", patchFiles.Count),
         });
 
         // 下载补丁差异文件到暂存目录
@@ -410,7 +410,7 @@ public sealed class GameUpdater : IGameUpdater
 
         if (failures.Count > 0)
         {
-            return (false, staging, $"有 {failures.Count} 个文件下载失败: {failures[0]}");
+            return (false, staging, CoreStrings.F("Core.Updater.DownloadFailures", $"有 {failures.Count} 个文件下载失败: {failures[0]}", failures.Count, failures[0]));
         }
 
         // 仅在全部包完成 MD5 校验后将预载标记切换为可安装。
@@ -465,14 +465,14 @@ public sealed class GameUpdater : IGameUpdater
         var root = _paths.GameRootDir;
         if (string.IsNullOrEmpty(root))
         {
-            return (false, "未设置游戏目录");
+            return (false, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
         }
 
         var indexUrl = _indexUrlProvider(serverType);
         var load = await _loader.LoadKuroAsync(indexUrl, preDownload: false, ct).ConfigureAwait(false);
         if (!load.Success || load.Manifest is null)
         {
-            return (false, load.Message ?? "获取更新清单失败");
+            return (false, load.Message ?? CoreStrings.T("Core.Updater.ManifestFailed", "获取更新清单失败"));
         }
 
         var manifest = load.Manifest;
@@ -527,11 +527,11 @@ public sealed class GameUpdater : IGameUpdater
                     var patchDiskBytes = patchConfig.Ext?.RequiredDiskSpace ?? patchConfig.UnCompressSize ?? 0;
                     if (!HasFreeSpace(_appDataDir, patchDownloadBytes))
                     {
-                        return (false, $"更新下载盘空间不足: {FormatBytes(patchDownloadBytes)}");
+                        return (false, CoreStrings.F("Core.Updater.DownloadDiskFull", $"更新下载盘空间不足: {FormatBytes(patchDownloadBytes)}", FormatBytes(patchDownloadBytes)));
                     }
                     if (!HasFreeSpace(root, patchDiskBytes))
                     {
-                        return (false, $"游戏盘空间不足: {FormatBytes(patchDiskBytes)}");
+                        return (false, CoreStrings.F("Core.Updater.GameDiskFull", $"游戏盘空间不足: {FormatBytes(patchDiskBytes)}", FormatBytes(patchDiskBytes)));
                     }
                     stagingDir = Path.Combine(_appDataDir, "install_tmp", Guid.NewGuid().ToString("N"));
                     Directory.CreateDirectory(stagingDir);
@@ -574,7 +574,7 @@ public sealed class GameUpdater : IGameUpdater
                     DeletePatchFiles(root, patchLoad.Manifest.PatchPlan.DeleteFiles, manifest);
                     WriteInstalledVersion(root, manifest.Version);
                     TryDeleteDirectory(stagingDir);
-                    return (true, $"补丁安装完成,版本 {manifest.Version}");
+                    return (true, CoreStrings.F("Core.Updater.PatchInstalled", $"补丁安装完成,版本 {manifest.Version}", manifest.Version));
                 }
                 _logger.LogWarning("补丁安装后最终校验未通过,回退完整清单: {Message}", verified.Message);
             }
@@ -593,7 +593,7 @@ public sealed class GameUpdater : IGameUpdater
             return fullResult;
         }
         WriteInstalledVersion(root, manifest.Version);
-        return (true, fullResult.Message ?? $"更新完成,版本 {manifest.Version}");
+        return (true, fullResult.Message ?? CoreStrings.F("Core.Updater.Updated", $"更新完成,版本 {manifest.Version}", manifest.Version));
     }
 
     private async Task<(bool Success, string? Message)> EnsureManifestCompleteAsync(
@@ -612,7 +612,7 @@ public sealed class GameUpdater : IGameUpdater
                 BytesDownloaded = 0,
                 BytesTotal = 0,
                 SpeedBps = 0,
-                CurrentFile = $"正在校验本地文件 {p.Checked}/{p.Total}…",
+                CurrentFile = CoreStrings.F("Launcher.Verifying", $"正在校验本地文件 {p.Checked}/{p.Total}…", p.Checked, p.Total),
             }));
         }
 
@@ -621,13 +621,13 @@ public sealed class GameUpdater : IGameUpdater
             ct).ConfigureAwait(false);
         if (!diff.HasChanges)
         {
-            return (true, "游戏文件完整,无需额外下载");
+            return (true, CoreStrings.T("Core.Updater.FilesComplete", "游戏文件完整,无需额外下载"));
         }
 
         var downloadBytes = diff.ToDownload.Sum(file => file.Size);
         if (!HasFreeSpace(_appDataDir, downloadBytes))
         {
-            return (false, $"下载盘空间不足: {FormatBytes(downloadBytes)}");
+            return (false, CoreStrings.F("Core.Updater.DownloadDiskFull", $"下载盘空间不足: {FormatBytes(downloadBytes)}", FormatBytes(downloadBytes)));
         }
         var tempInstall = Path.Combine(_appDataDir, "install_tmp", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempInstall);
@@ -641,7 +641,7 @@ public sealed class GameUpdater : IGameUpdater
                 ct).ConfigureAwait(false);
             if (failures.Count > 0)
             {
-                return (false, $"下载失败: {failures[0]}");
+                return (false, CoreStrings.F("Core.Updater.DownloadFailedFirst", $"下载失败: {failures[0]}", failures[0]));
             }
 
             var installed = await Task.Run(
@@ -649,7 +649,7 @@ public sealed class GameUpdater : IGameUpdater
                 ct).ConfigureAwait(false);
             if (installed.Failures.Count > 0)
             {
-                return (false, $"安装失败: {installed.Failures[0]}");
+                return (false, CoreStrings.F("Core.Updater.InstallFailedFirst", $"安装失败: {installed.Failures[0]}", installed.Failures[0]));
             }
         }
         finally
@@ -661,8 +661,8 @@ public sealed class GameUpdater : IGameUpdater
             () => _installer.ComputeDiff(manifest, root, ct: ct),
             ct).ConfigureAwait(false);
         return remaining.HasChanges
-            ? (false, $"最终校验仍有 {remaining.ToDownload.Count} 个文件不完整")
-            : (true, $"已补齐 {diff.ToDownload.Count} 个文件");
+            ? (false, CoreStrings.F("Core.Updater.VerifyIncomplete", $"最终校验仍有 {remaining.ToDownload.Count} 个文件不完整", remaining.ToDownload.Count))
+            : (true, CoreStrings.F("Core.Updater.FilesPatched", $"已补齐 {diff.ToDownload.Count} 个文件", diff.ToDownload.Count));
     }
 
     private static void DeletePatchFiles(string gameRoot, IEnumerable<string> relativePaths, GameManifest targetManifest)
@@ -725,14 +725,14 @@ public sealed class GameUpdater : IGameUpdater
         var root = _paths.GameRootDir;
         if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
         {
-            return (false, "未设置游戏目录");
+            return (false, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
         }
 
         var indexUrl = _indexUrlProvider(serverType);
         var load = await _loader.LoadKuroAsync(indexUrl, preDownload: false, ct).ConfigureAwait(false);
         if (!load.Success || load.Manifest is null)
         {
-            return (false, load.Message ?? "获取更新清单失败");
+            return (false, load.Message ?? CoreStrings.T("Core.Updater.ManifestFailed", "获取更新清单失败"));
         }
 
         var manifest = load.Manifest;
@@ -745,21 +745,21 @@ public sealed class GameUpdater : IGameUpdater
                 BytesDownloaded = 0,
                 BytesTotal = 0,
                 SpeedBps = 0,
-                CurrentFile = $"正在检查本地文件 {p.Checked}/{p.Total}…",
+                CurrentFile = CoreStrings.F("Launcher.Verifying", $"正在检查本地文件 {p.Checked}/{p.Total}…", p.Checked, p.Total),
             }));
         var diff = await Task.Run(
             () => _installer.ComputeDiff(manifest, root, skipPaths, diffProgress, ct),
             ct).ConfigureAwait(false);
         if (!diff.HasChanges)
         {
-            return (true, "游戏文件完整,无需修复");
+            return (true, CoreStrings.T("Core.Updater.FilesCompleteRepair", "游戏文件完整,无需修复"));
         }
 
         // 下载缺失/损坏文件到临时目录,再整体安装
         var repairDownloadBytes = diff.ToDownload.Sum(file => file.Size);
         if (!HasFreeSpace(_appDataDir, repairDownloadBytes))
         {
-            return (false, $"修复下载盘空间不足: {FormatBytes(repairDownloadBytes)}");
+            return (false, CoreStrings.F("Core.Updater.DownloadDiskFull", $"修复下载盘空间不足: {FormatBytes(repairDownloadBytes)}", FormatBytes(repairDownloadBytes)));
         }
         var tempInstall = Path.Combine(_appDataDir, "repair_tmp", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempInstall);
@@ -773,7 +773,7 @@ public sealed class GameUpdater : IGameUpdater
                 ct).ConfigureAwait(false);
             if (failures.Count > 0)
             {
-                return (false, $"下载失败: {failures[0]}");
+                return (false, CoreStrings.F("Core.Updater.DownloadFailedFirst", $"下载失败: {failures[0]}", failures[0]));
             }
 
             var (installed, installFailures) = await Task.Run(
@@ -792,7 +792,7 @@ public sealed class GameUpdater : IGameUpdater
             }
 
             WriteInstalledVersion(root, manifest.Version);
-            return (true, $"修复完成:重新下载 {installed} 个文件,版本 {manifest.Version}");
+            return (true, CoreStrings.F("Core.Updater.RepairDone", $"修复完成:重新下载 {installed} 个文件,版本 {manifest.Version}", installed, manifest.Version));
         }
         finally
         {

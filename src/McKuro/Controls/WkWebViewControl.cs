@@ -30,6 +30,26 @@ public sealed class WkWebViewControl : NativeControlHost
         set => SetValue(UrlProperty, value);
     }
 
+    /// <summary>要加载的 HTML 内容(设置后优先于 Url;用于 YouTube embed 的 iframe 包装页)。</summary>
+    public static readonly StyledProperty<string> HtmlProperty =
+        AvaloniaProperty.Register<WkWebViewControl, string>(nameof(Html), "");
+
+    public string Html
+    {
+        get => GetValue(HtmlProperty);
+        set => SetValue(HtmlProperty, value);
+    }
+
+    /// <summary>HTML 内容的 baseURL(提供来源上下文)。</summary>
+    public static readonly StyledProperty<string> HtmlBaseUrlProperty =
+        AvaloniaProperty.Register<WkWebViewControl, string>(nameof(HtmlBaseUrl), "");
+
+    public string HtmlBaseUrl
+    {
+        get => GetValue(HtmlBaseUrlProperty);
+        set => SetValue(HtmlBaseUrlProperty, value);
+    }
+
     /// <summary>仅 macOS(Apple Silicon)支持:Intel 下 objc_msgSend 大结构体参数需 stret 变体,未实现,回退外部浏览器。</summary>
     public static bool IsSupported { get; } =
         OperatingSystem.IsMacOS()
@@ -41,6 +61,7 @@ public sealed class WkWebViewControl : NativeControlHost
     public WkWebViewControl()
     {
         UrlProperty.Changed.AddClassHandler<WkWebViewControl>((o, _) => o.LoadUrl());
+        HtmlProperty.Changed.AddClassHandler<WkWebViewControl>((o, _) => o.LoadUrl());
     }
 
     protected override IPlatformHandle CreateNativeControlCore(IPlatformHandle parent)
@@ -69,7 +90,15 @@ public sealed class WkWebViewControl : NativeControlHost
 
     private void LoadUrl()
     {
-        if (_webView != IntPtr.Zero && !string.IsNullOrWhiteSpace(Url))
+        if (_webView == IntPtr.Zero)
+        {
+            return;
+        }
+        if (!string.IsNullOrWhiteSpace(Html))
+        {
+            Objc.LoadHtmlString(_webView, Html, string.IsNullOrWhiteSpace(HtmlBaseUrl) ? "https://example.com" : HtmlBaseUrl);
+        }
+        else if (!string.IsNullOrWhiteSpace(Url))
         {
             Objc.LoadUrl(_webView, Url);
         }
@@ -206,6 +235,44 @@ public sealed class WkWebViewControl : NativeControlHost
             catch (Exception)
             {
                 return IntPtr.Zero;
+            }
+        }
+
+        /// <summary>
+        /// 在 WKWebView 中加载 HTML 字符串。baseURL 提供页面来源上下文 —— YouTube embed 页
+        /// 被顶层直接加载(无 referrer/ancestorOrigins)会报"视频播放配置错误(153)",
+        /// 包一层 iframe 且 baseURL 指向 https 来源即可正常播放。
+        /// </summary>
+        public static void LoadHtmlString(IntPtr webView, string html, string baseUrl)
+        {
+            try
+            {
+                if (_clsNSString == IntPtr.Zero || _clsNSURL == IntPtr.Zero)
+                {
+                    return;
+                }
+                var nsHtml = CreateNsString(html);
+                if (nsHtml == IntPtr.Zero)
+                {
+                    return;
+                }
+                IntPtr nsBase = IntPtr.Zero;
+                var nsBaseStr = CreateNsString(baseUrl);
+                if (nsBaseStr != IntPtr.Zero)
+                {
+                    nsBase = SendPtr(Send2(_clsNSURL, Sel("alloc")), Sel("initWithString:"), nsBaseStr);
+                    CFRelease(nsBaseStr);
+                }
+                // loadHTMLString:baseURL: 返回 void;经 IntPtr 委托调用,返回值忽略
+                GetDelegate<MsgSendPtr2>()(webView, Sel("loadHTMLString:baseURL:"), nsHtml, nsBase);
+                ReleaseObject(nsHtml);
+                if (nsBase != IntPtr.Zero)
+                {
+                    ReleaseObject(nsBase);
+                }
+            }
+            catch (Exception)
+            {
             }
         }
 

@@ -3,9 +3,10 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:McKuro.ViewModels"
-             xmlns:ic="using:FluentIcons.Avalonia"
-             xmlns:controls="clr-namespace:McKuro.Controls"
-             xmlns:wp="clr-namespace:McKuro.Core.Services.Wallpaper;assembly=McKuro.Core"
+    xmlns:ic="using:FluentIcons.Avalonia"
+    xmlns:controls="clr-namespace:McKuro.Controls"
+    xmlns:wp="clr-namespace:McKuro.Core.Services.Wallpaper;assembly=McKuro.Core"
+    xmlns:loc="clr-namespace:McKuro.Services"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
@@ -62,14 +63,14 @@
             <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ic:FluentIcon Icon="Settings" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
-                    <TextBlock Text="设置" FontSize="24" FontWeight="Bold" VerticalAlignment="Center" />
+                    <TextBlock Text="{loc:Localize Key=Settings.Title}" FontSize="24" FontWeight="Bold" VerticalAlignment="Center" />
                 </StackPanel>
                 <Border Grid.Column="1" Padding="10,5" CornerRadius="10" VerticalAlignment="Center"
                         Background="{DynamicResource SemiColorBg2}">
                     <StackPanel Orientation="Horizontal" Spacing="5">
                         <ic:FluentIcon Icon="CheckmarkCircle" IconVariant="Regular" IconSize="Size12"
                                        VerticalAlignment="Center" Foreground="{DynamicResource SemiColorPrimary}" />
-                        <TextBlock Text="改动自动保存" FontSize="11" VerticalAlignment="Center"
+                        <TextBlock Text="{loc:Localize Key=Settings.AutoSave}" FontSize="11" VerticalAlignment="Center"
                                    Foreground="{DynamicResource SemiColorText2}" />
                     </StackPanel>
                 </Border>
@@ -97,9 +98,9 @@
                                                IsVisible="{Binding IsPlatformLinux}" />
                             </Grid>
                         </Border>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Classes="rowTitle" Text="当前平台" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.CurrentPlatform}" />
                                 <TextBlock Classes="rowTitle" Text="{Binding PlatformNameText}"
                                            Foreground="{DynamicResource SemiColorPrimary}" />
                             </StackPanel>
@@ -117,7 +118,7 @@
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
                         VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="外观与界面" VerticalAlignment="Center" />
+                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.Appearance}" VerticalAlignment="Center" />
             </StackPanel>
             <Border Classes="section">
                 <StackPanel>
@@ -129,8 +130,8 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="主题" />
-                                <TextBlock Classes="rowDesc" Text="跟随系统 / 浅色 / 深色(选择后即时生效)" />
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.Theme}" />
+                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.Theme.Desc}" />
                             </StackPanel>
                             <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
                                       ItemsSource="{Binding Themes}"
@@ -145,8 +146,8 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="界面语言" />
-                                <TextBlock Classes="rowDesc" Text="重启后生效" />
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.Language}" />
+                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.Language.Desc}" />
                             </StackPanel>
                             <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
                                       ItemsSource="{Binding Languages}"
@@ -161,9 +162,9 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="启动时打开的页面" />
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.StartupPage}" />
                                 <TextBlock Classes="rowDesc"
-                                           Text="启动软件后默认进入主页或鸣潮启动页(下次启动生效)" />
+                                           Text="{loc:Localize Key=Settings.StartupPage.Desc}" />
                             </StackPanel>
                             <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
                                       ItemsSource="{Binding StartupPages}"
@@ -178,9 +179,9 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="背景视频封面" />
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.BackgroundVideo}" />
                                 <TextBlock Classes="rowDesc"
-                                           Text="游戏页播放宣传视频(官方或自定义动态壁纸);视频不可用时自动回退静态封面图" />
+                                           Text="{loc:Localize Key=Settings.BackgroundVideo.Desc}" />
                             </StackPanel>
                             <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
                                           IsChecked="{Binding BackgroundVideoEnabled, Mode=TwoWay}" />
@@ -194,9 +195,9 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="视频来源" />
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.VideoSource}" />
                                 <TextBlock Classes="rowDesc"
-                                           Text="自定义模式可加载本地视频或 Wallpaper Engine 视频壁纸作为启动页动态壁纸" />
+                                           Text="{loc:Localize Key=Settings.VideoSource.Desc}" />
                             </StackPanel>
                             <ComboBox Grid.Column="2" Width="280" VerticalAlignment="Center"
                                       ItemsSource="{Binding VideoSources}"
@@ -207,9 +208,9 @@
                     <Border Classes="row" IsVisible="{Binding BackgroundVideoEnabled}">
                         <StackPanel IsVisible="{Binding IsCustomVideoMode}" Spacing="12">
                             <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="10">
-                                <Button Command="{Binding BrowseCustomVideoCommand}" Content="选择视频文件…" />
+                                <Button Command="{Binding BrowseCustomVideoCommand}" Content="{loc:Localize Key=Settings.BrowseVideo}" />
                                 <Button Grid.Column="1" Command="{Binding BrowseWallpaperEngineCommand}"
-                                        Content="Wallpaper Engine 文件夹…" />
+                                        Content="{loc:Localize Key=Settings.BrowseWeFolder}" />
                                 <TextBlock Grid.Column="2" Classes="rowDesc" VerticalAlignment="Center" Margin="6,0,0,0"
                                            TextTrimming="CharacterEllipsis" Text="{Binding WallpaperScanStatus}" />
                             </Grid>
@@ -265,7 +266,7 @@
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
                         VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="游戏目录" VerticalAlignment="Center" />
+                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.GameDir}" VerticalAlignment="Center" />
             </StackPanel>
             <Border Classes="section">
                 <StackPanel>
@@ -277,16 +278,16 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="游戏安装目录" />
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.GameDir}" />
                                 <TextBlock Classes="rowDesc"
-                                           Text="用于更新/安装/抽卡日志解析,目录应包含 Wuthering Waves.exe" />
+                                           Text="{loc:Localize Key=Settings.GameDir.Desc}" />
                             </StackPanel>
                             <Grid Grid.Column="2" ColumnDefinitions="*,Auto" ColumnSpacing="8" MinWidth="320"
                                   VerticalAlignment="Center">
                                 <TextBox Grid.Column="0" Text="{Binding GameRootDir}"
-                                         PlaceholderText="例如: D:\Kuro\Wuthering Waves"
+                                         PlaceholderText="{loc:Localize Key=Settings.GameDir.Placeholder}"
                                          VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Content="浏览…" Command="{Binding BrowseGameDirCommand}" />
+                                <Button Grid.Column="1" Content="{loc:Localize Key=Common.Browse}" Command="{Binding BrowseGameDirCommand}" />
                             </Grid>
                         </Grid>
                     </Border>
@@ -299,9 +300,9 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="服务器渠道" />
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.Server}" />
                                 <TextBlock Classes="rowDesc"
-                                           Text="自动检测失败时可手动指定(官服 / B站 / WeGame / 国际服)" />
+                                           Text="{loc:Localize Key=Settings.Server.Desc}" />
                             </StackPanel>
                             <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
                                       ItemsSource="{Binding ServerTypes}"
@@ -315,7 +316,7 @@
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
                         VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="游戏修复" VerticalAlignment="Center" />
+                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.Repair}" VerticalAlignment="Center" />
             </StackPanel>
             <Border Classes="section">
                 <StackPanel>
@@ -328,18 +329,18 @@
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                    <TextBlock Classes="rowTitle" Text="游戏修复 · 跳过校验文件" />
+                                    <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Repair.Title}" />
                                     <TextBlock Classes="rowDesc"
-                                               Text="修复游戏时跳过这些文件(如日志/配置,避免被还原);相对游戏目录的路径,正斜杠分隔" />
+                                               Text="{loc:Localize Key=Repair.Desc}" />
                                 </StackPanel>
                                 <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                              OffContent="保留跳过文件" OnContent="删除跳过文件"
+                                              OffContent="{loc:Localize Key=Repair.Keep}" OnContent="{loc:Localize Key=Repair.Delete}"
                                               IsChecked="{Binding AutoSkipVerifyDelete, Mode=TwoWay}" />
                             </Grid>
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="54,0,0,0">
                                 <TextBox Grid.Column="0" Text="{Binding SkipVerifyInput}"
-                                         PlaceholderText="例如: Client/Saved/Logs/Client.log" />
-                                <Button Grid.Column="1" Content="添加" Command="{Binding AddSkipVerifyFileCommand}" />
+                                         PlaceholderText="{loc:Localize Key=Repair.Placeholder}" />
+                                <Button Grid.Column="1" Content="{loc:Localize Key=Common.Add}" Command="{Binding AddSkipVerifyFileCommand}" />
                             </Grid>
                             <ItemsControl ItemsSource="{Binding SkipVerifyFiles}" Margin="54,0,0,0">
                                 <ItemsControl.ItemTemplate>
@@ -359,7 +360,7 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <TextBlock Text="未配置跳过文件" FontSize="12" Foreground="{DynamicResource SemiColorText3}"
+                            <TextBlock Text="{loc:Localize Key=Repair.NoneConfigured}" FontSize="12" Foreground="{DynamicResource SemiColorText3}"
                                        Margin="54,0,0,0"
                                        IsVisible="{Binding !SkipVerifyFiles.Count}" />
                         </StackPanel>
@@ -371,7 +372,7 @@
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
                         VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="游戏启动" VerticalAlignment="Center" />
+                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.Launch}" VerticalAlignment="Center" />
             </StackPanel>
             <Border Classes="section">
                 <StackPanel>
@@ -384,29 +385,29 @@
                             </Border>
                             <StackPanel Grid.Column="1" Spacing="8">
                                 <StackPanel Spacing="2">
-                                    <TextBlock Classes="rowTitle" Text="游戏启动参数" />
+                                    <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.LaunchArgs}" />
                                     <TextBlock Classes="rowDesc"
-                                               Text="对齐 Haiyu:命令行追加 -dx11 -slno 及自定义参数" />
+                                               Text="{loc:Localize Key=Settings.LaunchArgs.Desc}" />
                                 </StackPanel>
                                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="DX11 启动" FontSize="13" VerticalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Launch.Dx11}" FontSize="13" VerticalAlignment="Center" />
                                     <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
                                                   IsChecked="{Binding UseDx11, Mode=TwoWay}" />
                                 </Grid>
                                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="禁用 DLSS" FontSize="13" VerticalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Launch.DisableDlss}" FontSize="13" VerticalAlignment="Center" />
                                     <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
                                                   IsChecked="{Binding DisableDlss, Mode=TwoWay}" />
                                 </Grid>
                                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="自定义参数" FontSize="13" VerticalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Launch.CustomArgs}" FontSize="13" VerticalAlignment="Center" />
                                     <TextBox Grid.Column="1" Text="{Binding StartGameArguments, Mode=TwoWay}"
-                                             PlaceholderText="如 -notexturestreaming" />
+                                             PlaceholderText="{loc:Localize Key=Launch.CustomArgs.Placeholder}" />
                                 </Grid>
                                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="启动文件" FontSize="13" VerticalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Launch.ExeName}" FontSize="13" VerticalAlignment="Center" />
                                     <TextBox Grid.Column="1" Text="{Binding StartGameExeName, Mode=TwoWay}"
-                                             PlaceholderText="留空自动:Wuthering Waves.exe → Client-Win64-Shipping.exe" />
+                                             PlaceholderText="{loc:Localize Key=Launch.ExeName.Placeholder}" />
                                 </Grid>
                             </StackPanel>
                         </Grid>
@@ -420,9 +421,9 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="启动游戏后最小化主窗口" />
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.MinimizeOnLaunch}" />
                                 <TextBlock Classes="rowDesc"
-                                           Text="启动游戏后自动最小化主窗口(下方可选任务栏/系统托盘;对齐 Haiyu 启动后可关闭主界面)" />
+                                           Text="{loc:Localize Key=Settings.MinimizeOnLaunch.Desc}" />
                             </StackPanel>
                             <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
                                           IsChecked="{Binding MinimizeOnLaunch, Mode=TwoWay}" />
@@ -436,9 +437,9 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="最小化位置" />
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.MinimizeLocation}" />
                                 <TextBlock Classes="rowDesc"
-                                           Text="任务栏或系统托盘(macOS 对应 Dock / 菜单栏状态项)" />
+                                           Text="{loc:Localize Key=Settings.MinimizeLocation.Desc}" />
                             </StackPanel>
                             <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
                                       ItemsSource="{Binding MinimizeLocations}"
@@ -453,9 +454,9 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="游戏结束后窗口状态" />
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.AfterExit}" />
                                 <TextBlock Classes="rowDesc"
-                                           Text="游戏进程退出后主窗口的处置:保持原样 / 显示主窗口 / 自动退出软件" />
+                                           Text="{loc:Localize Key=Settings.AfterExit.Desc}" />
                             </StackPanel>
                             <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
                                       ItemsSource="{Binding AfterGameExitActions}"
@@ -469,7 +470,7 @@
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
                         VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="下载" VerticalAlignment="Center" />
+                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.Download}" VerticalAlignment="Center" />
             </StackPanel>
             <Border Classes="section">
                 <StackPanel>
@@ -481,8 +482,8 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="并发下载数" />
-                                <TextBlock Classes="rowDesc" Text="同时下载的文件数(1~32)" />
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.Concurrency}" />
+                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.Concurrency.Desc}" />
                             </StackPanel>
                             <NumericUpDown Grid.Column="2" Width="132" VerticalAlignment="Center"
                                            Value="{Binding DownloadConcurrency, Mode=TwoWay}"
@@ -497,8 +498,8 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="下载速度限制 (MB/s)" />
-                                <TextBlock Classes="rowDesc" Text="0 = 不限速(对齐 Haiyu 的下载限速设置)" />
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.SpeedLimit}" />
+                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.SpeedLimit.Desc}" />
                             </StackPanel>
                             <NumericUpDown Grid.Column="2" Width="132" VerticalAlignment="Center"
                                            Value="{Binding LimitSpeedMbps, Mode=TwoWay}"
@@ -512,7 +513,7 @@
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
                         VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="关于" VerticalAlignment="Center" />
+                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.About}" VerticalAlignment="Center" />
             </StackPanel>
             <Border Classes="section">
                 <StackPanel>
@@ -523,13 +524,13 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="McKuro · 鸣潮启动器" />
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=About.AppName}" />
                                 <TextBlock Classes="rowDesc">
-                                    <Run Text="当前版本 " />
+                                    <Run Text="{loc:Localize Key=About.VersionPrefix}" />
                                     <Run Text="{Binding CurrentAppVersionText}" FontWeight="Bold" />
                                 </TextBlock>
                             </StackPanel>
-                            <Button Grid.Column="2" VerticalAlignment="Center" Content="打开日志目录"
+                            <Button Grid.Column="2" VerticalAlignment="Center" Content="{loc:Localize Key=Common.OpenLogDir}"
                                     Command="{Binding OpenLogDirCommand}"
                                     ToolTip.Tip="{Binding LogDirText}" />
                         </Grid>
@@ -544,27 +545,27 @@
                             </Border>
                             <StackPanel Grid.Column="1" Spacing="10">
                                 <StackPanel Spacing="2">
-                                    <TextBlock Classes="rowTitle" Text="应用自更新" />
+                                    <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.SelfUpdate}" />
                                     <TextBlock Classes="rowDesc"
-                                               Text="检查 GitHub Release 更新并一键安装;Release 需含 zip 绿色包或 exe 安装包" />
+                                               Text="{loc:Localize Key=Settings.SelfUpdate.Desc}" />
                                 </StackPanel>
                                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="启动后自动检查更新" FontSize="13" VerticalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Settings.AutoCheckUpdate}" FontSize="13" VerticalAlignment="Center" />
                                     <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
                                                   IsChecked="{Binding AppUpdateAutoCheck, Mode=TwoWay}" />
                                 </Grid>
                                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="自动下载安装并重启(零点击)" FontSize="13" VerticalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Settings.AutoInstallUpdate}" FontSize="13" VerticalAlignment="Center" />
                                     <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
                                                   IsChecked="{Binding AppUpdateAutoInstall, Mode=TwoWay}" />
                                 </Grid>
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Button Content="检查更新" Command="{Binding CheckAppUpdateCommand}"
+                                    <Button Content="{loc:Localize Key=Common.CheckUpdate}" Command="{Binding CheckAppUpdateCommand}"
                                             IsEnabled="{Binding !AppUpdateChecking}" />
-                                    <Button Content="下载并安装" Classes="primary" Command="{Binding DownloadAppUpdateCommand}"
+                                    <Button Content="{loc:Localize Key=Common.DownloadInstall}" Classes="primary" Command="{Binding DownloadAppUpdateCommand}"
                                             IsVisible="{Binding AppUpdateAvailable}"
                                             IsEnabled="{Binding !AppUpdateDownloading}" />
-                                    <Button Content="跳过此版本" Command="{Binding SkipAppUpdateCommand}"
+                                    <Button Content="{loc:Localize Key=Update.SkipVersion}" Command="{Binding SkipAppUpdateCommand}"
                                             IsVisible="{Binding AppUpdateAvailable}" />
                                     <ProgressBar Width="200" Height="6" VerticalAlignment="Center"
                                                  Value="{Binding AppUpdateProgress}" Minimum="0" Maximum="100"

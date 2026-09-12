@@ -61,10 +61,10 @@ public sealed class CloudGachaService
     {
         if (string.IsNullOrWhiteSpace(phone))
         {
-            return (false, "请填写手机号");
+            return (false, CoreStrings.T("Account.FillPhone", "请填写手机号"));
         }
         var (result, _) = await _cloud.GetPhoneSMSAsync(phone.Trim(), ct).ConfigureAwait(false);
-        return result is not null ? (true, "验证码已发送") : (false, "发送验证码失败");
+        return result is not null ? (true, CoreStrings.T("Account.CodeSent", "验证码已发送")) : (false, CoreStrings.T("Account.SendFailedShort", "发送验证码失败"));
     }
 
     /// <summary>云鸣潮手机号登录(SDK 登录成功即持久化会话,续期留给同步时执行)。</summary>
@@ -74,7 +74,7 @@ public sealed class CloudGachaService
         if (login is not { Code: 0, Data: not null })
         {
             var msg = login?.Msg;
-            return (false, $"登录失败: {msg}");
+            return (false, CoreStrings.F("Account.LoginFailed", $"登录失败: {msg}", msg));
         }
         // 持久化登录数据 + 账号名 + 手机号(账号页表单复用与同账号判定)
         var s = _settings.Current;
@@ -82,7 +82,7 @@ public sealed class CloudGachaService
         s.CloudLoginName = login.Data.Username ?? login.Data.Phone ?? "";
         s.CloudLoginPhone = phone.Trim();
         _settings.Save();
-        return (true, $"已登录云鸣潮: {s.CloudLoginName}");
+        return (true, CoreStrings.F("Core.Cloud.LoggedInAs", $"已登录云鸣潮: {s.CloudLoginName}", s.CloudLoginName));
     }
 
     /// <summary>退出云鸣潮登录(清除持久化会话)。</summary>
@@ -104,20 +104,20 @@ public sealed class CloudGachaService
         var json = _settings.Current.CloudLoginDataJson;
         if (string.IsNullOrWhiteSpace(json))
         {
-            return (CloudGachaStatus.NotLoggedIn, "未登录云鸣潮");
+            return (CloudGachaStatus.NotLoggedIn, CoreStrings.T("Core.Cloud.NotLoggedIn", "未登录云鸣潮"));
         }
         try
         {
             var data = JsonSerializer.Deserialize(json, CloudGameJsonContext.Default.CloudGameLoginData);
             if (data is null)
             {
-                return (CloudGachaStatus.LoginFailed, "云鸣潮登录数据无效,请重新登录");
+                return (CloudGachaStatus.LoginFailed, CoreStrings.T("Core.Cloud.DataInvalid", "云鸣潮登录数据无效,请重新登录"));
             }
             // 静默续期一次:成功即证明会话仍有效(与同步走同一条续期链路)
             var session = await _cloud.BuildSessionAsync(data, ct).ConfigureAwait(false);
             if (session is null)
             {
-                return (CloudGachaStatus.LoginFailed, "云鸣潮会话已失效,请重新登录");
+                return (CloudGachaStatus.LoginFailed, CoreStrings.T("Account.CloudSessionExpired", "云鸣潮会话已失效,请重新登录"));
             }
             PersistRenewedToken(data, session.PhoneToken);
             return (CloudGachaStatus.Success, null);
@@ -125,7 +125,7 @@ public sealed class CloudGachaService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "云鸣潮会话校验失败(不判定过期)");
-            return (CloudGachaStatus.FetchFailed, $"会话校验失败: {ex.Message}");
+            return (CloudGachaStatus.FetchFailed, CoreStrings.F("Core.Guide.SessionCheckFailed", $"会话校验失败: {ex.Message}", ex.Message));
         }
     }
 
@@ -161,7 +161,7 @@ public sealed class CloudGachaService
         var json = _settings.Current.CloudLoginDataJson;
         if (string.IsNullOrWhiteSpace(json))
         {
-            return new CloudGachaResult { Status = CloudGachaStatus.NotLoggedIn, Message = "未登录云鸣潮" };
+            return new CloudGachaResult { Status = CloudGachaStatus.NotLoggedIn, Message = CoreStrings.T("Core.Cloud.NotLoggedIn", "未登录云鸣潮") };
         }
 
         try
@@ -169,14 +169,14 @@ public sealed class CloudGachaService
             var data = JsonSerializer.Deserialize(json, CloudGameJsonContext.Default.CloudGameLoginData);
             if (data is null)
             {
-                return new CloudGachaResult { Status = CloudGachaStatus.LoginFailed, Message = "云鸣潮登录数据无效" };
+                return new CloudGachaResult { Status = CloudGachaStatus.LoginFailed, Message = CoreStrings.T("Core.Cloud.DataInvalidShort", "云鸣潮登录数据无效") };
             }
 
             // 静默续会话
             var session = await _cloud.BuildSessionAsync(data, ct).ConfigureAwait(false);
             if (session is null)
             {
-                return new CloudGachaResult { Status = CloudGachaStatus.LoginFailed, Message = "云鸣潮会话续期失败(可能已失效,请重新登录)" };
+                return new CloudGachaResult { Status = CloudGachaStatus.LoginFailed, Message = CoreStrings.T("Core.Cloud.RenewFailed", "云鸣潮会话续期失败(可能已失效,请重新登录)") };
             }
             PersistRenewedToken(data, session.PhoneToken);
 
@@ -184,7 +184,7 @@ public sealed class CloudGachaService
             var record = await _cloud.GetRecordAsync(session, ct).ConfigureAwait(false);
             if (record?.Data is not { RecordId: { Length: > 0 } recordId })
             {
-                return new CloudGachaResult { Status = CloudGachaStatus.FetchFailed, Message = "获取抽卡记录信息失败" };
+                return new CloudGachaResult { Status = CloudGachaStatus.FetchFailed, Message = CoreStrings.T("Core.Cloud.FetchInfoFailed", "获取抽卡记录信息失败") };
             }
 
             // 构造请求 → 复用 GachaSyncService 流水线(gmserver-api 明细查询 + 合并 + 分析)

@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:McKuro.ViewModels"
              xmlns:ic="using:FluentIcons.Avalonia"
+             xmlns:loc="clr-namespace:McKuro.Services"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.PlayTimeView"
              x:DataType="vm:PlayTimeViewModel">
@@ -17,7 +18,7 @@
             <StackPanel Spacing="2">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ic:FluentIcon Icon="Timer" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
-                    <TextBlock Text="游玩统计" FontSize="24" FontWeight="Bold" />
+                    <TextBlock Text="{loc:Localize Key=Nav.PlayTime}" FontSize="24" FontWeight="Bold" />
                 </StackPanel>
                 <TextBlock Text="{Binding StatusText}" FontSize="12"
                            Foreground="{DynamicResource SemiColorText2}" />
@@ -27,7 +28,7 @@
             <Grid ColumnDefinitions="*,*,*" ColumnSpacing="16">
                 <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="总游玩时长" FontSize="12"
+                        <TextBlock Text="{loc:Localize Key=PT.TotalHours}" FontSize="12"
                                    Foreground="{DynamicResource SemiColorText2}" />
                         <TextBlock Text="{Binding TotalHoursText}" FontSize="26" FontWeight="Bold"
                                    Foreground="{DynamicResource SemiColorPrimary}" />
@@ -35,7 +36,7 @@
                 </Border>
                 <Border Grid.Column="1" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="今日游玩" FontSize="12"
+                        <TextBlock Text="{loc:Localize Key=PT.Today}" FontSize="12"
                                    Foreground="{DynamicResource SemiColorText2}" />
                         <TextBlock Text="{Binding TodayHoursText}" FontSize="26" FontWeight="Bold"
                                    Foreground="{DynamicResource SemiColorPrimary}" />
@@ -43,7 +44,7 @@
                 </Border>
                 <Border Grid.Column="2" CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="记录天数" FontSize="12"
+                        <TextBlock Text="{loc:Localize Key=PT.RecordDays}" FontSize="12"
                                    Foreground="{DynamicResource SemiColorText2}" />
                         <TextBlock Text="{Binding RecordDaysText}" FontSize="26" FontWeight="Bold"
                                    Foreground="{DynamicResource SemiColorPrimary}" />
@@ -54,7 +55,7 @@
             <!-- 最近 7 天每日时长柱状 -->
             <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                 <StackPanel Spacing="12">
-                    <TextBlock Text="最近 7 天每日游玩时长" FontSize="15" FontWeight="Bold" />
+                    <TextBlock Text="{loc:Localize Key=PT.Last7Days}" FontSize="15" FontWeight="Bold" />
                     <ItemsControl ItemsSource="{Binding Last7Days}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -110,7 +111,7 @@
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <ic:FluentIcon Icon="DocumentText" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                            <TextBlock Text="最近 7 天游玩分析报告" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:Localize Key=PT.Report}" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                         </StackPanel>
                         <Border Grid.Column="1" CornerRadius="10" Padding="10,3"
                                 Background="{DynamicResource SemiColorBg3}" VerticalAlignment="Center">
@@ -123,15 +124,15 @@
                     <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="12">
                         <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="日均时长" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{loc:Localize Key=PT.AvgPerDay}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
                                 <TextBlock Text="{Binding WeeklyReport.AvgPerDayText}" FontSize="22" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorPrimary}" />
-                                <TextBlock Text="按有游玩的天平均" FontSize="10" Foreground="{DynamicResource SemiColorText3}" />
+                                <TextBlock Text="{loc:Localize Key=PT.AvgPerDayDesc}" FontSize="10" Foreground="{DynamicResource SemiColorText3}" />
                             </StackPanel>
                         </Border>
                         <Border Grid.Column="1" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="最长单次" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{loc:Localize Key=PT.Longest}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
                                 <TextBlock Text="{Binding WeeklyReport.LongestSessionText}" FontSize="22" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorPrimary}" />
                                 <TextBlock Text="{Binding WeeklyReport.LongestSessionDayText}" FontSize="10"
@@ -140,15 +141,15 @@
                         </Border>
                         <Border Grid.Column="2" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="连续游玩" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{loc:Localize Key=PT.Streak}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
                                 <TextBlock Text="{Binding WeeklyReport.StreakText}" FontSize="22" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorPrimary}" />
-                                <TextBlock Text="截至今天" FontSize="10" Foreground="{DynamicResource SemiColorText3}" />
+                                <TextBlock Text="{loc:Localize Key=PT.UpToToday}" FontSize="10" Foreground="{DynamicResource SemiColorText3}" />
                             </StackPanel>
                         </Border>
                         <Border Grid.Column="3" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="最活跃日" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{loc:Localize Key=PT.PeakDay}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
                                 <TextBlock Text="{Binding WeeklyReport.PeakDayText}" FontSize="22" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorPrimary}" />
                                 <TextBlock Text="{Binding WeeklyReport.PeakDayDetail}" FontSize="10"
@@ -161,7 +162,7 @@
                     <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="12">
                         <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="时段偏好" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{loc:Localize Key=PT.Habit}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
                                 <TextBlock Text="{Binding WeeklyReport.HabitTag}" FontSize="17" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorPrimary}" />
                                 <TextBlock Text="{Binding WeeklyReport.HabitDetail}" FontSize="11" TextWrapping="Wrap"
@@ -170,7 +171,7 @@
                         </Border>
                         <Border Grid.Column="1" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="作息规律" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{loc:Localize Key=PT.Regularity}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
                                 <TextBlock Text="{Binding WeeklyReport.RegularityTag}" FontSize="17" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorPrimary}" />
                                 <TextBlock Text="{Binding WeeklyReport.RegularityDetail}" FontSize="11" TextWrapping="Wrap"
@@ -179,7 +180,7 @@
                         </Border>
                         <Border Grid.Column="2" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="游玩方式" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{loc:Localize Key=PT.Style}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
                                 <TextBlock Text="{Binding WeeklyReport.StyleTag}" FontSize="17" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorPrimary}" />
                                 <TextBlock Text="{Binding WeeklyReport.StyleDetail}" FontSize="11" TextWrapping="Wrap"
@@ -188,7 +189,7 @@
                         </Border>
                         <Border Grid.Column="3" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="14,12">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="周内趋势" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock Text="{loc:Localize Key=PT.Trend}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
                                 <TextBlock Text="{Binding WeeklyReport.TrendTag}" FontSize="17" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorPrimary}" />
                                 <TextBlock Text="{Binding WeeklyReport.TrendDetail}" FontSize="11" TextWrapping="Wrap"
@@ -201,7 +202,7 @@
                     <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="16,12"
                             BorderBrush="{DynamicResource SemiColorPrimary}" BorderThickness="3,0,0,0">
                         <StackPanel Spacing="6">
-                            <TextBlock Text="本周总结" FontSize="12" FontWeight="Bold"
+                            <TextBlock Text="{loc:Localize Key=PT.Summary}" FontSize="12" FontWeight="Bold"
                                        Foreground="{DynamicResource SemiColorPrimary}" />
                             <TextBlock Text="{Binding WeeklyReport.SummaryText}" FontSize="13" TextWrapping="Wrap"
                                        LineHeight="22" Foreground="{DynamicResource SemiColorText1}" />
@@ -214,7 +215,7 @@
             <!-- 最近 7 天时段热力图(7 行 × 24 小时,放页面最底部) -->
             <Border CornerRadius="12" Background="{DynamicResource SemiColorBg2}" Padding="18">
                 <StackPanel Spacing="8">
-                    <TextBlock Text="最近 7 天游玩时间区间(7×24 小时热力)" FontSize="15" FontWeight="Bold" />
+                    <TextBlock Text="{loc:Localize Key=PT.Heatmap}" FontSize="15" FontWeight="Bold" />
                     <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
                         <!-- 行标签(最近 7 天日期) -->
                         <StackPanel Grid.Row="0" Grid.Column="0" Spacing="3" Margin="0,0,8,0">

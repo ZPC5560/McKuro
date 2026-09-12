@@ -5,6 +5,7 @@
              xmlns:vm="using:McKuro.ViewModels"
              xmlns:controls="using:McKuro.Controls"
              xmlns:ic="using:FluentIcons.Avalonia"
+             xmlns:loc="clr-namespace:McKuro.Services"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.ActivityView"
              x:DataType="vm:ActivityViewModel">
@@ -20,14 +21,14 @@
             <StackPanel Spacing="2">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ic:FluentIcon Icon="CalendarStar" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
-                    <TextBlock Text="活动" FontSize="24" FontWeight="Bold" />
+                    <TextBlock Text="{loc:Localize Key=Activity.Title}" FontSize="24" FontWeight="Bold" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <TextBlock Text="{Binding StatusText}" FontSize="12"
                                Foreground="{DynamicResource SemiColorText2}" />
                 </StackPanel>
             </StackPanel>
-            <Button Grid.Column="1" Content="刷新" Classes="primary" VerticalAlignment="Center"
+            <Button Grid.Column="1" Content="{loc:Localize Key=Common.Refresh}" Classes="primary" VerticalAlignment="Center"
                     Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsBusy}" />
         </Grid>
 
@@ -39,9 +40,9 @@
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <ic:FluentIcon Icon="TicketDiagonal" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                                <TextBlock Text="换取活动 (卡池)" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Activity.PoolTitle}" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" />
                             </StackPanel>
-                            <TextBlock Text="带倒计时,独立于版本活动" FontSize="11"
+                            <TextBlock Text="{loc:Localize Key=Activity.PoolDesc}" FontSize="11"
                                        Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
                         </StackPanel>
                         <ItemsControl ItemsSource="{Binding PoolActivities}">
@@ -74,7 +75,7 @@
                                             </StackPanel>
                                             <!-- 4★ 角色/武器换取信息(首张 5★ 大图之后的内容小图,对齐 Haiyu 显示 4 张) -->
                                             <StackPanel Spacing="4" IsVisible="{Binding HasFourStar}">
-                                                <TextBlock Text="4★ 角色/武器" FontSize="10"
+                                                <TextBlock Text="{loc:Localize Key=Activity.FourStar}" FontSize="10"
                                                            Foreground="{DynamicResource SemiColorText3}" />
                                                 <ItemsControl ItemsSource="{Binding FourStarImages}">
                                                     <ItemsControl.ItemsPanel>
@@ -113,9 +114,9 @@
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <ic:FluentIcon Icon="CalendarStar" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                                <TextBlock Text="版本活动 (甘特图)" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Activity.VersionTitle}" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" />
                             </StackPanel>
-                            <TextBlock Text="已过期的自动剔除" FontSize="11"
+                            <TextBlock Text="{loc:Localize Key=Activity.VersionDesc}" FontSize="11"
                                        Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
                         </StackPanel>
 
@@ -124,7 +125,7 @@
                             <Grid ColumnDefinitions="230,940" ColumnSpacing="14">
                                 <!-- 左列:活动 logo + 名称 + 时间 -->
                                 <StackPanel Spacing="10">
-                                    <TextBlock Text="活动" FontSize="11" Foreground="{DynamicResource SemiColorText3}"
+                                    <TextBlock Text="{loc:Localize Key=Activity.GanttLabel}" FontSize="11" Foreground="{DynamicResource SemiColorText3}"
                                                Height="18" />
                                     <ItemsControl ItemsSource="{Binding VersionActivities}">
                                         <ItemsControl.ItemsPanel>
@@ -241,7 +242,7 @@
         <!-- 空状态 -->
         <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
                     IsVisible="{Binding !HasData}">
-            <TextBlock Text="正在加载活动数据…" FontSize="16"
+            <TextBlock Text="{loc:Localize Key=Activity.Loading}" FontSize="16"
                        Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
         </StackPanel>
     </Grid>

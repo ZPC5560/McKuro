@@ -14,7 +14,7 @@ namespace McKuro.ViewModels;
 public sealed partial class GachaViewModel : ViewModelBase
 {
     [ObservableProperty]
-    private string _statusText = "就绪";
+    private string _statusText = LanguageService.Format("Roles.Ready");
 
     [ObservableProperty]
     private int _totalPulls;
@@ -53,10 +53,10 @@ public sealed partial class GachaViewModel : ViewModelBase
     private double _starAvgValue;
 
     [ObservableProperty]
-    private string _guaranteeHeader = "保底状态: -";
+    private string _guaranteeHeader = LanguageService.Format("Gacha.PityHeaderNone");
 
     /// <summary>"全部账号"聚合选项的显示文本。</summary>
-    public const string AllPlayersLabel = "全部账号";
+    public static string AllPlayersLabel => LanguageService.Format("Gacha.AllPlayers");
 
     /// <summary>玩家筛选选项(含"全部账号")。</summary>
     public AvaloniaList<string> PlayerIds { get; } = [];
@@ -76,7 +76,7 @@ public sealed partial class GachaViewModel : ViewModelBase
     public int CurrentPityBarValue => Math.Min(SelectedPool?.CurrentPity ?? 0, 80);
 
     /// <summary>已垫行文本(出五星——无论是否歪——后刷新为角色行)。</summary>
-    public string CurrentPityRowText => $"已垫 {SelectedPool?.CurrentPity ?? 0} 抽";
+    public string CurrentPityRowText => LanguageService.Format("Gacha.CurrentPity", SelectedPool?.CurrentPity ?? 0);
 
     public AvaloniaList<GachaRecord> AllRecords { get; } = [];
 
@@ -102,6 +102,11 @@ public sealed partial class GachaViewModel : ViewModelBase
     [ObservableProperty]
     private int _tableTotalCount;
 
+    /// <summary>表格总条数(本地化文本,替代 XAML StringFormat 中文)。</summary>
+    public string TableTotalText => LanguageService.Format("Gacha.TableTotal", TableTotalCount);
+
+    partial void OnTableTotalCountChanged(int value) => OnPropertyChanged(nameof(TableTotalText));
+
     [ObservableProperty]
     private int _tableTotalPages = 1;
 
@@ -119,7 +124,7 @@ public sealed partial class GachaViewModel : ViewModelBase
     public AvaloniaList<PieSliceViewModel> PoolSlices { get; } = [];
 
     /// <summary>统计图下拉选项(三图合一的卡片内切换)。</summary>
-    public AvaloniaList<string> ChartOptions { get; } = ["保底状态", "出货占比", "各卡池抽数占比"];
+    public AvaloniaList<string> ChartOptions { get; } = [LanguageService.Format("Gacha.ChartPity"), LanguageService.Format("Gacha.ChartOffRate"), LanguageService.Format("Gacha.ChartPoolShare")];
 
     [ObservableProperty]
     private int _selectedChartIndex;
@@ -202,7 +207,7 @@ public sealed partial class GachaViewModel : ViewModelBase
 
         var playerId = selected == AllPlayersLabel ? "" : selected;
         ApplyAnalysis(AppServices.GachaAnalysis.Analyze(playerId, records, _upIds));
-        StatusText = "已加载本地记录";
+        StatusText = LanguageService.Format("Gacha.LocalLoaded");
     }
 
     private void LoadExisting()
@@ -225,7 +230,7 @@ public sealed partial class GachaViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            StatusText = $"加载本地记录失败: {ex.Message}";
+            StatusText = LanguageService.Format("Gacha.LocalLoadFailed", ex.Message);
         }
     }
 
@@ -238,7 +243,7 @@ public sealed partial class GachaViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = "正在同步抽卡记录…";
+        StatusText = LanguageService.Format("Gacha.Syncing");
         try
         {
             // 先刷新 UP/歪 判定配置:避免整段会话沿用构造时的旧缓存(如新卡池开启后旧数据把当期 UP 误判为歪)
@@ -248,17 +253,17 @@ public sealed partial class GachaViewModel : ViewModelBase
             GachaSyncResult? result = null;
             if (AppServices.CloudGacha.HasSavedLogin)
             {
-                StatusText = "正在通过云鸣潮接口同步…";
+                StatusText = LanguageService.Format("Gacha.SyncingCloud");
                 var cloud = await AppServices.CloudGacha.SyncFromCloudAsync();
                 if (cloud.IsSuccess)
                 {
                     result = cloud.Sync;
-                    StatusText = "云鸣潮接口同步成功";
+                    StatusText = LanguageService.Format("Gacha.CloudSynced");
                 }
                 else
                 {
                     // 云鸣潮失败 → 回退本地日志
-                    StatusText = $"{cloud.Message},回退本地日志…";
+                    StatusText = LanguageService.Format("Gacha.CloudFallback", cloud.Message);
                     result = await AppServices.GachaSync.SyncFromLocalLogAsync(AppServices.UpPools);
                 }
             }
@@ -280,11 +285,11 @@ public sealed partial class GachaViewModel : ViewModelBase
                     PlayerIds.Add(AllPlayersLabel);
                     PlayerIds.AddRange(cachedIds);
                     SelectedPlayerId = cachePlayerId ?? (cachedIds.Count > 0 ? cachedIds[^1] : "");
-                    StatusText = $"{result?.Message ?? "同步失败"},已显示本地缓存记录";
+                    StatusText = LanguageService.Format("Gacha.SyncFailedCached", result?.Message ?? LanguageService.Format("Gacha.SyncFailed"));
                 }
                 else
                 {
-                    StatusText = result?.Message ?? "同步失败";
+                    StatusText = result?.Message ?? LanguageService.Format("Gacha.SyncFailed");
                 }
                 return;
             }
@@ -308,11 +313,11 @@ public sealed partial class GachaViewModel : ViewModelBase
             PlayerIds.AddRange(all);
             SelectedPlayerId = result.Request?.PlayerId ?? (all.Count > 0 ? all[^1] : "");
 
-            StatusText = $"同步完成:新增 {result.NewRecords} 条,共 {result.TotalRecords} 条";
+            StatusText = LanguageService.Format("Gacha.Synced", result.NewRecords, result.TotalRecords);
         }
         catch (Exception ex)
         {
-            StatusText = $"同步失败: {ex.Message}";
+            StatusText = LanguageService.Format("Gacha.SyncFailedWith", ex.Message);
         }
         finally
         {
@@ -427,21 +432,21 @@ public sealed partial class GachaViewModel : ViewModelBase
         {
             var rate = pityPool.OffBannerRate ?? 0;
             GuaranteeSlices.AddRange(PieSliceViewModel.BuildPie(
-                [("中", Math.Round((1 - rate) * 100, 1)), ("歪", Math.Round(rate * 100, 1))],
+                [(LanguageService.Format("Gacha.OnBanner"), Math.Round((1 - rate) * 100, 1)), (LanguageService.Format("Gacha.OffBanner"), Math.Round(rate * 100, 1))],
                 [Color.Parse("#52C41A"), Color.Parse("#F53F3F")]));
 
-            GuaranteeHeader = $"保底状态: {pityPool.DisplayName} · 歪率 {rate * 100:0.#}%";
+            GuaranteeHeader = LanguageService.Format("Gacha.PityHeader", pityPool.DisplayName, rate * 100);
         }
         else
         {
-            GuaranteeHeader = "保底状态: -";
+            GuaranteeHeader = LanguageService.Format("Gacha.PityHeaderNone");
         }
 
         // 出货占比(4星/5星)
         var fourStar = Math.Max(0, analysis.TotalPulls - analysis.TotalFiveStars);
         StarRatioSlices.Clear();
         StarRatioSlices.AddRange(PieSliceViewModel.BuildPie(
-            [("4星", fourStar), ("5星", analysis.TotalFiveStars)],
+            [(LanguageService.Format("Gacha.FourStar"), fourStar), (LanguageService.Format("Gacha.FiveStar"), analysis.TotalFiveStars)],
             [Color.Parse("#1677FF"), Color.Parse("#FAAD14")]));
 
         // 各卡池抽数分布
@@ -694,7 +699,7 @@ public sealed class FiveStarFlagTextConverter : Avalonia.Data.Converters.IValueC
     public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
         => value switch
         {
-            true => "歪",
+            true => LanguageService.Format("Gacha.OffBanner"),
             false => "UP",
             _ => "-",
         };

@@ -6,6 +6,7 @@
              xmlns:kuro="using:McKuro.Core.Models.Kuro"
              xmlns:controls="using:McKuro.Controls"
              xmlns:ic="using:FluentIcons.Avalonia"
+             xmlns:loc="clr-namespace:McKuro.Services"
              mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="700"
              x:Class="McKuro.Views.SignView"
              x:DataType="vm:SignViewModel">
@@ -19,7 +20,7 @@
             <StackPanel Spacing="2">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ic:FluentIcon Icon="CalendarCheckmark" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
-                    <TextBlock Text="签到" FontSize="24" FontWeight="Bold" />
+                    <TextBlock Text="{loc:Localize Key=Sign.Title}" FontSize="24" FontWeight="Bold" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <TextBlock Text="{Binding StatusText}"
@@ -32,18 +33,18 @@
                 <TextBlock Text="{Binding AccountText}" FontSize="13" FontWeight="Bold"
                            VerticalAlignment="Center"
                            IsVisible="{Binding IsLoggedIn}" />
-                <Button Content="刷新角色" Command="{Binding RefreshRolesCommand}"
+                <Button Content="{loc:Localize Key=Common.RefreshRoles}" Command="{Binding RefreshRolesCommand}"
                         FontSize="12" Padding="8,2"
                         IsVisible="{Binding IsLoggedIn}" />
-                <Button Content="游戏签到" Classes="primary"
+                <Button Content="{loc:Localize Key=Sign.GameSignIn}" Classes="primary"
                         Command="{Binding SignAllCommand}"
                         IsEnabled="{Binding !IsBusy}"
                         IsVisible="{Binding IsLoggedIn}" />
-                <Button Content="库街区每日任务" Command="{Binding ExecuteDailyCommand}"
+                <Button Content="{loc:Localize Key=Sign.KuroDaily}" Command="{Binding ExecuteDailyCommand}"
                         IsEnabled="{Binding !IsBusy}"
                         IsVisible="{Binding IsLoggedIn}" />
                 <!-- 未登录:引导去账号页 -->
-                <Button Content="前往「账号」页登录" Classes="primary"
+                <Button Content="{loc:Localize Key=Sign.GoLogin}" Classes="primary"
                         Command="{Binding GoAccountCommand}"
                         IsVisible="{Binding !IsLoggedIn}" />
             </StackPanel>
@@ -54,8 +55,8 @@
         <Border Grid.Row="1" Margin="20,0,20,10" Padding="16" CornerRadius="12"
                 Background="{DynamicResource SemiColorBg2}">
             <StackPanel Orientation="Horizontal" Spacing="16">
-                <CheckBox Content="自动游戏签到(启动后自动执行)" IsChecked="{Binding AutoSignEnabled}" />
-                <CheckBox Content="自动执行库街区每日任务" IsChecked="{Binding AutoKuroClientTaskEnabled}" />
+                <CheckBox Content="{loc:Localize Key=Sign.AutoGame}" IsChecked="{Binding AutoSignEnabled}" />
+                <CheckBox Content="{loc:Localize Key=Sign.AutoKuroDaily}" IsChecked="{Binding AutoKuroClientTaskEnabled}" />
                 <TextBlock Text="{Binding AutoRunStatusText}" FontSize="12"
                            Foreground="{DynamicResource SemiColorText2}"
                            VerticalAlignment="Center" />
@@ -72,7 +73,7 @@
                     <StackPanel Orientation="Horizontal" Spacing="12">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <ic:FluentIcon Icon="Gift" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                            <TextBlock Text="签到奖励" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:Localize Key=Sign.Rewards}" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                         </StackPanel>
                         <TextBlock Text="{Binding TodaySignText}" FontSize="12"
                                    Foreground="{DynamicResource SemiColorPrimary}"
@@ -134,7 +135,7 @@
                     <Grid RowDefinitions="Auto,*">
                         <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
                             <ic:FluentIcon Icon="DataLine" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                            <TextBlock Text="签到统计" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:Localize Key=Sign.Stats}" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" />
                         </StackPanel>
                         <ListBox Grid.Row="1" ItemsSource="{Binding SignHistory}"
                                  Background="Transparent" BorderThickness="0">
@@ -201,7 +202,7 @@
         <!-- 未登录空状态 -->
         <StackPanel Grid.Row="2" Grid.RowSpan="2" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
                     IsVisible="{Binding !IsLoggedIn}">
-            <TextBlock Text="登录后即可一键签到鸣潮全部角色(登录入口在「账号」页)" FontSize="16"
+            <TextBlock Text="{loc:Localize Key=Sign.LoginHint}" FontSize="16"
                        Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
         </StackPanel>
     </Grid>

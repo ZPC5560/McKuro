@@ -6,6 +6,7 @@
              xmlns:controls="using:McKuro.Controls"
              xmlns:tower="using:McKuro.Core.Models.Tower"
              xmlns:ic="using:FluentIcons.Avalonia"
+             xmlns:loc="clr-namespace:McKuro.Services"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.TowerView"
              x:DataType="vm:TowerViewModel">
@@ -33,7 +34,7 @@
         <StackPanel Grid.Row="0" Spacing="2" Margin="0,0,0,12">
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <ic:FluentIcon Icon="BuildingSkyscraper" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
-                <TextBlock Text="深塔 / 海墟" FontSize="24" FontWeight="Bold" />
+                <TextBlock Text="{loc:Localize Key=Tower.Title}" FontSize="24" FontWeight="Bold" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="10">
                 <TextBlock Text="{Binding StatusText}" FontSize="12"
@@ -45,14 +46,14 @@
                     IsVisible="{Binding HasData}"
                     Padding="0" Background="Transparent" FontSize="13">
             <!-- 逆境深塔 -->
-            <TabItem Header="逆境深塔">
+            <TabItem Header="{loc:Localize Key=Tower.TabTower}">
                 <Grid RowDefinitions="Auto,*" Margin="8,8,8,8">
                     <!-- 未解锁提示 -->
                     <StackPanel Grid.Row="0" Grid.RowSpan="2" VerticalAlignment="Center" HorizontalAlignment="Center"
                                 Spacing="8" IsVisible="{Binding !TowerUnlocked}">
-                        <TextBlock Text="逆境深塔尚未解锁" FontSize="16" FontWeight="Bold"
+                        <TextBlock Text="{loc:Localize Key=Tower.TowerLocked}" FontSize="16" FontWeight="Bold"
                                    HorizontalAlignment="Center" />
-                        <TextBlock Text="请先在游戏中挑战逆境深塔,再回到本页刷新"
+                        <TextBlock Text="{loc:Localize Key=Tower.TowerLockedDesc}"
                                    FontSize="12" Foreground="{DynamicResource SemiColorText2}"
                                    HorizontalAlignment="Center" />
                     </StackPanel>
@@ -143,7 +144,7 @@
             </TabItem>
 
             <!-- 终焉矩阵(主从布局,对齐 WutheringWavesTool NewTowerView:左栏模式/历史,右栏详情) -->
-            <TabItem Header="终焉矩阵">
+            <TabItem Header="{loc:Localize Key=Tower.TabMatrix}">
                 <Grid Margin="8,8,8,8" ColumnDefinitions="264,*" ColumnSpacing="14">
                     <!-- 左栏:挑战模式 + 往期历史 -->
                     <Border Grid.Column="0" CornerRadius="12" Background="{DynamicResource SemiColorBg3}" Padding="14">
@@ -151,7 +152,7 @@
                             <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="2,0,0,8">
                                 <ic:FluentIcon Icon="BookOpen" IconVariant="Regular" IconSize="Size16"
                                                VerticalAlignment="Center" />
-                                <TextBlock Text="挑战模式" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Tower.ChallengeMode}" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                             </StackPanel>
                             <ListBox Grid.Row="1" ItemsSource="{Binding TowerModes}"
                                      SelectedItem="{Binding SelectedTowerMode}"
@@ -180,7 +181,7 @@
                             <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" Margin="2,12,0,8">
                                 <ic:FluentIcon Icon="History" IconVariant="Regular" IconSize="Size16"
                                                VerticalAlignment="Center" />
-                                <TextBlock Text="往期历史" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Tower.History}" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                             </StackPanel>
                             <ListBox Grid.Row="4" ItemsSource="{Binding NewTowerHistory}"
                                      SelectedItem="{Binding SelectedNewTowerHistory}"
@@ -193,7 +194,7 @@
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
-                            <TextBlock Grid.Row="5" Text="暂无往期记录" FontSize="12.5" Margin="2,10,0,0"
+                            <TextBlock Grid.Row="5" Text="{loc:Localize Key=Tower.NoHistory}" FontSize="12.5" Margin="2,10,0,0"
                                        Foreground="{DynamicResource SemiColorText3}"
                                        IsVisible="{Binding !HasNewTowerHistory}" />
                             <TextBlock Grid.Row="6" Text="" />
@@ -205,9 +206,9 @@
                         <!-- 空态:本期无记录且未查看历史 -->
                         <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Spacing="8" Margin="0,48,0,0"
                                     IsVisible="{Binding NewTowerShowWaiting}">
-                            <TextBlock Text="当前版本等待开放中" FontSize="18" FontWeight="Bold"
+                            <TextBlock Text="{loc:Localize Key=Tower.MatrixWaitOpen}" FontSize="18" FontWeight="Bold"
                                        HorizontalAlignment="Center" />
-                            <TextBlock Text="本期暂无终焉矩阵挑战记录,开放后回到本页刷新即可同步"
+                            <TextBlock Text="{loc:Localize Key=Tower.MatrixEmptyDesc}"
                                        FontSize="12.5" Foreground="{DynamicResource SemiColorText2}"
                                        HorizontalAlignment="Center" />
                         </StackPanel>
@@ -225,14 +226,14 @@
                                             <StackPanel Spacing="2" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding NewTowerDetail.ModeName}" FontSize="17" FontWeight="Bold" />
                                                 <TextBlock FontSize="12.5" Foreground="{DynamicResource SemiColorText2}">
-                                                    <Run Text="进度 " /><Run Text="{Binding NewTowerDetail.ProgressText}" FontWeight="Bold" />
+                                                    <Run Text="{loc:Localize Key=Tower.ProgressPrefix}" /><Run Text="{Binding NewTowerDetail.ProgressText}" FontWeight="Bold" />
                                                 </TextBlock>
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" Spacing="0" VerticalAlignment="Center"
                                                         HorizontalAlignment="Right">
                                                 <TextBlock Text="{Binding NewTowerDetail.ScoreText}" FontSize="26" FontWeight="Bold"
                                                            HorizontalAlignment="Right" />
-                                                <TextBlock Text="分数" FontSize="11"
+                                                <TextBlock Text="{loc:Localize Key=Tower.Score}" FontSize="11"
                                                            Foreground="{DynamicResource SemiColorText3}"
                                                            HorizontalAlignment="Right" />
                                             </StackPanel>
@@ -281,12 +282,12 @@
             </TabItem>
 
             <!-- 海墟 -->
-            <TabItem Header="海墟">
+            <TabItem Header="{loc:Localize Key=Tower.TabSea}">
                 <Grid RowDefinitions="Auto,*" Margin="8,8,8,8">
                     <!-- 本期总积分 / 刷新倒计时(对齐 WutheringWavesTool score01/score02/endTime) -->
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12" Margin="0,0,0,10"
                                 IsVisible="{Binding SlashHasRecord}">
-                        <TextBlock Text="本期总积分" FontSize="12" VerticalAlignment="Center"
+                        <TextBlock Text="{loc:Localize Key=Tower.SeasonScore}" FontSize="12" VerticalAlignment="Center"
                                    Foreground="{DynamicResource SemiColorText2}" />
                         <TextBlock Text="{Binding SlashTotalScoreText}" FontSize="17" FontWeight="Bold"
                                    VerticalAlignment="Center" IsVisible="{Binding SlashTotalScoreText,
@@ -304,9 +305,9 @@
                     <!-- 本期无挑战记录提示 -->
                     <StackPanel Grid.Row="0" Grid.RowSpan="2" VerticalAlignment="Center" HorizontalAlignment="Center"
                                 Spacing="8" IsVisible="{Binding !SlashHasRecord}">
-                        <TextBlock Text="本期暂无海墟挑战记录" FontSize="16" FontWeight="Bold"
+                        <TextBlock Text="{loc:Localize Key=Tower.SeaEmpty}" FontSize="16" FontWeight="Bold"
                                    HorizontalAlignment="Center" />
-                        <TextBlock Text="请先在游戏中挑战再生海域,再回到本页刷新"
+                        <TextBlock Text="{loc:Localize Key=Tower.SeaEmptyDesc}"
                                    FontSize="12" Foreground="{DynamicResource SemiColorText2}"
                                    HorizontalAlignment="Center" />
                     </StackPanel>
@@ -338,7 +339,7 @@
                                                             HorizontalAlignment="Right">
                                                     <TextBlock Text="{Binding ScoreText}" FontSize="28" FontWeight="Bold"
                                                                HorizontalAlignment="Right" />
-                                                    <TextBlock Text="分数" FontSize="11"
+                                                    <TextBlock Text="{loc:Localize Key=Tower.Score}" FontSize="11"
                                                                Foreground="{DynamicResource SemiColorText3}"
                                                                HorizontalAlignment="Right" />
                                                 </StackPanel>
@@ -423,7 +424,7 @@
         <!-- 空/未登录状态 -->
         <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
                     IsVisible="{Binding !HasData}">
-            <TextBlock Text="进入页面自动加载深塔与海墟(需登录库街区)" FontSize="15"
+            <TextBlock Text="{loc:Localize Key=Tower.AutoLoadHint}" FontSize="15"
                        Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
         </StackPanel>
     </Grid>

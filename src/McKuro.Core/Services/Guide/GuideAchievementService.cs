@@ -39,11 +39,11 @@ public sealed class GuideAchievementService
         var (result, _) = await _cloud.GetGuidePhoneSMSAsync(phone, ct).ConfigureAwait(false);
         if (result is null)
         {
-            return (false, "发送验证码失败(响应无效)");
+            return (false, CoreStrings.T("Core.Guide.SendInvalid", "发送验证码失败(响应无效)"));
         }
         return result.Codes == 0
-            ? (true, "验证码已发送,请查收")
-            : (false, $"发送失败: {result.ErrorDescription ?? $"code={result.Codes}"}");
+            ? (true, CoreStrings.T("Account.CodeSent", "验证码已发送,请查收"))
+            : (false, CoreStrings.F("Account.SendFailed", $"发送失败: {result.ErrorDescription ?? $"code={result.Codes}"}", result.ErrorDescription ?? $"code={result.Codes}"));
     }
 
     /// <summary>手机号 + 验证码登录:SDK 登录 → guide 换 x-token → 自动选玩家。</summary>
@@ -54,13 +54,13 @@ public sealed class GuideAchievementService
             var login = await _cloud.LoginGuideAsync(phone, code, ct).ConfigureAwait(false);
             if (login is not { Code: 0, Data: not null })
             {
-                return (false, login?.Msg ?? "SDK 登录失败");
+                return (false, login?.Msg ?? CoreStrings.T("Core.Guide.SdkLoginFailed", "SDK 登录失败"));
             }
 
             var access = await _cloud.GetGuideAccessTokenAsync(login.Data, login.Data.Code ?? "", ct).ConfigureAwait(false);
             if (access is not { Code: 0, Data: not null } || string.IsNullOrEmpty(access.Data.AccessToken))
             {
-                return (false, access?.Msg ?? "获取 access_token 失败");
+                return (false, access?.Msg ?? CoreStrings.T("Core.Guide.AccessTokenFailed", "获取 access_token 失败"));
             }
 
             var cUid = login.Data.Cuid ?? "";
@@ -68,7 +68,7 @@ public sealed class GuideAchievementService
             var token = await _api.LoginSdkAsync(cUid, cName, access.Data.AccessToken!, ct).ConfigureAwait(false);
             if (string.IsNullOrEmpty(token))
             {
-                return (false, "guide 登录失败(未返回 x-token)");
+                return (false, CoreStrings.T("Core.Guide.LoginNoToken", "guide 登录失败(未返回 x-token)"));
             }
 
             var s = _settings.Current;
@@ -80,13 +80,13 @@ public sealed class GuideAchievementService
 
             var playerOk = await EnsurePlayerAsync(ct).ConfigureAwait(false);
             return playerOk
-                ? (true, "登录成功")
-                : (true, "登录成功,但自动选择玩家失败(可在角色页重新选择)");
+                ? (true, CoreStrings.T("Account.LoginSuccess", "登录成功"))
+                : (true, CoreStrings.T("Core.Guide.LoginAutoSelectFailed", "登录成功,但自动选择玩家失败(可在角色页重新选择)"));
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "mcguide 登录失败");
-            return (false, $"登录失败: {ex.Message}");
+            return (false, CoreStrings.F("Account.LoginFailed", $"登录失败: {ex.Message}", ex.Message));
         }
     }
 
@@ -154,7 +154,7 @@ public sealed class GuideAchievementService
         {
             // x-token 已失效:清除会话让账号页回到登录表单(保留手机号便于复用),提示重新登录
             ClearExpiredSession();
-            throw new GuideApiException("mcguide 登录已过期,请到「账号」页的攻略站区块重新登录", ex.Code);
+            throw new GuideApiException(CoreStrings.T("Core.Guide.SessionExpired", "mcguide 登录已过期,请到「账号」页的攻略站区块重新登录"), ex.Code);
         }
     }
 
@@ -167,23 +167,23 @@ public sealed class GuideAchievementService
         var s = _settings.Current;
         if (string.IsNullOrWhiteSpace(s.GuideToken))
         {
-            return (null, "未登录(角色页将隐藏官方评级)");
+            return (null, CoreStrings.T("Account.GuideNotLoggedIn", "未登录(角色页将隐藏官方评级)"));
         }
         try
         {
             // /user/player/list 是最轻的鉴权 GET,足以判定 x-token 有效性
             await _api.GetPlayerListAsync(s.GuideToken, ct).ConfigureAwait(false);
-            return (true, string.IsNullOrWhiteSpace(s.GuideCName) ? "已登录" : $"已登录: {s.GuideCName}");
+            return (true, string.IsNullOrWhiteSpace(s.GuideCName) ? CoreStrings.T("Account.LoggedIn", "已登录") : CoreStrings.F("Account.GuideLoggedIn", $"已登录: {s.GuideCName}", s.GuideCName));
         }
         catch (GuideApiException ex) when (ex.Code == GuideApiException.SessionExpiredCode)
         {
             ClearExpiredSession();
-            return (false, "登录已过期,请重新登录");
+            return (false, CoreStrings.T("Core.Guide.LoginExpired", "登录已过期,请重新登录"));
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "mcguide 会话校验失败(不判定过期)");
-            return (null, $"会话校验失败: {ex.Message}");
+            return (null, CoreStrings.F("Core.Guide.SessionCheckFailed", $"会话校验失败: {ex.Message}", ex.Message));
         }
     }
 
@@ -259,7 +259,7 @@ public sealed class GuideAchievementService
             {
                 AttributeName = a.Name ?? "",
                 AttributeValue = BuildAmountText(a),
-                AttributeType = a.IsFinished == true ? "已达标" : "未达标",
+                AttributeType = a.IsFinished == true ? CoreStrings.T("Roles.Met", "已达标") : CoreStrings.T("Roles.NotMet", "未达标"),
                 IconUrl = a.PictureUrl ?? "",
             })
             .ToList();

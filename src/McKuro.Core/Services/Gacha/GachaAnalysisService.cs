@@ -328,11 +328,11 @@ public sealed class GachaAnalysisService
     /// <summary>根据综合评分给出称号(参考 Haiyu 的 EvaluateLuck)。</summary>
     private static string ComputeDesignation(double score) => score switch
     {
-        < 20 => "大非酋",
-        < 40 => "非酋",
-        < 60 => "平民",
-        < 80 => "小欧皇",
-        _ => "至尊无敌欧皇",
+        < 20 => CoreStrings.T("Gacha.Luck.VeryUnlucky", "大非酋"),
+        < 40 => CoreStrings.T("Gacha.Luck.Unlucky", "非酋"),
+        < 60 => CoreStrings.T("Gacha.Luck.Normal", "平民"),
+        < 80 => CoreStrings.T("Gacha.Luck.Lucky", "小欧皇"),
+        _ => CoreStrings.T("Gacha.Luck.VeryLucky", "至尊无敌欧皇"),
     };
 
     /// <summary>解析记录时间字符串(兼容 ISO 8601 与 "yyyy-MM-dd HH:mm:ss")。</summary>

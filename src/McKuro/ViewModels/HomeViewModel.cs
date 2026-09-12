@@ -91,7 +91,7 @@ public sealed class DailyItem : System.ComponentModel.INotifyPropertyChanged
 
     private void SetCountdownText(int? seconds)
     {
-        var text = seconds is null ? null : $"预计 {FormatCountdown(seconds.Value)} 后满";
+        var text = seconds is null ? null : LanguageService.Format("Home.RecoverFull", FormatCountdown(seconds.Value));
         if (text != _countdownText)
         {
             _countdownText = text;
@@ -123,7 +123,7 @@ public sealed partial class HomeViewModel : ViewModelBase
     private bool _isInstalled;
 
     [ObservableProperty]
-    private string _installStateText = "未检测";
+    private string _installStateText = LanguageService.Format("Launcher.NotDetected");
 
     [ObservableProperty]
     private string _serverTypeText = "-";
@@ -222,14 +222,14 @@ public sealed partial class HomeViewModel : ViewModelBase
     private void RefreshState()
     {
         IsInstalled = AppServices.Paths.IsGameInstalled;
-        InstallStateText = IsInstalled ? "游戏已就绪" : "尚未安装游戏";
+        InstallStateText = IsInstalled ? LanguageService.Format("Launcher.GameReady") : LanguageService.Format("Launcher.NotInstalled");
         ServerTypeText = AppServices.Paths.DetectServerType() switch
         {
-            GameServerType.Official => "官服",
-            GameServerType.Bilibili => "B站",
+            GameServerType.Official => LanguageService.Format("Server.Official"),
+            GameServerType.Bilibili => LanguageService.Format("Server.Bilibili"),
             GameServerType.WeGame => "WeGame",
-            GameServerType.Global => "国际服",
-            _ => "自动检测",
+            GameServerType.Global => LanguageService.Format("Server.Global"),
+            _ => LanguageService.Format("Server.Auto"),
         };
         var account = AppServices.KuroAccounts.Current;
         IsLoggedIn = account is not null;
@@ -263,7 +263,7 @@ public sealed partial class HomeViewModel : ViewModelBase
         }
         RefreshState();
         IsBusy = true;
-        StatusText = "正在拉取每日数据…";
+        StatusText = LanguageService.Format("Home.FetchingDaily");
         try
         {
             // 先用本地缓存头像占位(离线/慢网也立即显示,参照 Java 版 assets/header 本地文件优先)
@@ -273,7 +273,7 @@ public sealed partial class HomeViewModel : ViewModelBase
             var local = await AppServices.LocalDaily.GetDailyDataAsync();
             if (local is not null)
             {
-                ApplyDailyData(local, "本地启动器");
+                ApplyDailyData(local, LanguageService.Format("Home.SrcLocal"));
                 // 本地 SDK 数据不含头像 URL:从库街区 gamer 接口补齐并落盘缓存
                 await ResolveAvatarAsync(local.HeadUrl, local.RoleId);
                 return;
@@ -284,7 +284,7 @@ public sealed partial class HomeViewModel : ViewModelBase
             {
                 ClearProfile();
                 DailyItems.Clear();
-                StatusText = "本地无游戏缓存,暂无每日数据";
+                StatusText = LanguageService.Format("Home.NoLocalData");
                 return;
             }
             var data = await AppServices.DailyData.GetDailyDataAsync();
@@ -292,16 +292,16 @@ public sealed partial class HomeViewModel : ViewModelBase
             {
                 ClearProfile();
                 DailyItems.Clear();
-                StatusText = "拉取每日数据失败";
+                StatusText = LanguageService.Format("Home.FetchDailyFailed");
                 return;
             }
-            ApplyDailyData(data, "库街区");
+            ApplyDailyData(data, LanguageService.Format("Home.SrcKuro"));
             // 库街区路径 HeadUrl 已含头像:只需确保落盘缓存并切换为本地路径
             await ResolveAvatarAsync(data.HeadUrl, data.RoleId);
         }
         catch (Exception ex)
         {
-            StatusText = $"拉取失败: {ex.Message}";
+            StatusText = LanguageService.Format("Status.LoadFailedWith", ex.Message);
         }
         finally
         {
@@ -329,22 +329,22 @@ public sealed partial class HomeViewModel : ViewModelBase
         ApplyProfile(data);
         // 体力(结晶波片):每 6 分钟恢复 1 点(上限 240);结晶单质:体力恢复满(240)后才开始恢复,
         // 同样每 6 分钟恢复 1 点(上限 480),体力未满时不启动倒计时。
-        var energy = AddItem(data.EnergyData, Icon.Flash, "体力", iconFile: "waveplates.png", recoverMinutes: 6);
-        AddItem(data.StoreEnergyData, Icon.Diamond, "结晶单质", iconFile: "wavesubstance.png",
+        var energy = AddItem(data.EnergyData, Icon.Flash, LanguageService.Format("Home.ItemEnergy"), iconFile: "waveplates.png", recoverMinutes: 6);
+        AddItem(data.StoreEnergyData, Icon.Diamond, LanguageService.Format("Home.ItemCrystal"), iconFile: "wavesubstance.png",
             gate: energy, recoverMinutes: 6, totalFallback: 480);
         // 活跃度满 100:接口无总量时回退 100(数据中心 livenessMaxCount)
-        AddItem(data.LivenessData, Icon.Fire, "活跃度", iconFile: "activity.png",
+        AddItem(data.LivenessData, Icon.Fire, LanguageService.Format("Home.ItemLiveness"), iconFile: "activity.png",
             totalFallback: data.LivenessLimit > 0 ? data.LivenessLimit : 100);
         // 周本每周 3 次:接口无总量时回退 3(数据中心 weeklyInstCountLimit)
-        AddItem(data.WeeklyData, Icon.Trophy, "周本", iconFile: "weeklyInst.png", forcedUrl: data.WeeklyIconUrl,
+        AddItem(data.WeeklyData, Icon.Trophy, LanguageService.Format("Home.ItemWeekly"), iconFile: "weeklyInst.png", forcedUrl: data.WeeklyIconUrl,
             totalFallback: data.WeeklyLimit > 0 ? data.WeeklyLimit : 3);
-        AddItem(data.NewTowerData, Icon.BuildingSkyscraper, "终焉矩阵");
-        AddItem(data.SlashTowerData, Icon.Beach, "冥歌海墟");
-        AddItem(data.RougeData, Icon.Door, "千道门扉", curOnly: true);
-        AddItem(data.WeeklyFrameData, Icon.Map, "周度游历", curOnly: true);
+        AddItem(data.NewTowerData, Icon.BuildingSkyscraper, LanguageService.Format("Tower.TabMatrix"));
+        AddItem(data.SlashTowerData, Icon.Beach, LanguageService.Format("Home.ItemSlash"));
+        AddItem(data.RougeData, Icon.Door, LanguageService.Format("Home.ItemRouge"), curOnly: true);
+        AddItem(data.WeeklyFrameData, Icon.Map, LanguageService.Format("Home.ItemWeeklyFrame"), curOnly: true);
         AddBattlePass(data.BattlePassData);
         // 只显示数据来源与更新状态,不显示账号信息(角色名/角色 ID)
-        StatusText = $"已更新({source})";
+        StatusText = LanguageService.Format("Home.Updated", source);
     }
 
     /// <summary>填充资料卡:昵称/等级/游玩天数/头像/开服玩家徽章(参照 Java WutheringWavesTool 角色卡)。</summary>
@@ -353,10 +353,10 @@ public sealed partial class HomeViewModel : ViewModelBase
         RoleNameText = string.IsNullOrWhiteSpace(data.RoleName) ? "" : data.RoleName!;
         RoleIdText = string.IsNullOrWhiteSpace(data.RoleId) ? "" : $"ID: {data.RoleId}";
         LevelText = data.Level > 0 ? $"LV.{data.Level}" : "";
-        PlayDaysText = data.ActiveDays > 0 ? $"已游玩 {data.ActiveDays} 天" : "";
+        PlayDaysText = data.ActiveDays > 0 ? LanguageService.Format("Home.PlayedDays", data.ActiveDays) : "";
         AvatarUrl = string.IsNullOrWhiteSpace(data.HeadUrl) ? DefaultAvatarUrl : data.HeadUrl!;
         RegisterText = data.CreatTime > 0
-            ? $"注册于 {DateTimeOffset.FromUnixTimeMilliseconds(data.CreatTime).LocalDateTime:yyyy-MM-dd}"
+            ? LanguageService.Format("Home.RegisteredAt", DateTimeOffset.FromUnixTimeMilliseconds(data.CreatTime).LocalDateTime.ToString("yyyy-MM-dd"))
             : "";
         IsLaunchPlayer = UserProfile.IsLaunchPlayer(data.CreatTime);
         HasProfile = !string.IsNullOrWhiteSpace(data.RoleName) || data.Level > 0;
@@ -443,9 +443,9 @@ public sealed partial class HomeViewModel : ViewModelBase
         {
             Icon = Icon.Medal,
             ImageUrl = GameIcon("podcast.png"),
-            Name = "电台",
+            Name = LanguageService.Format("Home.ItemRadio"),
             ValueText = $"LV.{level:00}",
-            SubText = progress is null ? null : $"经验: {progress.Cur}/{progress.Total}",
+            SubText = progress is null ? null : LanguageService.Format("Home.RadioExp", progress.Cur, progress.Total),
             Cur = progress?.Cur ?? 0,
             Total = progress?.Total ?? 0,
         });

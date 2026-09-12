@@ -25,7 +25,7 @@ public sealed partial class RoleSignItem : ObservableObject
     private string _headUrl = "";
 
     [ObservableProperty]
-    private string _signStatus = "待签到";
+    private string _signStatus = LanguageService.Format("Sign.Pending");
 
     public GameRoilDataItem Source { get; init; } = null!;
 }
@@ -40,7 +40,7 @@ public sealed partial class SignViewModel : ViewModelBase
     private bool _isLoggedIn;
 
     [ObservableProperty]
-    private string _accountText = "未登录";
+    private string _accountText = LanguageService.Format("Sign.NotLoggedIn");
 
     [ObservableProperty]
     private string _statusText = "";
@@ -102,8 +102,9 @@ public sealed partial class SignViewModel : ViewModelBase
 
     private void RefreshAutoRunStatusText()
     {
-        AutoRunStatusText = DailyAutoRunSchedule.DescribeToday(
-            DateTime.Now, AppServices.Settings.Current.LastDailyAutoRunDate);
+        AutoRunStatusText = DailyAutoRunSchedule.HasRunToday(DateTime.Now, AppServices.Settings.Current.LastDailyAutoRunDate)
+            ? LanguageService.Format("Sign.AutoDone")
+            : LanguageService.Format("Sign.AutoPending");
     }
 
     private void RefreshAccount()
@@ -112,9 +113,9 @@ public sealed partial class SignViewModel : ViewModelBase
         IsLoggedIn = accounts.Count > 0;
         AccountText = accounts.Count switch
         {
-            0 => "未登录",
+            0 => LanguageService.Format("Sign.NotLoggedIn"),
             1 => DescribeAccount(accounts[0]),
-            _ => $"{accounts.Count} 个库街区账号",
+            _ => LanguageService.Format("Sign.AccountsCount", accounts.Count),
         };
         if (accounts.Count > 0)
         {
@@ -124,7 +125,7 @@ public sealed partial class SignViewModel : ViewModelBase
     }
 
     private static string DescribeAccount(KuroAccount account) =>
-        $"{(string.IsNullOrEmpty(account.Nickname) ? "库街区用户" : account.Nickname)} (ID: {account.UserId})";
+        $"{(string.IsNullOrEmpty(account.Nickname) ? LanguageService.Format("Sign.KuroUser") : account.Nickname)} (ID: {account.UserId})";
 
     /// <summary>遍历全部已保存账号:拉取角色、失效账号自动移除、汇总签到状态。</summary>
     private async Task RefreshAllAccountsAsync(IReadOnlyList<KuroAccount> accounts)
@@ -161,8 +162,8 @@ public sealed partial class SignViewModel : ViewModelBase
                             }
                             var item = new RoleSignItem
                             {
-                                GameName = "鸣潮",
-                                RoleName = role.RoleName ?? "未知角色",
+                                GameName = LanguageService.Format("Nav.Launcher"),
+                                RoleName = role.RoleName ?? LanguageService.Format("Sign.UnknownRole"),
                                 ServerName = role.ServerName ?? "",
                                 Level = role.GameLevel,
                                 Source = role,
@@ -182,12 +183,12 @@ public sealed partial class SignViewModel : ViewModelBase
                     }
                     else
                     {
-                        removed.Add($"{DescribeAccount(account)}: 网络异常");
+                        removed.Add(LanguageService.Format("Sign.NetError", DescribeAccount(account)));
                     }
                 }
                 catch (Exception)
                 {
-                    removed.Add($"{DescribeAccount(account)}: 网络异常");
+                    removed.Add(LanguageService.Format("Sign.NetError", DescribeAccount(account)));
                 }
             }
 
@@ -204,8 +205,8 @@ public sealed partial class SignViewModel : ViewModelBase
             }
 
             StatusText = removed.Count > 0
-                ? $"共 {Roles.Count} 个角色(已移除失效账号:{string.Join("; ", removed)}) → 请重新登录"
-                : $"共 {Roles.Count} 个角色";
+                ? LanguageService.Format("Sign.RolesSummaryRemoved", Roles.Count, string.Join("; ", removed))
+                : LanguageService.Format("Sign.RolesSummary", Roles.Count);
         }
         finally
         {
@@ -286,7 +287,7 @@ public sealed partial class SignViewModel : ViewModelBase
                         var target = Roles.FirstOrDefault(r => ReferenceEquals(r.Source, item.Source));
                         if (target is not null)
                         {
-                            target.SignStatus = signed ? "已签到" : "待签到";
+                            target.SignStatus = signed ? LanguageService.Format("Sign.Signed") : LanguageService.Format("Sign.Pending");
                         }
                         // 主角色(列表第一项)同时填充签到奖励格子与今日状态
                         if (isFirst && info?.Data is { } data)
@@ -303,8 +304,8 @@ public sealed partial class SignViewModel : ViewModelBase
                                     SignGoods.Add(ordered[i]);
                                 }
                             }
-                            TodaySignText = signed ? "今日已签到" : "今日尚未签到";
-                            SignCountText = $"累计签到 {sigInNum} 天";
+                            TodaySignText = signed ? LanguageService.Format("Sign.TodaySigned") : LanguageService.Format("Sign.TodayNotSigned");
+                            SignCountText = LanguageService.Format("Sign.TotalDays", sigInNum);
                         }
                     });
                     // 主角色额外拉取签到历史(后台网络调用,聚合后回 UI 线程更新)
@@ -372,12 +373,12 @@ public sealed partial class SignViewModel : ViewModelBase
         var account = AppServices.KuroAccounts.Current;
         if (account is null)
         {
-            StatusText = "请先登录库街区账号";
+            StatusText = LanguageService.Format("Sign.LoginFirst");
             return;
         }
 
         IsBusy = true;
-        StatusText = "正在执行游戏签到…";
+        StatusText = LanguageService.Format("Sign.SigningInProgress");
         try
         {
             var summary = await AppServices.KuroSign.SignAllGamesAsync(account);
@@ -387,7 +388,7 @@ public sealed partial class SignViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            StatusText = $"签到失败: {ex.Message}";
+            StatusText = LanguageService.Format("Sign.SignFailed", ex.Message);
         }
         finally
         {
@@ -402,20 +403,20 @@ public sealed partial class SignViewModel : ViewModelBase
         var account = AppServices.KuroAccounts.Current;
         if (account is null)
         {
-            StatusText = "请先登录库街区账号";
+            StatusText = LanguageService.Format("Sign.LoginFirst");
             return;
         }
 
         IsBusy = true;
-        StatusText = "正在执行库街区每日任务…";
+        StatusText = LanguageService.Format("Sign.KuroDailyInProgress");
         try
         {
             var ok = await AppServices.KuroSign.ExecuteDailyTasksAsync(account);
-            StatusText = ok ? "库街区每日任务完成" : "每日任务执行失败(请查看网络或稍后重试)";
+            StatusText = ok ? LanguageService.Format("Sign.KuroDailyDone") : LanguageService.Format("Sign.KuroDailyFailed");
         }
         catch (Exception ex)
         {
-            StatusText = $"每日任务失败: {ex.Message}";
+            StatusText = LanguageService.Format("Sign.KuroDailyFailedWith", ex.Message);
         }
         finally
         {

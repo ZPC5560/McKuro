@@ -28,7 +28,7 @@ public sealed class PlayHourCell
     public required long Minutes { get; init; }
     /// <summary>强度 0-1(用于背景色深浅)。</summary>
     public required double Intensity { get; init; }
-    public string Tip => $"{Minutes} 分钟";
+    public string Tip => LanguageService.Format("PT.MinutesTip", Minutes);
 }
 
 /// <summary>
@@ -38,7 +38,7 @@ public sealed class PlayHourCell
 public sealed partial class PlayTimeViewModel : ViewModelBase
 {
     [ObservableProperty]
-    private string _statusText = "尚未分析";
+    private string _statusText = LanguageService.Format("PT.NotAnalyzed");
 
     [ObservableProperty]
     private bool _isBusy;
@@ -89,16 +89,16 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
             return;
         }
         IsBusy = true;
-        StatusText = "正在解析游戏日志…";
+        StatusText = LanguageService.Format("PT.Parsing");
         try
         {
             var count = await AppServices.PlayTime.AnalyzeLogAsync();
             RefreshFromDb();
-            StatusText = count > 0 ? $"解析完成,本次 {count} 条游玩记录" : "日志解析完成(未发现新记录)";
+            StatusText = count > 0 ? LanguageService.Format("PT.Parsed", count) : LanguageService.Format("PT.ParsedNone");
         }
         catch (Exception ex)
         {
-            StatusText = $"解析失败: {ex.Message}";
+            StatusText = LanguageService.Format("Status.ParseFailedWith", ex.Message);
         }
         finally
         {
@@ -112,7 +112,7 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
 
         TotalHoursText = FormatHours(a.TotalSeconds);
         TodayHoursText = FormatHours(a.TodaySeconds);
-        RecordDaysText = $"{a.RecordDays} 天";
+        RecordDaysText = LanguageService.Format("PT.StreakDays", a.RecordDays);
 
         // 最近 7 天每日时长(柱状)
         Last7Days.Clear();
@@ -141,8 +141,8 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
         // 报告总览:最近 7 天有游玩的天数(逐日明细已移除,仅保留汇总徽标)
         var playedDays = a.Last7DaysSeconds.Count(secs => secs > 0);
         ReportSummaryText = playedDays > 0
-            ? $"最近 7 天共 {playedDays} 天有游玩"
-            : "最近 7 天暂无游玩记录";
+            ? LanguageService.Format("PT.DaysPlayed", playedDays)
+            : LanguageService.Format("PT.NoRecords7");
 
         // 7 天分析报告:在逐日聚合之上二次计算(纯 Core 计算,便于测试)
         WeeklyReport = PlayTimeService.BuildWeeklyReport(a);

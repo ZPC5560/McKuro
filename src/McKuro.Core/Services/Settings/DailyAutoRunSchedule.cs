@@ -14,7 +14,7 @@ public static class DailyAutoRunSchedule
     public static bool ShouldRunNow(DateTime now, string? lastRunDate)
         => lastRunDate != TodayText(now);
 
-    /// <summary>今日自动任务状态描述(供界面展示)。</summary>
-    public static string DescribeToday(DateTime now, string? lastRunDate)
-        => lastRunDate == TodayText(now) ? "今日自动任务已完成" : "今日尚未执行,下次启动软件后自动执行";
+    /// <summary>今天的自动任务是否已执行过(供界面展示状态;文案由调用方按语言生成)。</summary>
+    public static bool HasRunToday(DateTime now, string? lastRunDate)
+        => lastRunDate == TodayText(now);
 }

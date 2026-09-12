@@ -5,6 +5,7 @@
              xmlns:vm="using:McKuro.ViewModels"
              xmlns:redeem="using:McKuro.Core.Models.Redeem"
              xmlns:ic="using:FluentIcons.Avalonia"
+             xmlns:loc="clr-namespace:McKuro.Services"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.RedemptionCodeView"
              x:DataType="vm:RedemptionCodeViewModel">
@@ -20,14 +21,14 @@
             <StackPanel Spacing="2">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ic:FluentIcon Icon="TicketDiagonal" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
-                    <TextBlock Text="兑换码" FontSize="24" FontWeight="Bold" />
+                    <TextBlock Text="{loc:Localize Key=Redeem.Title}" FontSize="24" FontWeight="Bold" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <TextBlock Text="{Binding StatusText}" FontSize="12"
                                Foreground="{DynamicResource SemiColorText2}" />
                 </StackPanel>
             </StackPanel>
-            <Button Grid.Column="1" Content="刷新" VerticalAlignment="Center"
+            <Button Grid.Column="1" Content="{loc:Localize Key=Common.Refresh}" VerticalAlignment="Center"
                     Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsLoading}" />
         </Grid>
 
@@ -39,7 +40,7 @@
                 <Grid RowDefinitions="Auto,*">
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
                         <ic:FluentIcon Icon="Home" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                        <TextBlock Text="国服" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                        <TextBlock Text="{loc:Localize Key=Redeem.Mainland}" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                         <Border CornerRadius="6" Padding="7,1" Background="{DynamicResource SemiColorBg3}" VerticalAlignment="Center">
                             <TextBlock Text="{Binding MainlandCodes.Count}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
                         </Border>
@@ -82,7 +83,7 @@
                                             <TextBlock Text="{Binding TimeRangeText}" FontSize="11"
                                                        Foreground="{DynamicResource SemiColorText3}" />
                                         </StackPanel>
-                                        <Button Grid.Column="2" Content="复制" Padding="12,3" FontSize="12"
+                                        <Button Grid.Column="2" Content="{loc:Localize Key=Common.Copy}" Padding="12,3" FontSize="12"
                                                 VerticalAlignment="Center"
                                                 Command="{Binding $parent[ItemsControl].((vm:RedemptionCodeViewModel)DataContext).CopyMainlandCommand}" />
                                     </Grid>
@@ -98,7 +99,7 @@
                 <Grid RowDefinitions="Auto,*">
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
                         <ic:FluentIcon Icon="Globe" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                        <TextBlock Text="国际服" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                        <TextBlock Text="{loc:Localize Key=Redeem.Global}" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                         <Border CornerRadius="6" Padding="7,1" Background="{DynamicResource SemiColorBg3}" VerticalAlignment="Center">
                             <TextBlock Text="{Binding GlobalCodes.Count}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" />
                         </Border>
@@ -141,7 +142,7 @@
                                             <TextBlock Text="{Binding TimeRangeText}" FontSize="11"
                                                        Foreground="{DynamicResource SemiColorText3}" />
                                         </StackPanel>
-                                        <Button Grid.Column="2" Content="复制" Padding="12,3" FontSize="12"
+                                        <Button Grid.Column="2" Content="{loc:Localize Key=Common.Copy}" Padding="12,3" FontSize="12"
                                                 VerticalAlignment="Center"
                                                 Command="{Binding $parent[ItemsControl].((vm:RedemptionCodeViewModel)DataContext).CopyGlobalCommand}" />
                                     </Grid>
@@ -156,7 +157,7 @@
         <!-- 空/加载状态 -->
         <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
                     IsVisible="{Binding !HasData}">
-            <TextBlock Text="正在拉取兑换码…" FontSize="16"
+            <TextBlock Text="{loc:Localize Key=Redeem.Loading}" FontSize="16"
                        Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
         </StackPanel>
     </Grid>

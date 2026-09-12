@@ -1,3 +1,5 @@
+using McKuro.Core.Services;
+
 namespace McKuro.Core.Models.Gacha;
 
 /// <summary>单条抽卡分析记录(包含五星间隔与 UP 判定)。</summary>
@@ -25,13 +27,16 @@ public sealed class GachaPullEntry
     public string BannerText => IsOffBanner switch
     {
         false => "UP",
-        true => "歪",
+        true => CoreStrings.T("Gacha.OffBanner", "歪"),
         _ => "",
     };
 
-    public string PityText => Pity.HasValue ? $"{Pity.Value} 抽" : "";
+    /// <summary>品质等级显示文本("{0}星" 的本地化版本)。</summary>
+    public string QualityLevelText => CoreStrings.F("Gacha.StarLevel", $"{Record.QualityLevel}星", Record.QualityLevel);
 
-    public string FiveStarGapText => FiveStarGap.HasValue ? $"{FiveStarGap.Value} 抽" : "-";
+    public string PityText => Pity.HasValue ? CoreStrings.F("Gacha.PityCount", $"{Pity.Value} 抽", Pity.Value) : "";
+
+    public string FiveStarGapText => FiveStarGap.HasValue ? CoreStrings.F("Gacha.PityCount", $"{FiveStarGap.Value} 抽", FiveStarGap.Value) : "-";
 
     public string IconUrl => IconCatalog.GetIconUrl(Record);
 }
@@ -53,7 +58,7 @@ public sealed class FiveStarEntry
     /// <summary>两个五星之间的普通抽数(与 Pity 相同,不含本次)。</summary>
     public int FiveStarGap => Math.Max(0, Pity);
 
-    public string FiveStarGapText => Index > 1 ? $"间隔 {FiveStarGap} 抽" : "首次五星";
+    public string FiveStarGapText => Index > 1 ? CoreStrings.F("Gacha.Gap", $"间隔 {FiveStarGap} 抽", FiveStarGap) : CoreStrings.T("Gacha.FirstFiveStar", "首次五星");
 
     /// <summary>该五星在整个卡池中的序号(1 起)。</summary>
     public int Index { get; init; }
@@ -71,6 +76,12 @@ public sealed class PoolStats
     /// <summary>总抽数。</summary>
     public int TotalPulls { get; init; }
 
+    /// <summary>总抽数显示文本("总抽 {0}" 的本地化版本,供统计卡片绑定)。</summary>
+    public string TotalPullsText => CoreStrings.F("Gacha.TotalPullsCard", $"总抽 {TotalPulls}", TotalPulls);
+
+    /// <summary>当前垫抽数显示文本("已垫 {0} / 80 抽" 的本地化版本)。</summary>
+    public string CurrentPityFullText => CoreStrings.F("Gacha.CurrentPityFull", $"已垫 {CurrentPity} / 80 抽", CurrentPity);
+
     /// <summary>五星数量。</summary>
     public int FiveStarCount { get; init; }
 
@@ -87,7 +98,7 @@ public sealed class PoolStats
     public int CurrentUpPity { get; init; }
 
     /// <summary>用于界面显示的最近一次 UP 垫抽文本。</summary>
-    public string CurrentUpPityText => UpCount > 0 ? $"UP 后垫抽: {CurrentUpPity} 抽" : "UP 后垫抽: -";
+    public string CurrentUpPityText => UpCount > 0 ? CoreStrings.F("Gacha.UpPity", $"UP 后垫抽: {CurrentUpPity} 抽", CurrentUpPity) : CoreStrings.T("Gacha.UpPityNone", "UP 后垫抽: -");
 
     /// <summary>距上次五星的平均抽数(含本次,与 Haiyu FormatRecordFive 一致;若至少有 1 个五星)。</summary>
     public double? AveragePity => FiveStarEntries.Count > 0
@@ -164,12 +175,12 @@ public sealed class PoolStats
     }
 
     /// <summary>HERO 数字的标签:有 UP 池显示 UP 概率,无 UP 池显示 5★ 概率。</summary>
-    public string UpChanceCaption => HasUpTarget ? "预计下一抽 UP" : "预计下一抽 5★";
+    public string UpChanceCaption => HasUpTarget ? CoreStrings.T("Gacha.NextUpChance", "预计下一抽 UP") : CoreStrings.T("Gacha.Next5StarChance", "预计下一抽 5★");
 
     /// <summary>保底状态徽标文本(大保底/小保底/必UP/无UP)。</summary>
     public string GuaranteeBadgeText => HasUpTarget
-        ? (IsFiftyFifty ? (IsGuaranteedUp ? "大保底" : "小保底") : "必UP")
-        : "无UP";
+        ? (IsFiftyFifty ? (IsGuaranteedUp ? CoreStrings.T("Gacha.BigGuarantee", "大保底") : CoreStrings.T("Gacha.SmallGuarantee", "小保底")) : CoreStrings.T("Gacha.AlwaysUp", "必UP"))
+        : CoreStrings.T("Gacha.NoUp", "无UP");
 
     /// <summary>保底状态徽标语义色键(guaranteed/fifty/always/none),供配色转换器。</summary>
     public string GuaranteeBadgeKind => HasUpTarget
@@ -224,7 +235,7 @@ public sealed class GachaAnalysisResult
     public double Score { get; init; }
 
     /// <summary>称号(大非酋/非酋/平民/小欧皇/至尊无敌欧皇)。</summary>
-    public string Designation { get; init; } = "平民";
+    public string Designation { get; init; } = CoreStrings.T("Gacha.Luck.Normal", "平民");
 
     /// <summary>双金次数(10 抽内两个五星)。</summary>
     public int DoubleCount { get; init; }

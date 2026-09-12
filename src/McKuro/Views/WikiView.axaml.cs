@@ -14,7 +14,7 @@ namespace McKuro.Views;
 public partial class WikiView : UserControl
 {
     /// <summary>当前已注入的B站内嵌播放器对应的 BV 号(切换视频项时重建 WebView)。</summary>
-    private string? _biliEmbedBvid;
+    private string? _embedSessionKey;
 
     /// <summary>当前注入的 WebView2 实例(换视频项/离开时需 CloseWebView 回收)。</summary>
     private WebView2Control? _biliWebView2;
@@ -77,39 +77,73 @@ public partial class WikiView : UserControl
         BannerHost.Height = Math.Clamp(BannerHost.Bounds.Width / aspect.Value, 160, 640);
     }
 
-    /// <summary>按当前轮播项维护视频覆盖层:直接视频交给 XAML 控件;B站视频注入平台 WebView。</summary>
+    /// <summary>按当前轮播项维护视频覆盖层:直接视频交给 XAML 控件;B站/YouTube 视频注入平台 WebView。
+    /// B站为中文轮播预告;YouTube 为国际服英文轮播预告(界面语言 en-US 的数据源)。</summary>
     private void UpdateVideoOverlay()
     {
         var vm = DataContext as WikiViewModel;
-        var bvid = vm?.CurrentBannerIsBili == true ? vm.CurrentBanner?.Bvid : null;
+        var banner = vm?.CurrentBannerIsWebVideo == true ? vm.CurrentBanner : null;
+        // 会话键:B站用 BV 号,YouTube 用视频 ID(前缀区分来源)
+        string? sessionKey = banner switch
+        {
+            { IsYoutubeVideo: true } => "yt:" + banner.YoutubeId,
+            { IsBiliVideo: true } => "bili:" + banner.Bvid,
+            _ => null,
+        };
 
-        // 离开B站视频项(或 BV 号变化):回收旧 WebView,停止静音注入
-        if (bvid is null || bvid != _biliEmbedBvid)
+        // 离开网页视频项(或会话键变化):回收旧 WebView,停止静音注入
+        if (sessionKey is null || sessionKey != _embedSessionKey)
         {
             _biliMuteTimer?.Stop();
             _biliMuteTimer = null;
-            (_biliEmbedBvid is null ? null : BiliEmbedHost.Content as WebView2Control)?.CloseWebView();
+            (_embedSessionKey is null ? null : BiliEmbedHost.Content as WebView2Control)?.CloseWebView();
             BiliEmbedHost.Content = null;
             _biliWebView2 = null;
         }
-        if (bvid is not null && bvid != _biliEmbedBvid)
+        if (sessionKey is not null && sessionKey != _embedSessionKey)
         {
-            var playerUrl = $"https://player.bilibili.com/player.html?bvid={Uri.EscapeDataString(bvid)}&autoplay=1&danmaku=0&mute=1";
+            var isYoutube = sessionKey.StartsWith("yt:", StringComparison.Ordinal);
+            // B站多语言 PV(【中】【日】【英】【韩】分P):英文界面带 p= 参数播英文分P
+            var pageParam = banner is { BvPage: > 0 } ? $"&p={banner.BvPage}" : "";
+            var playerUrl = isYoutube
+                ? $"https://www.youtube-nocookie.com/embed/{Uri.EscapeDataString(sessionKey[3..])}?autoplay=1&mute=1&loop=1&playlist={Uri.EscapeDataString(sessionKey[3..])}&rel=0"
+                : $"https://player.bilibili.com/player.html?bvid={Uri.EscapeDataString(sessionKey[5..])}&autoplay=1&danmaku=0&mute=1{pageParam}";
             if (WkWebViewControl.IsSupported)
             {
-                BiliEmbedHost.Content = new WkWebViewControl { Url = playerUrl };
+                if (isYoutube)
+                {
+                    // YouTube embed 页被 WKWebView 顶层直接加载会报"配置错误 153"(缺来源上下文),
+                    // 包一层 iframe 且 baseURL 指向 https 来源即可正常播放
+                    BiliEmbedHost.Content = new WkWebViewControl
+                    {
+                        Html = BuildYoutubeIframeHtml(playerUrl),
+                        HtmlBaseUrl = "https://example.com",
+                    };
+                }
+                else
+                {
+                    BiliEmbedHost.Content = new WkWebViewControl { Url = playerUrl };
+                }
             }
             else if (WebView2Control.IsSupported)
             {
                 _biliWebView2 = new WebView2Control { Url = playerUrl };
                 BiliEmbedHost.Content = _biliWebView2;
             }
+            // YouTube 播放器原生支持 mute=1 URL 参数,无需 JS 注入;
             // B站播放器不支持可靠的 URL 静音参数:页面加载后分多次注入 JS 静音
             // (脚本自身 MutationObserver + 定时器持续保持静音,一次成功注入即长期有效)
-            StartBiliMuteInjection();
+            if (banner?.IsBiliVideo == true)
+            {
+                StartBiliMuteInjection();
+            }
         }
-        _biliEmbedBvid = bvid;
+        _embedSessionKey = sessionKey;
     }
+
+    /// <summary>YouTube embed 的 iframe 包装页(满铺、无边距;autoplay+mute 参数由 embed URL 携带)。</summary>
+    private static string BuildYoutubeIframeHtml(string embedUrl)
+        => $$"""<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}iframe{position:absolute;inset:0;width:100%;height:100%;border:0}</style></head><body><iframe src="{{embedUrl}}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></body></html>""";
 
     /// <summary>启动B站播放器静音注入:2/4/6/8/10 秒各一次,覆盖页面加载与播放器延迟创建 video 元素的时序;
     /// 注入窗口结束后不再干预 —— 用户可通过播放器自带音量控制手动恢复声音。</summary>

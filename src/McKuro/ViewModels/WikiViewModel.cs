@@ -22,6 +22,33 @@ public sealed class WikiBannerItem
     public string? Bvid { get; init; }
     public bool IsBiliVideo => !string.IsNullOrEmpty(Bvid);
 
+    /// <summary>B站多 P 视频要播放的分 P 页码(0=第 1P)。英文界面下官方 PV 为
+    /// 【中】【日】【英】【韩】多语言分P,自动选【英】分P 播放。</summary>
+    public int BvPage { get; init; }
+
+    /// <summary>跳转链接为 YouTube 视频时提取的视频 ID(国际服英文轮播的预告片;非空 = 内嵌 YouTube 播放器)。</summary>
+    public string? YoutubeId { get; init; }
+    public bool IsYoutubeVideo => !string.IsNullOrEmpty(YoutubeId);
+
+    /// <summary>从 youtu.be 短链 / youtube.com watch|shorts 链接提取视频 ID;非 YouTube 链接返回 null。</summary>
+    public static string? TryExtractYoutubeId(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+        var u = url.Trim();
+        // youtu.be/{id}
+        var m = System.Text.RegularExpressions.Regex.Match(u, @"youtu\.be/([A-Za-z0-9_-]{11})");
+        if (m.Success)
+        {
+            return m.Groups[1].Value;
+        }
+        // youtube.com/watch?v={id} / /shorts/{id} / /embed/{id}
+        m = System.Text.RegularExpressions.Regex.Match(u, @"youtube\.com/(?:watch\?v=|shorts/|embed/)([A-Za-z0-9_-]{11})");
+        return m.Success ? m.Groups[1].Value : null;
+    }
+
     /// <summary>链接本身是直接视频文件(按扩展名识别,mp4/webm/mov/m3u8 等)→ mpv 原地播放。</summary>
     public bool IsVideo => WikiBannerItem.IsVideoUrl(Url);
 
@@ -104,6 +131,9 @@ public sealed partial class WikiViewModel : ViewModelBase
     /// <summary>当前项是B站视频 → 原控件内嵌B站播放器自动播放。</summary>
     public bool CurrentBannerIsBili => CurrentBanner?.IsBiliVideo == true;
 
+    /// <summary>当前项是网页内嵌视频(B站或 YouTube)→ WebView 播放器层显示。</summary>
+    public bool CurrentBannerIsWebVideo => CurrentBanner is { IsBiliVideo: true } or { IsYoutubeVideo: true };
+
     public string CurrentBannerTitle => CurrentBanner?.Title ?? "";
     public bool CurrentBannerHasTitle => CurrentBannerTitle.Length > 0;
     public string CurrentBannerJumpUrl => CurrentBanner?.JumpUrl ?? "";
@@ -114,6 +144,7 @@ public sealed partial class WikiViewModel : ViewModelBase
         OnPropertyChanged(nameof(CurrentBanner));
         OnPropertyChanged(nameof(CurrentBannerIsDirectVideo));
         OnPropertyChanged(nameof(CurrentBannerIsBili));
+        OnPropertyChanged(nameof(CurrentBannerIsWebVideo));
         OnPropertyChanged(nameof(CurrentBannerTitle));
         OnPropertyChanged(nameof(CurrentBannerHasTitle));
         OnPropertyChanged(nameof(CurrentBannerJumpUrl));
@@ -146,14 +177,23 @@ public sealed partial class WikiViewModel : ViewModelBase
     /// <summary>封面反查表(标题 → 封面,精确匹配兜底)。</summary>
     private readonly Dictionary<string, string> _coverByTitle = new();
 
-    /// <summary>网页快捷入口。</summary>
+    /// <summary>网页快捷入口:中文=库街区生态;英文=全球官方源(库街区无英文版)。</summary>
     public IReadOnlyList<WikiLinkItem> WebLinks { get; } =
-    [
-        new("库街区官方页", "https://www.kurobbs.com/mc/official", "公告 / 资讯 / 活动官方发布"),
-        new("库街区 Wiki", "https://wiki.kurobbs.com/mc/home", "官方角色/武器/声骸图鉴"),
-        new("库街区地图", "https://www.kurobbs.com/mc/map/", "官方大地图 / 资源分布"),
-        new("Gamekee Wiki", "https://www.gamekee.com/mc/", "第三方图鉴与攻略"),
-    ];
+        LanguageService.Current == "en-US"
+            ?
+            [
+                new(LanguageService.Format("Wiki.LinkGlobalNewsName"), "https://wutheringwaves.kurogames.com/en/main/news", LanguageService.Format("Wiki.LinkGlobalNewsDesc")),
+                new(LanguageService.Format("Wiki.LinkXName"), "https://x.com/Wuthering_Waves", LanguageService.Format("Wiki.LinkXDesc")),
+                new(LanguageService.Format("Wiki.LinkYtName"), "https://www.youtube.com/@WutheringWaves", LanguageService.Format("Wiki.LinkYtDesc")),
+                new(LanguageService.Format("Wiki.LinkGlobalSiteName"), "https://wutheringwaves.kurogames.com/en/main", LanguageService.Format("Wiki.LinkGlobalSiteDesc")),
+            ]
+            :
+            [
+                new(LanguageService.Format("Wiki.LinkOfficialName"), "https://www.kurobbs.com/mc/official", LanguageService.Format("Wiki.LinkOfficialDesc")),
+                new(LanguageService.Format("Wiki.LinkWikiName"), "https://wiki.kurobbs.com/mc/home", LanguageService.Format("Wiki.LinkWikiDesc")),
+                new(LanguageService.Format("Wiki.LinkMapName"), "https://www.kurobbs.com/mc/map/", LanguageService.Format("Wiki.LinkMapDesc")),
+                new("Gamekee Wiki", "https://www.gamekee.com/mc/", LanguageService.Format("Wiki.LinkGamekeeDesc")),
+            ];
 
     public WikiViewModel()
     {
@@ -179,7 +219,7 @@ public sealed partial class WikiViewModel : ViewModelBase
         }
         catch (Exception)
         {
-            StatusText = "打开网页失败";
+            StatusText = LanguageService.Format("Status.OpenWebFailed");
         }
     }
 
@@ -198,6 +238,13 @@ public sealed partial class WikiViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// 资讯数据源渠道说明:曾试验英文界面切国际服英文内容包(G153/en.json),
+    /// 但其公告为机翻标题、无封面图、条目稀疏,观感差 —— 已回退:信息源始终跟随
+    /// 服务器设置(国服数据最全)。英文版的实现保留在:轮播 B站 PV 自动播【英】分P、
+    /// 快捷链接切全球官方源、B站多语言 PV 的分P查询(FindEnglishPageAsync)。
+    /// </summary>
+
     private async Task LoadInternalAsync()
     {
         if (IsBusy)
@@ -206,7 +253,7 @@ public sealed partial class WikiViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = "正在加载图鉴与官方资讯…";
+        StatusText = LanguageService.Format("Wiki.StatusLoading");
         try
         {
             Banners.Clear();
@@ -226,11 +273,11 @@ public sealed partial class WikiViewModel : ViewModelBase
             var (news, anns, acts) = await LoadKurobbsEventsAsync();
             int notices = await LoadLauncherGuidanceAsync();
 
-            StatusText = $"已加载:封面 {banners} · 库街区 资讯{news}/公告{anns}/活动{acts} · 启动器公告 {notices} 条";
+            StatusText = LanguageService.Format("Wiki.StatusLoaded", banners, news, anns, acts, notices);
         }
         catch (Exception ex)
         {
-            StatusText = $"加载失败: {ex.Message}";
+            StatusText = LanguageService.Format("Status.LoadFailedWith", ex.Message);
         }
         finally
         {
@@ -246,11 +293,12 @@ public sealed partial class WikiViewModel : ViewModelBase
         if (info?.Slideshow is { Count: > 0 })
         {
             var slides = info.Slideshow.Where(s => !string.IsNullOrWhiteSpace(s.Url)).ToList();
-            // 并行解析B站视频链接(含 b23.tv 短链重定向)→ BV 号
+            // 并行解析B站视频链接(含 b23.tv 短链重定向)→ BV 号;YouTube 链接(国际服英文轮播)直接提取 ID,无需网络解析
             var bvids = new string?[slides.Count];
             await Task.WhenAll(slides.Select(async (slide, i) =>
             {
-                if (!BiliVideoHelper.IsBiliVideoUrl(slide.JumpUrl))
+                if (WikiBannerItem.TryExtractYoutubeId(slide.JumpUrl) is not null
+                    || !BiliVideoHelper.IsBiliVideoUrl(slide.JumpUrl))
                 {
                     return;
                 }
@@ -263,6 +311,19 @@ public sealed partial class WikiViewModel : ViewModelBase
                     // 解析失败:该轮播项按普通图片展示
                 }
             }));
+            // 英文界面:官方 PV 是【中】【日】【英】【韩】多语言分P,查询分P列表取【英】所在页码
+            var bvPages = new int[slides.Count];
+            if (LanguageService.Current == "en-US")
+            {
+                await Task.WhenAll(slides.Select(async (slide, i) =>
+                {
+                    var bv = bvids[i];
+                    if (!string.IsNullOrEmpty(bv))
+                    {
+                        bvPages[i] = await FindEnglishPageAsync(bv);
+                    }
+                }));
+            }
             for (var i = 0; i < slides.Count; i++)
             {
                 Banners.Add(new WikiBannerItem
@@ -271,6 +332,8 @@ public sealed partial class WikiViewModel : ViewModelBase
                     Title = slides[i].CarouselNotes ?? "",
                     JumpUrl = slides[i].JumpUrl ?? "",
                     Bvid = bvids[i],
+                    BvPage = bvPages[i],
+                    YoutubeId = WikiBannerItem.TryExtractYoutubeId(slides[i].JumpUrl),
                 });
             }
             return Banners.Count;
@@ -286,6 +349,38 @@ public sealed partial class WikiViewModel : ViewModelBase
             }
         }
         return Banners.Count;
+    }
+
+    /// <summary>
+    /// 查询 B站分P列表,返回标题含【英】/English 的分P页码(官方多语言 PV 的英文版所在 P);
+    /// 无多语言分P或查询失败返回 0(播放第 1P)。
+    /// </summary>
+    private static async Task<int> FindEnglishPageAsync(string bvid)
+    {
+        try
+        {
+            var url = "https://api.bilibili.com/x/player/pagelist?bvid=" + Uri.EscapeDataString(bvid);
+            var resp = await AppServices.Http.GetStringAsync(url).ConfigureAwait(false);
+            using var doc = System.Text.Json.JsonDocument.Parse(resp);
+            if (doc.RootElement.TryGetProperty("data", out var arr) && arr.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var el in arr.EnumerateArray())
+                {
+                    var title = el.TryGetProperty("part", out var pt) ? pt.GetString() ?? "" : "";
+                    var page = el.TryGetProperty("page", out var pg) && pg.TryGetInt32(out var n) ? n : 0;
+                    if (page > 0 && (title.Contains("【英】", StringComparison.Ordinal)
+                                     || title.Contains("English", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return page;
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // 查询失败:回退第 1P
+        }
+        return 0;
     }
 
     /// <summary>拉取库街区官方资讯三个分类。返回 (资讯数, 公告数, 活动数)。</summary>
@@ -384,6 +479,13 @@ public sealed partial class WikiViewModel : ViewModelBase
         Fill(LauncherActivities, guidance.Activity);
         Fill(LauncherNotices, guidance.Notice);
         Fill(LauncherNews, guidance.News);
+        // 默认选中第一个非空标签:英文源(国际服)活动分组可能为空(functionSwitch=0),
+        // 停在空标签上左侧信息栏看起来像"没加载出来"
+        SelectedLauncherTab =
+            LauncherActivities.Count > 0 ? 0
+            : LauncherNotices.Count > 0 ? 1
+            : LauncherNews.Count > 0 ? 2
+            : 0;
         return LauncherActivities.Count + LauncherNotices.Count + LauncherNews.Count;
     }
 

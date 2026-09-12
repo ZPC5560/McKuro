@@ -30,14 +30,14 @@ public sealed class LauncherInfoService
         "https://prod-tencentcdn-gamestarter.kurogame.com",
     ];
 
-    private static readonly (string AppId, string AppKey, string GameId, string Language) Official =
-        ("10003", "Y8xXrXk65DqFHEDgApn3cpK5lfczpFx5", "G152", "zh-Hans");
+    private static readonly (string AppId, string AppKey, string GameId) Official =
+        ("10003", "Y8xXrXk65DqFHEDgApn3cpK5lfczpFx5", "G152");
 
-    private static readonly (string AppId, string AppKey, string GameId, string Language) Bilibili =
-        ("10004", "j5GWFuUFlb8N31Wi2uS3ZAVHcb7ZGN7y", "G152", "zh-Hans");
+    private static readonly (string AppId, string AppKey, string GameId) Bilibili =
+        ("10004", "j5GWFuUFlb8N31Wi2uS3ZAVHcb7ZGN7y", "G152");
 
-    private static readonly (string AppId, string AppKey, string GameId, string Language) Global =
-        ("50004", "obOHXFrFanqsaIEOmuKroCcbZkQRBC7c", "G153", "zh-Hant");
+    private static readonly (string AppId, string AppKey, string GameId) Global =
+        ("50004", "obOHXFrFanqsaIEOmuKroCcbZkQRBC7c", "G153");
 
     private static readonly HttpClient Http = CreateClient();
 
@@ -56,12 +56,20 @@ public sealed class LauncherInfoService
         return client;
     }
 
-    private static (string AppId, string AppKey, string GameId, string Language) GetServerConfig(
+    private static (string AppId, string AppKey, string GameId) GetServerConfig(
         GameServerType serverType) => serverType switch
     {
         GameServerType.Bilibili => Bilibili,
         GameServerType.Global => Global,
         _ => Official, // 官服 / WeGame / Unknown 默认官服配置
+    };
+
+    /// <summary>启动器内容语言包名:国际服(G153)按界面语言取 en(英文)或 zh-Hant(繁中,实测仅此两种);
+    /// 国服/B站服只有 zh-Hans 语言包。语言包不存在时调用方的多主机重试与兜底逻辑负责回退。</summary>
+    private static string GetLanguage(GameServerType serverType) => serverType switch
+    {
+        GameServerType.Global => CoreStrings.CurrentLanguage == "en-US" ? "en" : "zh-Hant",
+        _ => "zh-Hans",
     };
 
     /// <summary>拉取指定服务器的启动器信息;全部失败返回 null。</summary>
@@ -71,7 +79,7 @@ public sealed class LauncherInfoService
 
         foreach (var host in Hosts)
         {
-            var url = $"{host}/launcher/{cfg.AppId}_{cfg.AppKey}/{cfg.GameId}/information/{cfg.Language}.json" +
+            var url = $"{host}/launcher/{cfg.AppId}_{cfg.AppKey}/{cfg.GameId}/information/{GetLanguage(serverType)}.json" +
                       $"?_t={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
             try
             {
@@ -134,7 +142,7 @@ public sealed class LauncherInfoService
                 }
 
                 // 第二层:background 接口
-                var bgUrl = $"{host}/launcher/{cfg.AppId}_{cfg.AppKey}/{cfg.GameId}/background/{code}/{cfg.Language}.json";
+                var bgUrl = $"{host}/launcher/{cfg.AppId}_{cfg.AppKey}/{cfg.GameId}/background/{code}/{GetLanguage(serverType)}.json";
                 using var bgResp = await Http.GetAsync(bgUrl, ct).ConfigureAwait(false);
                 if (!bgResp.IsSuccessStatusCode)
                 {

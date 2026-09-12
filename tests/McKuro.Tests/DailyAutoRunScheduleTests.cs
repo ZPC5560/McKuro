@@ -33,12 +33,10 @@ public class DailyAutoRunScheduleTests
     }
 
     [Fact]
-    public void DescribeToday_Reflects_Dedup_State()
+    public void HasRunToday_Reflects_Dedup_State()
     {
         var now = new DateTime(2026, 9, 6, 9, 0, 0);
-        Assert.Equal("今日尚未执行,下次启动软件后自动执行",
-            DailyAutoRunSchedule.DescribeToday(now, lastRunDate: ""));
-        Assert.Equal("今日自动任务已完成",
-            DailyAutoRunSchedule.DescribeToday(now, lastRunDate: "2026-09-06"));
+        Assert.False(DailyAutoRunSchedule.HasRunToday(now, lastRunDate: ""));
+        Assert.True(DailyAutoRunSchedule.HasRunToday(now, lastRunDate: "2026-09-06"));
     }
 }

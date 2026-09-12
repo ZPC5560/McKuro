@@ -14,16 +14,16 @@ namespace McKuro.ViewModels;
 public sealed partial class LauncherViewModel : ViewModelBase
 {
     [ObservableProperty]
-    private string _statusText = "就绪";
+    private string _statusText = LanguageService.Format("Roles.Ready");
 
     [ObservableProperty]
-    private string _gameVersionText = "未检测";
+    private string _gameVersionText = LanguageService.Format("Launcher.NotDetected");
 
     [ObservableProperty]
     private string _serverVersionText = "-";
 
     [ObservableProperty]
-    private string _installStateText = "未安装";
+    private string _installStateText = LanguageService.Format("Launcher.NotInstalledShort");
 
     [ObservableProperty]
     private string _predownloadStateText = "";
@@ -51,15 +51,15 @@ public sealed partial class LauncherViewModel : ViewModelBase
     public bool DownloadPaused => AppServices.Downloader.IsPaused;
 
     /// <summary>暂停/继续按钮文案。</summary>
-    public string PauseResumeText => DownloadPaused ? "继续下载" : "暂停下载";
+    public string PauseResumeText => DownloadPaused ? LanguageService.Format("Launcher.Resume") : LanguageService.Format("Launcher.Pause");
 
     /// <summary>是否显示暂停/继续按钮(下载进行中)。</summary>
     public bool ShowPauseResume => IsDownloading;
 
     /// <summary>合并按钮文案:未下载时"预下载"(已完成显示"预下载完成"),下载中"暂停下载"/"继续下载"。</summary>
     public string PreDownloadButtonText => IsDownloading
-        ? (DownloadPaused ? "继续下载" : "暂停下载")
-        : PredownloadCompleted ? "预下载完成" : "预下载";
+        ? (DownloadPaused ? LanguageService.Format("Launcher.Resume") : LanguageService.Format("Launcher.Pause"))
+        : PredownloadCompleted ? LanguageService.Format("Launcher.PredownloadDone") : LanguageService.Format("Launcher.Predownload");
 
     /// <summary>合并按钮是否可用:未下载时有预下载可用(已完成则禁用);下载中始终可用。</summary>
     public bool PreDownloadButtonEnabled => IsDownloading || (HasPredownload && !PredownloadCompleted);
@@ -127,7 +127,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
     /// <summary>启动按钮文案:启动游戏 / 启动中 / 游戏中(由 GameProcessMonitor 状态驱动,对齐 Haiyu 启动按钮状态)。</summary>
     [ObservableProperty]
-    private string _launchButtonText = "启动游戏";
+    private string _launchButtonText = LanguageService.Format("Launcher.Launch");
 
     /// <summary>启动按钮可用:游戏中/启动中禁用,防止重复启动。</summary>
     [ObservableProperty]
@@ -253,7 +253,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>服务器渠道列表(与设置页一致)。</summary>
     public IReadOnlyList<string> Servers { get; } =
     [
-        "自动检测", "官服", "B站", "WeGame", "国际服",
+        LanguageService.Format("Server.Auto"), LanguageService.Format("Server.Official"),
+        LanguageService.Format("Server.Bilibili"), "WeGame", LanguageService.Format("Server.Global"),
     ];
 
     [ObservableProperty]
@@ -308,7 +309,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
         else
         {
-            StatusText = string.IsNullOrEmpty(gameRoot) ? "未设置游戏目录" : $"目录未包含 {GamePathResolver.ExeRootName},请确认选择正确";
+            StatusText = string.IsNullOrEmpty(gameRoot) ? LanguageService.Format("Launcher.NoGameDir") : LanguageService.Format("Launcher.DirInvalid", GamePathResolver.ExeRootName);
         }
     }
 
@@ -367,8 +368,15 @@ public sealed partial class LauncherViewModel : ViewModelBase
                            && File.Exists(s.CustomBackgroundVideoPath);
         if (customActive)
         {
-            BackgroundVideoUrl = s.CustomBackgroundVideoPath;
-            VideoEnabled = true;
+            // 先开视频开关再换 URL:保证最后一次属性变更即最终状态,只触发一次 TryStartVideo
+            if (!VideoEnabled)
+            {
+                VideoEnabled = true;
+            }
+            if (BackgroundVideoUrl != s.CustomBackgroundVideoPath)
+            {
+                BackgroundVideoUrl = s.CustomBackgroundVideoPath;
+            }
         }
         IsCustomVideoActive = customActive;
     }
@@ -440,6 +448,13 @@ public sealed partial class LauncherViewModel : ViewModelBase
                 }
             }
 
+            // 自定义壁纸生效需在设置官方视频前判定:生效则直接跳过官方视频 URL,
+            // 避免"官方 URL → 自定义路径"同栈连续两次 TryStartVideo(旧版跨会话竞态的固定触发点)
+            var sNow = AppServices.Settings.Current;
+            var customActive = sNow.BackgroundVideoEnabled
+                               && sNow.BackgroundVideoMode == 1
+                               && File.Exists(sNow.CustomBackgroundVideoPath);
+
             // 背景封面(首帧图 + 视频 URL + 版本 Logo)
             var background = await AppServices.LauncherInfo.GetLauncherBackgroundAsync(server);
             if (background is not null)
@@ -450,17 +465,20 @@ public sealed partial class LauncherViewModel : ViewModelBase
                     BackgroundImageUrl = background.FirstFrameImage;
                 }
 
-                if (background.BackgroundFileType == 2 && !string.IsNullOrWhiteSpace(background.BackgroundFile))
+                if (!customActive)
                 {
-                    BackgroundVideoUrl = background.BackgroundFile;
-                }
-                else if (background.BackgroundFileType == 1 && !string.IsNullOrWhiteSpace(background.BackgroundFile))
-                {
-                    // 官方接口偶尔只返回静态背景文件，仍然作为封面显示。
-                    BackgroundImageUrl = background.BackgroundFile;
+                    if (background.BackgroundFileType == 2 && !string.IsNullOrWhiteSpace(background.BackgroundFile))
+                    {
+                        BackgroundVideoUrl = background.BackgroundFile;
+                    }
+                    else if (background.BackgroundFileType == 1 && !string.IsNullOrWhiteSpace(background.BackgroundFile))
+                    {
+                        // 官方接口偶尔只返回静态背景文件，仍然作为封面显示。
+                        BackgroundImageUrl = background.BackgroundFile;
+                    }
                 }
 
-                VideoEnabled = background.BackgroundFileType == 2
+                VideoEnabled = !customActive && background.BackgroundFileType == 2
                     && AppServices.Settings.Current.BackgroundVideoEnabled;
 
                 if (!string.IsNullOrWhiteSpace(background.Slogan))
@@ -493,7 +511,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             PredownloadCompleted = false;
             ServerVersionText = "-";
             PredownloadStateText = "";
-            GameVersionText = "平台不适用";
+            GameVersionText = LanguageService.Format("Launcher.PlatformUnsupported");
             InstallStateText = PlatformGameNotice;
             GraphicsComponentsText = "";
             OnPropertyChanged(nameof(GraphicsComponentsText));
@@ -502,8 +520,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
         var paths = AppServices.Paths;
         IsInstalled = paths.IsGameInstalled;
-        GameVersionText = IsInstalled ? "已安装" : "未安装";
-        InstallStateText = IsInstalled ? "游戏已就绪" : "尚未安装游戏";
+        GameVersionText = IsInstalled ? LanguageService.Format("Launcher.Installed") : LanguageService.Format("Launcher.NotInstalledShort");
+        InstallStateText = IsInstalled ? LanguageService.Format("Launcher.GameReady") : LanguageService.Format("Launcher.NotInstalled");
         RefreshGraphicsComponents();
 
         if (!IsInstalled)
@@ -542,7 +560,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = "正在检查更新…";
+        StatusText = LanguageService.Format("Launcher.Checking");
         try
         {
             var result = await AppServices.GameUpdater.CheckUpdateAsync(ServerType);
@@ -551,7 +569,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             {
                 // 检查失败:清除旧的有更新横幅,避免残留误导
                 HasUpdate = false;
-                StatusText = result.Message ?? "检查失败";
+                StatusText = result.Message ?? LanguageService.Format("Launcher.CheckFailed");
                 return;
             }
 
@@ -559,16 +577,16 @@ public sealed partial class LauncherViewModel : ViewModelBase
             // 本地版本(对齐 Haiyu 的 DisplayVersion)
             GameVersionText = result.InstalledVersion is { Length: > 0 }
                 ? $"v{result.InstalledVersion}"
-                : (result.NotInstalled ? "未安装" : "已安装");
+                : (result.NotInstalled ? LanguageService.Format("Launcher.NotInstalledShort") : LanguageService.Format("Launcher.Installed"));
             HasUpdate = result.HasUpdate;
             // 预载版本本地已完整下载:HasPredownload 已被 Core 短路为 false,
             // 这里置完成态让按钮禁用并显示「预下载完成」(对齐上游 1.6 修复)
             PredownloadCompleted = result.PredownloadCompleted;
             HasPredownload = result.HasPredownload;
             PredownloadStateText = result.PredownloadCompleted
-                ? "预下载完成,上线后可直接更新"
+                ? LanguageService.Format("Launcher.PredownloadDoneHint")
                 : result.HasPredownload
-                    ? $"可预下载:版本 {result.PredownloadVersion}"
+                    ? LanguageService.Format("Launcher.CanPredownload", result.PredownloadVersion)
                     : "";
 
             // 下载/磁盘预估(参考 Haiyu Config.Size + UnCompressSize;空间不足时置警告)
@@ -587,23 +605,23 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
             if (result.NotInstalled)
             {
-                InstallStateText = "未安装游戏,点击「下载安装」安装";
+                InstallStateText = LanguageService.Format("Launcher.InstallHint");
             }
             else if (result.HasUpdate)
             {
-                InstallStateText = $"发现新版本 {result.ServerVersion}" +
-                    (result.TotalBytes > 0 ? $" (需下载 {FormatSize(result.TotalBytes)})" : "");
+                InstallStateText = LanguageService.Format("Launcher.NewVersion", result.ServerVersion) +
+                    (result.TotalBytes > 0 ? LanguageService.Format("Launcher.NeedDownload", FormatSize(result.TotalBytes)) : "");
             }
             else
             {
-                InstallStateText = $"游戏已是最新版本 {result.ServerVersion}";
+                InstallStateText = LanguageService.Format("Launcher.UpToDate", result.ServerVersion);
             }
 
-            StatusText = result.HasUpdate ? "有可用更新" : "游戏已是最新";
+            StatusText = result.HasUpdate ? LanguageService.Format("Launcher.UpdateAvailable") : LanguageService.Format("Launcher.Latest");
         }
         catch (Exception ex)
         {
-            StatusText = $"检查更新失败: {ex.Message}";
+            StatusText = LanguageService.Format("Launcher.CheckFailedWith", ex.Message);
         }
         finally
         {
@@ -626,8 +644,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
         IsDownloading = true;
         ProgressPercent = 0;
-        ProgressText = "正在预下载…";
-        StatusText = "预下载中(不会影响当前游戏文件)";
+        ProgressText = LanguageService.Format("Launcher.Predownloading");
+        StatusText = LanguageService.Format("Launcher.PredownloadStatus");
 
         var progress = new Progress<DownloadProgress>(p =>
         {
@@ -643,14 +661,14 @@ public sealed partial class LauncherViewModel : ViewModelBase
             if (p.BytesTotal <= 0 && p.FileTotal > 0)
             {
                 ProgressPercent = Math.Clamp(p.FileIndex * 100.0 / p.FileTotal, 0, 100);
-                ProgressText = $"正在校验本地文件 {p.FileIndex}/{p.FileTotal}…";
+                ProgressText = LanguageService.Format("Launcher.Verifying", p.FileIndex, p.FileTotal);
                 CurrentFileText = p.CurrentFile;
                 SpeedText = "";
                 return;
             }
             ProgressPercent = p.Percent * 100;
             // 速度只在 SpeedText 显示一处(对齐上游 1.6 修复:避免进度行与速度行重复显示)
-            ProgressText = $"{p.FileIndex}/{p.FileTotal} 文件 · {FormatSize(p.BytesDownloaded)}/{FormatSize(p.BytesTotal)}";
+            ProgressText = LanguageService.Format("Launcher.FileProgress", p.FileIndex, p.FileTotal, FormatSize(p.BytesDownloaded), FormatSize(p.BytesTotal));
             CurrentFileText = p.CurrentFile;
             SpeedText = FormatSpeed(p.SpeedBps);
             BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
@@ -666,19 +684,19 @@ public sealed partial class LauncherViewModel : ViewModelBase
                 // 下载完整落盘即置完成态:按钮禁用并显示「预下载完成」(对齐上游 1.6)
                 PredownloadCompleted = true;
                 HasPredownload = false;
-                PredownloadStateText = "预下载完成,上线后可直接更新";
-                StatusText = "预下载完成,自动开始安装…";
+                PredownloadStateText = LanguageService.Format("Launcher.PredownloadDoneHint");
+                StatusText = LanguageService.Format("Launcher.PredownloadAutoInstall");
                 // 下载完成后自动进入安装阶段,进度卡片继续显示安装进度。
                 await InstallCoreAsync();
             }
             else
             {
-                StatusText = message ?? "预下载失败";
+                StatusText = message ?? LanguageService.Format("Launcher.PredownloadFailed");
             }
         }
         catch (Exception ex)
         {
-            StatusText = $"预下载失败: {ex.Message}";
+            StatusText = LanguageService.Format("Launcher.PredownloadFailedWith", ex.Message);
         }
         finally
         {
@@ -716,7 +734,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
     private async Task InstallCoreAsync()
     {
         ProgressPercent = 0;
-        StatusText = "正在安装/更新…";
+        StatusText = LanguageService.Format("Launcher.Installing");
 
         var progress = new Progress<DownloadProgress>(p =>
         {
@@ -737,7 +755,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
             _lastInstallUiUpdate = now;
             ProgressPercent = p.Percent * 100;
-            ProgressText = $"{p.FileIndex}/{p.FileTotal} 文件 · {FormatSize(p.BytesDownloaded)}/{FormatSize(p.BytesTotal)}";
+            ProgressText = LanguageService.Format("Launcher.FileProgress", p.FileIndex, p.FileTotal, FormatSize(p.BytesDownloaded), FormatSize(p.BytesTotal));
             CurrentFileText = p.CurrentFile;
             SpeedText = FormatSpeed(p.SpeedBps);
             BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
@@ -748,7 +766,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
         try
         {
             var (success, message) = await AppServices.GameUpdater.InstallAsync(ServerType, progress);
-            StatusText = success ? (message ?? "安装完成") : (message ?? "安装失败");
+            StatusText = success ? (message ?? LanguageService.Format("Launcher.InstallDone")) : (message ?? LanguageService.Format("Launcher.InstallFailed"));
             if (success)
             {
                 RefreshState();
@@ -757,7 +775,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            StatusText = $"安装失败: {ex.Message}";
+            StatusText = LanguageService.Format("Launcher.InstallFailedWith", ex.Message);
         }
     }
 
@@ -791,8 +809,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
         IsDownloading = true;
         ProgressPercent = 0;
-        ProgressText = "正在修复游戏…";
-        StatusText = "修复中(重新下载缺失/损坏文件)";
+        ProgressText = LanguageService.Format("Launcher.Repairing");
+        StatusText = LanguageService.Format("Launcher.RepairStatus");
 
         var progress = new Progress<DownloadProgress>(p =>
         {
@@ -805,7 +823,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
                 return;
             }
             ProgressPercent = p.Percent * 100;
-            ProgressText = $"{p.FileIndex}/{p.FileTotal} 文件 · {FormatSize(p.BytesDownloaded)}/{FormatSize(p.BytesTotal)}";
+            ProgressText = LanguageService.Format("Launcher.FileProgress", p.FileIndex, p.FileTotal, FormatSize(p.BytesDownloaded), FormatSize(p.BytesTotal));
             CurrentFileText = p.CurrentFile;
             SpeedText = FormatSpeed(p.SpeedBps);
             BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
@@ -820,7 +838,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             var skip = new HashSet<string>(s.SkipVerifyFiles, StringComparer.OrdinalIgnoreCase);
             var (success, message) = await AppServices.GameUpdater.RepairGameAsync(
                 ServerType, skip, s.AutoSkipVerifyDelete, progress);
-            StatusText = message ?? (success ? "修复完成" : "修复失败");
+            StatusText = message ?? (success ? LanguageService.Format("Launcher.RepairDone") : LanguageService.Format("Launcher.RepairFailed"));
             if (success)
             {
                 RefreshState();
@@ -829,7 +847,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            StatusText = $"修复失败: {ex.Message}";
+            StatusText = LanguageService.Format("Launcher.RepairFailedWith", ex.Message);
         }
         finally
         {
@@ -849,13 +867,13 @@ public sealed partial class LauncherViewModel : ViewModelBase
         var ok = AppServices.GameUpdater.LaunchGame(out var error);
         if (!ok)
         {
-            StatusText = $"启动失败: {error}";
+            StatusText = LanguageService.Format("Launcher.LaunchFailed", error);
             return;
         }
 
         // 进程监控:点击启动 → 「启动中」;进程持续存活满 20 秒 → 「游戏中」;进程消失回「启动游戏」
         AppServices.GameMonitor.BeginLaunch(BuildGameProcessNames());
-        StatusText = "游戏已启动,等待游戏进程稳定(20 秒)…";
+        StatusText = LanguageService.Format("Launcher.Launched");
 
         // 对齐 Haiyu 的"启动后可关闭主界面":可选最小化主窗口(任务栏 / 系统托盘)
         if (AppServices.Settings.Current.MinimizeOnLaunch
@@ -893,15 +911,15 @@ public sealed partial class LauncherViewModel : ViewModelBase
     {
         LaunchButtonText = state switch
         {
-            GameSessionState.Launching => "启动中",
-            GameSessionState.InGame => "游戏中",
-            _ => "启动游戏",
+            GameSessionState.Launching => LanguageService.Format("Launcher.StateLaunching"),
+            GameSessionState.InGame => LanguageService.Format("Launcher.StateInGame"),
+            _ => LanguageService.Format("Launcher.Launch"),
         };
         UpdateLaunchButtonEnabled();
         StatusText = state switch
         {
-            GameSessionState.Launching => "游戏启动中…",
-            GameSessionState.InGame => $"游戏运行中({GameProcessMonitor.DefaultInGameWindow.TotalSeconds:0} 秒稳定窗口)…",
+            GameSessionState.Launching => LanguageService.Format("Launcher.StateLaunchingStatus"),
+            GameSessionState.InGame => LanguageService.Format("Launcher.StateInGameStatus", GameProcessMonitor.DefaultInGameWindow.TotalSeconds),
             _ => StatusText, // 空闲文案由 SessionEnded 设置
         };
     }
@@ -914,12 +932,12 @@ public sealed partial class LauncherViewModel : ViewModelBase
     {
         if (reason == GameSessionEndReason.Failed)
         {
-            StatusText = "游戏启动失败:进程未持续运行(请检查启动文件/游戏目录)";
+            StatusText = LanguageService.Format("Launcher.LaunchProcessDied");
             ShowMainWindowFromHidden();
             return;
         }
 
-        StatusText = "游戏已退出";
+        StatusText = LanguageService.Format("Launcher.GameExited");
         // 广播会话结束(主页重拉今日数据、游玩统计页重新解析日志刷新今日游玩时间)
         WeakReferenceMessenger.Default.Send(new GameSessionEndedMessage(reason));
         switch (AppServices.Settings.Current.AfterGameExitAction)
@@ -962,12 +980,12 @@ public sealed partial class LauncherViewModel : ViewModelBase
         {
             if (!AppServices.OpenInFileManager(root))
             {
-                StatusText = "打开目录失败";
+                StatusText = LanguageService.Format("Launcher.OpenDirFailed");
             }
         }
         else
         {
-            StatusText = "未设置游戏目录";
+            StatusText = LanguageService.Format("Launcher.NoGameDir");
         }
     }
 
@@ -1023,7 +1041,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>更新下载/磁盘预估(参考 Haiyu Config.Size + UnCompressSize,磁盘空间用 DriveInfo 实测)。</summary>
     private void UpdateDownloadEstimate(long downloadBytes, long diskBytes = 0)
     {
-        DownloadSizeText = downloadBytes > 0 ? $"需下载 {FormatSize(downloadBytes)}" : "";
+        DownloadSizeText = downloadBytes > 0 ? LanguageService.Format("Launcher.NeedDownload", FormatSize(downloadBytes)) : "";
         DiskSpaceText = BuildDiskSpaceText(downloadBytes, diskBytes);
         OnPropertyChanged(nameof(DiskSpaceWarning));
     }
@@ -1039,15 +1057,15 @@ public sealed partial class LauncherViewModel : ViewModelBase
         var seconds = (long)(remainingBytes / speedBps);
         if (seconds < 60)
         {
-            RemainingTimeText = "剩余不到 1 分钟";
+            RemainingTimeText = LanguageService.Format("Launcher.Less1Min");
         }
         else if (seconds < 3600)
         {
-            RemainingTimeText = $"剩余约 {seconds / 60} 分钟";
+            RemainingTimeText = LanguageService.Format("Launcher.RemainMinutes", seconds / 60);
         }
         else
         {
-            RemainingTimeText = $"剩余约 {seconds / 3600} 小时 {seconds % 3600 / 60} 分钟";
+            RemainingTimeText = LanguageService.Format("Launcher.RemainHoursMinutes", seconds / 3600, seconds % 3600 / 60);
         }
     }
 
@@ -1072,8 +1090,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
                 : (long)(downloadBytes * 1.1);
             var free = drive.AvailableFreeSpace;
             DiskSpaceWarning = free < needed;
-            return $"需 {FormatSize(needed)} 磁盘空间,可用 {FormatSize(free)}"
-                + (DiskSpaceWarning ? "(空间不足!)" : "");
+            return LanguageService.Format("Launcher.DiskNeed", FormatSize(needed), FormatSize(free))
+                + (DiskSpaceWarning ? LanguageService.Format("Launcher.DiskInsufficient") : "");
         }
         catch
         {

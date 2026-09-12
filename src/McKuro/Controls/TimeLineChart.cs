@@ -59,7 +59,7 @@ public sealed class TimeLineChart : Control
         sb.Append(day.Date.ToString("yyyy-MM-dd"));
         if (day.Pools.Count == 0)
         {
-            sb.Append('\n').Append("共 ").Append(day.Count).Append(" 抽");
+            sb.Append('\n').Append(McKuro.Services.LanguageService.Format("Gacha.DayTotal", day.Count));
         }
         else
         {
@@ -69,7 +69,7 @@ public sealed class TimeLineChart : Control
             }
             if (day.Pools.Count > 1)
             {
-                sb.Append('\n').Append("共 ").Append(day.Count).Append(" 抽");
+                sb.Append('\n').Append(McKuro.Services.LanguageService.Format("Gacha.DayTotal", day.Count));
             }
         }
         return sb.ToString();
@@ -250,7 +250,7 @@ public sealed class TimeLineChart : Control
         var values = Values;
         if (values is null || values.Count == 0)
         {
-            var empty = _emptyText ??= Text("暂无数据", 12, EmptyBrush);
+            var empty = _emptyText ??= Text(McKuro.Services.LanguageService.Format("Gacha.ChartEmpty"), 12, EmptyBrush);
             context.DrawText(empty, new Point((width - empty.Width) / 2, (height - empty.Height) / 2));
             return;
         }
@@ -371,7 +371,7 @@ public sealed class TimeLineChart : Control
             var tip = Tips is not null && _hoverIndex < Tips.Count
                 ? Tips[_hoverIndex]
                 : (Labels is not null && _hoverIndex < Labels.Count
-                    ? Labels[_hoverIndex] + "\n" + values[_hoverIndex] + " 抽"
+                    ? Labels[_hoverIndex] + "\n" + McKuro.Services.LanguageService.Format("Gacha.PityCount", values[_hoverIndex])
                     : null);
             if (tip is not null)
             {

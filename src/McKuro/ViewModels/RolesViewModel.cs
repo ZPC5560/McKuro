@@ -24,17 +24,17 @@ public sealed partial class RolesViewModel : ViewModelBase
     /// <summary>最近一次被 mcguide 填充的角色(其图标是 guide-res B 域名,不写入磁盘缓存)。</summary>
     private RoleDetail? _guideFilledRole;
 
-    /// <summary>属性筛选中的"全部"选项。</summary>
-    public const string AllAttributeFilter = "全部属性";
+    /// <summary>属性筛选中的"全部"选项(本地化属性;语言重启生效,进程内取值恒定)。</summary>
+    public static string AllAttributeFilter => LanguageService.Format("Roles.AllAttr");
 
-    public const string SortByStar = "星级 ↓";
-    public const string SortByName = "名称 ↑";
-
-    [ObservableProperty]
-    private string _statusText = "就绪";
+    public static string SortByStar => LanguageService.Format("Roles.SortStar");
+    public static string SortByName => LanguageService.Format("Roles.SortName");
 
     [ObservableProperty]
-    private string _sourceText = "数据源: -";
+    private string _statusText = LanguageService.Format("Roles.Ready");
+
+    [ObservableProperty]
+    private string _sourceText = LanguageService.Format("Roles.SourceNone");
 
     [ObservableProperty]
     private string _tokenText = "";
@@ -103,8 +103,8 @@ public sealed partial class RolesViewModel : ViewModelBase
         RoleIdText = AppServices.Settings.Current.RoleId;
         GuideLoggedIn = AppServices.Guide.HasToken;
         GuideStatusText = AppServices.Guide.HasToken
-            ? $"已登录攻略站 ({AppServices.Settings.Current.GuideCName})"
-            : "未登录攻略站";
+            ? LanguageService.Format("Roles.GuideLoggedIn", AppServices.Settings.Current.GuideCName)
+            : LanguageService.Format("Roles.GuideNotLoggedIn");
         // 默认加载本地缓存,不自动请求库街区(频繁访问易触发账号风控);
         // 在线获取分两层:「同步」按钮只拉角色列表,角色详情在选中角色时按需单发
         LoadFromLocal();
@@ -244,19 +244,19 @@ public sealed partial class RolesViewModel : ViewModelBase
         }
         if (!AppServices.Guide.HasToken)
         {
-            GuideStatusText = "未登录攻略站(可在「账号」页登录)";
+            GuideStatusText = LanguageService.Format("Roles.GuideNotLoggedInHint");
             return;
         }
 
         var cardRoleId = role.Role?.RoleId ?? 0;
         if (cardRoleId <= 0)
         {
-            GuideStatusText = $"该角色无 cardRoleId,无法查询攻略站({role.RoleName})";
+            GuideStatusText = LanguageService.Format("Roles.GuideNoCardRoleId", role.RoleName);
             return;
         }
 
         GuideLoading = true;
-        GuideStatusText = $"正在拉取 {role.RoleName} 达成度…";
+        GuideStatusText = LanguageService.Format("Roles.GuideFetching", role.RoleName);
         try
         {
             var info = await AppServices.Guide.GetAchievementAsync(role.RoleName, cardRoleId);
@@ -266,11 +266,11 @@ public sealed partial class RolesViewModel : ViewModelBase
             }
             GuideAchievement = info;
             HasGuideAchievement = info is not null;
-            GuideStatusText = info is null ? "未获取到该角色达成度" : $"官方达成度: {info.Grade ?? "-"}";
+            GuideStatusText = info is null ? LanguageService.Format("Roles.GuideNoData") : LanguageService.Format("Roles.GuideGrade", info.Grade ?? "-");
         }
         catch (Exception ex)
         {
-            GuideStatusText = $"拉取达成度失败: {ex.Message}";
+            GuideStatusText = LanguageService.Format("Roles.GuideFetchFailed", ex.Message);
         }
         finally
         {
@@ -303,7 +303,7 @@ public sealed partial class RolesViewModel : ViewModelBase
         var cts = new CancellationTokenSource();
         _detailFetchCts = cts;
 
-        StatusText = $"正在获取 {role.RoleName} 详情…";
+        StatusText = LanguageService.Format("Roles.FetchingDetail", role.RoleName);
         try
         {
             var result = await AppServices.Roles.LoadRoleDetailAsync(
@@ -315,17 +315,17 @@ public sealed partial class RolesViewModel : ViewModelBase
             if (result.Detail is not null)
             {
                 MergeKujiequDetail(role, result.Detail);
-                StatusText = $"已获取 {role.RoleName} 完整详情";
+                StatusText = LanguageService.Format("Roles.DetailLoaded", role.RoleName);
             }
             else if (result.GeeTest)
             {
                 // 极验风控:不弹验证页(角色场景实测无法解除),提示稍后重试;详情留给 mcguide 兜底
-                StatusText = $"库街区触发了人机验证风控,{role.RoleName} 详情暂不可用(可稍后重试)";
+                StatusText = LanguageService.Format("Roles.GeetestBlocked", role.RoleName);
                 _ = FillRoleDetailFromGuideIfEmptyAsync();
             }
             else
             {
-                StatusText = $"获取 {role.RoleName} 详情失败(请确认登录状态后重试)";
+                StatusText = LanguageService.Format("Roles.DetailFailed", role.RoleName);
             }
         }
         catch (OperationCanceledException)
@@ -336,7 +336,7 @@ public sealed partial class RolesViewModel : ViewModelBase
         {
             if (ReferenceEquals(role, SelectedRole))
             {
-                StatusText = $"获取 {role.RoleName} 详情失败: {ex.Message}";
+                StatusText = LanguageService.Format("Roles.DetailFailedWith", role.RoleName, ex.Message);
             }
         }
     }
@@ -400,8 +400,8 @@ public sealed partial class RolesViewModel : ViewModelBase
             // mcguide 图标是 B 域名:命中库街区磁盘缓存时按名称替换为本地图标,避免缺失/错位
             ApplyCachedRoleIcons(role);
             _guideFilledRole = role;
-            SourceText = "数据源: mcguide 攻略站";
-            StatusText = $"已用 mcguide 攻略站数据补充角色详情({role.RoleName})";
+            SourceText = LanguageService.Format("Roles.SourceGuide");
+            StatusText = LanguageService.Format("Roles.GuideFilled", role.RoleName);
         }
         catch (Exception)
         {
@@ -517,17 +517,17 @@ public sealed partial class RolesViewModel : ViewModelBase
 
         if (string.IsNullOrWhiteSpace(TokenText))
         {
-            LoadCachedOrHint("未登录库街区");
+            LoadCachedOrHint(LanguageService.Format("Roles.NotLoggedIn"));
             return;
         }
         if (string.IsNullOrWhiteSpace(RoleIdText))
         {
-            LoadCachedOrHint("未配置角色 ID");
+            LoadCachedOrHint(LanguageService.Format("Roles.NoRoleId"));
             return;
         }
 
         IsBusy = true;
-        StatusText = "正在从库街区获取角色列表…";
+        StatusText = LanguageService.Format("Roles.Syncing");
         try
         {
             // 仅同步角色列表(roleData);角色详情在点击具体角色时按需单发(高频接口批量易触发极验风控)
@@ -535,21 +535,21 @@ public sealed partial class RolesViewModel : ViewModelBase
             if (result.IsSuccess)
             {
                 ApplyRoles(result);
-                StatusText = result.Message ?? $"角色列表同步成功: {result.Roles.Count} 个角色";
+                StatusText = result.Message ?? LanguageService.Format("Roles.Synced", result.Roles.Count);
                 if (result.Roles is { Count: > 0 } && SelectedRole is { } first && first.IsDetailComplete)
                 {
-                    StatusText += " (从缓存合并详情)";
+                    StatusText += LanguageService.Format("Roles.MergedFromCache");
                 }
             }
             else
             {
                 // 同步失败(网络/token 失效等):兜底读本地缓存
-                LoadCachedOrHint(result.Message ?? "同步失败");
+                LoadCachedOrHint(result.Message ?? LanguageService.Format("Roles.SyncFailed"));
             }
         }
         catch (Exception ex)
         {
-            LoadCachedOrHint($"获取失败: {ex.Message}");
+            LoadCachedOrHint(LanguageService.Format("Roles.FetchFailed", ex.Message));
         }
         finally
         {
@@ -564,11 +564,11 @@ public sealed partial class RolesViewModel : ViewModelBase
         if (cached.IsSuccess && cached.Roles.Count > 0)
         {
             ApplyRoles(cached);
-            StatusText = $"{reason} → 已加载本地缓存 (角色数: {cached.Roles.Count})";
+            StatusText = LanguageService.Format("Roles.CachedLoaded", reason, cached.Roles.Count);
         }
         else
         {
-            StatusText = $"{reason} → 本地缓存不可用({cached.Message})";
+            StatusText = LanguageService.Format("Roles.CacheUnavailable", reason, cached.Message);
         }
     }
 
@@ -581,11 +581,11 @@ public sealed partial class RolesViewModel : ViewModelBase
         if (result.IsSuccess)
         {
             ApplyRoles(result);
-            StatusText = $"已从本地缓存读取 {result.Roles.Count} 个角色";
+            StatusText = LanguageService.Format("Roles.ReadCacheLoaded", result.Roles.Count);
         }
         else
         {
-            StatusText = result.Message ?? "本地缓存不可用";
+            StatusText = result.Message ?? LanguageService.Format("Roles.CacheUnavailableShort");
         }
     }
 
@@ -600,9 +600,9 @@ public sealed partial class RolesViewModel : ViewModelBase
         HasRoles = Roles.Count > 0;
         SourceText = result.Source switch
         {
-            RoleDataSource.Kujiequ => "数据源: 库街区 (在线)",
-            RoleDataSource.Local => "数据源: 本地缓存/文件",
-            _ => "数据源: -",
+            RoleDataSource.Kujiequ => LanguageService.Format("Roles.SourceOnline"),
+            RoleDataSource.Local => LanguageService.Format("Roles.SourceLocal"),
+            _ => LanguageService.Format("Roles.SourceNone"),
         };
 
         // 重建属性筛选选项(从角色数据中提取去重属性)
@@ -634,13 +634,12 @@ public sealed partial class RolesViewModel : ViewModelBase
             ? all
             : all.Where(r => string.Equals(r.AttributeName, SelectedAttributeFilter, StringComparison.Ordinal));
 
-        IEnumerable<RoleDetail> ordered = SelectedSort switch
-        {
-            SortByName => source.OrderBy(r => r.RoleName, StringComparer.Ordinal),
-            _ => source
+        // 本地化排序选项非常量,不能用 switch 常量模式
+        IEnumerable<RoleDetail> ordered = SelectedSort == SortByName
+            ? source.OrderBy(r => r.RoleName, StringComparer.Ordinal)
+            : source
                 .OrderByDescending(r => r.StarLevel)
-                .ThenBy(r => r.RoleName, StringComparer.Ordinal),
-        };
+                .ThenBy(r => r.RoleName, StringComparer.Ordinal);
 
         FilteredRoles.Clear();
         foreach (var role in ordered)
@@ -858,9 +857,9 @@ public sealed class NullableBoolToTextConverter : Avalonia.Data.Converters.IValu
     public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
         => value switch
         {
-            true => "已达标",
-            false => "未达标",
-            _ => "未知",
+            true => LanguageService.Format("Roles.Met"),
+            false => LanguageService.Format("Roles.NotMet"),
+            _ => LanguageService.Format("Roles.Unknown"),
         };
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)

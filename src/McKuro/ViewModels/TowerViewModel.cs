@@ -105,7 +105,7 @@ public sealed partial class TowerViewModel : ViewModelBase
     private int _selectedTabIndex;
 
     [ObservableProperty]
-    private string _statusText = "未加载";
+    private string _statusText = LanguageService.Format("Tower.NotLoaded");
 
     [ObservableProperty]
     private bool _isBusy;
@@ -234,8 +234,8 @@ public sealed partial class TowerViewModel : ViewModelBase
             }
             var modes = JsonSerializer.Deserialize(json, TowerJsonContext.Default.ListNewTowerModeDetail);
             var first = modes?.FirstOrDefault();
-            NewTowerDetailTitle = "历史-终焉矩阵";
-            NewTowerHistoryDetail = first is null ? null : BuildModeItem(first, prefix: "历史-");
+            NewTowerDetailTitle = LanguageService.Format("Tower.HistoryMatrix");
+            NewTowerHistoryDetail = first is null ? null : BuildModeItem(first, prefix: LanguageService.Format("Tower.HistoryPrefix"));
         }
         catch (Exception)
         {
@@ -251,18 +251,18 @@ public sealed partial class TowerViewModel : ViewModelBase
         var rank = m.Rank is >= 0 and <= 3 ? m.Rank : 0;
         return new TowerModeItem
         {
-            ModeName = prefix + (m.ModeId == 0 ? "稳态协议" : "奇点扩张"),
+            ModeName = prefix + (m.ModeId == 0 ? LanguageService.Format("Tower.ModeStable") : LanguageService.Format("Tower.ModeSingularity")),
             ScoreText = $"{m.Score}",
             ProgressText = m.ModeId == 0
                 ? $"{m.PassBoss}/{m.BossCount}"
-                : $"第{m.Round}轮 {m.PassBoss}/{m.BossCount}",
+                : LanguageService.Format("Tower.RoundInfo", m.Round, m.PassBoss, m.BossCount),
             RankText = RankToText(rank),
             RankColor = RankToColor(rank),
             Roles = m.Teams?.SelectMany(t => t.RoleList ?? []).ToList() ?? [],
             Buffs = m.Teams?.SelectMany(t => t.Buffs ?? [])
                 .Select(b => new TowerBuffItem
                 {
-                    BuffName = b.BuffName ?? "特殊增益",
+                    BuffName = b.BuffName ?? LanguageService.Format("Tower.SpecialBuff"),
                     BuffIcon = b.BuffIcon,
                     BuffDescription = b.Desc,
                 }).ToList() ?? [],
@@ -309,7 +309,7 @@ public sealed partial class TowerViewModel : ViewModelBase
             return;
         }
         IsBusy = true;
-        StatusText = "正在加载…";
+        StatusText = LanguageService.Format("Common.Loading");
         try
         {
             var (tower, newTower, slash, error, roleId) = await AppServices.Tower.GetTowerDataAsync();
@@ -347,17 +347,17 @@ public sealed partial class TowerViewModel : ViewModelBase
                         .Where(d => (d.TowerAreaList?.Count ?? 0) > 0)
                         .Select(d => new TowerDifficultyItem
                         {
-                            DifficultyName = d.DifficultyName ?? $"难度 {d.Difficulty}",
+                            DifficultyName = d.DifficultyName ?? LanguageService.Format("Tower.Difficulty", d.Difficulty),
                             Difficulty = d.Difficulty,
                             Areas = d.TowerAreaList!.Select(a => new TowerAreaItem
                             {
-                                AreaName = a.AreaName ?? $"区域 {a.AreaId}",
+                                AreaName = a.AreaName ?? LanguageService.Format("Tower.Area", a.AreaId),
                                 StarText = $"{a.Star} / {a.MaxStar}",
                                 Floors = (a.FloorList ?? [])
                                     .OrderBy(f => f.Floor)
                                     .Select(f => new TowerFloorItem
                                     {
-                                        FloorName = $"第{f.Floor}层",
+                                        FloorName = LanguageService.Format("Tower.Floor", f.Floor),
                                         Star = Math.Max(0, Math.Min(f.Star, 3)),
                                         Roles = f.RoleList ?? [],
                                     })
@@ -392,7 +392,7 @@ public sealed partial class TowerViewModel : ViewModelBase
                     NewTowerHistory.Add(new NewTowerHistoryItem
                     {
                         EndTimeMillis = end,
-                        Label = $"{DateTimeOffset.FromUnixTimeMilliseconds(end).LocalDateTime:yyyy.MM.dd} 前的记录",
+                        Label = LanguageService.Format("Tower.RecordBefore", DateTimeOffset.FromUnixTimeMilliseconds(end).LocalDateTime.ToString("yyyy.MM.dd")),
                     });
                 }
             }
@@ -410,7 +410,7 @@ public sealed partial class TowerViewModel : ViewModelBase
                 }
                 if (turbid is not null && turbid.AllScore > 0)
                 {
-                    SlashTurbidScoreText = $"无尽湍渊 {turbid.AllScore} / {turbid.MaxScore}";
+                    SlashTurbidScoreText = LanguageService.Format("Tower.TurbidScore", turbid.AllScore, turbid.MaxScore);
                     SlashHasTurbidScore = true;
                 }
 
@@ -433,18 +433,18 @@ public sealed partial class TowerViewModel : ViewModelBase
                         SlashChallenges.Add(new SlashChallengeItem
                         {
                             ChallengeId = c.ChallengeId,
-                            ChallengeNoText = $"第{c.ChallengeId}关",
+                            ChallengeNoText = LanguageService.Format("Tower.ChallengeNo", c.ChallengeId),
                             ChallengeName = isTurbid
-                                ? (c.ChallengeName ?? $"无尽湍渊 {c.ChallengeId}")
-                                : (c.ChallengeName ?? $"关卡 {c.ChallengeId}"),
+                                ? (c.ChallengeName ?? LanguageService.Format("Tower.TurbidName", c.ChallengeId))
+                                : (c.ChallengeName ?? LanguageService.Format("Tower.LevelName", c.ChallengeId)),
                             ScoreText = $"{c.Score}",
                             RankText = SlashRankText(c.Rank),
                             RankColor = SlashRankColor(c.Rank),
                             Teams = halves.Select((h, i) => new SlashTeamItem
                             {
-                                TeamName = i == 0 ? "上半" : "下半",
+                                TeamName = i == 0 ? LanguageService.Format("Tower.TeamFirst") : LanguageService.Format("Tower.TeamSecond"),
                                 ScoreText = $"{h.Score}",
-                                BuffName = string.IsNullOrWhiteSpace(h.BuffName) ? "无增益" : h.BuffName!,
+                                BuffName = string.IsNullOrWhiteSpace(h.BuffName) ? LanguageService.Format("Tower.NoBuff") : h.BuffName!,
                                 BuffIcon = h.BuffIcon,
                                 BuffDescription = h.BuffDescription,
                                 Roles = h.RoleList ?? [],
@@ -456,11 +456,11 @@ public sealed partial class TowerViewModel : ViewModelBase
             }
 
             HasData = TowerDifficulties.Count > 0 || TowerModes.Count > 0 || SlashChallenges.Count > 0;
-            StatusText = $"加载完成(逆境深塔 {TowerDifficulties.Count} 难度 / 终焉矩阵 {TowerModes.Count} 模式 / 海墟 {SlashChallenges.Count} 关)";
+            StatusText = LanguageService.Format("Tower.StatusLoaded", TowerDifficulties.Count, TowerModes.Count, SlashChallenges.Count);
         }
         catch (Exception ex)
         {
-            StatusText = $"加载失败: {ex.Message}";
+            StatusText = LanguageService.Format("Status.LoadFailedWith", ex.Message);
         }
         finally
         {

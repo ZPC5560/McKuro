@@ -42,7 +42,7 @@ public sealed partial class ActivityGanttItem : ObservableObject
     public bool IsAlertVisible => IsExpiringSoon && !IsIgnored;
 
     /// <summary>忽略按钮文本(忽略 ↔ 取消忽略)。</summary>
-    public string IgnoreButtonText => IsIgnored ? "取消忽略" : "忽略";
+    public string IgnoreButtonText => LanguageService.Format(IsIgnored ? "Activity.Unignore" : "Activity.Ignore");
 
     partial void OnIsIgnoredChanged(bool value)
     {
@@ -114,7 +114,7 @@ public sealed partial class ActivityViewModel : ViewModelBase
             return;
         }
         IsBusy = true;
-        StatusText = "正在加载活动…";
+        StatusText = LanguageService.Format("Activity.StatusLoading");
         try
         {
             VersionActivities.Clear();
@@ -145,7 +145,7 @@ public sealed partial class ActivityViewModel : ViewModelBase
                     // 当前进度:now 在 [Start,End] 区间的位置(未开始=0,已结束=100)
                     double progress = now <= start ? 0 : now >= end ? 100
                         : (now - start).TotalSeconds / (end - start).TotalSeconds * 100;
-                    rawHots.Add((hot.Title ?? "活动", start, end, brush, end >= now, progress, hot.ContentUrl));
+                    rawHots.Add((hot.Title ?? LanguageService.Format("Activity.FallbackTitle"), start, end, brush, end >= now, progress, hot.ContentUrl));
                 }
             }
 
@@ -172,7 +172,7 @@ public sealed partial class ActivityViewModel : ViewModelBase
             // 今天在时间轴的位置(当前日期竖线)
             GanttTodayPercent = Math.Clamp((now - GanttStart).TotalSeconds / windowSpan * 100, 0, 100);
             OnPropertyChanged(nameof(GanttTodayPercent));
-            GanttTodayLabel = $"今天 {now:MM-dd}";
+            GanttTodayLabel = LanguageService.Format("Activity.Today", now.ToString("MM-dd"));
             OnPropertyChanged(nameof(GanttTodayLabel));
 
             foreach (var item in rawHots)
@@ -198,7 +198,7 @@ public sealed partial class ActivityViewModel : ViewModelBase
                     ProgressWidthPercent = widthPct * item.Progress / 100,
                     ImageUrl = item.ImageUrl,
                     IsExpiringSoon = expiringSoon,
-                    AlertTitle = expiringSoon ? $"{item.Title} · 剩{FormatRemaining(item.End - now)}" : item.Title,
+                    AlertTitle = expiringSoon ? LanguageService.Format("Activity.AlertRemaining", item.Title, FormatRemaining(item.End - now)) : item.Title,
                 });
             }
 
@@ -222,7 +222,7 @@ public sealed partial class ActivityViewModel : ViewModelBase
             {
                 for (int poolIdx = 0; poolIdx < eventsList.Count; poolIdx++)
                 {
-                    var category = poolIdx == 0 ? "角色" : poolIdx == 1 ? "武器" : $"卡池{poolIdx + 1}";
+                    var category = poolIdx == 0 ? LanguageService.Format("Activity.CatRole") : poolIdx == 1 ? LanguageService.Format("Activity.CatWeapon") : LanguageService.Format("Activity.CatPool", poolIdx + 1);
                     var events = eventsList[poolIdx];
                     if (events?.Tabs is null)
                     {
@@ -245,7 +245,7 @@ public sealed partial class ActivityViewModel : ViewModelBase
                         }
                         PoolActivities.Add(new ActivityPoolItem
                         {
-                            Name = tab.Name ?? "卡池",
+                            Name = tab.Name ?? LanguageService.Format("Activity.PoolFallback"),
                             Category = category,
                             CountdownText = FormatCountdown(end - now),
                             TimeRangeText = $"{start:MM-dd} {start:HH:mm} ~ {end:MM-dd} {end:HH:mm}",
@@ -258,11 +258,11 @@ public sealed partial class ActivityViewModel : ViewModelBase
             }
 
             HasData = VersionActivities.Count > 0 || PoolActivities.Count > 0;
-            StatusText = $"加载完成(版本活动 {VersionActivities.Count} · 换取活动 {PoolActivities.Count})";
+            StatusText = LanguageService.Format("Activity.StatusLoaded", VersionActivities.Count, PoolActivities.Count);
         }
         catch (Exception ex)
         {
-            StatusText = $"加载失败: {ex.Message}";
+            StatusText = LanguageService.Format("Status.LoadFailedWith", ex.Message);
         }
         finally
         {
@@ -330,13 +330,13 @@ public sealed partial class ActivityViewModel : ViewModelBase
     {
         if (remaining.TotalDays >= 1)
         {
-            return $"{remaining.Days}天";
+            return LanguageService.Format("Activity.DaysShort", remaining.Days);
         }
         if (remaining.TotalHours >= 1)
         {
-            return $"{(int)remaining.TotalHours}小时";
+            return LanguageService.Format("Activity.HoursShort", (int)remaining.TotalHours);
         }
-        return $"{Math.Max(1, (int)remaining.TotalMinutes)}分钟";
+        return LanguageService.Format("Activity.MinutesShort", Math.Max(1, (int)remaining.TotalMinutes));
     }
 
     /// <summary>
@@ -362,17 +362,17 @@ public sealed partial class ActivityViewModel : ViewModelBase
     {
         if (remaining <= TimeSpan.Zero)
         {
-            return "已结束";
+            return LanguageService.Format("Activity.Ended");
         }
         if (remaining.TotalDays >= 1)
         {
-            return $"剩余 {remaining.Days} 天 {remaining.Hours} 小时";
+            return LanguageService.Format("Activity.RemainDH", remaining.Days, remaining.Hours);
         }
         if (remaining.TotalHours >= 1)
         {
-            return $"剩余 {remaining.Hours} 小时 {remaining.Minutes} 分";
+            return LanguageService.Format("Activity.RemainHM", remaining.Hours, remaining.Minutes);
         }
-        return $"剩余 {remaining.Minutes} 分钟";
+        return LanguageService.Format("Activity.RemainM", remaining.Minutes);
     }
 }
 

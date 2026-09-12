@@ -2,9 +2,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:loc="clr-namespace:McKuro.Services"
         mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="520"
         x:Class="McKuro.Views.GeetestWindow"
-        Title="完成滑块验证"
+        Title="{loc:Localize Key=Geetest.Title}"
         Width="500" Height="520"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
@@ -23,9 +24,9 @@
             <RotateTransform />
           </TextBlock.RenderTransform>
         </TextBlock>
-        <TextBlock x:Name="LoadingText" Text="正在加载验证组件…" FontSize="14" Foreground="#FF334155"
+        <TextBlock x:Name="LoadingText" Text="{loc:Localize Key=Geetest.Loading}" FontSize="14" Foreground="#FF334155"
                    HorizontalAlignment="Center" />
-        <TextBlock x:Name="LoadingSub" Text="首次加载约需数秒,请稍候" FontSize="12" Foreground="#FF667085"
+        <TextBlock x:Name="LoadingSub" Text="{loc:Localize Key=Geetest.LoadingSub}" FontSize="12" Foreground="#FF667085"
                    HorizontalAlignment="Center" />
       </StackPanel>
     </Panel>

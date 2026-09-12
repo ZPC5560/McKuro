@@ -45,7 +45,7 @@ public sealed class TowerService
         var account = _accounts.Current;
         if (account is null)
         {
-            return (null, null, null, "请先登录库街区账号", "");
+            return (null, null, null, CoreStrings.T("Core.Tower.NoLogin", "请先登录库街区账号"), "");
         }
 
         // 复用角色数据服务的 accessToken 换取流程
@@ -53,13 +53,13 @@ public sealed class TowerService
         var gamer = await _kuro.GetGamerAsync(account, (int)KuroGameType.Waves, ct).ConfigureAwait(false);
         if (gamer is not { Code: 200, Data: not null } || gamer.Data.Count == 0)
         {
-            return (null, null, null, "获取角色列表失败", "");
+            return (null, null, null, CoreStrings.T("Core.Tower.RoleListFailed", "获取角色列表失败"), "");
         }
         var role = gamer.Data[0];
         var roleId = role.RoleId ?? "";
         if (string.IsNullOrEmpty(roleId))
         {
-            return (null, null, null, "角色 ID 为空", "");
+            return (null, null, null, CoreStrings.T("Core.Tower.NoRoleId", "角色 ID 为空"), "");
         }
 
         _api.PublicIp = _kuro.Ip;
@@ -67,7 +67,7 @@ public sealed class TowerService
             account.Token, deviceId, roleId, account.UserId ?? "", "android", ct).ConfigureAwait(false);
         if (string.IsNullOrEmpty(accessToken))
         {
-            return (null, null, null, "获取访问令牌失败(Token 可能已失效)", roleId);
+            return (null, null, null, CoreStrings.T("Core.Tower.TokenFailed", "获取访问令牌失败(Token 可能已失效)"), roleId);
         }
 
         TowerSeasonData? tower = null;
@@ -104,7 +104,7 @@ public sealed class TowerService
 
         if (tower is null && newTower is null && slash is null)
         {
-            return (null, null, null, "接口返回空数据(可能受风控)", roleId);
+            return (null, null, null, CoreStrings.T("Core.Tower.EmptyData", "接口返回空数据(可能受风控)"), roleId);
         }
         return (tower, newTower, slash, "", roleId);
     }

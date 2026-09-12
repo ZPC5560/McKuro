@@ -108,11 +108,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
     // ---------- 启动后最小化位置 / 游戏结束后窗口状态 ----------
 
     /// <summary>启动后最小化位置选项(任务栏 / 系统托盘;macOS 对应 Dock / 菜单栏)。</summary>
-    public ObservableCollection<string> MinimizeLocations { get; } = ["任务栏", "系统托盘"];
+    public ObservableCollection<string> MinimizeLocations { get; } =
+        [LanguageService.Format("Minimize.Taskbar"), LanguageService.Format("Minimize.Tray")];
 
     /// <summary>游戏结束后软件窗口状态选项(保持原样 / 显示主窗口 / 自动退出软件)。</summary>
     public ObservableCollection<string> AfterGameExitActions { get; } =
-        ["保持原样", "显示主窗口", "自动退出软件"];
+        [LanguageService.Format("AfterExit.Keep"), LanguageService.Format("AfterExit.Show"), LanguageService.Format("AfterExit.Exit")];
 
     /// <summary>最小化位置行是否显示:仅启用「启动游戏后最小化主窗口」时显示。</summary>
     public bool ShowMinimizeLocationSetting => MinimizeOnLaunch;
@@ -171,7 +172,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public bool IsCustomVideoMode => BackgroundVideoMode == 1;
 
     /// <summary>视频来源下拉项(索引即 BackgroundVideoMode)。</summary>
-    public ObservableCollection<string> VideoSources { get; } = ["官方宣传视频", "自定义动态壁纸(本地 / Wallpaper Engine)"];
+    public ObservableCollection<string> VideoSources { get; } =
+        [LanguageService.Format("VideoSource.Official"), LanguageService.Format("VideoSource.Custom")];
 
     /// <summary>当前自定义视频绝对路径(即时保存)。</summary>
     [ObservableProperty]
@@ -223,11 +225,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         var files = await topLevel.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
         {
-            Title = "选择动态壁纸视频",
+            Title = LanguageService.Format("Settings.PickVideoTitle"),
             AllowMultiple = false,
             FileTypeFilter =
             [
-                new Avalonia.Platform.Storage.FilePickerFileType("视频文件")
+                new Avalonia.Platform.Storage.FilePickerFileType(LanguageService.Format("Settings.VideoFiles"))
                 {
                     Patterns = ["*.mp4", "*.webm", "*.mkv", "*.avi", "*.mov", "*.wmv"],
                 },
@@ -240,7 +242,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         CustomVideoCoverPath = ""; // 本地文件无封面,设置页用实时预览
         CustomBackgroundVideoPath = files[0].Path.LocalPath;
         BackgroundVideoMode = 1;
-        WallpaperScanStatus = "已选择本地视频";
+        WallpaperScanStatus = LanguageService.Format("Settings.PickedLocalVideo");
     }
 
     /// <summary>选择 Wallpaper Engine 内容目录并扫描视频壁纸(工坊 431960 目录或单个壁纸包目录)。</summary>
@@ -255,7 +257,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
         {
-            Title = "选择 Wallpaper Engine 内容目录(如 steamapps\\workshop\\content\\431960)",
+            Title = LanguageService.Format("Settings.PickWeDirTitle"),
             AllowMultiple = false,
         });
         if (folders.Count == 0)
@@ -264,7 +266,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         var dir = folders[0].Path.LocalPath;
         WallpaperEngineDir = dir;
-        WallpaperScanStatus = "正在扫描…";
+        WallpaperScanStatus = LanguageService.Format("Settings.Scanning");
         // 大目录(几十个包 + IO)不卡 UI 线程
         var entries = await Task.Run(() => WallpaperEngineScanner.Scan(dir));
         WallpaperEntries.Clear();
@@ -274,8 +276,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         HasWallpaperEntries = WallpaperEntries.Count > 0;
         WallpaperScanStatus = entries.Count > 0
-            ? $"扫描到 {entries.Count} 个视频壁纸,点击封面选用"
-            : "未找到视频类壁纸(scene/web 类型由 WE 私有引擎渲染,无视频文件可复用)";
+            ? LanguageService.Format("Settings.ScanFound", entries.Count)
+            : LanguageService.Format("Settings.ScanNone");
     }
 
     /// <summary>点选扫描结果条目 → 设为自定义壁纸(带封面)。</summary>
@@ -289,7 +291,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         CustomVideoCoverPath = entry.CoverPath ?? "";
         CustomBackgroundVideoPath = entry.VideoPath;
         BackgroundVideoMode = 1;
-        WallpaperScanStatus = $"已选择「{entry.Title}」";
+        WallpaperScanStatus = LanguageService.Format("Settings.PickedWallpaper", entry.Title);
     }
 
     /// <summary>为已保存的自定义视频找回 WE 封面(视频同目录 preview.*;本地任意文件则无)。</summary>
@@ -339,7 +341,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     // 启动时打开的页面(主页 / 鸣潮启动页)
     /// <summary>启动页选项:0=主页,1=启动页(鸣潮)。</summary>
-    public ObservableCollection<string> StartupPages { get; } = ["主页", "启动页"];
+    public ObservableCollection<string> StartupPages { get; } =
+        [LanguageService.Format("StartupPage.Home"), LanguageService.Format("StartupPage.Launcher")];
 
     [ObservableProperty]
     private int _startupPageIndex;
@@ -403,7 +406,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public bool IsPlatformLinux => AppServices.Capabilities.IsLinux;
 
     /// <summary>平台支持状态徽标文本。</summary>
-    public string PlatformSupportBadgeText => AppServices.Capabilities.IsWindows ? "原生支持" : "部分支持";
+    public string PlatformSupportBadgeText =>
+        AppServices.Capabilities.IsWindows ? LanguageService.Format("Badge.NativeSupport") : LanguageService.Format("Badge.PartialSupport");
 
     [RelayCommand]
     private void OpenLogDir()
@@ -411,19 +415,19 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var dir = AppServices.LogDir;
         if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
         {
-            AppUpdateStatusText = "日志目录不可用";
+            AppUpdateStatusText = LanguageService.Format("Status.LogDirUnavailable");
             return;
         }
         try
         {
             if (!AppServices.OpenInFileManager(dir))
             {
-                AppUpdateStatusText = "打开日志目录失败";
+                AppUpdateStatusText = LanguageService.Format("Status.OpenLogFailed");
             }
         }
         catch (Exception ex)
         {
-            AppUpdateStatusText = $"打开日志目录失败: {ex.Message}";
+            AppUpdateStatusText = LanguageService.Format("Status.OpenLogFailedWith", ex.Message);
         }
     }
 
@@ -433,7 +437,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public ObservableCollection<string> Languages { get; } = ["简体中文 (zh-Hans)", "English (en-US)"];
 
-    public ObservableCollection<string> Themes { get; } = ["跟随系统", "浅色", "深色"];
+    public ObservableCollection<string> Themes { get; } =
+        [LanguageService.Format("Theme.System"), LanguageService.Format("Theme.Light"), LanguageService.Format("Theme.Dark")];
 
     /// <summary>主题选择即时生效(对齐 Haiyu OnSelectThemeChanged):切换即应用并持久化,无需点保存。</summary>
     partial void OnThemeIndexChanged(int value)
@@ -466,7 +471,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public ObservableCollection<string> ServerTypes { get; } =
     [
-        "自动检测", "官服", "B站", "WeGame", "国际服",
+        LanguageService.Format("Server.Auto"), LanguageService.Format("Server.Official"),
+        LanguageService.Format("Server.Bilibili"), "WeGame", LanguageService.Format("Server.Global"),
     ];
 
     [ObservableProperty]
@@ -555,7 +561,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
         var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
         {
-            Title = "选择鸣潮游戏安装目录",
+            Title = LanguageService.Format("Settings.PickGameDirTitle"),
             AllowMultiple = false,
         });
         if (folders.Count == 0)
@@ -568,7 +574,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         // 校验目录包含游戏主程序(对齐 Haiyu 选目录后自动识别:无效目录直接提示,不写入配置)
         if (!File.Exists(Path.Combine(dir, GamePathResolver.ExeRootName)))
         {
-            StatusText = $"目录未包含 {GamePathResolver.ExeRootName},请选择正确的游戏安装目录";
+            StatusText = LanguageService.Format("Status.DirNotContains", GamePathResolver.ExeRootName);
             return;
         }
 
@@ -577,7 +583,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.ServerType = GameServerType.Unknown; // 交给自动检测
         SelectedServerIndex = 0; // 触发 OnSelectedServerIndexChanged 写回并保存
         GameRootDir = dir; // 触发 OnGameRootDirChanged 写回并保存(含上面的 ServerType 变更)
-        StatusText = "目录已设置,正在自动识别加载…";
+        StatusText = LanguageService.Format("Status.DirSet");
         WeakReferenceMessenger.Default.Send(new GameDirectoryChangedMessage(dir));
     }
 
@@ -587,18 +593,18 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var path = SkipVerifyInput.Trim().Replace('\\', '/');
         if (string.IsNullOrEmpty(path))
         {
-            StatusText = "请输入要跳过的文件相对路径";
+            StatusText = LanguageService.Format("Status.SkipInputRequired");
             return;
         }
         if (SkipVerifyFiles.Any(f => string.Equals(f, path, StringComparison.OrdinalIgnoreCase)))
         {
-            StatusText = "该文件已在跳过列表中";
+            StatusText = LanguageService.Format("Status.SkipExists");
             return;
         }
         SkipVerifyFiles.Add(path);
         SkipVerifyInput = "";
         Save(); // 即时写回配置
-        StatusText = $"已添加跳过文件: {path}";
+        StatusText = LanguageService.Format("Status.SkipAdded", path);
     }
 
     [RelayCommand]
@@ -606,7 +612,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         SkipVerifyFiles.Remove(path);
         Save();
-        StatusText = $"已移除跳过文件: {path}";
+        StatusText = LanguageService.Format("Status.SkipRemoved", path);
     }
 
     /// <summary>把所有界面设置项写回配置并保存(各设置项改动时已即时保存,此方法为幂等兜底)。</summary>
@@ -687,7 +693,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var repo = AppServices.Settings.Current.AppUpdateRepo.Trim();
         if (string.IsNullOrWhiteSpace(repo))
         {
-            AppUpdateStatusText = "未配置更新仓库,无法检查更新";
+            AppUpdateStatusText = LanguageService.Format("Update.NoRepo");
             return;
         }
         if (AppUpdateChecking || AppUpdateDownloading)
@@ -696,7 +702,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
 
         AppUpdateChecking = true;
-        AppUpdateStatusText = "正在检查应用更新…";
+        AppUpdateStatusText = LanguageService.Format("Update.Checking");
         AppUpdateAvailable = false;
         _pendingUpdate = null;
         try
@@ -704,7 +710,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             var info = await AppServices.AppUpdate.CheckAsync(repo);
             if (info is null)
             {
-                AppUpdateStatusText = "检查失败(仓库不存在或网络异常)";
+                AppUpdateStatusText = LanguageService.Format("Update.CheckFailed");
                 return;
             }
 
@@ -712,26 +718,26 @@ public sealed partial class SettingsViewModel : ViewModelBase
             var isNewer = AppUpdateService.IsNewer(current, info.Version);
             if (!isNewer)
             {
-                AppUpdateStatusText = $"已是最新版本 ({info.Version})";
+                AppUpdateStatusText = LanguageService.Format("Update.Latest", info.Version);
                 return;
             }
             if (string.Equals(info.Version, AppServices.Settings.Current.SkipAppVersion, StringComparison.OrdinalIgnoreCase))
             {
-                AppUpdateStatusText = $"已跳过版本 {info.Version}(发布更新版本时会再次提示)";
+                AppUpdateStatusText = LanguageService.Format("Update.Skipped", info.Version);
                 return;
             }
 
             _pendingUpdate = info;
             AppUpdateAvailable = true;
-            AppUpdateVersionText = $"发现新版本 {info.Version}";
+            AppUpdateVersionText = LanguageService.Format("Update.NewVersionWith", info.Version);
             // HTML 回退通道拿不到文件大小(AssetSize=0),省略大小段
             AppUpdateStatusText = info.AssetSize > 0
-                ? $"大小 {FormatAppUpdateSize(info.AssetSize)} · {info.AssetName}"
+                ? LanguageService.Format("Update.Size", FormatAppUpdateSize(info.AssetSize), info.AssetName)
                 : info.AssetName;
         }
         catch (Exception ex)
         {
-            AppUpdateStatusText = $"检查失败: {ex.Message}";
+            AppUpdateStatusText = LanguageService.Format("Update.CheckFailedWith", ex.Message);
         }
         finally
         {
@@ -749,7 +755,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
 
         AppUpdateDownloading = true;
-        AppUpdateStatusText = "正在下载更新…";
+        AppUpdateStatusText = LanguageService.Format("Update.Downloading");
         try
         {
             var progress = new Progress<double>(p => AppUpdateProgress = p * 100);
@@ -758,7 +764,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 _pendingUpdate.DownloadUrl, destDir, progress);
             if (localPath is null)
             {
-                AppUpdateStatusText = "下载失败,请检查网络";
+                AppUpdateStatusText = LanguageService.Format("Update.DownloadFailed");
                 return;
             }
 
@@ -766,22 +772,22 @@ public sealed partial class SettingsViewModel : ViewModelBase
             if (fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
                 // zip 绿色包:解压(带进度)到 updates\<版本>\ 后延迟替换当前安装目录并重启(本进程退出后再执行)
-                AppUpdateStatusText = "下载完成,正在解压安装…";
+                AppUpdateStatusText = LanguageService.Format("Update.Extracting");
                 AppUpdateInstalling = true;
                 AppUpdateProgress = 0;
                 var installProgress = new Progress<double>(p =>
                 {
                     AppUpdateProgress = p * 100;
-                    AppUpdateStatusText = $"解压安装中 {p * 100:0}%…";
+                    AppUpdateStatusText = LanguageService.Format("Update.ExtractingPct", p * 100);
                 });
                 if (!await TryApplyZipUpdateAsync(localPath, destDir, installProgress))
                 {
-                    AppUpdateStatusText = "替换失败(请关闭程序后手动解压 zip 到安装目录覆盖)";
+                    AppUpdateStatusText = LanguageService.Format("Update.ReplaceFailed");
                 }
                 return;
             }
 
-            AppUpdateStatusText = "下载完成,正在静默安装(自动替换并重启)…";
+            AppUpdateStatusText = LanguageService.Format("Update.SilentInstalling");
             AppUpdateInstalling = true;
             // /DIR 显式锁定当前安装目录:自更新链路零选择、零歧义(zip 便携版无卸载注册表项,
             // 不能依赖 Inno 的 UsePreviousAppDir;手动双击 setup.exe 才走注册表自动定位)。
@@ -817,7 +823,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             });
             if (installer is null)
             {
-                AppUpdateStatusText = "安装程序启动失败";
+                AppUpdateStatusText = LanguageService.Format("Update.InstallerStartFailed");
                 return;
             }
 
@@ -851,7 +857,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            AppUpdateStatusText = $"下载失败: {ex.Message}";
+            AppUpdateStatusText = LanguageService.Format("Update.DownloadFailedWith", ex.Message);
         }
         finally
         {
@@ -903,7 +909,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 if (processPath.EndsWith("/dotnet", StringComparison.OrdinalIgnoreCase))
                 {
                     // dotnet 宿主运行(开发模式):进程是 dotnet 本身,"替换安装目录"语义不成立
-                    AppUpdateStatusText = "开发模式运行,无法自动替换 —— 请手动下载更新包覆盖安装目录";
+                    AppUpdateStatusText = LanguageService.Format("Update.DevMode");
                     return false;
                 }
                 var exeName = Path.GetFileName(processPath);
@@ -950,7 +956,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            AppUpdateStatusText = $"替换失败: {ex.Message}";
+            AppUpdateStatusText = LanguageService.Format("Update.ReplaceFailedWith", ex.Message);
             return false;
         }
     }
@@ -998,7 +1004,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Save();
         AppUpdateAvailable = false;
         AppUpdateVersionText = "";
-        AppUpdateStatusText = $"已跳过版本 {_pendingUpdate.Version}";
+        AppUpdateStatusText = LanguageService.Format("Update.SkippedNow", _pendingUpdate.Version);
     }
 
     private static string FormatAppUpdateSize(long bytes) =>

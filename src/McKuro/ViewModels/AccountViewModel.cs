@@ -51,7 +51,7 @@ public sealed partial class AccountViewModel : ViewModelBase
 
     // 库街区账号
     [ObservableProperty]
-    private string _accountText = "未登录";
+    private string _accountText = LanguageService.Format("Sign.NotLoggedIn");
 
     [ObservableProperty]
     private int _selectedAccountIndex = -1;
@@ -144,7 +144,7 @@ public sealed partial class AccountViewModel : ViewModelBase
     private bool _smsSending;
 
     /// <summary>发送验证码按钮文案(倒计时中显示剩余秒数)。</summary>
-    public string SmsButtonText => SmsCountdown > 0 ? $"重新发送 ({SmsCountdown}s)" : "发送验证码";
+    public string SmsButtonText => SmsCountdown > 0 ? LanguageService.Format("Account.Resend", SmsCountdown) : LanguageService.Format("Account.SendCode");
 
     /// <summary>发送验证码按钮可用(极验/发送中或倒计时中禁用)。</summary>
     public bool CanSendSms => !SmsSending && SmsCountdown <= 0;
@@ -173,7 +173,7 @@ public sealed partial class AccountViewModel : ViewModelBase
     private bool _isCloudLoginOpen;
 
     [ObservableProperty]
-    private string _cloudAccountText = "未登录";
+    private string _cloudAccountText = LanguageService.Format("Sign.NotLoggedIn");
 
     [ObservableProperty]
     private string _cloudMobile = "";
@@ -191,7 +191,7 @@ public sealed partial class AccountViewModel : ViewModelBase
     private bool _cloudSmsSending;
 
     /// <summary>云鸣潮发送验证码按钮文案。</summary>
-    public string CloudSmsButtonText => CloudSmsCountdown > 0 ? $"重新发送 ({CloudSmsCountdown}s)" : "发送验证码";
+    public string CloudSmsButtonText => CloudSmsCountdown > 0 ? LanguageService.Format("Account.Resend", CloudSmsCountdown) : LanguageService.Format("Account.SendCode");
 
     /// <summary>云鸣潮发送验证码按钮可用。</summary>
     public bool CanSendCloudSms => !CloudSmsSending && CloudSmsCountdown <= 0;
@@ -235,7 +235,7 @@ public sealed partial class AccountViewModel : ViewModelBase
     public bool GuideLoggedIn => AppServices.Guide.HasToken;
 
     /// <summary>mcguide 发送验证码按钮文案。</summary>
-    public string GuideSmsButtonText => GuideSmsCountdown > 0 ? $"重新发送 ({GuideSmsCountdown}s)" : "发送验证码";
+    public string GuideSmsButtonText => GuideSmsCountdown > 0 ? LanguageService.Format("Account.Resend", GuideSmsCountdown) : LanguageService.Format("Account.SendCode");
 
     /// <summary>mcguide 发送验证码按钮可用。</summary>
     public bool CanSendGuideSms => !GuideSmsSending && GuideSmsCountdown <= 0;
@@ -290,8 +290,8 @@ public sealed partial class AccountViewModel : ViewModelBase
         _guideMobile = string.IsNullOrWhiteSpace(s.GuidePhone) ? lastKuroMobile : s.GuidePhone;
 
         _guideStatusText = AppServices.Guide.HasToken
-            ? $"已登录: {AppServices.Settings.Current.GuideCName}"
-            : "未登录(角色页将隐藏官方评级)";
+            ? LanguageService.Format("Account.GuideLoggedIn", AppServices.Settings.Current.GuideCName)
+            : LanguageService.Format("Account.GuideNotLoggedIn");
 
         // 尚无任何库街区账号时自动展开登录表单;云鸣潮/mcguide 未登录时同样展开
         _isKuroLoginOpen = AppServices.KuroAccounts.GetAccounts().Count == 0;
@@ -351,11 +351,11 @@ public sealed partial class AccountViewModel : ViewModelBase
             }
             // 服务端明确拒绝 → 橙点(异常登录);网络异常不改状态,避免误报
             KuroLoginState = InterfaceLoginState.Error;
-            StatusText = $"库街区登录态已失效({gamer?.Msg ?? $"code={gamer?.Code}"}),请重新登录或切换账号";
+            StatusText = LanguageService.Format("Account.KuroSessionExpired", gamer?.Msg ?? $"code={gamer?.Code}");
         }
         catch (Exception ex)
         {
-            StatusText = $"库街区登录态校验失败: {ex.Message}";
+            StatusText = LanguageService.Format("Account.KuroCheckFailed", ex.Message);
         }
     }
 
@@ -373,7 +373,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             // 状态点转灰(未登录),状态文案保留失效原因
             AppServices.CloudGacha.Logout();
             RefreshCloudState();
-            CloudStatusText = msg ?? "云鸣潮会话已失效,请重新登录";
+            CloudStatusText = msg ?? LanguageService.Format("Account.CloudSessionExpired");
             IsCloudLoginOpen = true;
         }
         else if (status == CloudGachaStatus.Success)
@@ -413,7 +413,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             AccountOptions.Add($"{name} (ID: {account.UserId}{mobileSuffix})");
         }
         var current = AppServices.KuroAccounts.Current;
-        AccountText = current is null ? "未登录" : AccountOptions.FirstOrDefault(o => o.Contains(current.UserId)) ?? "未登录";
+        AccountText = current is null ? LanguageService.Format("Sign.NotLoggedIn") : AccountOptions.FirstOrDefault(o => o.Contains(current.UserId)) ?? LanguageService.Format("Sign.NotLoggedIn");
         SelectedAccountIndex = current is null ? -1 : Math.Max(0, AccountOptions.ToList().FindIndex(o => o.Contains(current.UserId)));
         // 已保存登录先按绿点显示,会话校验失败再转橙点
         KuroLoginState = current is null ? InterfaceLoginState.NotLoggedIn : InterfaceLoginState.Ok;
@@ -429,8 +429,8 @@ public sealed partial class AccountViewModel : ViewModelBase
     {
         IsCloudLoggedIn = AppServices.CloudGacha.HasSavedLogin;
         CloudAccountText = IsCloudLoggedIn
-            ? (string.IsNullOrWhiteSpace(AppServices.CloudGacha.SavedLoginName) ? "已登录" : AppServices.CloudGacha.SavedLoginName)
-            : "未登录";
+            ? (string.IsNullOrWhiteSpace(AppServices.CloudGacha.SavedLoginName) ? LanguageService.Format("Account.LoggedIn") : AppServices.CloudGacha.SavedLoginName)
+            : LanguageService.Format("Sign.NotLoggedIn");
         // 已保存登录先按绿点显示,会话校验失败再转橙点
         CloudLoginState = IsCloudLoggedIn ? InterfaceLoginState.Ok : InterfaceLoginState.NotLoggedIn;
         RefreshSameAccountAuto();
@@ -449,7 +449,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         AppServices.Settings.Current.KujiequToken = account.Token;
         AppServices.Settings.Save();
         RefreshAccounts();
-        StatusText = $"已切换到账号: {(string.IsNullOrEmpty(account.Nickname) ? account.UserId : account.Nickname)}";
+        StatusText = LanguageService.Format("Account.Switched", string.IsNullOrEmpty(account.Nickname) ? account.UserId : account.Nickname);
         // 通知角色数据页按新账号刷新
         WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(account.UserId));
     }
@@ -467,7 +467,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             if (!string.IsNullOrEmpty(reused))
             {
                 MobileInput = reused;
-                SmsStatusText = "已复用已保存账号的手机号";
+                SmsStatusText = LanguageService.Format("Account.PhoneReused");
             }
         }
     }
@@ -488,7 +488,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             if (!string.IsNullOrEmpty(reused))
             {
                 CloudMobile = reused;
-                CloudStatusText = "已复用已保存账号的手机号";
+                CloudStatusText = LanguageService.Format("Account.PhoneReused");
             }
         }
     }
@@ -509,7 +509,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             if (!string.IsNullOrEmpty(reused))
             {
                 GuideMobile = reused;
-                GuideSmsText = "已复用已保存账号的手机号";
+                GuideSmsText = LanguageService.Format("Account.PhoneReused");
             }
         }
     }
@@ -529,7 +529,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(current.UserId));
         }
         RefreshAccounts();
-        StatusText = "已退出登录";
+        StatusText = LanguageService.Format("Account.LoggedOut");
     }
 
     // ==================== 库街区短信登录(自签到页迁移) ====================
@@ -544,12 +544,12 @@ public sealed partial class AccountViewModel : ViewModelBase
         var mobile = MobileInput.Trim();
         if (!MobileRegex().IsMatch(mobile))
         {
-            SmsStatusText = "请输入正确的 11 位手机号";
+            SmsStatusText = LanguageService.Format("Account.BadPhone");
             return;
         }
         if (SmsCountdown > 0)
         {
-            SmsStatusText = $"请 {SmsCountdown} 秒后再试";
+            SmsStatusText = LanguageService.Format("Account.WaitRetry", SmsCountdown);
             return;
         }
         if (SmsSending)
@@ -558,7 +558,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
 
         SmsSending = true;
-        SmsStatusText = "正在打开极验验证…";
+        SmsStatusText = LanguageService.Format("Account.OpeningGeetest");
         var geetCts = new CancellationTokenSource(); // 用户关闭内置验证窗口时取消等待
         GeetestWindow? geetestWindow = null;
         var fallbackToBrowser = false; // 内置窗口不可用自动改走系统浏览器:此时关窗不算取消
@@ -601,7 +601,7 @@ public sealed partial class AccountViewModel : ViewModelBase
                                 fallbackToBrowser = true;
                                 geetestWindow?.Close();
                                 geetestWindow = null;
-                                SmsStatusText = "内置验证窗口不可用,已改用系统浏览器完成验证…";
+                                SmsStatusText = LanguageService.Format("Account.GeetestFallback");
                                 _loginLog?.LogWarning("内置极验窗口不可用,自动回退系统浏览器");
                                 try
                                 {
@@ -609,7 +609,7 @@ public sealed partial class AccountViewModel : ViewModelBase
                                 }
                                 catch (Exception ex)
                                 {
-                                    SmsStatusText = $"打开系统浏览器失败: {ex.Message}";
+                                    SmsStatusText = LanguageService.Format("Account.OpenBrowserFailed", ex.Message);
                                 }
                             });
                             if (owner is not null)
@@ -625,48 +625,48 @@ public sealed partial class AccountViewModel : ViewModelBase
                     else
                     {
                         // 平台无内置 WebView 或 WebView2 运行时缺失:维持原有系统浏览器流程
-                        SmsStatusText = "正在打开浏览器,请在浏览器完成滑块…";
+                        SmsStatusText = LanguageService.Format("Account.OpeningBrowser");
                         Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
                     }
                 });
             if (string.IsNullOrEmpty(geeTestJson))
             {
                 SmsStatusText = geetestWindow is null
-                    ? "极验验证未完成或已取消,请重试"
-                    : "极验验证未完成或超时,请重试";
+                    ? LanguageService.Format("Account.GeetestCancelled")
+                    : LanguageService.Format("Account.GeetestTimeout");
                 _loginLog?.LogWarning("极验验证未完成或超时(返回 null),手机号: {Mobile}", mobile);
                 return;
             }
 
             _loginLog?.LogInformation("极验验证成功,极验 JSON 长度={Len}", geeTestJson.Length);
-            SmsStatusText = "正在发送验证码…";
+            SmsStatusText = LanguageService.Format("Account.Sending");
             var result = await AppServices.Kuro.SendSMSAsync(mobile, geeTestJson, _smsDeviceId);
             if (result is null)
             {
-                SmsStatusText = "发送失败: 服务无响应";
+                SmsStatusText = LanguageService.Format("Account.SendNoResponse");
                 return;
             }
             _loginLog?.LogInformation("SendSMSAsync 响应: Code={Code} Success={Success} Msg={Msg}",
                 result.Code, result.Success, result.Msg);
             if (result.Code == 242)
             {
-                SmsStatusText = "短信发送频繁,请稍后再试";
+                SmsStatusText = LanguageService.Format("Account.SendThrottled");
                 return;
             }
             // Data.GeeTest == false 表示服务端确认发送成功(对齐 Haiyu 判断)
             if (result is { Data.GeeTest: false } || result.Success || result.Code is 0 or 200)
             {
-                SmsStatusText = "验证码已发送,请查收";
+                SmsStatusText = LanguageService.Format("Account.CodeSent");
                 StartKuroSmsCountdown(60);
             }
             else
             {
-                SmsStatusText = $"发送失败: {result.Msg ?? $"code={result.Code}"}";
+                SmsStatusText = LanguageService.Format("Account.SendFailed", result.Msg ?? $"code={result.Code}");
             }
         }
         catch (Exception ex)
         {
-            SmsStatusText = $"发送失败: {ex.Message}";
+            SmsStatusText = LanguageService.Format("Account.SendFailed", ex.Message);
         }
         finally
         {
@@ -689,22 +689,22 @@ public sealed partial class AccountViewModel : ViewModelBase
         var code = VerifyCodeInput.Trim();
         if (string.IsNullOrWhiteSpace(mobile) || string.IsNullOrWhiteSpace(code))
         {
-            SmsStatusText = "请填写手机号与验证码";
+            SmsStatusText = LanguageService.Format("Account.FillBoth");
             return;
         }
         if (string.IsNullOrEmpty(_smsDeviceId))
         {
-            SmsStatusText = "请先点击「发送验证码」";
+            SmsStatusText = LanguageService.Format("Account.SendFirst");
             return;
         }
 
-        SmsStatusText = "正在登录…";
+        SmsStatusText = LanguageService.Format("Account.LoggingIn");
         try
         {
             var result = await AppServices.Kuro.LoginAsync(mobile, code, _smsDeviceId);
             if (result is not { Success: true } || result.Data is null || string.IsNullOrEmpty(result.Data.Token))
             {
-                SmsStatusText = $"登录失败: {result?.Msg ?? "响应无效"}";
+                SmsStatusText = LanguageService.Format("Account.LoginFailed", result?.Msg ?? LanguageService.Format("Account.InvalidResponse"));
                 return;
             }
 
@@ -726,17 +726,17 @@ public sealed partial class AccountViewModel : ViewModelBase
             if (existed is not null)
             {
                 // 同一账号重新登录:仅更新登录态,不产生重复条目
-                note = "该账号已存在,登录态已更新";
+                note = LanguageService.Format("Account.NoteExists");
             }
             else if (sameMobileOld is not null)
             {
                 // 同手机号但 UserId 不同:判定为同一账号的旧记录,合并移除
                 AppServices.KuroAccounts.Remove(sameMobileOld.UserId);
-                note = $"与旧记录(UID {sameMobileOld.UserId})为同一手机号,已合并";
+                note = LanguageService.Format("Account.NoteMerged", sameMobileOld.UserId);
             }
             else
             {
-                note = $"已添加账号 {account.Nickname}(ID: {account.UserId})";
+                note = LanguageService.Format("Account.NoteAdded", account.Nickname, account.UserId);
             }
 
             _smsTimer.Stop();
@@ -746,8 +746,8 @@ public sealed partial class AccountViewModel : ViewModelBase
             AppServices.Settings.Current.KujiequToken = account.Token;
             AppServices.Settings.Save();
             RefreshAccounts();
-            SmsStatusText = $"登录成功,{note}";
-            StatusText = $"库街区登录成功: {note}";
+            SmsStatusText = LanguageService.Format("Account.LoginSuccessWith", note);
+            StatusText = LanguageService.Format("Account.KuroLoginSuccess", note);
 
             // 一个接口账号登录成功 → 其他接口账号复用该手机号
             ReusePhoneAcrossLogins(mobile, source: "kuro");
@@ -761,7 +761,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            SmsStatusText = $"登录失败: {ex.Message}";
+            SmsStatusText = LanguageService.Format("Account.LoginFailed", ex.Message);
         }
     }
 
@@ -825,15 +825,15 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
         if (string.IsNullOrWhiteSpace(CloudMobile))
         {
-            CloudStatusText = "请先填写手机号";
+            CloudStatusText = LanguageService.Format("Account.FillPhone");
             return;
         }
         CloudSmsSending = true;
-        CloudStatusText = "正在发送验证码…";
+        CloudStatusText = LanguageService.Format("Account.Sending");
         try
         {
             var (ok, msg) = await AppServices.CloudGacha.SendSmsAsync(CloudMobile.Trim());
-            CloudStatusText = msg ?? (ok ? "验证码已发送" : "发送失败");
+            CloudStatusText = msg ?? (ok ? LanguageService.Format("Account.CodeSent") : LanguageService.Format("Account.SendFailedShort"));
             if (ok)
             {
                 StartCloudSmsCountdown(60);
@@ -841,7 +841,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            CloudStatusText = $"发送失败: {ex.Message}";
+            CloudStatusText = LanguageService.Format("Account.SendFailed", ex.Message);
         }
         finally
         {
@@ -855,10 +855,10 @@ public sealed partial class AccountViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(CloudMobile) || string.IsNullOrWhiteSpace(CloudCode))
         {
-            CloudStatusText = "请填写手机号与验证码";
+            CloudStatusText = LanguageService.Format("Account.FillBoth");
             return;
         }
-        CloudStatusText = "正在登录…";
+        CloudStatusText = LanguageService.Format("Account.LoggingIn");
         try
         {
             var (ok, msg) = await AppServices.CloudGacha.LoginAsync(CloudMobile.Trim(), CloudCode.Trim());
@@ -872,8 +872,8 @@ public sealed partial class AccountViewModel : ViewModelBase
                 CloudSmsCountdown = 0;
                 CloudSmsSending = false;
                 RefreshCloudState();
-                CloudStatusText = "登录成功,可到「抽卡分析」页同步记录";
-                StatusText = "云鸣潮登录成功";
+                CloudStatusText = LanguageService.Format("Account.CloudLoginDone");
+                StatusText = LanguageService.Format("Account.CloudLoginSuccess");
 
                 // 堆叠卡片:云鸣潮登录完成 → 自动切到下一个未登录的卡片
                 AdvanceToNextLoginCard(1);
@@ -883,12 +883,12 @@ public sealed partial class AccountViewModel : ViewModelBase
             }
             else
             {
-                CloudStatusText = msg ?? "登录失败";
+                CloudStatusText = msg ?? LanguageService.Format("Account.LoginFailedShort");
             }
         }
         catch (Exception ex)
         {
-            CloudStatusText = $"登录失败: {ex.Message}";
+            CloudStatusText = LanguageService.Format("Account.LoginFailed", ex.Message);
         }
     }
 
@@ -898,7 +898,7 @@ public sealed partial class AccountViewModel : ViewModelBase
     {
         AppServices.CloudGacha.Logout();
         RefreshCloudState();
-        CloudStatusText = "已退出云鸣潮登录";
+        CloudStatusText = LanguageService.Format("Account.CloudLoggedOut");
         // 退出后重新展开登录表单,便于再次登录
         IsCloudLoginOpen = true;
     }
@@ -933,7 +933,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         var mobile = GuideMobile.Trim();
         if (string.IsNullOrWhiteSpace(mobile))
         {
-            GuideSmsText = "请填写手机号";
+            GuideSmsText = LanguageService.Format("Account.FillPhone");
             return;
         }
         if (GuideSmsSending || GuideSmsCountdown > 0)
@@ -942,11 +942,11 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
 
         GuideSmsSending = true;
-        GuideSmsText = "正在发送…";
+        GuideSmsText = LanguageService.Format("Account.Sending");
         try
         {
             var (ok, msg) = await AppServices.Guide.SendSmsAsync(mobile);
-            GuideSmsText = msg ?? (ok ? "验证码已发送" : "发送失败");
+            GuideSmsText = msg ?? (ok ? LanguageService.Format("Account.CodeSent") : LanguageService.Format("Account.SendFailedShort"));
             if (ok)
             {
                 StartGuideSmsCountdown(60);
@@ -954,7 +954,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            GuideSmsText = $"发送失败: {ex.Message}";
+            GuideSmsText = LanguageService.Format("Account.SendFailed", ex.Message);
         }
         finally
         {
@@ -970,15 +970,15 @@ public sealed partial class AccountViewModel : ViewModelBase
         var code = GuideCode.Trim();
         if (string.IsNullOrWhiteSpace(mobile) || string.IsNullOrWhiteSpace(code))
         {
-            GuideStatusText = "请填写手机号与验证码";
+            GuideStatusText = LanguageService.Format("Account.FillBoth");
             return;
         }
 
-        GuideStatusText = "正在登录攻略站…";
+        GuideStatusText = LanguageService.Format("Account.GuideLoggingIn");
         try
         {
             var (ok, msg) = await AppServices.Guide.LoginAsync(mobile, code);
-            GuideStatusText = msg ?? (ok ? "登录成功" : "登录失败");
+            GuideStatusText = msg ?? (ok ? LanguageService.Format("Account.LoginSuccess") : LanguageService.Format("Account.LoginFailedShort"));
             if (ok)
             {
                 GuideCode = "";
@@ -990,7 +990,7 @@ public sealed partial class AccountViewModel : ViewModelBase
                 GuideSmsSending = false;
                 OnPropertyChanged(nameof(GuideLoggedIn));
                 GuideLoginState = InterfaceLoginState.Ok;
-                StatusText = "攻略站登录成功";
+                StatusText = LanguageService.Format("Account.GuideLoginSuccess");
 
                 // 堆叠卡片:官方评级登录完成 → 自动切到下一个未登录的卡片(全登录完则回库街区)
                 AdvanceToNextLoginCard(2);
@@ -1002,7 +1002,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            GuideStatusText = $"登录失败: {ex.Message}";
+            GuideStatusText = LanguageService.Format("Account.LoginFailed", ex.Message);
         }
     }
 
@@ -1027,8 +1027,8 @@ public sealed partial class AccountViewModel : ViewModelBase
         AppServices.Settings.Save();
         OnPropertyChanged(nameof(GuideLoggedIn));
         GuideLoginState = InterfaceLoginState.NotLoggedIn;
-        GuideStatusText = "未登录(角色页将隐藏官方评级)";
-        StatusText = "已退出 mcguide 登录";
+        GuideStatusText = LanguageService.Format("Account.GuideNotLoggedIn");
+        StatusText = LanguageService.Format("Account.GuideLoggedOut");
         RefreshSameAccountAuto();
         // 退出后重新展开登录表单,便于再次登录
         IsGuideLoginOpen = true;
@@ -1103,11 +1103,11 @@ public sealed partial class AccountViewModel : ViewModelBase
             var active = new List<(string Name, string Phone)>();
             if (kuro is not null)
             {
-                active.Add(("库街区", kuroPhone));
+                active.Add((LanguageService.Format("Account.IfKuro"), kuroPhone));
             }
             if (AppServices.CloudGacha.HasSavedLogin)
             {
-                active.Add(("云鸣潮", cloudPhone));
+                active.Add((LanguageService.Format("Account.IfCloud"), cloudPhone));
             }
             if (AppServices.Guide.HasToken)
             {
@@ -1118,8 +1118,8 @@ public sealed partial class AccountViewModel : ViewModelBase
             {
                 SameAccountVerdict = SameAccountVerdict.Unknown;
                 SameAccountStatus = active.Count == 0
-                    ? "尚未登录任何接口账号"
-                    : $"仅登录 {active[0].Name},暂无需同一账号判定";
+                    ? LanguageService.Format("Account.NoAccounts")
+                    : LanguageService.Format("Account.OnlyOne", active[0].Name);
                 return;
             }
 
@@ -1128,7 +1128,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             {
                 // 有接口没记录手机号,无法完整判定
                 SameAccountVerdict = SameAccountVerdict.Unknown;
-                SameAccountStatus = $"「{string.Join(" / ", missing.Select(m => m.Name))}」未记录手机号,无法完整判定是否同一账号";
+                SameAccountStatus = LanguageService.Format("Account.PhonesMissing", string.Join(" / ", missing.Select(m => m.Name)));
                 return;
             }
 
@@ -1136,13 +1136,13 @@ public sealed partial class AccountViewModel : ViewModelBase
             if (distinctPhones == 1)
             {
                 SameAccountVerdict = SameAccountVerdict.Same;
-                SameAccountStatus = $"已登录的 {active.Count} 个接口均为同一账号";
+                SameAccountStatus = LanguageService.Format("Account.AllSame", active.Count);
             }
             else
             {
                 // 不同手机号 → 完全不同或部分不同,仅提醒不强制登出
                 SameAccountVerdict = SameAccountVerdict.Different;
-                SameAccountStatus = "检测到不同接口使用了不同手机号,可能不是同一个账号(已提醒,不会强制登出)";
+                SameAccountStatus = LanguageService.Format("Account.DifferentPhones");
             }
         }
         finally

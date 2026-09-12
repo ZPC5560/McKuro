@@ -42,6 +42,9 @@ public partial class App : Application
 
         // 界面语言(重启后生效;首次启动默认 zh-Hans)
         LanguageService.Load(AppServices.Settings.Current.Language);
+        // Core 层展示文案网关:Core 项目不引用应用层,统一委托给 LanguageService 解析
+        McKuro.Core.Services.CoreStrings.Resolver = key => LanguageService.Get(key);
+        McKuro.Core.Services.CoreStrings.CurrentLanguage = LanguageService.Current;
 
         // 应用已保存的下载并发数与限速(对齐 Haiyu 的下载设置持久化)
         AppServices.Downloader.SetConcurrency(AppServices.Settings.Current.DownloadConcurrency);

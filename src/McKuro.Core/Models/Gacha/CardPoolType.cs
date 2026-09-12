@@ -1,3 +1,5 @@
+using McKuro.Core.Services;
+
 namespace McKuro.Core.Models.Gacha;
 
 /// <summary>
@@ -64,22 +66,22 @@ public static class CardPoolTypeValues
         CardPoolType.WeaponMemoryJourney,
     ];
 
-    /// <summary>卡池类型中文名。</summary>
+    /// <summary>卡池类型显示名(经 CoreStrings 本地化;未注册时回退中文)。</summary>
     public static string GetDisplayName(CardPoolType type) => type switch
     {
-        CardPoolType.RoleActivity => "角色活动",
-        CardPoolType.WeaponsActivity => "武器活动",
-        CardPoolType.RoleResident => "角色常驻",
-        CardPoolType.WeaponsResident => "武器常驻",
-        CardPoolType.Beginner => "新手唤取",
-        CardPoolType.BeginnerChoice => "新手自选",
-        CardPoolType.GratitudeOrientation => "感恩定向",
-        CardPoolType.CharacterNovice => "角色新旅",
-        CardPoolType.WeaponNovice => "武器新旅",
-        CardPoolType.CharacterCollaboration => "角色联动",
-        CardPoolType.WeaponCollaboration => "武器联动",
-        CardPoolType.CharacterMemoryJourney => "角色忆旅",
-        CardPoolType.WeaponMemoryJourney => "武器忆旅",
+        CardPoolType.RoleActivity => CoreStrings.T("Gacha.Pool.RoleActivity", "角色活动"),
+        CardPoolType.WeaponsActivity => CoreStrings.T("Gacha.Pool.WeaponsActivity", "武器活动"),
+        CardPoolType.RoleResident => CoreStrings.T("Gacha.Pool.RoleResident", "角色常驻"),
+        CardPoolType.WeaponsResident => CoreStrings.T("Gacha.Pool.WeaponsResident", "武器常驻"),
+        CardPoolType.Beginner => CoreStrings.T("Gacha.Pool.Beginner", "新手唤取"),
+        CardPoolType.BeginnerChoice => CoreStrings.T("Gacha.Pool.BeginnerChoice", "新手自选"),
+        CardPoolType.GratitudeOrientation => CoreStrings.T("Gacha.Pool.GratitudeOrientation", "感恩定向"),
+        CardPoolType.CharacterNovice => CoreStrings.T("Gacha.Pool.CharacterNovice", "角色新旅"),
+        CardPoolType.WeaponNovice => CoreStrings.T("Gacha.Pool.WeaponNovice", "武器新旅"),
+        CardPoolType.CharacterCollaboration => CoreStrings.T("Gacha.Pool.CharacterCollaboration", "角色联动"),
+        CardPoolType.WeaponCollaboration => CoreStrings.T("Gacha.Pool.WeaponCollaboration", "武器联动"),
+        CardPoolType.CharacterMemoryJourney => CoreStrings.T("Gacha.Pool.CharacterMemoryJourney", "角色忆旅"),
+        CardPoolType.WeaponMemoryJourney => CoreStrings.T("Gacha.Pool.WeaponMemoryJourney", "武器忆旅"),
         _ => type.ToString(),
     };
 }

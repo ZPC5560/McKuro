@@ -157,7 +157,7 @@ public sealed class FileDownloader
         }
         catch (OperationCanceledException)
         {
-            return new FileDownloadResult { Success = false, RelativePath = entry.Path, Error = "已取消" };
+            return new FileDownloadResult { Success = false, RelativePath = entry.Path, Error = CoreStrings.T("Core.Dl.Cancelled", "已取消") };
         }
         catch (Exception ex)
         {
@@ -217,7 +217,7 @@ public sealed class FileDownloader
                 response.EnsureSuccessStatusCode();
                 if (response.StatusCode != HttpStatusCode.PartialContent && chunk.Start > 0)
                 {
-                    throw new IOException($"服务器未返回分片响应: {response.StatusCode}");
+                    throw new IOException(CoreStrings.F("Core.Dl.NoChunkResponse", $"服务器未返回分片响应: {response.StatusCode}", response.StatusCode));
                 }
 
                 await using var source = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
@@ -233,7 +233,7 @@ public sealed class FileDownloader
                         .ConfigureAwait(false);
                     if (read == 0)
                     {
-                        throw new IOException($"分片下载不完整: {written}/{expectedLength}");
+                        throw new IOException(CoreStrings.F("Core.Dl.ChunkIncomplete", $"分片下载不完整: {written}/{expectedLength}", written, expectedLength));
                     }
                     await target.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
                     if (rateLimiter is not null)
@@ -247,7 +247,7 @@ public sealed class FileDownloader
                 await target.FlushAsync(ct).ConfigureAwait(false);
                 if (!await IsChunkValidAsync(target, chunk, ct).ConfigureAwait(false))
                 {
-                    throw new IOException($"分片 MD5 校验失败: {chunk.Start}-{chunk.End}");
+                    throw new IOException(CoreStrings.F("Core.Dl.ChunkMd5Failed", $"分片 MD5 校验失败: {chunk.Start}-{chunk.End}", chunk.Start, chunk.End));
                 }
             }
 
@@ -264,7 +264,7 @@ public sealed class FileDownloader
         }
         catch (OperationCanceledException)
         {
-            return new FileDownloadResult { Success = false, RelativePath = entry.Path, Error = "已取消" };
+            return new FileDownloadResult { Success = false, RelativePath = entry.Path, Error = CoreStrings.T("Core.Dl.Cancelled", "已取消") };
         }
         catch (Exception ex)
         {
@@ -318,7 +318,7 @@ public sealed class FileDownloader
         {
             if (!File.Exists(path))
             {
-                return new FileDownloadResult { Success = false, RelativePath = entry.Path, Error = "下载文件不存在" };
+                return new FileDownloadResult { Success = false, RelativePath = entry.Path, Error = CoreStrings.T("Core.Dl.FileMissing", "下载文件不存在") };
             }
             if (entry.Size > 0 && new FileInfo(path).Length != entry.Size)
             {
@@ -342,7 +342,7 @@ public sealed class FileDownloader
                 Success = ok,
                 RelativePath = entry.Path,
                 HashVerified = true,
-                Error = ok ? null : $"MD5 校验失败: 期望 {entry.Md5},实际 {hash}",
+                Error = ok ? null : CoreStrings.F("Core.Dl.Md5Failed", $"MD5 校验失败: 期望 {entry.Md5},实际 {hash}", entry.Md5, hash),
             };
         }
         catch (Exception ex)

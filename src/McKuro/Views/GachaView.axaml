@@ -6,6 +6,7 @@
              xmlns:gacha="using:McKuro.Core.Models.Gacha"
              xmlns:controls="using:McKuro.Controls"
              xmlns:ic="using:FluentIcons.Avalonia"
+             xmlns:loc="clr-namespace:McKuro.Services"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.GachaView"
              x:DataType="vm:GachaViewModel">
@@ -16,7 +17,7 @@
             <StackPanel Spacing="1">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ic:FluentIcon Icon="Gauge" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
-                    <TextBlock Text="抽卡分析" FontSize="20" FontWeight="Bold" />
+                    <TextBlock Text="{loc:Localize Key=Nav.Gacha}" FontSize="20" FontWeight="Bold" />
                 </StackPanel>
                 <!-- 仅显示数据来源(玩家账号 ID 已移除) -->
                 <TextBlock Text="{Binding StatusText}" FontSize="11"
@@ -28,7 +29,7 @@
                       VerticalAlignment="Center"
                       ItemsSource="{Binding PlayerIds}"
                       SelectedItem="{Binding SelectedPlayerId, Mode=TwoWay}" />
-            <Button Grid.Column="2" Content="同步" Classes="primary"
+            <Button Grid.Column="2" Content="{loc:Localize Key=Common.Sync}" Classes="primary"
                     VerticalAlignment="Center"
                     Command="{Binding RefreshCommand}"
                     IsEnabled="{Binding !IsBusy}" />
@@ -36,7 +37,7 @@
 
         <!-- 视图切换(0=综合分析[默认] 1=统计卡片 2=表格) -->
         <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedViewIndex}" Padding="0" Background="Transparent" FontSize="13">
-            <TabItem Header="综合分析">
+            <TabItem Header="{loc:Localize Key=Gacha.TabOverview}">
                 <Grid ColumnDefinitions="380,*">
             <!-- 左侧:卡池 + 五星列表 -->
             <Border Grid.Column="0"
@@ -57,8 +58,8 @@
                         </ComboBox>
                         <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="11"
                                    Foreground="{DynamicResource SemiColorText2}"
-                                   ToolTip.Tip="当前池平均出货与 UP 后垫抽">
-                            <Run Text="平均 " /><Run Text="{Binding StarAvgValue, StringFormat={}{0:0.#}}" /><Run Text=" 抽 · " /><Run Text="{Binding SelectedPool.CurrentUpPityText}" />
+                                   ToolTip.Tip="{loc:Localize Key=Gacha.PityTooltip}">
+                            <Run Text="{loc:Localize Key=Gacha.AvgPrefix}" /><Run Text="{Binding StarAvgValue, StringFormat={}{0:0.#}}" /><Run Text="{loc:Localize Key=Gacha.PullsDot}" /><Run Text="{Binding SelectedPool.CurrentUpPityText}" />
                         </TextBlock>
                     </Grid>
                     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Hidden">
@@ -80,7 +81,7 @@
                                                 Orientation="Horizontal"
                                                 Spacing="6"
                                                 VerticalAlignment="Center">
-                                        <TextBlock Text="已垫" FontSize="13" FontWeight="Bold" />
+                                        <TextBlock Text="{loc:Localize Key=Gacha.CurrentPityShort}" FontSize="13" FontWeight="Bold" />
                                         <TextBlock Text="{Binding SelectedPool.CurrentPity}"
                                                    FontSize="13"
                                                    FontWeight="Bold"
@@ -165,42 +166,42 @@
                                 Background="{DynamicResource SemiColorBg2}">
                             <Grid ColumnDefinitions="*,*,*,*,*,*,*,*">
                                 <StackPanel HorizontalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="总抽数" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Gacha.TotalPulls}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
                                     <TextBlock Text="{Binding TotalPulls}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="称号" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Gacha.Designation}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
                                     <TextBlock Text="{Binding Designation}" FontSize="15" FontWeight="Bold"
                                                Foreground="{DynamicResource SemiColorPrimary}" HorizontalAlignment="Center" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="双金次数" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Gacha.DoubleCount}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
                                     <TextBlock Text="{Binding DoubleCount}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="3" HorizontalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="歪的次数" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Gacha.OffCount}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
                                     <TextBlock Text="{Binding CrookedTotal}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="4" HorizontalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="综合评分" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Gacha.Score}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
                                     <TextBlock Text="{Binding Score}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="5" HorizontalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="平均出货" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Gacha.AvgPulls}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
                                     <TextBlock FontSize="18" FontWeight="Bold" HorizontalAlignment="Center">
-                                        <Run Text="{Binding AvgPulls}" /><Run Text=" 抽" />
+                                        <Run Text="{Binding AvgPulls}" /><Run Text="{loc:Localize Key=Gacha.PullsSuffix}" />
                                     </TextBlock>
                                 </StackPanel>
                                 <StackPanel Grid.Column="6" HorizontalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="出货率" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Gacha.WinRate}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
                                     <TextBlock FontSize="18" FontWeight="Bold" HorizontalAlignment="Center">
                                         <Run Text="{Binding ActualFiveStarRate}" /><Run Text="%" />
                                     </TextBlock>
                                 </StackPanel>
                                 <StackPanel Grid.Column="7" HorizontalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="记录天数" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=PT.RecordDays}" FontSize="11" Foreground="{DynamicResource SemiColorText2}" HorizontalAlignment="Center" />
                                     <TextBlock FontSize="18" FontWeight="Bold" HorizontalAlignment="Center">
-                                        <Run Text="{Binding Days}" /><Run Text=" 天" />
+                                        <Run Text="{Binding Days}" /><Run Text="{loc:Localize Key=PT.StreakDaysNoCount}" />
                                     </TextBlock>
                                 </StackPanel>
                             </Grid>
@@ -240,7 +241,7 @@
                                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
                                                 <TextBlock Text="{Binding TotalFiveStars}" FontSize="18" FontWeight="Bold"
                                                            HorizontalAlignment="Center" />
-                                                <TextBlock Text="五星" FontSize="11" Foreground="{DynamicResource SemiColorText2}"
+                                                <TextBlock Text="{loc:Localize Key=Gacha.FiveStar}" FontSize="11" Foreground="{DynamicResource SemiColorText2}"
                                                            HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Grid>
@@ -279,7 +280,7 @@
                                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
                                             <TextBlock Text="{Binding TotalPulls}" FontSize="18" FontWeight="Bold"
                                                        HorizontalAlignment="Center" />
-                                            <TextBlock Text="总抽数" FontSize="11" Foreground="{DynamicResource SemiColorText2}"
+                                            <TextBlock Text="{loc:Localize Key=Gacha.TotalPulls}" FontSize="11" Foreground="{DynamicResource SemiColorText2}"
                                                        HorizontalAlignment="Center" />
                                         </StackPanel>
                                     </Grid>
@@ -321,7 +322,7 @@
                                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
                                             <TextBlock Text="{Binding TotalPulls}" FontSize="18" FontWeight="Bold"
                                                        HorizontalAlignment="Center" />
-                                            <TextBlock Text="总抽数" FontSize="11" Foreground="{DynamicResource SemiColorText2}"
+                                            <TextBlock Text="{loc:Localize Key=Gacha.TotalPulls}" FontSize="11" Foreground="{DynamicResource SemiColorText2}"
                                                        HorizontalAlignment="Center" />
                                         </StackPanel>
                                     </Grid>
@@ -351,7 +352,7 @@
                         <Border Grid.Row="2" CornerRadius="10" Padding="12"
                                 Background="{DynamicResource SemiColorBg2}">
                             <Grid RowDefinitions="Auto,*">
-                                <TextBlock Text="每日抽数" FontSize="13" FontWeight="Bold" Margin="0,0,0,6" />
+                                <TextBlock Text="{loc:Localize Key=Gacha.DailyPulls}" FontSize="13" FontWeight="Bold" Margin="0,0,0,6" />
                                 <controls:TimeLineChart Grid.Row="1" Margin="0,2,0,0"
                                                         Values="{Binding TimeLineCounts}"
                                                         Labels="{Binding TimeLineLabels}"
@@ -364,7 +365,7 @@
             </TabItem>
 
             <!-- 视图2:统计卡片(Java CardCommon) -->
-            <TabItem Header="统计卡片">
+            <TabItem Header="{loc:Localize Key=Gacha.TabCards}">
                 <ScrollViewer>
                     <ItemsControl ItemsSource="{Binding Pools}">
                         <ItemsControl.ItemsPanel>
@@ -386,7 +387,7 @@
                                                     <TextBlock Text="{Binding GuaranteeBadgeText}" FontSize="10" FontWeight="Bold" Foreground="White" />
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Grid.Column="1" Text="{Binding TotalPulls, StringFormat=总抽 {0}}"
+                                            <TextBlock Grid.Column="1" Text="{Binding TotalPullsText}"
                                                        FontSize="13" Foreground="#64B5F6" VerticalAlignment="Center" />
                                         </Grid>
                                         <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText3}" Margin="0,4,0,0">
@@ -413,7 +414,7 @@
                                                              Background="{DynamicResource SemiColorBg3}" />
                                                 <TextBlock HorizontalAlignment="Right" FontSize="11"
                                                            Foreground="{DynamicResource SemiColorText2}"
-                                                           Text="{Binding CurrentPity, StringFormat=已垫 {0} / 80 抽}" />
+                                                           Text="{Binding CurrentPityFullText}" />
                                             </StackPanel>
                                         </Grid>
 
@@ -423,25 +424,25 @@
                                             <StackPanel Grid.Row="0" Grid.Column="0" Spacing="1">
                                                 <StackPanel Orientation="Horizontal" Spacing="3">
                                                     <TextBlock Text="{Binding CurrentPity}" FontSize="16" FontWeight="Bold" Foreground="#4CAF50" />
-                                                    <TextBlock Text="抽" FontSize="12" Foreground="#4CAF50" Margin="0,0,0,1" />
+                                                    <TextBlock Text="{loc:Localize Key=Gacha.PullUnit}" FontSize="12" Foreground="#4CAF50" Margin="0,0,0,1" />
                                                 </StackPanel>
-                                                <TextBlock Text="SSR 垫抽" FontSize="11" Foreground="{DynamicResource SemiColorText3}" />
+                                                <TextBlock Text="{loc:Localize Key=Gacha.SsrPity}" FontSize="11" Foreground="{DynamicResource SemiColorText3}" />
                                             </StackPanel>
                                             <StackPanel Grid.Row="0" Grid.Column="1" Spacing="1">
                                                 <StackPanel Orientation="Horizontal" Spacing="3">
                                                     <TextBlock Text="{Binding AveragePity, StringFormat={}{0:0}, TargetNullValue=—}"
                                                                FontSize="16" FontWeight="Bold" Foreground="#E57373" />
-                                                    <TextBlock Text="抽" FontSize="12" Foreground="#E57373" Margin="0,0,0,1"
+                                                    <TextBlock Text="{loc:Localize Key=Gacha.PullUnit}" FontSize="12" Foreground="#E57373" Margin="0,0,0,1"
                                                                IsVisible="{Binding AveragePity}" />
                                                 </StackPanel>
-                                                <TextBlock Text="SSR 平均" FontSize="11" Foreground="{DynamicResource SemiColorText3}" />
+                                                <TextBlock Text="{loc:Localize Key=Gacha.SsrAvg}" FontSize="11" Foreground="{DynamicResource SemiColorText3}" />
                                             </StackPanel>
                                             <StackPanel Grid.Row="1" Grid.Column="0" Spacing="1" IsVisible="{Binding CanJudgeUp}">
                                                 <StackPanel Orientation="Horizontal" Spacing="3">
                                                     <TextBlock Text="{Binding UpCount}" FontSize="16" FontWeight="Bold" Foreground="#FF8000" />
                                                     <TextBlock Text="UP" FontSize="12" Foreground="#FF8000" Margin="0,0,0,1" />
                                                 </StackPanel>
-                                                <TextBlock Text="UP 数" FontSize="11" Foreground="{DynamicResource SemiColorText3}" />
+                                                <TextBlock Text="{loc:Localize Key=Gacha.UpCount}" FontSize="11" Foreground="{DynamicResource SemiColorText3}" />
                                             </StackPanel>
                                             <StackPanel Grid.Row="1" Grid.Column="1" Spacing="1" IsVisible="{Binding CanJudgeUp}">
                                                 <StackPanel Orientation="Horizontal" Spacing="3">
@@ -450,7 +451,7 @@
                                                     <TextBlock Text="%" FontSize="12" Foreground="#64B5F6" Margin="0,0,0,1"
                                                                IsVisible="{Binding OffBannerRate}" />
                                                 </StackPanel>
-                                                <TextBlock Text="不歪率" FontSize="11" Foreground="{DynamicResource SemiColorText3}" />
+                                                <TextBlock Text="{loc:Localize Key=Gacha.WinRateShort}" FontSize="11" Foreground="{DynamicResource SemiColorText3}" />
                                             </StackPanel>
                                         </Grid>
 
@@ -468,7 +469,7 @@
             </TabItem>
 
             <!-- 视图3:表格(Java CardTableShow) -->
-            <TabItem Header="表格">
+            <TabItem Header="{loc:Localize Key=Gacha.TabTable}">
                 <Grid RowDefinitions="Auto,*,Auto">
                     <ComboBox Grid.Row="0" ItemsSource="{Binding TablePoolTypes}" SelectedItem="{Binding SelectedTablePool, Mode=TwoWay}" Margin="0,0,0,8" />
                     <Border Grid.Row="1" CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="10">
@@ -480,7 +481,7 @@
                                                 Background="{DynamicResource SemiColorBg3}" CornerRadius="6">
                                             <Grid ColumnDefinitions="2*,65,70,1*,55,65,160">
                                                 <TextBlock Text="{Binding Record.Name}" FontSize="14" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{Binding Record.QualityLevel, StringFormat={}{0}星}" FontSize="14"
+                                                <TextBlock Grid.Column="1" Text="{Binding QualityLevelText}" FontSize="14"
                                                            Foreground="{Binding Record.QualityLevel, Converter={x:Static vm:QualityColorConverter.Instance}}" VerticalAlignment="Center" />
                                                 <TextBlock Grid.Column="2" Text="{Binding Record.ResourceType}" FontSize="14" Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
                                                 <TextBlock Grid.Column="3" Text="{Binding Record.CardPoolType}" FontSize="14" Foreground="{DynamicResource SemiColorText2}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
@@ -513,7 +514,7 @@
                         </StackPanel>
                         <ComboBox Grid.Column="1" Width="90" VerticalAlignment="Center"
                                   ItemsSource="{Binding PageSizeOptions}" SelectedItem="{Binding TablePageSize, Mode=TwoWay}" />
-                        <TextBlock Grid.Column="3" Text="{Binding TableTotalCount, StringFormat=共 {0} 条}" FontSize="12"
+                        <TextBlock Grid.Column="3" Text="{Binding TableTotalText}" FontSize="12"
                                    Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" HorizontalAlignment="Right" />
                     </Grid>
                 </Grid>

@@ -7,6 +7,7 @@
              xmlns:vm="using:McKuro.ViewModels"
              xmlns:controls="using:McKuro.Controls"
              xmlns:ic="using:FluentIcons.Avalonia"
+             xmlns:loc="clr-namespace:McKuro.Services"
              mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="700"
              x:Class="McKuro.Views.RolesView"
              x:DataType="vm:RolesViewModel">
@@ -33,7 +34,7 @@
             <StackPanel Spacing="2">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ic:FluentIcon Icon="Person" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
-                    <TextBlock Text="角色数据" FontSize="24" FontWeight="Bold" />
+                    <TextBlock Text="{loc:Localize Key=Nav.Roles}" FontSize="24" FontWeight="Bold" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <TextBlock Text="{Binding StatusText}"
@@ -45,7 +46,7 @@
                 </StackPanel>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <Button Content="同步" Command="{Binding LoadFromKujiequCommand}"
+                <Button Content="{loc:Localize Key=Common.Sync}" Command="{Binding LoadFromKujiequCommand}"
                         IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
             </StackPanel>
         </Grid>
@@ -60,7 +61,7 @@
                       SelectedItem="{Binding SelectedSort, Mode=TwoWay}" />
             <TextBlock Grid.Column="3" VerticalAlignment="Center" FontSize="12"
                        Foreground="{DynamicResource SemiColorText3}"
-                       Text="「同步」仅拉取角色列表;点击角色卡片时按需获取该角色完整详情" />
+                       Text="{loc:Localize Key=Roles.SyncHint}" />
         </Grid>
 
         <!-- 内容:角色列表 + 详情 -->
@@ -105,7 +106,7 @@
                                             HorizontalAlignment="Right" VerticalAlignment="Top" Opacity="0.9"
                                             IsVisible="{Binding ChainCount, Converter={StaticResource GreaterThanZero}}">
                                         <TextBlock FontSize="9" Foreground="{Binding Converter={StaticResource EmphasisBrush}}" FontWeight="Bold">
-                                            <Run Text="{Binding UnlockedChainCount}" /><Run Text="链" />
+                                            <Run Text="{Binding UnlockedChainCount}" /><Run Text="{loc:Localize Key=Roles.ChainSuffix}" />
                                         </TextBlock>
                                     </Border>
                                 </Grid>
@@ -175,9 +176,9 @@
                                     </StackPanel>
                                     <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
                                         <Run Text="Lv." /><Run Text="{Binding SelectedRole.Role.Level}" />
-                                        <Run Text=" · 突破 " /><Run Text="{Binding SelectedRole.Role.Breach}" />
+                                        <Run Text="{loc:Localize Key=Roles.Breach}" /><Run Text="{Binding SelectedRole.Role.Breach}" />
                                         <Run Text=" · " /><Run Text="{Binding SelectedRole.AttributeName}" />
-                                        <Run Text=" · 共鸣链 " /><Run Text="{Binding SelectedRole.UnlockedChainCount}" />
+                                        <Run Text="{loc:Localize Key=Roles.Chain}" /><Run Text="{Binding SelectedRole.UnlockedChainCount}" />
                                         <Run Text="/" /><Run Text="{Binding SelectedRole.ChainCount}" />
                                     </TextBlock>
                                 </StackPanel>
@@ -198,8 +199,8 @@
                                             <TextBlock FontSize="12"
                                                        Foreground="{DynamicResource SemiColorText2}">
                                                 <Run Text="Lv." /><Run Text="{Binding SelectedRole.WeaponData.Level}" />
-                                                <Run Text=" · 突破" /><Run Text="{Binding SelectedRole.WeaponData.Breach}" />
-                                                <Run Text=" · 精炼" /><Run Text="{Binding SelectedRole.WeaponData.Rank}" />
+                                                <Run Text="{loc:Localize Key=Roles.BreachShort}" /><Run Text="{Binding SelectedRole.WeaponData.Breach}" />
+                                                <Run Text="{loc:Localize Key=Roles.Refine}" /><Run Text="{Binding SelectedRole.WeaponData.Rank}" />
                                             </TextBlock>
                                         </StackPanel>
                                     </StackPanel>
@@ -242,7 +243,7 @@
                                 Background="{DynamicResource SemiColorBg3}"
                                 IsVisible="{Binding SelectedRole.HasAttributes}">
                             <StackPanel Spacing="8">
-                                <TextBlock Text="属性" FontSize="13" FontWeight="Bold"
+                                <TextBlock Text="{loc:Localize Key=Roles.Attributes}" FontSize="13" FontWeight="Bold"
                                            Foreground="{DynamicResource SemiColorText2}" />
                                 <ItemsControl ItemsSource="{Binding SelectedRole.Attributes}">
                                     <ItemsControl.ItemsPanel>
@@ -283,7 +284,7 @@
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <ic:FluentIcon Icon="Link" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                                        <TextBlock Text="共鸣链" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                                        <TextBlock Text="{loc:Localize Key=Roles.Chain}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
                                     </StackPanel>
                                     <TextBlock FontSize="13" FontWeight="Bold"
                                                Foreground="{DynamicResource SemiColorPrimary}">
@@ -329,7 +330,7 @@
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <ic:FluentIcon Icon="ChatBubblesQuestion" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                                        <TextBlock Text="mcguide 官方达成度" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                                        <TextBlock Text="{loc:Localize Key=Roles.GuideAchievement}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
                                     </StackPanel>
                                     <TextBlock Text="{Binding GuideStatusText}" FontSize="12"
                                                Foreground="{DynamicResource SemiColorText2}"
@@ -348,19 +349,19 @@
                                         <!-- 概览:属性/共鸣链/声骸达标 -->
                                         <StackPanel Spacing="4" VerticalAlignment="Center">
                                             <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
-                                                <Run Text="属性达标 " />
+                                                <Run Text="{loc:Localize Key=Roles.AttrMet}" />
                                                 <Run Text="{Binding GuideAchievement.RoleAttribute.FinishedCount}" />
                                                 <Run Text="/" />
                                                 <Run Text="{Binding GuideAchievement.RoleAttribute.TotalCount}" />
                                             </TextBlock>
                                             <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
-                                                <Run Text="共鸣链 " />
+                                                <Run Text="{loc:Localize Key=Roles.ChainShort}" />
                                                 <Run Text="{Binding GuideAchievement.RoleResonance.AcquiredCount}" />
                                                 <Run Text="/" />
                                                 <Run Text="{Binding GuideAchievement.RoleResonance.TotalCount}" />
                                             </TextBlock>
                                             <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
-                                                <Run Text="声骸 " />
+                                                <Run Text="{loc:Localize Key=Roles.EchoShort}" />
                                                 <Run Text="{Binding GuideAchievement.Echo.IsFinished, Converter={StaticResource NullableBoolToText}}" />
                                             </TextBlock>
                                         </StackPanel>
@@ -385,8 +386,8 @@
                                                         </TextBlock>
                                                         <TextBlock FontSize="11"
                                                                    Foreground="{DynamicResource SemiColorText2}">
-                                                            <Run Text="推荐 " /><Run Text="{Binding RecommendAmount}" />
-                                                            <Run Text=" · 当前 " /><Run Text="{Binding CurrentAmount}" />
+                                                            <Run Text="{loc:Localize Key=Roles.Recommend}" /><Run Text="{Binding RecommendAmount}" />
+                                                            <Run Text="{loc:Localize Key=Roles.Current}" /><Run Text="{Binding CurrentAmount}" />
                                                         </TextBlock>
                                                     </StackPanel>
                                                 </Border>
@@ -399,7 +400,7 @@
 
                         <!-- ④ 声骸 (WutheringWavesTool Phantom 风格) -->
                         <StackPanel Spacing="6" IsVisible="{Binding SelectedRole.HasPhantoms}">
-                            <TextBlock Text="声骸" FontSize="13" FontWeight="Bold"
+                            <TextBlock Text="{loc:Localize Key=Roles.Echoes}" FontSize="13" FontWeight="Bold"
                                        Foreground="{DynamicResource SemiColorText2}" />
                             <ItemsControl ItemsSource="{Binding SelectedRole.PhantomData.Phantoms}">
                                 <ItemsControl.ItemsPanel>
@@ -429,7 +430,7 @@
                                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                                             <TextBlock FontSize="13" FontWeight="Bold"
                                                                        Foreground="{Binding PhantomStatus, Converter={StaticResource EchoRatingLevelBrush}}">
-                                                                <Run Text="词条:" /><Run Text="{Binding PhantomRatingText}" />
+                                                                <Run Text="{loc:Localize Key=Roles.StatsPrefix}" /><Run Text="{Binding PhantomRatingText}" />
                                                             </TextBlock>
                                                         </StackPanel>
                                                         <StackPanel Orientation="Horizontal" Spacing="6">
@@ -441,9 +442,9 @@
                                                         <TextBlock FontSize="13"
                                                                    Foreground="{DynamicResource SemiColorText2}">
                                                             <Run Text="Lv." /><Run Text="{Binding Level}" />
-                                                            <Run Text=" · 品质" /><Run Text="{Binding Quality}" />
+                                                            <Run Text="{loc:Localize Key=Roles.Quality}" /><Run Text="{Binding Quality}" />
                                                             <Run Text=" · " /><Run Text="{Binding Cost}" />
-                                                            <Run Text="费" />
+                                                            <Run Text="{loc:Localize Key=Roles.CostSuffix}" />
                                                         </TextBlock>
                                                     </StackPanel>
                                                 </StackPanel>
@@ -500,9 +501,9 @@
         <!-- 空状态 -->
         <StackPanel Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
                     IsVisible="{Binding !HasRoles}">
-            <TextBlock Text="暂无角色数据" FontSize="18" Foreground="{DynamicResource SemiColorText2}"
+            <TextBlock Text="{loc:Localize Key=Roles.NoData}" FontSize="18" Foreground="{DynamicResource SemiColorText2}"
                        HorizontalAlignment="Center" />
-            <TextBlock Text="点击右上角「同步」拉取当前账号的角色列表,再点击角色卡片查看该角色的完整详情。"
+            <TextBlock Text="{loc:Localize Key=Roles.NoDataDesc}"
                        FontSize="13" Foreground="{DynamicResource SemiColorText3}"
                        HorizontalAlignment="Center" />
         </StackPanel>

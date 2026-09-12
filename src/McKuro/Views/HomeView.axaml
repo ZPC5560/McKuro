@@ -6,6 +6,7 @@
              xmlns:controls="using:McKuro.Controls"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:ic="using:FluentIcons.Avalonia"
+             xmlns:loc="clr-namespace:McKuro.Services"
              mc:Ignorable="d" d:DesignWidth="1040" d:DesignHeight="720"
              x:Class="McKuro.Views.HomeView"
              x:DataType="vm:HomeViewModel">
@@ -65,7 +66,7 @@
                     <!-- ─── 左:欢迎标题区(splash-left) ─── -->
                     <StackPanel Grid.Column="0" MaxWidth="420" VerticalAlignment="Center" Spacing="0">
                         <!-- 签名行 -->
-                        <TextBlock Text="MCKURO · 鸣潮启动器" FontSize="12" FontWeight="Light"
+                        <TextBlock Text="{loc:Localize Key=Home.Brand}" FontSize="12" FontWeight="Light"
                                    LetterSpacing="3" Foreground="{DynamicResource McKuroTextMuted}" />
                         <!-- 发光发丝分隔线 -->
                         <Border Width="36" Height="1" Margin="0,22,0,26" HorizontalAlignment="Left"
@@ -85,12 +86,12 @@
                         <!-- 描述文字(宋体感、行高 2、部分白色高亮) -->
                         <TextBlock Margin="0,30,0,0" FontSize="15.5" LineHeight="2" Foreground="{DynamicResource McKuroTextMuted}"
                                    TextWrapping="Wrap">
-                            <Run Text="潮起潮落，回声常在。" />
-                            <Run Text="管理你的冒险、角色与数据。" Foreground="{DynamicResource McKuroTextOnWallpaper}" FontWeight="Bold" />
+                            <Run Text="{loc:Localize Key=Home.Slogan1}" />
+                            <Run Text="{loc:Localize Key=Home.Slogan2}" Foreground="{DynamicResource McKuroTextOnWallpaper}" FontWeight="Bold" />
                         </TextBlock>
                         <!-- 次要描述(细体、浅色) -->
                         <TextBlock Margin="0,8,0,0" FontSize="13" FontWeight="Light" Foreground="{DynamicResource McKuroTextMuted}"
-                                   TextWrapping="Wrap" Text="游戏启动 · 抽卡分析 · 角色数据 · 每日数据一览" />
+                                   TextWrapping="Wrap" Text="{loc:Localize Key=Home.Features}" />
                         <!-- 安装状态 / 服务器渠道 -->
                         <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
                             <TextBlock Text="{Binding InstallStateText}" FontSize="12" Foreground="{DynamicResource McKuroTextMuted}" />
@@ -99,9 +100,9 @@
                         </StackPanel>
                         <!-- 半透明描边按钮 -->
                         <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,34,0,0">
-                            <Button Content="进入游戏" Classes="splashBtn" Command="{Binding GoLauncherCommand}" />
-                            <Button Content="抽卡分析" Classes="splashBtn" Command="{Binding GoGachaCommand}" />
-                            <Button Content="角色数据" Classes="splashBtn" Command="{Binding GoRolesCommand}" />
+                            <Button Content="{loc:Localize Key=Home.EnterGame}" Classes="splashBtn" Command="{Binding GoLauncherCommand}" />
+                            <Button Content="{loc:Localize Key=Home.GoGacha}" Classes="splashBtn" Command="{Binding GoGachaCommand}" />
+                            <Button Content="{loc:Localize Key=Home.GoRoles}" Classes="splashBtn" Command="{Binding GoRolesCommand}" />
                         </StackPanel>
                         <!-- 跳过/提示小字 -->
                         <TextBlock Margin="0,18,0,0" FontSize="12" FontWeight="Light" Foreground="{DynamicResource McKuroTextMuted}"
@@ -142,7 +143,7 @@
                                             <Border CornerRadius="9" Background="{DynamicResource McKuroAccent}"
                                                     Padding="8,2" IsVisible="{Binding IsLaunchPlayer}"
                                                     ToolTip.Tip="{Binding RegisterText}">
-                                                <TextBlock Text="开服玩家" FontSize="12" FontWeight="Bold" Foreground="White" />
+                                                <TextBlock Text="{loc:Localize Key=Home.LaunchVeteran}" FontSize="12" FontWeight="Bold" Foreground="White" />
                                             </Border>
                                         </StackPanel>
                                     </StackPanel>
@@ -161,7 +162,7 @@
                             </Border>
 
                             <StackPanel Spacing="4">
-                                <TextBlock Text="今日数据" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                <TextBlock Text="{loc:Localize Key=Home.TodayStats}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource McKuroTextOnWallpaper}" />
                             </StackPanel>
                             <ItemsControl ItemsSource="{Binding DailyItems}">
                                 <ItemsControl.ItemsPanel>

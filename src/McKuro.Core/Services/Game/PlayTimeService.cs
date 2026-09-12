@@ -74,16 +74,16 @@ public sealed class PlayTimeWeeklyReport
     public string PeakDayDetail { get; init; } = "";
     /// <summary>时段偏好标签(夜猫型/清晨型/午后型/深夜型)。</summary>
     public string HabitTag { get; init; } = "--";
-    public string HabitDetail { get; init; } = "暂无时段分布数据";
+    public string HabitDetail { get; init; } = CoreStrings.T("PT.HabitNone", "暂无时段分布数据");
     /// <summary>作息规律度标签(很规律/较规律/随性,按每天首次开场时刻的波动)。</summary>
     public string RegularityTag { get; init; } = "--";
-    public string RegularityDetail { get; init; } = "暂无开场数据";
+    public string RegularityDetail { get; init; } = CoreStrings.T("PT.RegNone", "暂无开场数据");
     /// <summary>游玩方式标签(碎片轻玩/中度游玩/长时沉浸,按单次会话平均长度)。</summary>
     public string StyleTag { get; init; } = "--";
-    public string StyleDetail { get; init; } = "暂无会话数据";
+    public string StyleDetail { get; init; } = CoreStrings.T("PT.StyleNone", "暂无会话数据");
     /// <summary>周内趋势标签(后程发力/逐步收手/节奏稳定)。</summary>
     public string TrendTag { get; init; } = "--";
-    public string TrendDetail { get; init; } = "暂无趋势数据";
+    public string TrendDetail { get; init; } = CoreStrings.T("PT.TrendNone", "暂无趋势数据");
     /// <summary>自动生成的整段总结文字。</summary>
     public string SummaryText { get; init; } = "";
 
@@ -485,16 +485,24 @@ public sealed partial class PlayTimeService
                 hb = i;
             }
         }
-        string[] habitTags = ["深夜型", "清晨型", "午后型", "夜猫型"];
-        string[] bucketNames = ["凌晨 0-6 点", "上午 6-12 点", "午后 12-18 点", "晚间 18-24 点"];
+        string[] habitTags =
+        [
+            CoreStrings.T("PT.HabitLateNight", "深夜型"), CoreStrings.T("PT.HabitMorning", "清晨型"),
+            CoreStrings.T("PT.HabitAfternoon", "午后型"), CoreStrings.T("PT.HabitNightOwl", "夜猫型"),
+        ];
+        string[] bucketNames =
+        [
+            CoreStrings.T("PT.BucketEarly", "凌晨 0-6 点"), CoreStrings.T("PT.BucketMorning", "上午 6-12 点"),
+            CoreStrings.T("PT.BucketAfternoon", "午后 12-18 点"), CoreStrings.T("PT.BucketEvening", "晚间 18-24 点"),
+        ];
         long bucketSum = buckets.Sum();
         string habitTag = "--";
-        string habitDetail = "暂无时段分布数据";
+        string habitDetail = CoreStrings.T("PT.HabitNone", "暂无时段分布数据");
         if (bucketSum > 0)
         {
             int share = (int)Math.Round(buckets[hb] * 100.0 / bucketSum);
             habitTag = habitTags[hb];
-            habitDetail = $"时长占比最高的时段是{bucketNames[hb]},约 {share}%";
+            habitDetail = CoreStrings.F("PT.HabitDetail", $"时长占比最高的时段是{bucketNames[hb]},约 {share}%", bucketNames[hb], share);
         }
 
         // ── 作息规律度:每天第一次开玩时刻的波动(标准差)──
@@ -509,25 +517,25 @@ public sealed partial class PlayTimeService
             }
         }
         string regTag = "--";
-        string regDetail = "暂无开场数据";
+        string regDetail = CoreStrings.T("PT.RegNone", "暂无开场数据");
         if (firstStartMin.Count >= 2)
         {
             double mean = firstStartMin.Average();
             double sigma = Math.Sqrt(firstStartMin.Average(v => (v - mean) * (v - mean)));
             var meanTime = DateTime.Today.AddMinutes(mean);
-            regTag = sigma switch { <= 45 => "很规律", <= 90 => "较规律", _ => "随性" };
-            regDetail = $"开场平均 {meanTime:HH:mm},日常波动约 ±{(int)Math.Round(sigma)} 分钟";
+            regTag = sigma switch { <= 45 => CoreStrings.T("PT.RegVeryRegular", "很规律"), <= 90 => CoreStrings.T("PT.RegFairlyRegular", "较规律"), _ => CoreStrings.T("PT.RegCasual", "随性") };
+            regDetail = CoreStrings.F("PT.RegDetail", $"开场平均 {meanTime:HH:mm},日常波动约 ±{(int)Math.Round(sigma)} 分钟", meanTime.ToString("HH:mm"), (int)Math.Round(sigma));
         }
 
         // ── 游玩方式:单次会话的平均长度 ──
         var allSessions = a.Last7DaysSessions.SelectMany(x => x ?? []).ToList();
         string styleTag = "--";
-        string styleDetail = "暂无会话数据";
+        string styleDetail = CoreStrings.T("PT.StyleNone", "暂无会话数据");
         if (allSessions.Count > 0)
         {
             double avgSession = allSessions.Average(s => (double)s.Minutes);
-            styleTag = avgSession switch { < 30 => "碎片轻玩", < 90 => "中度游玩", _ => "长时沉浸" };
-            styleDetail = $"共 {allSessions.Count} 次游玩,单次平均 {(int)Math.Round(avgSession)} 分钟";
+            styleTag = avgSession switch { < 30 => CoreStrings.T("PT.StyleFragmented", "碎片轻玩"), < 90 => CoreStrings.T("PT.StyleModerate", "中度游玩"), _ => CoreStrings.T("PT.StyleImmersive", "长时沉浸") };
+            styleDetail = CoreStrings.F("PT.StyleDetail", $"共 {allSessions.Count} 次游玩,单次平均 {(int)Math.Round(avgSession)} 分钟", allSessions.Count, (int)Math.Round(avgSession));
         }
 
         // ── 周内趋势:前半周(前 3 天) vs 后半周(后 4 天),按日均对比消除天数不对等 ──
@@ -538,42 +546,42 @@ public sealed partial class PlayTimeService
         if (firstHalf <= 0 && secondHalf <= 0)
         {
             trendTag = "--";
-            trendDetail = "暂无趋势数据";
+            trendDetail = CoreStrings.T("PT.TrendNone", "暂无趋势数据");
         }
         else if (firstHalf <= 0)
         {
-            trendTag = "渐入状态";
-            trendDetail = "前半周未游玩,后半周开始活跃";
+            trendTag = CoreStrings.T("PT.TrendWarming", "渐入状态");
+            trendDetail = CoreStrings.T("PT.TrendWarmingDetail", "前半周未游玩,后半周开始活跃");
         }
         else
         {
             double pct = ((secondHalf / 4.0) - (firstHalf / 3.0)) * 100.0 / (firstHalf / 3.0);
-            trendTag = pct switch { >= 15 => "后程发力", <= -15 => "逐步收手", _ => "节奏稳定" };
-            trendDetail = $"后半周日均比前半周{(pct >= 0 ? "高" : "低")}{Math.Abs(pct):0}%";
+            trendTag = pct switch { >= 15 => CoreStrings.T("PT.TrendRising", "后程发力"), <= -15 => CoreStrings.T("PT.TrendEasing", "逐步收手"), _ => CoreStrings.T("PT.TrendSteady", "节奏稳定") };
+            trendDetail = CoreStrings.F("PT.TrendDetail", $"后半周日均比前半周{(pct >= 0 ? "高" : "低")}{Math.Abs(pct):0}%", CoreStrings.T(pct >= 0 ? "PT.Higher" : "PT.Lower", pct >= 0 ? "高" : "低"), Math.Abs(pct).ToString("0"));
         }
 
         // ── 自动总结 ──
         var parts = new List<string>
         {
-            $"最近 7 天共 {playedDays} 天有游玩,累计 {FormatDuration(total)},日均约 {FormatMinutes((long)Math.Round(avgMin))}",
+            CoreStrings.F("PT.SummaryMain", $"最近 7 天共 {playedDays} 天有游玩,累计 {FormatDuration(total)},日均约 {FormatMinutes((long)Math.Round(avgMin))}", playedDays, FormatDuration(total), FormatMinutes((long)Math.Round(avgMin))),
         };
         if (bucketSum > 0)
         {
-            parts.Add($"游玩主要集中在{bucketNames[hb]}({habitTag})");
+            parts.Add(CoreStrings.F("PT.SummaryHabit", $"游玩主要集中在{bucketNames[hb]}({habitTag})", bucketNames[hb], habitTag));
         }
         if (firstStartMin.Count >= 2)
         {
-            parts.Add($"开场时间{regTag}");
+            parts.Add(CoreStrings.F("PT.SummaryReg", $"开场时间{regTag}", regTag));
         }
         if (allSessions.Count > 0)
         {
-            parts.Add($"{styleTag},单次平均 {(int)Math.Round(allSessions.Average(s => (double)s.Minutes))} 分钟");
+            parts.Add(CoreStrings.F("PT.SummaryStyle", $"{styleTag},单次平均 {(int)Math.Round(allSessions.Average(s => (double)s.Minutes))} 分钟", styleTag, (int)Math.Round(allSessions.Average(s => (double)s.Minutes))));
         }
         if (trendTag != "--")
         {
-            parts.Add($"整体{trendTag}");
+            parts.Add(CoreStrings.F("PT.SummaryTrend", $"整体{trendTag}", trendTag));
         }
-        string summary = string.Join(";", parts) + "。";
+        string summary = string.Join(";", parts) + CoreStrings.T("PT.SummaryEnd", "。");
 
         return new PlayTimeWeeklyReport
         {
@@ -582,7 +590,7 @@ public sealed partial class PlayTimeService
             AvgPerDayText = FormatMinutes((long)Math.Round(avgMin)),
             LongestSessionText = longestMin > 0 ? FormatMinutes(longestMin) : "--",
             LongestSessionDayText = longestMin > 0 ? longestDay.ToString("MM/dd") : "",
-            StreakText = $"{streak} 天",
+            StreakText = CoreStrings.F("PT.StreakDays", $"{streak} 天", streak),
             PeakDayText = dates[peak] == DateTime.MinValue ? "--" : dates[peak].ToString("MM/dd"),
             PeakDayDetail = FormatDuration(a.Last7DaysSeconds[peak]),
             HabitTag = habitTag,

@@ -7,6 +7,7 @@
              xmlns:controls="using:McKuro.Controls"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:ic="using:FluentIcons.Avalonia"
+             xmlns:loc="clr-namespace:McKuro.Services"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.LauncherView"
              x:DataType="vm:LauncherViewModel">
@@ -95,7 +96,7 @@
                                                            Foreground="{DynamicResource McKuroTextOnWallpaper}" />
                                         </Border>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                                            <TextBlock Text="鸣潮 · 启动器" FontSize="14" FontWeight="Bold"
+                                            <TextBlock Text="{loc:Localize Key=Launcher.Title}" FontSize="14" FontWeight="Bold"
                                                        Foreground="{DynamicResource McKuroTextOnWallpaper}" />
                                             <TextBlock Text="{Binding InstallStateText}" FontSize="11"
                                                        Foreground="{DynamicResource SemiColorText2}" />
@@ -104,13 +105,13 @@
                                     <!-- 版本信息(本地/服务端):整卡由 HasUpdate 控制显隐 -->
                                     <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="12">
                                         <StackPanel Spacing="1">
-                                            <TextBlock Text="服务端版本" FontSize="9"
+                                            <TextBlock Text="{loc:Localize Key=Launcher.ServerVersion}" FontSize="9"
                                                        Foreground="{DynamicResource SemiColorText2}" />
                                             <TextBlock Text="{Binding ServerVersionText}" FontSize="12" FontWeight="Bold"
                                                        Foreground="{DynamicResource McKuroTextOnWallpaper}" />
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Spacing="1">
-                                            <TextBlock Text="本地版本" FontSize="9"
+                                            <TextBlock Text="{loc:Localize Key=Launcher.LocalVersion}" FontSize="9"
                                                        Foreground="{DynamicResource SemiColorText2}" />
                                             <TextBlock Text="{Binding GameVersionText}" FontSize="12" FontWeight="Bold"
                                                        Foreground="{DynamicResource McKuroTextOnWallpaper}" />
@@ -128,7 +129,7 @@
                                             <StackPanel Orientation="Horizontal" Spacing="5">
                                                 <ic:FluentIcon Icon="Folder" IconVariant="Regular" IconSize="Size16"
                                                                Foreground="{DynamicResource McKuroTextOnWallpaper}" VerticalAlignment="Center" />
-                                                <TextBlock Text="打开目录" FontSize="11" VerticalAlignment="Center"
+                                                <TextBlock Text="{loc:Localize Key=Launcher.OpenDir}" FontSize="11" VerticalAlignment="Center"
                                                            Foreground="{DynamicResource McKuroTextOnWallpaper}" />
                                             </StackPanel>
                                         </Button>
@@ -139,7 +140,7 @@
                                             <StackPanel Orientation="Horizontal" Spacing="5">
                                                 <ic:FluentIcon Icon="Wrench" IconVariant="Regular" IconSize="Size16"
                                                                Foreground="{DynamicResource McKuroTextOnWallpaper}" VerticalAlignment="Center" />
-                                                <TextBlock Text="修复游戏" FontSize="11" VerticalAlignment="Center"
+                                                <TextBlock Text="{loc:Localize Key=Launcher.RepairGame}" FontSize="11" VerticalAlignment="Center"
                                                            Foreground="{DynamicResource McKuroTextOnWallpaper}" />
                                             </StackPanel>
                                         </Button>
@@ -281,7 +282,7 @@
                             </Style>
                         </Button.Styles>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" VerticalAlignment="Center">
-                            <TextBlock Text="下载安装" FontSize="15" FontWeight="Bold" />
+                            <TextBlock Text="{loc:Localize Key=Launcher.DownloadInstall}" FontSize="15" FontWeight="Bold" />
                             <TextBlock Text="{Binding ServerVersionText}" FontSize="11" />
                         </StackPanel>
                     </Button>
@@ -323,7 +324,7 @@
                             IsVisible="{Binding ShowInstallUpdate}"
                             HorizontalAlignment="Stretch">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" VerticalAlignment="Center">
-                            <TextBlock Text="安装更新" FontSize="15" FontWeight="Bold" />
+                            <TextBlock Text="{loc:Localize Key=Launcher.InstallUpdate}" FontSize="15" FontWeight="Bold" />
                             <TextBlock Text="{Binding ServerVersionText}" FontSize="11" />
                         </StackPanel>
                     </Button>

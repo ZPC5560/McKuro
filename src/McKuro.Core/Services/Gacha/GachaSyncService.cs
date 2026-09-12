@@ -53,14 +53,14 @@ public sealed class GachaSyncService : IGachaSyncService
         var logFile = _pathResolver.ClientLogPath;
         if (logFile is null)
         {
-            return new GachaSyncResult { Status = GachaSyncStatus.GameDirNotSet, Message = "未设置游戏目录" };
+            return new GachaSyncResult { Status = GachaSyncStatus.GameDirNotSet, Message = CoreStrings.T("Core.Gacha.NoGameDir", "未设置游戏目录") };
         }
         if (!File.Exists(logFile))
         {
             return new GachaSyncResult
             {
                 Status = GachaSyncStatus.ClientLogNotFound,
-                Message = $"未找到日志文件: {logFile}",
+                Message = CoreStrings.F("Core.Gacha.LogNotFound", $"未找到日志文件: {logFile}", logFile),
             };
         }
 
@@ -71,7 +71,7 @@ public sealed class GachaSyncService : IGachaSyncService
             return new GachaSyncResult
             {
                 Status = GachaSyncStatus.RecordUrlNotFound,
-                Message = "日志中未找到抽卡记录链接(请先在游戏中打开一次抽卡记录页面)",
+                Message = CoreStrings.T("Core.Gacha.NoGachaUrl", "日志中未找到抽卡记录链接(请先在游戏中打开一次抽卡记录页面)"),
             };
         }
 
@@ -81,7 +81,7 @@ public sealed class GachaSyncService : IGachaSyncService
             return new GachaSyncResult
             {
                 Status = GachaSyncStatus.InvalidRequestParams,
-                Message = "抽卡记录链接参数不完整",
+                Message = CoreStrings.T("Core.Gacha.GachaUrlIncomplete", "抽卡记录链接参数不完整"),
             };
         }
 
