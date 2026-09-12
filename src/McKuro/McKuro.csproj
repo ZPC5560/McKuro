@@ -45,6 +45,7 @@
          比 LibVLC vmem 回调稳定(Native AOT 安全:LoadLibrary + GetProcAddress → Marshal.GetDelegateForFunctionPointer,无反射)。
          Windows native 库由 Endpne.LibMPV.Windows 内置(自动拷到输出 libmpv\win-x64\libmpv-2.dll);
          mac/Linux 用系统/Homebrew libmpv(resolver 内置搜索 + MpvApi.RootPath 兜底)。 -->
+    <PackageReference Include="Sparkle.Live2DView" Version="0.1.1" />
     <PackageReference Include="HanumanInstitute.LibMpv" Version="0.10.1" />
     <PackageReference Include="Endpne.LibMPV.Windows" Version="0.41.0" Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(RuntimeIdentifier)' == 'win-arm64' Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')" />
   </ItemGroup>
