@@ -102,3 +102,46 @@
 | What's the goal? | 制定 McKuro 动态壁纸、自适应玻璃主题和视频修复方案 |
 | What have I learned? | 见 `findings.md` |
 | What have I done? | 已完成现状盘点、视觉规范、技术架构和验收标准 |
+
+---
+
+## Session: 2026-09-12(v1.2.3 发布 + 全量本地化 + 资讯英文源 + Live2D)
+
+### Actions
+- 修复启动页视频红黑色块/加载失败:`VideoBackgroundControl` 会话代号守卫全面替换 `_disposed` 检查,GL 未接管渲染器的过期拆除,GL 上下文创建 try-catch;`LauncherViewModel` 自定义壁纸生效时跳过官方视频 URL 消除双重切换触发点
+- 修复中英文切换失效(语言资源无任何消费点):双语资源 122→711 key,全部 11 页 XAML + 各 VM 动态消息消费 `LanguageService`;新增 `CoreStrings` 网关打通 Core 层约 60 条展示文案(单测回退中文,断言零改动);`DailyAutoRunSchedule` 文案决策移回调用方;测试 ModuleInitializer 加载 zh-Hans
+- 全页面实测英文界面(逐页截图),设置页 Live2D 区块与 mac 优雅降级实测
+- 资讯页英文适配:轮播 B站官方多语言 PV 分P接口查【英】内嵌播放(p= 参数);快捷链接英文界面切全球官方源;公告分组为空时自动选中第一个非空标签;试验国际服英文内容包后因数据质量(机翻/无封面/条目稀疏)回退国服数据源
+- 兑换码英文界面按官方译名术语表展示接口内容(未知条目保留原文)
+- 新增首页 Live2D 模型(参考 Sparkle.Live2DView):NuGet 控件 + `Live2DLocator`(Core DLL 定位/AddDllDirectory)+ `Live2DModelHost` 复用宿主控件 + 设置页(启用/导入/模型选择/实时预览/缩放位置透明度滑条)+ 首页纯展示叠加层;仅 Windows x64,其他平台灰显
+- 发布 v1.2.3:版本号(csproj + setup.iss)→ 分主题提交 → tag → CI 全平台构建;修复 CI 两个问题(Release 不自动创建 → 手建后重跑;提交误排除 csproj 致包引用缺失 → 补提交),11 个发布资产全部挂齐
+- 更新 README 与开发文档
+
+### Files
+- `src/McKuro/Controls/VideoBackgroundControl.cs`(竞态修复)
+- `src/McKuro/Controls/Live2DModelHost.cs`、`src/McKuro/Services/Live2DLocator.cs`(新增)
+- `src/McKuro/Views/*.axaml`、`src/McKuro/ViewModels/*.cs`、`src/McKuro/MainWindow.axaml`(本地化消费)
+- `src/McKuro.Core/Services/CoreStrings.cs`(新增)、`src/McKuro.Core/Services/**`(约 60 条文案网关化)
+- `src/McKuro/Assets/lang/zh-Hans.json`、`en-US.json`(711 key)
+- `tests/McKuro.Tests/TestBootstrap.cs`(新增)、`DailyAutoRunScheduleTests.cs`(纯函数化适配)
+- `src/McKuro/McKuro.csproj`、`installer/setup.iss`(1.2.3)
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| xUnit 全量 | McKuro.Tests | 全部通过 | 398/398 Pass | Pass |
+| 视频竞态场景 | 自定义壁纸 + 默认启动页=启动页,连续冷启动 | 视频稳定播放无花屏 | 多次复验稳定(修复前存在竞态窗口) | Pass |
+| 英文界面 | Language=en-US 冷启动逐页截图 | 界面完整英文 | 10 页实测通过 | Pass |
+| 中文回归 | Language=zh-Hans 冷启动 | 中文界面正常 | 通过 | Pass |
+| 兑换码内容翻译 | en-US + 官方接口数据 | 已知术语英文/未知保留原文 | "v3.6 Livestream / Astrite*100" 等 | Pass |
+| B站 PV 英文分P | en-US 资讯页轮播 | 播【英】分P | pagelist 命中 p3,内嵌播放 | Pass |
+| Live2D 优雅降级 | macOS 设置页/首页 | 区块灰显指引,首页无渲染器 | 通过 | Pass |
+| Windows AOT 发布 | CI win-x64 publish | AOT 编译含 Live2D 包成功 | 首跑失败(csproj 误排除)→ 补提交后成功 | Pass(修复后) |
+
+### Error Log
+| Timestamp | Error | Attempt | Resolution |
+|-----------|-------|---------|------------|
+| 2026-09-12 | CI Linux/Windows 构建失败 CS0246 'Sparkle' | 1 | 提交时误排除 McKuro.csproj 致包引用未上 main,补提交 |
+| 2026-09-12 | CI 挂载资产失败 "release not found" | 1 | 工作流不创建 Release,手建 v1.2.3 后 rerun failed jobs |
+| 2026-09-12 | YouTube embed 153/152-4 | 3 | 153 用 iframe 包装+baseURL 可解;152-4 受代理/区域影响 → 放弃 YouTube,改 B站分P方案 |
+| 2026-09-12 | 4 个测试文案断言失败 | 1 | 测试进程未加载语言资源返回 key 本身 → ModuleInitializer 加载 zh-Hans |

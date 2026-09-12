@@ -102,3 +102,30 @@
 
 ## Visual/Browser Findings
 - 尚未运行应用或检查截图。
+
+---
+
+## Findings — 2026-09(v1.2.3 发布与 Live2D 功能)
+
+### 视频竞态(启动页红黑色块根因)
+- `VideoBackgroundControl` 用 `_disposed` 做异步守卫,但 `TryStartVideo` 每次会话都会把它重置为 false —— 旧会话在途的 GL 初始化/看门狗/下载续体醒来后误判为当前会话,在新 mpv 上建第二个渲染上下文。mpv 每实例只允许一个 render context,第二个创建失败后 GL 层显示未初始化 FBO 垃圾帧(红黑色块)或会话被异常杀死(回退静态图)。
+- 自定义壁纸启动必触发:官方背景 URL 到达后又立即被自定义路径覆盖,同一调用栈连续两次 `TryStartVideo`;切换页面再回来重建单一会话所以自愈。
+- 修复模式:**会话代号守卫**(`_imageGeneration` 每会话自增,续体捕获并验证,`Stale(gen)` 取代 `_disposed` 检查);已初始化但未接管的 GL 渲染器在会话过期时必须显式拆除(否则残留视觉树用已释放句柄渲染);GL 上下文创建要 try-catch,不能把异常抛进 Avalonia 渲染线程。
+
+### 本地化
+- 此前语言切换完全失效的根因:`LocalizeExtension`/`LanguageService` 无任何消费点,资源 122 key 是孤儿。
+- 全量本地化的两个架构点:① Core 层不引用应用层 → `CoreStrings.T(key, 中文回退)` 网关,应用启动注册解析器,单测未注册回退原文使现有断言零改动;② 测试程序集 ModuleInitializer 加载 zh-Hans,避免"缺 key 返回 key 本身"污染断言。
+- `Directory.Build.props` 默认 Configuration=Release 的行为会影响本地 dotnet test 的调试体验(解决方案级构建需显式 -c)。
+
+### 资讯页英文源(实测结论)
+- 国际服启动器内容包 `G153/information/en.json`(prod-alicdn 主机)有完整英文公告,但**质量不可用**:机翻标题、无封面图、活动分组 functionSwitch=0 常空 —— 已回退为始终跟随服务器设置。
+- 官方 B站 PV(版本 PV/共鸣者 PV/战斗演示)全部是**多语言分P视频**([中][日][英][韩]),`api.bilibili.com/x/player/pagelist`(免登录)可查分P标题,内嵌播放器 `&p=N` 直接播指定语言 —— 这是英文版视频的正确接入方式。
+- YouTube embed 在 WKWebView 顶层直接加载报"配置错误 153"(缺来源上下文);iframe 包装页 + https baseURL 可解 153,但视频播放仍受代理/区域影响(152-4),不适合作为默认视频源。
+- B站搜索/用户 API 风控严格(无 cookie 频繁 -400),运行时依赖它选视频不可靠;pagelist 免登录且稳定。
+- bilibili 内嵌播放器(player.bilibili.com)不支持可靠的 URL 静音,需页面加载后多次注入 JS 静音;YouTube embed 原生支持 `mute=1` 参数。
+
+### Live2D(Sparkle.Live2DView)
+- NuGet `Sparkle.Live2DView 0.1.1`(MIT):Avalonia OpenGL 渲染 Cubism,基于 Live2DCSharpSDK P/Invoke;**仅 Windows x64**,控件 API:`LoadModelAsync(dir, name)`(name 不含扩展名,对应 `<name>.model3.json`)、PositionX/Y(-2~2)、Zoom(0.5~3)、ModelOpacity、FramesPerSecond、ModelLoaded/ModelLoadFailed 事件。
+- **Native AOT 兼容已由 CI(win-x64 publish)实测通过**;net8.0 包在 net10.0 + Avalonia 12.1.1 下构建无冲突。
+- `Live2DCubismCore.dll` 有 Live2D 独立许可,官方 NuGet 与参考仓库均不分发 → 定位顺序:程序目录 → `%AppData%/McKuro/live2d`;用户目录命中时用 `AddDllDirectory` + `LOAD_LIBRARY_SEARCH_USER_DIRS` 加入搜索路径(kernel32 P/Invoke)。
+- Avalonia 绑定注意:`int→bool`(如 `Count` 绑 IsEnabled)与字符串非空绑 IsVisible 均无隐式转换,需 VM 暴露 bool 计算属性;`Border` 只能单子元素,多状态子元素要包 `Panel`。

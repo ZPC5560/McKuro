@@ -159,3 +159,39 @@ Phase 4（实施中：先完成壁纸、动态配色、玻璃视觉基座与视�
 ## Notes
 - 本轮只做方案与代码定位，不修改业务实现。
 - 所有玻璃效果都必须保留关闭透明效果的降级路径。
+
+---
+
+## Session 2026-09-12: 视频竞态修复 / 全量本地化 / 资讯英文源 / Live2D
+
+**Status:** complete(已随 v1.2.3 发布;Live2D 功能已合入 main 并通过 Windows AOT 验证,待 Windows 实机验证后随下个版本发布)
+
+### Goals
+1. 修复设置页中英文切换失效(语言资源无消费点)
+2. 修复自定义壁纸下启动页视频红黑色块/加载失败
+3. 英文界面资讯/兑换码可读性(视频英文版、快捷链接、接口内容术语翻译)
+4. 首页 Live2D 模型显示 + 设置页导入/预览/配置(参考 Sparkle.Live2DView)
+
+### Actions Taken
+- 见 `progress.md` Session 2026-09-12(修复、适配、发布全记录)
+
+### Decisions Made
+| Decision | Rationale |
+|----------|-----------|
+| 异步回调一律用会话代号守卫而非 `_disposed` | 会话重建会重置 _disposed,旧续体必须按代号判过期,否则跨会话串台(视频花屏根因) |
+| 语言切换保持"重启生效" | 全量动态切换需要事件化绑定体系,收益低于成本;资源 711 key 覆盖全部页面 |
+| Core 层文案经 CoreStrings 网关 | Core 不引用应用层;fallback 中文保证纯函数测试零改动 |
+| 资讯信息源始终跟随服务器设置 | 国际服英文内容包数据质量不可用(机翻/无封面/分组常空) |
+| B站多语言 PV 播【英】分P 作为英文视频方案 | pagelist 接口免登录稳定;YouTube embed 受代理/区域限制(153/152-4)不适合默认源 |
+| Live2D 选 Sparkle.Live2DView 而非 WebView 方案 | 用户指定参考项目;原生 OpenGL 无网络依赖;CI 实测 AOT 兼容 |
+| Live2DCubismCore 不随仓库/安装包分发 | Live2D 独立许可,分发决定留给仓库所有者;设置页提供目录引导与官方下载链接 |
+| 首页 Live2D 纯展示(IsHitTestVisible=false) | 满屏宿主会挡住下方按钮;拖拽缩放交互保留在设置预览 |
+
+### Acceptance Criteria(本轮)
+- [x] 设置切英文重启后全部页面为英文(10 页截图实测)
+- [x] 自定义壁纸 + 默认启动页冷启动视频稳定播放
+- [x] 英文界面轮播播 B站 PV 英文分P
+- [x] 中文界面行为零变化(回归通过)
+- [x] macOS/Linux 无 Live2D 能力时灰显不崩溃
+- [x] Windows AOT 发布含 Live2D 包编译通过(CI 实测)
+- [ ] Live2D 在 Windows 实机完整验证(Core + 模型 + 首页显示)——待仓库所有者执行
