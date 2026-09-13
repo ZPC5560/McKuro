@@ -17,7 +17,7 @@
     <!-- Native AOT 发布 (win-x64 需在 Windows 上发布;osx-arm64 可本地验证) -->
     <PublishAot>true</PublishAot>
     <StripSymbols>true</StripSymbols>
-    <Version>1.2.3</Version>
+    <Version>1.2.4</Version>
     <!-- 注意:不要启用 InvariantGlobalization —— Semi 主题需要 zh-CN 文化支持 -->
     <!-- IL2104: 第三方 HanumanInstitute.LibMpv 自身产生的裁剪警告;本项目仅用其
          原生库加载/符号解析路径(无反射),该警告对本用法不适用 -->
@@ -45,7 +45,10 @@
          比 LibVLC vmem 回调稳定(Native AOT 安全:LoadLibrary + GetProcAddress → Marshal.GetDelegateForFunctionPointer,无反射)。
          Windows native 库由 Endpne.LibMPV.Windows 内置(自动拷到输出 libmpv\win-x64\libmpv-2.dll);
          mac/Linux 用系统/Homebrew libmpv(resolver 内置搜索 + MpvApi.RootPath 兜底)。 -->
-    <PackageReference Include="Sparkle.Live2DView" Version="0.1.1" />
+    <!-- Live2D Cubism 渲染控件:不再用 NuGet 包(0.1.1 的 dll 针对旧 Avalonia 11.x 编译,
+         Avalonia 12 下 MissingFieldException 启动即崩),改用 vendored 源码工程按 Avalonia 12.1.1 重新编译,
+         见 src/ThirdParty/Sparkle.Live2DView/。 -->
+    <ProjectReference Include="..\ThirdParty\Sparkle.Live2DView\Sparkle.Live2DView.csproj" />
     <PackageReference Include="HanumanInstitute.LibMpv" Version="0.10.1" />
     <PackageReference Include="Endpne.LibMPV.Windows" Version="0.41.0" Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(RuntimeIdentifier)' == 'win-arm64' Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')" />
   </ItemGroup>

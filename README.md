@@ -1,6 +1,6 @@
 # McKuro · 鸣潮启动器
 
-基于 **.NET 10 + Avalonia 12 + Semi Design** 的《鸣潮》(Wuthering Waves)桌面启动器,支持原生 AOT 发布。当前版本 **1.2.3**。
+基于 **.NET 10 + Avalonia 12 + Semi Design** 的《鸣潮》(Wuthering Waves)桌面启动器,支持原生 AOT 发布。当前版本 **1.2.4**。
 
 ## 功能
 
