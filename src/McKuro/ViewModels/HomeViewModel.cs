@@ -171,19 +171,36 @@ public sealed partial class HomeViewModel : ViewModelBase
     [ObservableProperty]
     private float _live2DOpacity = 1f;
 
+    /// <summary>模型视线跟随鼠标(开启时模型区域会接收指针事件以驱动跟随)。</summary>
+    [ObservableProperty]
+    private bool _live2DPointerFollow = true;
+
     /// <summary>从设置同步 Live2D 显示状态(构造时与收到 Live2DSettingsChangedMessage 时调用)。</summary>
     public void RefreshLive2D()
     {
         var s = AppServices.Settings.Current;
-        var valid = !string.IsNullOrWhiteSpace(s.Live2DModelDir)
-                    && !string.IsNullOrWhiteSpace(s.Live2DModelName)
-                    && File.Exists(Path.Combine(s.Live2DModelDir, s.Live2DModelName + ".model3.json"));
-        Live2DModelDir = valid ? s.Live2DModelDir : "";
-        Live2DModelName = valid ? s.Live2DModelName : "";
+        // 未导入模型目录时回退到首选 live2d 目录(程序目录下 live2d\,无写权限才用用户数据目录)自动发现默认模型
+        var modelDir = string.IsNullOrWhiteSpace(s.Live2DModelDir) ? Live2DLocator.EnsurePreferredDir() : s.Live2DModelDir;
+        var modelName = Live2DLocator.NormalizeModelName(s.Live2DModelName);
+        var valid = !string.IsNullOrWhiteSpace(modelName)
+                    && File.Exists(Path.Combine(modelDir, modelName + ".model3.json"));
+        if (!valid)
+        {
+            var fallback = Live2DLocator.FindDefaultModel(modelDir);
+            if (fallback is not null)
+            {
+                modelDir = fallback.Value.Dir;
+                modelName = fallback.Value.Name;
+                valid = true;
+            }
+        }
+        Live2DModelDir = valid ? modelDir : "";
+        Live2DModelName = valid ? modelName : "";
         Live2DZoom = Math.Clamp(s.Live2DZoom, 0.5f, 3f);
         Live2DPositionX = Math.Clamp(s.Live2DPositionX, -2f, 2f);
         Live2DPositionY = Math.Clamp(s.Live2DPositionY, -2f, 2f);
         Live2DOpacity = Math.Clamp(s.Live2DOpacity, 0f, 1f);
+        Live2DPointerFollow = s.Live2DPointerFollow;
         // Core 缺失时显示层置 false(设置页有指引);DLL 搜索路径仍要就位,模型加载才能解析 Core
         Live2DLocator.EnsureDllSearchPath();
         Live2DShow = IsLive2DSupported && s.Live2DEnabled && valid && Live2DLocator.IsCoreAvailable;

@@ -97,6 +97,9 @@ public sealed class AppSettings
     /// <summary>模型不透明度(0~1,默认 1)。</summary>
     public float Live2DOpacity { get; set; } = 1f;
 
+    /// <summary>模型视线跟随鼠标(指针在模型区域移动时视线/朝向跟随;默认开)。</summary>
+    public bool Live2DPointerFollow { get; set; } = true;
+
     // ---------- 游戏修复(对齐 Haiyu 的跳过校验文件) ----------
 
     /// <summary>修复游戏时跳过的文件相对路径列表(如 Client/Saved/Logs/Client.log)。</summary>

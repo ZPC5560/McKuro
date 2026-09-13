@@ -357,6 +357,8 @@
   "Live2D.DisplayDesc": "缩放与位置即时生效,首页实时应用",
   "Live2D.DisplayRowTitle": "显示参数",
   "Live2D.Enable": "首页显示 Live2D 模型",
+  "Live2D.FollowMouse": "模型视线跟随鼠标",
+  "Live2D.FollowMouseDesc": "指针移到首页模型上时视线与朝向跟随,不影响下方交互",
   "Live2D.EnableDesc": "模型叠加在首页壁纸上方、内容卡片下层;拖进回收站不会动它(纯展示)",
   "Live2D.GetSdk": "获取 Cubism SDK",
   "Live2D.Import": "导入模型文件夹",

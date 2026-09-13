@@ -1,5 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using McKuro.Services;
 
 namespace McKuro.Controls;
@@ -15,6 +17,7 @@ public sealed class Live2DModelHost : Panel
     private Sparkle.Live2DView.Live2DView? _view;
     private string _loadedDir = "";
     private string _loadedName = "";
+    private TopLevel? _hookedTopLevel;
 
     public static readonly StyledProperty<bool> ShowProperty =
         AvaloniaProperty.Register<Live2DModelHost, bool>(nameof(Show));
@@ -45,10 +48,21 @@ public sealed class Live2DModelHost : Panel
     public static readonly StyledProperty<bool> AllowInteractionProperty =
         AvaloniaProperty.Register<Live2DModelHost, bool>(nameof(AllowInteraction), true);
 
+    /// <summary>视线跟随鼠标(Sparkle 的 IsPointerFollowEnabled;与拖动/缩放独立)。
+    /// 首页按设置开关绑定;注意跟随需要控件能收到指针事件(IsHitTestVisible 须为 true)。</summary>
+    public static readonly StyledProperty<bool> PointerFollowProperty =
+        AvaloniaProperty.Register<Live2DModelHost, bool>(nameof(PointerFollow), true);
+
     public bool AllowInteraction
     {
         get => GetValue(AllowInteractionProperty);
         set => SetValue(AllowInteractionProperty, value);
+    }
+
+    public bool PointerFollow
+    {
+        get => GetValue(PointerFollowProperty);
+        set => SetValue(PointerFollowProperty, value);
     }
 
     public bool Show
@@ -102,6 +116,50 @@ public sealed class Live2DModelHost : Panel
     /// <summary>模型加载失败(文件损坏/Core 缺失等):静默回退为不显示,设置页有状态指引。</summary>
     public event EventHandler<Exception>? ModelLoadFailed;
 
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        // 纯展示模式(首页)不参与命中测试,指针事件到不了模型;改为挂窗口级
+        // PointerMoved,按位置转发视线目标,让"跟随鼠标"不需要抢占下方点击。
+        if (!AllowInteraction)
+        {
+            _hookedTopLevel = TopLevel.GetTopLevel(this);
+            _hookedTopLevel?.AddHandler(
+                InputElement.PointerMovedEvent,
+                OnTopLevelPointerMoved,
+                RoutingStrategies.Bubble,
+                handledEventsToo: true);
+        }
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        if (_hookedTopLevel is not null)
+        {
+            _hookedTopLevel.RemoveHandler(InputElement.PointerMovedEvent, OnTopLevelPointerMoved);
+            _hookedTopLevel = null;
+        }
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    private void OnTopLevelPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_view is null || !PointerFollow || !IsEffectivelyVisible)
+        {
+            return;
+        }
+        var p = e.GetPosition(_view);
+        if (p.X >= 0 && p.X <= _view.Bounds.Width && p.Y >= 0 && p.Y <= _view.Bounds.Height)
+        {
+            System.Console.Error.WriteLine($"[L2D-DBG] forward LookAt {p.X:0},{p.Y:0} (view {_view.Bounds.Width:0}x{_view.Bounds.Height:0})");
+            _view.LookAt(p.X, p.Y, _view.Bounds.Width, _view.Bounds.Height);
+        }
+        else
+        {
+            _view.LookAtCenter();
+        }
+    }
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
@@ -117,6 +175,10 @@ public sealed class Live2DModelHost : Panel
             if (e.Property == ZoomProperty)
             {
                 _view.Zoom = Zoom;
+            }
+            else if (e.Property == PointerFollowProperty)
+            {
+                _view.IsPointerFollowEnabled = PointerFollow;
             }
             else if (e.Property == PositionXProperty)
             {
@@ -152,6 +214,7 @@ public sealed class Live2DModelHost : Panel
             {
                 CanDrag = AllowInteraction,
                 CanZoom = AllowInteraction,
+                IsPointerFollowEnabled = PointerFollow,
                 FramesPerSecond = FramesPerSecond,
                 AutoPauseWhenHidden = true,
             };

@@ -357,6 +357,8 @@
   "Live2D.DisplayDesc": "Zoom and position apply live on Home",
   "Live2D.DisplayRowTitle": "Display",
   "Live2D.Enable": "Show Live2D model on Home",
+  "Live2D.FollowMouse": "Model eye-tracking follows the mouse",
+  "Live2D.FollowMouseDesc": "The model looks toward the pointer over its area on Home, without blocking clicks",
   "Live2D.EnableDesc": "The model sits above the wallpaper and below the content cards; display only",
   "Live2D.GetSdk": "Get Cubism SDK",
   "Live2D.Import": "Import Folder",

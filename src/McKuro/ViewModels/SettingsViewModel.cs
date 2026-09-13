@@ -306,6 +306,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _live2DEnabled;
 
+    /// <summary>模型视线跟随鼠标(首页模型区域收到指针移动时视线/朝向跟随)。</summary>
+    [ObservableProperty]
+    private bool _live2DPointerFollow = true;
+
     /// <summary>导入的模型文件夹绝对路径。</summary>
     [ObservableProperty]
     private string _live2DModelDir = "";
@@ -332,10 +336,28 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _live2DScanStatus = "";
 
-    /// <summary>设置页实时预览是否显示(平台支持 + 已启用 + Core 就绪 + 已选模型)。</summary>
+    /// <summary>
+    /// 生效的模型目录:已导入用导入目录;未导入时在首选 live2d 目录树中按选中模型名
+    /// 定位实际所在子目录(模型可放在任意层级,加载不递归),与首页默认发现一致。
+    /// </summary>
+    public string EffectiveLive2DModelDir
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Live2DModelDir))
+            {
+                return Live2DModelDir;
+            }
+            var root = Live2DLocator.EnsurePreferredDir();
+            var name = SelectedLive2DModelName;
+            return string.IsNullOrWhiteSpace(name) ? root : Live2DLocator.FindModelDir(root, name) ?? root;
+        }
+    }
+
+    /// <summary>设置页实时预览是否显示(平台支持 + 已启用 + Core 就绪 + 已选模型;目录走生效目录)。</summary>
     public bool IsLive2DPreviewVisible =>
         IsLive2DSupported && Live2DEnabled && IsLive2DCoreAvailable
-        && Live2DModelDir.Length > 0 && SelectedLive2DModelIndex >= 0;
+        && SelectedLive2DModelIndex >= 0;
 
     /// <summary>是否有可选模型(供下拉框 IsEnabled 绑定;int→bool 无隐式转换)。</summary>
     public bool HasLive2DModels => Live2DModelOptions.Count > 0;
@@ -352,6 +374,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
     partial void OnLive2DModelDirChanged(string value)
     {
         OnPropertyChanged(nameof(HasLive2DModelDir));
+        OnPropertyChanged(nameof(EffectiveLive2DModelDir));
+    }
+
+    partial void OnLive2DPointerFollowChanged(bool value)
+    {
+        AppServices.Settings.Current.Live2DPointerFollow = value;
+        AppServices.Settings.Save();
+        WeakReferenceMessenger.Default.Send(new Live2DSettingsChangedMessage(value));
     }
 
     partial void OnLive2DEnabledChanged(bool value)
@@ -371,6 +401,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Current.Live2DModelName = Live2DModelOptions[value];
         AppServices.Settings.Save();
         OnPropertyChanged(nameof(SelectedLive2DModelName));
+        OnPropertyChanged(nameof(EffectiveLive2DModelDir));
         OnPropertyChanged(nameof(IsLive2DPreviewVisible));
         WeakReferenceMessenger.Default.Send(new Live2DSettingsChangedMessage(Live2DEnabled));
     }
@@ -395,18 +426,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
         WeakReferenceMessenger.Default.Send(new Live2DSettingsChangedMessage(Live2DEnabled));
     }
 
-    /// <summary>打开(必要时创建)用户 Live2D 目录,引导放置 Cubism Core 与模型;刷新 Core 检测。</summary>
+    /// <summary>打开(必要时创建)首选 Live2D 目录(程序目录下 live2d\,无写权限回退用户数据目录),
+    /// 引导放置 Cubism Core 与模型;刷新 Core 检测。</summary>
     [RelayCommand]
     private void OpenLive2DDir()
     {
-        var dir = Live2DLocator.UserDir;
-        try
-        {
-            Directory.CreateDirectory(dir);
-        }
-        catch (Exception)
-        {
-        }
+        var dir = Live2DLocator.EnsurePreferredDir();
         AppServices.OpenInFileManager(dir);
         RefreshLive2DStatus();
     }
@@ -458,7 +483,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private void ScanLive2DModels()
     {
         Live2DModelOptions.Clear();
-        var dir = Live2DModelDir;
+        // 未导入模型目录时,默认扫描首选 live2d 目录(与首页默认模型发现保持一致)
+        var dir = string.IsNullOrWhiteSpace(Live2DModelDir) ? Live2DLocator.EnsurePreferredDir() : Live2DModelDir;
         if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
         {
             OnPropertyChanged(nameof(IsLive2DPreviewVisible));
@@ -467,7 +493,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         try
         {
             var models = Directory.EnumerateFiles(dir, "*.model3.json", SearchOption.AllDirectories)
-                .Select(Path.GetFileNameWithoutExtension)
+                .Select(f => Live2DLocator.NormalizeModelName(Path.GetFileName(f)))
                 .Where(n => !string.IsNullOrEmpty(n))
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
@@ -480,8 +506,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
         catch (Exception)
         {
         }
-        var saved = AppServices.Settings.Current.Live2DModelName;
+        var saved = Live2DLocator.NormalizeModelName(AppServices.Settings.Current.Live2DModelName);
         var idx = Live2DModelOptions.IndexOf(saved);
+        if (idx < 0 && string.IsNullOrWhiteSpace(AppServices.Settings.Current.Live2DModelName))
+        {
+            // 从未选择过模型:选中与首页一致的默认模型(Hiyori 优先,否则字典序第一个)
+            idx = Live2DModelOptions.IndexOf(Live2DLocator.FindDefaultModel(dir)?.Name ?? "");
+        }
         SelectedLive2DModelIndex = idx >= 0 ? idx : (Live2DModelOptions.Count > 0 ? 0 : -1);
         Live2DScanStatus = Live2DModelOptions.Count > 0
             ? LanguageService.Format("Live2D.Imported", Live2DModelOptions.Count)
@@ -705,6 +736,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _customVideoCoverPath = FindCoverForVideo(s.CustomBackgroundVideoPath);
         _wallpaperEngineDir = s.WallpaperEngineDir;
         _live2DEnabled = s.Live2DEnabled;
+        _live2DPointerFollow = s.Live2DPointerFollow;
         _live2DModelDir = s.Live2DModelDir;
         _live2DZoom = Math.Clamp(s.Live2DZoom, 0.5f, 3f);
         _live2DPositionX = Math.Clamp(s.Live2DPositionX, -2f, 2f);

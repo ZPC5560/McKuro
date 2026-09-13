@@ -10,6 +10,9 @@
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
+    <UserControl.Resources>
+        <vm:Live2DFloatTextConverter x:Key="Live2DFloatText" />
+    </UserControl.Resources>
     <!--
       设置页设计语言:
       - 顶部:标题 + "改动自动保存" 徽标
@@ -325,6 +328,22 @@
                         </Grid>
                     </Border>
 
+                    <!-- 跟随鼠标 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="EyeTracking" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.FollowMouse}" />
+                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Live2D.FollowMouseDesc}" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                          IsChecked="{Binding Live2DPointerFollow, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+
                     <!-- 导入模型 -->
                     <Border Classes="row">
                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
@@ -365,7 +384,7 @@
                                     Background="{DynamicResource SemiColorBg3}" HorizontalAlignment="Left"
                                     Width="460">
                                 <controls:Live2DModelHost Show="True"
-                                                          ModelDirectory="{Binding Live2DModelDir}"
+                                                          ModelDirectory="{Binding EffectiveLive2DModelDir}"
                                                           ModelName="{Binding SelectedLive2DModelName}"
                                                           Zoom="{Binding Live2DZoom, Mode=TwoWay}"
                                                           PositionX="{Binding Live2DPositionX, Mode=TwoWay}"
@@ -392,37 +411,37 @@
                                 </StackPanel>
                             </Grid>
                             <StackPanel Margin="54,0,0,0" Spacing="10">
-                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <Grid ColumnDefinitions="64,*,Auto" ColumnSpacing="12">
                                     <TextBlock Text="{loc:Localize Key=Live2D.Zoom}" FontSize="13" VerticalAlignment="Center" />
                                     <Slider Grid.Column="1" Minimum="0.5" Maximum="3" Value="{Binding Live2DZoom, Mode=TwoWay}"
                                             VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{Binding Live2DZoom, StringFormat={}{0:0.0##}x}"
-                                               FontSize="12" Foreground="{DynamicResource SemiColorText2}" Width="52"
-                                               TextAlignment="Right" VerticalAlignment="Center" />
+                                    <TextBox Grid.Column="2" Width="64" Height="28" Text="{Binding Live2DZoom, Converter={StaticResource Live2DFloatText}}"
+                                             FontSize="12" VerticalContentAlignment="Center" HorizontalContentAlignment="Right"
+                                             VerticalAlignment="Center" />
                                 </Grid>
-                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <Grid ColumnDefinitions="64,*,Auto" ColumnSpacing="12">
                                     <TextBlock Text="{loc:Localize Key=Live2D.PositionX}" FontSize="13" VerticalAlignment="Center" />
                                     <Slider Grid.Column="1" Minimum="-2" Maximum="2" Value="{Binding Live2DPositionX, Mode=TwoWay}"
                                             VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{Binding Live2DPositionX, StringFormat={}{0:0.00}}"
-                                               FontSize="12" Foreground="{DynamicResource SemiColorText2}" Width="52"
-                                               TextAlignment="Right" VerticalAlignment="Center" />
+                                    <TextBox Grid.Column="2" Width="64" Height="28" Text="{Binding Live2DPositionX, Converter={StaticResource Live2DFloatText}}"
+                                             FontSize="12" VerticalContentAlignment="Center" HorizontalContentAlignment="Right"
+                                             VerticalAlignment="Center" />
                                 </Grid>
-                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <Grid ColumnDefinitions="64,*,Auto" ColumnSpacing="12">
                                     <TextBlock Text="{loc:Localize Key=Live2D.PositionY}" FontSize="13" VerticalAlignment="Center" />
                                     <Slider Grid.Column="1" Minimum="-2" Maximum="2" Value="{Binding Live2DPositionY, Mode=TwoWay}"
                                             VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{Binding Live2DPositionY, StringFormat={}{0:0.00}}"
-                                               FontSize="12" Foreground="{DynamicResource SemiColorText2}" Width="52"
-                                               TextAlignment="Right" VerticalAlignment="Center" />
+                                    <TextBox Grid.Column="2" Width="64" Height="28" Text="{Binding Live2DPositionY, Converter={StaticResource Live2DFloatText}}"
+                                             FontSize="12" VerticalContentAlignment="Center" HorizontalContentAlignment="Right"
+                                             VerticalAlignment="Center" />
                                 </Grid>
-                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <Grid ColumnDefinitions="64,*,Auto" ColumnSpacing="12">
                                     <TextBlock Text="{loc:Localize Key=Live2D.Opacity}" FontSize="13" VerticalAlignment="Center" />
                                     <Slider Grid.Column="1" Minimum="0" Maximum="1" Value="{Binding Live2DOpacity, Mode=TwoWay}"
                                             VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{Binding Live2DOpacity, StringFormat={}{0:P0}}"
-                                               FontSize="12" Foreground="{DynamicResource SemiColorText2}" Width="52"
-                                               TextAlignment="Right" VerticalAlignment="Center" />
+                                    <TextBox Grid.Column="2" Width="64" Height="28" Text="{Binding Live2DOpacity, Converter={StaticResource Live2DFloatText}}"
+                                             FontSize="12" VerticalContentAlignment="Center" HorizontalContentAlignment="Right"
+                                             VerticalAlignment="Center" />
                                 </Grid>
                             </StackPanel>
                         </StackPanel>

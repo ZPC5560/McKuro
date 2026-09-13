@@ -54,19 +54,30 @@
             </Ellipse>
         </Panel>
 
-        <!-- ═══ Live2D 模型(仅 Windows x64;设置页导入/配置;纯展示层,不挡下方按钮) ═══ -->
-        <controls:Live2DModelHost Show="{Binding Live2DShow}"
-                                  ModelDirectory="{Binding Live2DModelDir}"
-                                  ModelName="{Binding Live2DModelName}"
-                                  Zoom="{Binding Live2DZoom}"
-                                  PositionX="{Binding Live2DPositionX}"
-                                  PositionY="{Binding Live2DPositionY}"
-                                  ModelOpacity="{Binding Live2DOpacity}"
-                                  FramesPerSecond="30"
-                                  AllowInteraction="False"
-                                  IsHitTestVisible="False"
-                                  HorizontalAlignment="Stretch"
-                                  VerticalAlignment="Stretch" />
+        <!-- ═══ Live2D 模型(仅 Windows x64;设置页导入/配置;壁纸上方、内容卡片下层) ═══
+             右下角锚定:右侧列约占 38% 宽,模型 Uniform 适配后撑满高度、贴底站立。
+             整层不参与命中测试,不挡下方卡片和按钮;"跟随鼠标"由宿主挂窗口级
+             PointerMoved 转发视线目标实现,无需抢占点击。 -->
+        <Grid IsHitTestVisible="False">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="0.62*" />
+            </Grid.ColumnDefinitions>
+            <controls:Live2DModelHost Grid.Column="1"
+                                      Show="{Binding Live2DShow}"
+                                      ModelDirectory="{Binding Live2DModelDir}"
+                                      ModelName="{Binding Live2DModelName}"
+                                      Zoom="{Binding Live2DZoom}"
+                                      PositionX="{Binding Live2DPositionX}"
+                                      PositionY="{Binding Live2DPositionY}"
+                                      ModelOpacity="{Binding Live2DOpacity}"
+                                      PointerFollow="{Binding Live2DPointerFollow}"
+                                      FramesPerSecond="30"
+                                      AllowInteraction="False"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch"
+                                      Margin="0,0,12,0" />
+        </Grid>
 
         <!-- ═══ 主内容 ═══ -->
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
