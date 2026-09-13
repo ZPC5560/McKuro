@@ -7,6 +7,7 @@
   <Folder Name="/src/">
     <Project Path="src/McKuro.Core/McKuro.Core.csproj" />
     <Project Path="src/McKuro/McKuro.csproj" />
+    <Project Path="src/ThirdParty/Sparkle.Live2DView/Sparkle.Live2DView.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/McKuro.Tests/McKuro.Tests.csproj" />

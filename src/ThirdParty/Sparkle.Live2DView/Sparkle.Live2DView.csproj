@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Vendored from https://github.com/Mozi216/Sparkle.Live2DView (MIT, see LICENSE) @ v0.1.1 (2026-08-30)。
+    不再用 NuGet 包 Sparkle.Live2DView 0.1.1:其 dll 是针对旧 Avalonia 11.x(StyledProperty<WindowState>
+    时代的 Window.WindowStateProperty 字段签名)编译的,在 Avalonia 12(DirectProperty<Window, WindowState>)
+    下运行时 JIT 解析字段 token 失败 → MissingFieldException,模型控件一挂到窗口整个应用启动即崩。
+    以源码引用 + 本仓库 Avalonia 版本重新编译即可正确绑定;上游更新后优先回到包引用并删掉此目录。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Live2DCSharpSDK.Framework" Version="1.0.0" />
+    <PackageReference Include="Live2DCSharpSDK.App" Version="1.0.0" />
+    <PackageReference Include="Live2DCSharpSDK.OpenGL" Version="1.0.0" />
+  </ItemGroup>
+</Project>
