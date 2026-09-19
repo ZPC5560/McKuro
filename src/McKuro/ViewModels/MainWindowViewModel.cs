@@ -43,6 +43,33 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     partial void OnNavAvatarPathChanged(string value) => OnPropertyChanged(nameof(HasNavAvatar));
 
+    partial void OnToastTextChanged(string value) => OnPropertyChanged(nameof(ToastVisible));
+
+    /// <summary>显示悬浮通知:立即展示,3 秒后自动关闭;连续触发时重置计时。</summary>
+    public void ShowToast(string text)
+    {
+        _toastCts?.Cancel();
+        _toastCts?.Dispose();
+        _toastCts = new CancellationTokenSource();
+        ToastText = text;
+
+        var token = _toastCts.Token;
+        _ = AutoHideToastAsync(token);
+    }
+
+    private async Task AutoHideToastAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3), token).ConfigureAwait(false);
+            ToastText = "";
+        }
+        catch (OperationCanceledException)
+        {
+            // 新通知到来时取消旧计时,由新通知接管
+        }
+    }
+
     public List<NavigationItem> NavigationItems { get; }
 
     /// <summary>设置页实例(自更新状态与命令供主窗口更新弹窗绑定;子 VM 全部启动即建,天然单例)。</summary>
@@ -51,6 +78,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>发现新版本的询问弹窗(自动检查触发;AutoInstall 开启时不弹,直接升级)。</summary>
     [ObservableProperty]
     private bool _appUpdatePromptVisible;
+
+    /// <summary>悬浮通知(Toast)当前文案;空 = 不显示。</summary>
+    [ObservableProperty]
+    private string _toastText = "";
+
+    /// <summary>悬浮通知是否可见(有文案且未到 3 秒自动关闭)。</summary>
+    public bool ToastVisible => !string.IsNullOrEmpty(ToastText);
+
+    private CancellationTokenSource? _toastCts;
 
     private readonly SettingsViewModel _settings;
     private readonly Dictionary<string, NavigationItem> _navByKey;
@@ -78,6 +114,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         // 主页解析出新头像(下载落盘)后即时切换
         WeakReferenceMessenger.Default.Register<MainWindowViewModel, AvatarResolvedMessage>(this,
             static (recipient, message) => recipient.NavAvatarPath = message.Value);
+
+        // 悬浮通知(兑换码复制成功等):主窗口统一展示,3 秒自动关闭
+        WeakReferenceMessenger.Default.Register<MainWindowViewModel, ShowToastMessage>(this,
+            static (recipient, message) => recipient.ShowToast(message.Value));
 
         var home = new HomeViewModel();
         var launcher = new LauncherViewModel();

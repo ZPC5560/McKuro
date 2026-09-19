@@ -87,3 +87,14 @@ public sealed class AvatarResolvedMessage : ValueChangedMessage<string>
     {
     }
 }
+
+/// <summary>
+/// 悬浮通知(Toast)消息:携带要展示的文案,由 MainWindowViewModel 订阅并在
+/// 主窗口内容区中间靠上位置显示,3 秒后自动关闭。
+/// </summary>
+public sealed class ShowToastMessage : ValueChangedMessage<string>
+{
+    public ShowToastMessage(string text) : base(text)
+    {
+    }
+}

@@ -457,6 +457,8 @@
   "Redeem.StatusFailed": "Fetch failed (network error or service unavailable)",
   "Redeem.StatusFailedWith": "Fetch failed: {0}",
   "Redeem.StatusSummary": "{0} codes (CN {1} / Global {2})",
+  "Redeem.CopySuccess": "Code copied",
+  "Redeem.CopyFailed": "Copy failed, please retry",
   "Redeem.Title": "Redeem Codes",
   "Redeem.Valid": "Valid",
   "Repair.Delete": "Delete skipped files",

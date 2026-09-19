@@ -85,7 +85,8 @@
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="{loc:Localize Key=Common.Copy}" Padding="12,3" FontSize="12"
                                                 VerticalAlignment="Center"
-                                                Command="{Binding $parent[ItemsControl].((vm:RedemptionCodeViewModel)DataContext).CopyMainlandCommand}" />
+                                                Command="{Binding $parent[ItemsControl].((vm:RedemptionCodeViewModel)DataContext).CopyCodeCommand}"
+                                                CommandParameter="{Binding Key}" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
@@ -144,7 +145,8 @@
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="{loc:Localize Key=Common.Copy}" Padding="12,3" FontSize="12"
                                                 VerticalAlignment="Center"
-                                                Command="{Binding $parent[ItemsControl].((vm:RedemptionCodeViewModel)DataContext).CopyGlobalCommand}" />
+                                                Command="{Binding $parent[ItemsControl].((vm:RedemptionCodeViewModel)DataContext).CopyCodeCommand}"
+                                                CommandParameter="{Binding Key}" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>

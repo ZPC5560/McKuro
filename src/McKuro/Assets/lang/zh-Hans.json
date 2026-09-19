@@ -457,6 +457,8 @@
   "Redeem.StatusFailed": "拉取失败(网络异常或服务不可用)",
   "Redeem.StatusFailedWith": "拉取失败: {0}",
   "Redeem.StatusSummary": "共 {0} 条(国服 {1} / 国际服 {2})",
+  "Redeem.CopySuccess": "复制成功",
+  "Redeem.CopyFailed": "复制失败,请重试",
   "Redeem.Title": "兑换码",
   "Redeem.Valid": "有效",
   "Repair.Delete": "删除跳过文件",

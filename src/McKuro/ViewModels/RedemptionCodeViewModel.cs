@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
 using Avalonia;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Core.Models.Redeem;
 using McKuro.Services;
 
@@ -148,43 +148,44 @@ public sealed partial class RedemptionCodeViewModel : ViewModelBase
         => DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.None, out var dt) ? dt : DateTime.MinValue;
 
-    /// <summary>复制兑换码到剪贴板(国服)。</summary>
+    /// <summary>
+    /// 复制指定兑换码到剪贴板(卡片按钮直接传参,无需先选中)。
+    /// 成功后发送「复制成功」悬浮通知;失败(剪贴板不可用/写入异常)同样提示,不再静默。
+    /// </summary>
     [RelayCommand]
-    private void CopyMainland()
+    private async Task CopyCodeAsync(string? key)
     {
-        if (SelectedMainland?.Key is { Length: > 0 } key)
+        if (string.IsNullOrEmpty(key))
         {
-            CopyToClipboard(key);
+            return;
         }
+        var ok = await CopyToClipboardAsync(key).ConfigureAwait(true);
+        WeakReferenceMessenger.Default.Send(new ShowToastMessage(
+            ok ? LanguageService.Format("Redeem.CopySuccess") : LanguageService.Format("Redeem.CopyFailed")));
     }
 
-    /// <summary>复制兑换码到剪贴板(国际服)。</summary>
-    [RelayCommand]
-    private void CopyGlobal()
-    {
-        if (SelectedGlobal?.Key is { Length: > 0 } key)
-        {
-            CopyToClipboard(key);
-        }
-    }
-
-    private static void CopyToClipboard(string text)
+    /// <summary>复制到剪贴板并等待结果;返回是否成功(供 Toast 反馈)。</summary>
+    private static async Task<bool> CopyToClipboardAsync(string text)
     {
         try
         {
-            var top = Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
-            var clip = top?.MainWindow?.Clipboard;
-            Dispatcher.UIThread.Post(() =>
+            if (Application.Current?.ApplicationLifetime
+                is not Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime
+                { MainWindow: { } mainWindow })
             {
-                if (clip is not null)
-                {
-                    _ = Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clip, text);
-                }
-            });
+                return false;
+            }
+            var clipboard = mainWindow.Clipboard;
+            if (clipboard is null)
+            {
+                return false;
+            }
+            await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, text).ConfigureAwait(true);
+            return true;
         }
         catch (Exception)
         {
-            // 剪贴板失败静默
+            return false;
         }
     }
 }
