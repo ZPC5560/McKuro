@@ -65,13 +65,20 @@ public sealed class DownloadEngine
     /// <param name="files">待下载文件。</param>
     /// <param name="baseUrl">URL 前缀。</param>
     /// <param name="destDir">保存根目录。</param>
+    /// <param name="progress">进度回调。</param>
+    /// <param name="ct">取消令牌。</param>
+    /// <param name="streamingGameRoot">非空时启用「边下载边更新」流式安装:
+    /// 把 <paramref name="destDir"/> 视为游戏根目录,文件下载完成即直接落位到
+    /// <c>{gameRoot}/{entry.Path}</c>(替换前把旧文件备份到 .McKuro_backup),
+    /// 不再经过临时暂存目录。返回的失败列表语义与暂存版一致。</param>
     /// <returns>(成功数, 失败列表)</returns>
     public async Task<(int Success, List<string> Failures)> DownloadManyAsync(
         IReadOnlyList<GameFileEntry> files,
         string baseUrl,
         string destDir,
         IProgress<DownloadProgress>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? streamingGameRoot = null)
     {
         var failures = new List<string>();
         int success = 0;
@@ -117,6 +124,11 @@ public sealed class DownloadEngine
         }
 
         var downloader = new FileDownloader(_http);
+        // 流式安装:下载落位即进入游戏目录。替换目标前把旧文件备份到 .McKuro_backup,
+        // 备份由 UpdateInstaller.BackupFile 完成(与暂存安装的备份实现一致)。
+        var onReplace = streamingGameRoot is null
+            ? null
+            : new Action<string, string>((dest, _) => UpdateInstaller.BackupFile(dest, streamingGameRoot!));
 
         foreach (var (entry, index) in files.Select((f, i) => (f, i)))
         {
@@ -142,6 +154,7 @@ public sealed class DownloadEngine
                             ReportProgress(entry.Path);
                         });
 
+                    // 流式安装:下载目的地位于游戏根目录,替换前先把旧文件备份到 .McKuro_backup。
                     var result = await downloader.DownloadAsync(
                         entry,
                         baseUrl,
@@ -149,7 +162,9 @@ public sealed class DownloadEngine
                         progress: byteProgress,
                         ct,
                         rateLimiter: _rateLimiter,
-                        pauseToken: _pauseToken).ConfigureAwait(false);
+                        pauseToken: _pauseToken,
+                        onReplace: onReplace).ConfigureAwait(false);
+
                     lock (byteLock)
                     {
                         if (result.Success)

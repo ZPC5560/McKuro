@@ -33,7 +33,8 @@ public sealed class FileDownloader
         IProgress<int>? progress = null,
         CancellationToken ct = default,
         DownloadRateLimiter? rateLimiter = null,
-        PauseTokenSource? pauseToken = null)
+        PauseTokenSource? pauseToken = null,
+        Action<string, string>? onReplace = null)
     {
         var dir = Path.GetDirectoryName(destPath);
         if (!string.IsNullOrEmpty(dir))
@@ -58,7 +59,7 @@ public sealed class FileDownloader
 
         if (entry.ChunkInfos.Count > 0)
         {
-            return await DownloadByChunksAsync(entry, url, destPath, partPath, progress, ct, rateLimiter, pauseToken)
+            return await DownloadByChunksAsync(entry, url, destPath, partPath, progress, ct, rateLimiter, pauseToken, onReplace)
                 .ConfigureAwait(false);
         }
 
@@ -77,6 +78,10 @@ public sealed class FileDownloader
                 {
                     if (string.IsNullOrWhiteSpace(entry.Md5) || VerifyLocalFile(partPath, entry))
                     {
+                        if (File.Exists(destPath))
+                        {
+                            onReplace?.Invoke(destPath, destPath);
+                        }
                         File.Move(partPath, destPath, overwrite: true);
                         return Verify(destPath, entry);
                     }
@@ -106,6 +111,10 @@ public sealed class FileDownloader
             var totalLength = response.Content.Headers.ContentLength ?? (isPartial ? entry.Size - resumeFrom : entry.Size);
             if (totalLength > 0 && resumeFrom >= entry.Size && entry.Size > 0)
             {
+                if (File.Exists(destPath))
+                {
+                    onReplace?.Invoke(destPath, destPath);
+                }
                 File.Move(partPath, destPath, overwrite: true);
                 return Verify(destPath, entry);
             }
@@ -152,6 +161,10 @@ public sealed class FileDownloader
                 TryDeletePart(partPath);
                 return verify;
             }
+            if (File.Exists(destPath))
+            {
+                onReplace?.Invoke(destPath, destPath);
+            }
             File.Move(partPath, destPath, overwrite: true);
             return verify;
         }
@@ -173,7 +186,8 @@ public sealed class FileDownloader
         IProgress<int>? progress,
         CancellationToken ct,
         DownloadRateLimiter? rateLimiter,
-        PauseTokenSource? pauseToken)
+        PauseTokenSource? pauseToken,
+        Action<string, string>? onReplace = null)
     {
         try
         {
@@ -258,6 +272,10 @@ public sealed class FileDownloader
             {
                 TryDeletePart(partPath);
                 return verify;
+            }
+            if (File.Exists(destPath))
+            {
+                onReplace?.Invoke(destPath, destPath);
             }
             File.Move(partPath, destPath, overwrite: true);
             return verify;

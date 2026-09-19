@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using McKuro.Core.Models.Game;
 
 namespace McKuro.Core.Services.Game;
@@ -21,57 +22,100 @@ public sealed class UpdateInstaller
 {
     public const string BackupDirName = ".McKuro_backup";
 
-    /// <summary>计算需要下载/更新的文件(缺失或 MD5 不一致)。</summary>
+    /// <summary>
+    /// 计算需要下载/更新的文件(缺失或 MD5 不一致)。
+    /// 文件彼此独立,使用 <see cref="Parallel.ForEachAsync"/> 并行读盘校验(纯 IO 密集,
+    /// SSD/机械盘数万文件均显著加速),保留 MD5 校验失败列入下载、跳过列表与取消语义。
+    /// </summary>
     /// <param name="manifest">服务端清单。</param>
     /// <param name="gameRootDir">游戏根目录。</param>
     /// <param name="skipPaths">跳过校验的相对路径集合(OrdinalIgnoreCase,使用正斜杠);命中则视为无需下载。</param>
-    /// <param name="progress">校验进度回调(每秒节流,避免几万文件高频回调阻塞 UI)。</param>
+    /// <param name="progress">校验进度回调(节流,避免几万文件高频回调阻塞 UI)。</param>
+    /// <param name="maxDegreeOfParallelism">并行度;默认 min(Environment.ProcessorCount, 8)。</param>
     public UpdateDiff ComputeDiff(
         GameManifest manifest,
         string gameRootDir,
         IReadOnlySet<string>? skipPaths = null,
         IProgress<DiffProgress>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        int? maxDegreeOfParallelism = null)
     {
         var diff = new UpdateDiff();
         var total = manifest.Files.Count;
         int checkedCount = 0;
-        var lastReport = DateTime.UtcNow;
-        foreach (var entry in manifest.Files)
+        long lastReportTicks = DateTime.UtcNow.Ticks;
+        var exceptionToThrow = (Exception?)null;
+
+        Parallel.ForEach(
+            manifest.Files,
+            new ParallelOptions
+            {
+                CancellationToken = ct,
+                // 纯 IO 并行;上限 8 防止机械盘上过度争用反而变慢
+                MaxDegreeOfParallelism = maxDegreeOfParallelism ?? Math.Min(Environment.ProcessorCount, 8),
+            },
+            entry =>
+            {
+                ct.ThrowIfCancellationRequested();
+                // 用户配置的跳过校验文件:直接忽略(对齐 Haiyu SkipVerifyFiles)
+                if (skipPaths is not null && skipPaths.Contains(entry.Path))
+                {
+                    Interlocked.Increment(ref checkedCount);
+                    return;
+                }
+
+                try
+                {
+                    var localPath = GameFilePath.CombineUnderRoot(gameRootDir, entry.Path);
+                    if (!File.Exists(localPath))
+                    {
+                        lock (diff.ToDownload)
+                        {
+                            diff.ToDownload.Add(entry);
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(entry.Md5) && !FileDownloader.VerifyLocalFile(localPath, entry))
+                    {
+                        lock (diff.ToDownload)
+                        {
+                            diff.ToDownload.Add(entry);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // 并行下不允许异常逃逸到其他迭代:记录首个异常,统一在结束后抛出
+                    // (保留旧语义:任一文件校验失败即整体失败,如路径越界 InvalidDataException)
+                    Interlocked.CompareExchange(ref exceptionToThrow, ex, null);
+                }
+
+                var now = DateTime.UtcNow.Ticks;
+                var count = Interlocked.Increment(ref checkedCount);
+                // 节流:最多每 100ms 报一次,避免几万文件高频回调阻塞 UI(并发下 CAS 竞争,线程安全)
+                if (progress is not null)
+                {
+                    var last = Volatile.Read(ref lastReportTicks);
+                    if (now - last >= TimeSpan.TicksPerMillisecond * 100
+                        && Interlocked.CompareExchange(ref lastReportTicks, now, last) == last)
+                    {
+                        progress.Report(new DiffProgress(count, total, entry.Path));
+                    }
+                }
+            });
+
+        if (exceptionToThrow is not null)
         {
-            ct.ThrowIfCancellationRequested();
-            // 用户配置的跳过校验文件:直接忽略(对齐 Haiyu SkipVerifyFiles)
-            if (skipPaths is not null && skipPaths.Contains(entry.Path))
-            {
-                checkedCount++;
-                continue;
-            }
-
-            var localPath = GameFilePath.CombineUnderRoot(gameRootDir, entry.Path);
-            if (!File.Exists(localPath))
-            {
-                diff.ToDownload.Add(entry);
-            }
-            else if (!string.IsNullOrEmpty(entry.Md5) && !FileDownloader.VerifyLocalFile(localPath, entry))
-            {
-                diff.ToDownload.Add(entry);
-            }
-
-            checkedCount++;
-            // 节流:最多每 100ms 报一次,避免几万文件高频回调阻塞 UI
-            var now = DateTime.UtcNow;
-            if (progress is not null && (now - lastReport).TotalMilliseconds >= 100)
-            {
-                lastReport = now;
-                progress.Report(new DiffProgress(checkedCount, total, entry.Path));
-            }
+            ExceptionDispatchInfo.Capture(exceptionToThrow).Throw();
         }
+
         progress?.Report(new DiffProgress(total, total, ""));
         return diff;
     }
 
     /// <summary>
     /// 将暂存目录(预下载)中的文件安装到游戏目录。
+    /// 文件彼此独立,使用 <see cref="Parallel.ForEach"/> 并行「校验→备份→替换」,
+    /// 移动前目录创建幂等;单个文件失败不中断其余文件(失败列表与顺序版语义一致)。
     /// </summary>
     /// <param name="stagingDir">预下载暂存目录(文件按相对路径存放)。</param>
     /// <param name="manifest">安装所用清单。</param>
@@ -84,48 +128,57 @@ public sealed class UpdateInstaller
         var failures = new List<string>();
         int installed = 0;
 
-        foreach (var entry in manifest.Files)
-        {
-            var stagedPath = GameFilePath.CombineUnderRoot(stagingDir, entry.Path);
-            if (!File.Exists(stagedPath))
+        Parallel.ForEach(
+            manifest.Files,
+            new ParallelOptions { MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, 8) },
+            entry =>
             {
-                continue;
-            }
-
-            try
-            {
-                var destPath = GameFilePath.CombineUnderRoot(gameRootDir, entry.Path);
-                var destDir = Path.GetDirectoryName(destPath);
-                if (!string.IsNullOrEmpty(destDir))
+                try
                 {
-                    Directory.CreateDirectory(destDir);
-                }
-
-                // 校验暂存文件
-                if (!string.IsNullOrEmpty(entry.Md5))
-                {
-                    var ok = FileDownloader.VerifyLocalFile(stagedPath, entry);
-                    if (!ok)
+                    var stagedPath = GameFilePath.CombineUnderRoot(stagingDir, entry.Path);
+                    if (!File.Exists(stagedPath))
                     {
-                        failures.Add($"{entry.Path}: 暂存文件校验失败");
-                        continue;
+                        return;
+                    }
+
+                    var destPath = GameFilePath.CombineUnderRoot(gameRootDir, entry.Path);
+                    var destDir = Path.GetDirectoryName(destPath);
+                    if (!string.IsNullOrEmpty(destDir))
+                    {
+                        Directory.CreateDirectory(destDir);
+                    }
+
+                    // 校验暂存文件
+                    if (!string.IsNullOrEmpty(entry.Md5))
+                    {
+                        var ok = FileDownloader.VerifyLocalFile(stagedPath, entry);
+                        if (!ok)
+                        {
+                            lock (failures)
+                            {
+                                failures.Add($"{entry.Path}: 暂存文件校验失败");
+                            }
+                            return;
+                        }
+                    }
+
+                    if (File.Exists(destPath))
+                    {
+                        BackupFile(destPath, gameRootDir);
+                        File.Delete(destPath);
+                    }
+
+                    File.Move(stagedPath, destPath);
+                    Interlocked.Increment(ref installed);
+                }
+                catch (Exception ex)
+                {
+                    lock (failures)
+                    {
+                        failures.Add($"{entry.Path}: {ex.Message}");
                     }
                 }
-
-                if (File.Exists(destPath))
-                {
-                    Backup(destPath, gameRootDir);
-                    File.Delete(destPath);
-                }
-
-                File.Move(stagedPath, destPath);
-                installed++;
-            }
-            catch (Exception ex)
-            {
-                failures.Add($"{entry.Path}: {ex.Message}");
-            }
-        }
+            });
 
         return (installed, failures);
     }
@@ -137,46 +190,60 @@ public sealed class UpdateInstaller
         IReadOnlyList<GameFileEntry> entries)
     {
         var failures = new List<string>();
-        var installed = 0;
-        foreach (var entry in entries)
-        {
-            var stagedPath = GameFilePath.CombineUnderRoot(stagingDir, entry.Path);
-            if (!File.Exists(stagedPath))
-            {
-                continue;
-            }
+        int installed = 0;
 
-            try
+        Parallel.ForEach(
+            entries,
+            new ParallelOptions { MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, 8) },
+            entry =>
             {
-                var destPath = GameFilePath.CombineUnderRoot(gameRootDir, entry.Path);
-                var destDir = Path.GetDirectoryName(destPath);
-                if (!string.IsNullOrEmpty(destDir))
+                try
                 {
-                    Directory.CreateDirectory(destDir);
+                    var stagedPath = GameFilePath.CombineUnderRoot(stagingDir, entry.Path);
+                    if (!File.Exists(stagedPath))
+                    {
+                        return;
+                    }
+
+                    var destPath = GameFilePath.CombineUnderRoot(gameRootDir, entry.Path);
+                    var destDir = Path.GetDirectoryName(destPath);
+                    if (!string.IsNullOrEmpty(destDir))
+                    {
+                        Directory.CreateDirectory(destDir);
+                    }
+                    if (!string.IsNullOrEmpty(entry.Md5) && !FileDownloader.VerifyLocalFile(stagedPath, entry))
+                    {
+                        lock (failures)
+                        {
+                            failures.Add($"{entry.Path}: 暂存文件校验失败");
+                        }
+                        return;
+                    }
+                    if (File.Exists(destPath))
+                    {
+                        BackupFile(destPath, gameRootDir);
+                        File.Delete(destPath);
+                    }
+                    File.Move(stagedPath, destPath, overwrite: true);
+                    Interlocked.Increment(ref installed);
                 }
-                if (!string.IsNullOrEmpty(entry.Md5) && !FileDownloader.VerifyLocalFile(stagedPath, entry))
+                catch (Exception ex)
                 {
-                    failures.Add($"{entry.Path}: 暂存文件校验失败");
-                    continue;
+                    lock (failures)
+                    {
+                        failures.Add($"{entry.Path}: {ex.Message}");
+                    }
                 }
-                if (File.Exists(destPath))
-                {
-                    Backup(destPath, gameRootDir);
-                    File.Delete(destPath);
-                }
-                File.Move(stagedPath, destPath, overwrite: true);
-                installed++;
-            }
-            catch (Exception ex)
-            {
-                failures.Add($"{entry.Path}: {ex.Message}");
-            }
-        }
+            });
+
         return (installed, failures);
     }
 
-    /// <summary>备份将被替换的文件。</summary>
-    private static void Backup(string filePath, string gameRootDir)
+    /// <summary>
+    /// 备份将被替换的文件到 <c>.McKuro_backup</c>(供流式安装/回滚)。
+    /// 公开供下载引擎在「边下载边更新」替换目标文件前调用;备份失败不阻断安装。
+    /// </summary>
+    public static void BackupFile(string filePath, string gameRootDir)
     {
         try
         {

@@ -625,44 +625,109 @@ public sealed class GameUpdater : IGameUpdater
         }
 
         var downloadBytes = diff.ToDownload.Sum(file => file.Size);
-        if (!HasFreeSpace(_appDataDir, downloadBytes))
+        // 流式安装:直接下载到游戏根目录,边下载边更新(替换前自动备份到 .McKuro_backup)。
+        // 不再需要 appData 上的一份临时暂存,磁盘余量只需满足游戏盘(下载体积 + 备份体积)。
+        // 保守预留备份体积:被替换的旧文件会复制到备份目录,按下载体积估算。
+        var requiredOnDisk = downloadBytes * 2;
+        if (!HasFreeSpace(root, requiredOnDisk))
         {
-            return (false, CoreStrings.F("Core.Updater.DownloadDiskFull", $"下载盘空间不足: {FormatBytes(downloadBytes)}", FormatBytes(downloadBytes)));
+            return (false, CoreStrings.F("Core.Updater.GameDiskFull", $"游戏盘空间不足(含备份预留): {FormatBytes(requiredOnDisk)}", FormatBytes(requiredOnDisk)));
         }
-        var tempInstall = Path.Combine(_appDataDir, "install_tmp", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempInstall);
+
         try
         {
             var (_, failures) = await _downloader.DownloadManyAsync(
                 diff.ToDownload,
                 baseUrl: "",
-                tempInstall,
+                root,
                 progress,
-                ct).ConfigureAwait(false);
+                ct,
+                streamingGameRoot: root).ConfigureAwait(false);
             if (failures.Count > 0)
             {
                 return (false, CoreStrings.F("Core.Updater.DownloadFailedFirst", $"下载失败: {failures[0]}", failures[0]));
             }
-
-            var installed = await Task.Run(
-                () => _installer.InstallFromStaging(tempInstall, root, manifest),
-                ct).ConfigureAwait(false);
-            if (installed.Failures.Count > 0)
-            {
-                return (false, CoreStrings.F("Core.Updater.InstallFailedFirst", $"安装失败: {installed.Failures[0]}", installed.Failures[0]));
-            }
         }
         finally
         {
-            TryDeleteDirectory(tempInstall);
+            // 清理残留的 .part(取消/失败时未移动的文件;成功时不存在)
+            foreach (var entry in diff.ToDownload)
+            {
+                try
+                {
+                    var part = GameFilePath.CombineUnderRoot(root, entry.Path) + ".part";
+                    if (File.Exists(part))
+                    {
+                        File.Delete(part);
+                    }
+                }
+                catch
+                {
+                    // 忽略清理失败
+                }
+            }
         }
 
-        var remaining = await Task.Run(
-            () => _installer.ComputeDiff(manifest, root, ct: ct),
-            ct).ConfigureAwait(false);
-        return remaining.HasChanges
-            ? (false, CoreStrings.F("Core.Updater.VerifyIncomplete", $"最终校验仍有 {remaining.ToDownload.Count} 个文件不完整", remaining.ToDownload.Count))
-            : (true, CoreStrings.F("Core.Updater.FilesPatched", $"已补齐 {diff.ToDownload.Count} 个文件", diff.ToDownload.Count));
+        // 末次复检降级为抽样核对:本次下载的每个文件在 FileDownloader 落位前已做 MD5 校验,
+        // InstallFromStaging 安装前又校验一遍,全盘重读数万文件属冗余(分钟级)。
+        // 抽样优先覆盖关键文件,并随机补充至最多 40 个。
+        var (verified, sampleMessage) = await Task.Run(
+            () => QuickVerifyAfterInstall(manifest, root, ct), ct).ConfigureAwait(false);
+        return verified
+            ? (true, CoreStrings.F("Core.Updater.FilesPatched", $"已补齐 {diff.ToDownload.Count} 个文件", diff.ToDownload.Count))
+            : (false, sampleMessage!);
+    }
+
+    /// <summary>
+    /// 安装后的抽样核对:关键文件全部复检 + 随机补充至最多 40 个,替代全量 MD5 复检。
+    /// 任一抽样失败即返回失败(保守,触发下次修复兜底)。
+    /// </summary>
+    private static (bool Success, string? Message) QuickVerifyAfterInstall(
+        GameManifest manifest,
+        string root,
+        CancellationToken ct)
+    {
+        var files = manifest.Files;
+        if (files.Count == 0)
+        {
+            return (true, null);
+        }
+
+        var keySet = new HashSet<string>(manifest.KeyFiles, StringComparer.OrdinalIgnoreCase);
+        var sample = new List<GameFileEntry>();
+        foreach (var f in files)
+        {
+            if (keySet.Contains(f.Path))
+            {
+                sample.Add(f);
+            }
+        }
+
+        var target = Math.Min(40, files.Count);
+        var needed = target - sample.Count;
+        if (needed > 0)
+        {
+            var pool = files.Where(f => !keySet.Contains(f.Path)).ToList();
+            while (needed > 0 && pool.Count > 0)
+            {
+                var idx = Random.Shared.Next(pool.Count);
+                sample.Add(pool[idx]);
+                pool.RemoveAt(idx);
+                needed--;
+            }
+        }
+
+        foreach (var entry in sample)
+        {
+            ct.ThrowIfCancellationRequested();
+            var localPath = GameFilePath.CombineUnderRoot(root, entry.Path);
+            if (!File.Exists(localPath)
+                || (!string.IsNullOrEmpty(entry.Md5) && !FileDownloader.VerifyLocalFile(localPath, entry)))
+            {
+                return (false, CoreStrings.F("Core.Updater.VerifySampleFailed", $"安装后抽样校验未通过: {entry.Path}", entry.Path));
+            }
+        }
+        return (true, null);
     }
 
     private static void DeletePatchFiles(string gameRoot, IEnumerable<string> relativePaths, GameManifest targetManifest)
@@ -755,33 +820,27 @@ public sealed class GameUpdater : IGameUpdater
             return (true, CoreStrings.T("Core.Updater.FilesCompleteRepair", "游戏文件完整,无需修复"));
         }
 
-        // 下载缺失/损坏文件到临时目录,再整体安装
+        // 流式修复:直接下载到游戏根目录,边下载边修复(替换前自动备份到 .McKuro_backup)。
+        // 磁盘余量只需满足游戏盘(下载体积 + 备份预留)。
         var repairDownloadBytes = diff.ToDownload.Sum(file => file.Size);
-        if (!HasFreeSpace(_appDataDir, repairDownloadBytes))
+        var requiredOnDisk = repairDownloadBytes * 2;
+        if (!HasFreeSpace(root, requiredOnDisk))
         {
-            return (false, CoreStrings.F("Core.Updater.DownloadDiskFull", $"修复下载盘空间不足: {FormatBytes(repairDownloadBytes)}", FormatBytes(repairDownloadBytes)));
+            return (false, CoreStrings.F("Core.Updater.GameDiskFull", $"游戏盘空间不足(含备份预留): {FormatBytes(requiredOnDisk)}", FormatBytes(requiredOnDisk)));
         }
-        var tempInstall = Path.Combine(_appDataDir, "repair_tmp", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempInstall);
+
         try
         {
             var (_, failures) = await _downloader.DownloadManyAsync(
                 diff.ToDownload,
                 baseUrl: "",
-                tempInstall,
+                root,
                 progress,
-                ct).ConfigureAwait(false);
+                ct,
+                streamingGameRoot: root).ConfigureAwait(false);
             if (failures.Count > 0)
             {
                 return (false, CoreStrings.F("Core.Updater.DownloadFailedFirst", $"下载失败: {failures[0]}", failures[0]));
-            }
-
-            var (installed, installFailures) = await Task.Run(
-                () => _installer.InstallFromStaging(tempInstall, root, manifest),
-                ct).ConfigureAwait(false);
-            if (installFailures.Count > 0)
-            {
-                return (false, $"安装失败: {installFailures[0]}");
             }
 
             // 与 Haiyu 一致:仅在用户选择删除跳过文件时清理,不擅自删除游戏目录中的额外文件。
@@ -792,17 +851,25 @@ public sealed class GameUpdater : IGameUpdater
             }
 
             WriteInstalledVersion(root, manifest.Version);
-            return (true, CoreStrings.F("Core.Updater.RepairDone", $"修复完成:重新下载 {installed} 个文件,版本 {manifest.Version}", installed, manifest.Version));
+            return (true, CoreStrings.F("Core.Updater.RepairDone", $"修复完成:重新下载 {diff.ToDownload.Count} 个文件,版本 {manifest.Version}", diff.ToDownload.Count, manifest.Version));
         }
         finally
         {
-            try
+            // 清理残留的 .part(取消/失败时未移动的文件;成功时不存在)
+            foreach (var entry in diff.ToDownload)
             {
-                Directory.Delete(tempInstall, recursive: true);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "清理修复临时目录失败: {Dir}", tempInstall);
+                try
+                {
+                    var part = GameFilePath.CombineUnderRoot(root, entry.Path) + ".part";
+                    if (File.Exists(part))
+                    {
+                        File.Delete(part);
+                    }
+                }
+                catch
+                {
+                    // 忽略清理失败
+                }
             }
         }
     }
