@@ -54,8 +54,7 @@ public sealed class AppUpdateService
         string repo,
         CancellationToken ct = default,
         bool forceRefresh = false,
-        string? accelerator = null,
-        string? mirrorUrl = null)
+        string? accelerator = null)
     {
         var trimmed = repo.Trim();
         if (string.IsNullOrWhiteSpace(trimmed))
@@ -77,8 +76,7 @@ public sealed class AppUpdateService
                 return ApplyAccelerator(cached!, accelerator);
             }
 
-            var info = await CheckViaMirrorAsync(mirrorUrl, ct).ConfigureAwait(false)
-                ?? await CheckViaApiAsync(trimmed, ct).ConfigureAwait(false)
+            var info = await CheckViaApiAsync(trimmed, ct).ConfigureAwait(false)
                 ?? await CheckViaHtmlAsync(trimmed, ct).ConfigureAwait(false);
 
             _cached = info;
@@ -124,56 +122,6 @@ public sealed class AppUpdateService
         _cached = null;
         _cachedAt = default;
     }
-
-    /// <summary>
-    /// 镜像源(mirrorchyan,对齐 Haiyu <c>MirrorUpdateService</c>):国内可达性最好的一条通道。
-    /// 仅在用户显式配置镜像地址时启用;返回的版本/资产交给统一平台过滤规则,避免镜像与实际平台错配。
-    /// 镜像响应中带 md5 而非 sha256,故此处只透出大小,不做摘要绑定。
-    /// </summary>
-    private async Task<AppUpdateInfo?> CheckViaMirrorAsync(string? mirrorUrl, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(mirrorUrl))
-        {
-            return null;
-        }
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get, mirrorUrl.Trim());
-            request.Headers.TryAddWithoutValidation("User-Agent", "McKuro");
-            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-            {
-                return null;
-            }
-            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            var mirror = JsonSerializer.Deserialize(json, GitHubJsonContext.Default.MirrorResponse);
-            if (mirror is null || mirror.Code != 0 || mirror.Data is null)
-            {
-                return null;
-            }
-            if (string.IsNullOrWhiteSpace(mirror.Data.Url) || string.IsNullOrWhiteSpace(mirror.Data.VersionName))
-            {
-                return null;
-            }
-
-            return new AppUpdateInfo
-            {
-                Version = mirror.Data.VersionName.TrimStart('v', 'V'),
-                AssetName = Path.GetFileName(new Uri(mirror.Data.Url).AbsolutePath),
-                AssetSize = mirror.Data.Filesize ?? 0,
-                DownloadUrl = mirror.Data.Url,
-                Sha256 = null,
-                ReleaseUrl = $"https://github.com/{RepoOf(mirror.Data)}/releases",
-            };
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
-
-    private static string RepoOf(MirrorData data) =>
-        string.IsNullOrWhiteSpace(data.Repo) ? "ZPC5560/McKuro" : data.Repo;
 
     /// <summary>标准通道:GitHub Releases API(匿名限 60 次/小时/IP)。</summary>
     private async Task<AppUpdateInfo?> CheckViaApiAsync(string trimmed, CancellationToken ct)
@@ -501,33 +449,6 @@ public sealed class GitHubAsset
     public string? BrowserDownloadUrl { get; set; }
 }
 
-/// <summary>镜像源(mirrorchyan 风格)响应模型,对齐 Haiyu <c>MirrorReponseModel</c>。</summary>
-public sealed class MirrorResponse
-{
-    [JsonPropertyName("code")]
-    public int Code { get; set; }
-
-    [JsonPropertyName("data")]
-    public MirrorData? Data { get; set; }
-}
-
-public sealed class MirrorData
-{
-    [JsonPropertyName("version_name")]
-    public string? VersionName { get; set; }
-
-    [JsonPropertyName("url")]
-    public string? Url { get; set; }
-
-    [JsonPropertyName("filesize")]
-    public long? Filesize { get; set; }
-
-    /// <summary>镜像返回的源仓库("owner/repo"),仅用于拼发布页地址。</summary>
-    [JsonPropertyName("repo")]
-    public string? Repo { get; set; }
-}
-
 [JsonSerializable(typeof(GitHubRelease))]
 [JsonSerializable(typeof(List<GitHubAsset>))]
-[JsonSerializable(typeof(MirrorResponse))]
 public sealed partial class GitHubJsonContext : JsonSerializerContext;

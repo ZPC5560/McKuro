@@ -578,8 +578,6 @@
   "Settings.UpdateIpFronting": "绕过 DNS 直连 GitHub IP(应对解析污染,默认关闭)",
   "Settings.UpdateAccelerator": "下载加速模板",
   "Settings.UpdateAccelerator.Watermark": "https://gh-proxy.example/{downloadUrl}",
-  "Settings.UpdateMirrorUrl": "镜像源地址(可选,优先于官方通道)",
-  "Settings.UpdateMirrorUrl.Watermark": "留空则只用 GitHub 官方通道",
   "Settings.VideoFiles": "视频文件",
   "Settings.VideoSource": "视频来源",
   "Settings.VideoSource.Desc": "自定义模式可加载本地视频或 Wallpaper Engine 视频壁纸作为启动页动态壁纸",

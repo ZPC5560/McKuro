@@ -207,11 +207,6 @@ public sealed class AppSettings
     /// 例:<c>https://gh-proxy.example/{downloadUrl}</c>。仅做字符串替换,不校验第三方可用性。
     /// </summary>
     public string AppUpdateAccelerator { get; set; } = "";
-
-    /// <summary>
-    /// 镜像源地址(默认空 = 不启用)。填写后优先走镜像检查更新,失败自动回退 GitHub 官方通道。
-    /// </summary>
-    public string AppUpdateMirrorUrl { get; set; } = "";
 }
 
 /// <summary>设置持久化服务(JSON 文件,支持原子写入与异步合并落盘)。</summary>

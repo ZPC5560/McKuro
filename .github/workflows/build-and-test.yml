@@ -102,7 +102,11 @@ jobs:
           $ver = $env:GITHUB_REF_NAME.TrimStart('v')
           $zip = "McKuro-win-x64-$ver.zip"
           Compress-Archive -Path src/McKuro/bin/Release/net10.0/win-x64/publish/* -DestinationPath $zip
-          gh release upload $env:GITHUB_REF_NAME $zip --clobber
+          # sha256 摘要资产:应用内自更新据此校验下载包(UpdateChecksum 解析 <资产名>.sha256)。
+          # 必须写成 GitHub 自动摘要风格 "SHA256 (name) = <hex>",该格式已被解析器覆盖并有单测。
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower()
+          "SHA256 ($zip) = $hash" | Out-File -Encoding ascii -NoNewline "$zip.sha256"
+          gh release upload $env:GITHUB_REF_NAME $zip "$zip.sha256" --clobber
 
   publish-macos:
     name: Publish macOS AOT (${{ matrix.rid }})
@@ -151,7 +155,10 @@ jobs:
           zip="McKuro-${{ matrix.rid }}-$ver.zip"
           # 平铺打包(zip 根即程序目录,解压后 chmod +x 即可运行)
           (cd "src/McKuro/bin/Release/net10.0/${{ matrix.rid }}/publish" && zip -qr "$GITHUB_WORKSPACE/$zip" .)
-          gh release upload "$GITHUB_REF_NAME" "$GITHUB_WORKSPACE/$zip" --clobber
+          # sha256 摘要资产(macOS 自更新下载的就是这个平铺 zip)
+          cd "$GITHUB_WORKSPACE"
+          echo "SHA256 ($zip) = $(shasum -a 256 "$zip" | cut -d' ' -f1)" > "$zip.sha256"
+          gh release upload "$GITHUB_REF_NAME" "$zip" "$zip.sha256" --clobber
 
       # .app 包:应用图标 + Info.plist + ad-hoc 签名(双击启动/Dock 图标正常)+ 拖拽安装 .dmg
       - name: Build .app bundle & attach to release
@@ -198,7 +205,10 @@ jobs:
           ver="${GITHUB_REF_NAME#v}"
           tar="McKuro-linux-x64-$ver.tar.gz"
           tar -czf "$GITHUB_WORKSPACE/$tar" -C "src/McKuro/bin/Release/net10.0/linux-x64/publish" .
-          gh release upload "$GITHUB_REF_NAME" "$GITHUB_WORKSPACE/$tar" --clobber
+          # sha256 摘要资产(Linux 无自动更新资产,摘要供手动下载时自校验)
+          cd "$GITHUB_WORKSPACE"
+          echo "SHA256 ($tar) = $(shasum -a 256 "$tar" | cut -d' ' -f1)" > "$tar.sha256"
+          gh release upload "$GITHUB_REF_NAME" "$tar" "$tar.sha256" --clobber
 
       - name: Install rpm tooling
         run: sudo apt-get update && sudo apt-get install -y rpm
@@ -264,6 +274,13 @@ jobs:
 
       - name: Attach installer to release
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.ref_name }}" artifacts/setup/*.exe --clobber
+        run: |
+          # exe 是 Windows 上 zip 缺失时的回退更新资产,同样附 sha256 摘要
+          Get-ChildItem artifacts/setup/*.exe | ForEach-Object {
+            $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower()
+            "SHA256 ($($_.Name)) = $hash" | Out-File -Encoding ascii -NoNewline "$($_.FullName).sha256"
+          }
+          gh release upload "${{ github.ref_name }}" artifacts/setup/*.exe artifacts/setup/*.sha256 --clobber

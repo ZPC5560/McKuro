@@ -290,6 +290,33 @@ public class UpdateEnhancementTests
         service.InvalidateCache();
     }
 
+    // ---------- CI 契约:发布流程生成的 *.sha256 必须能被解析 ----------
+
+    /// <summary>
+    /// 逐字复刻 .github/workflows/build-and-test.yml 各发布步骤产出的摘要内容
+    /// (publish-win / setup 用 pwsh <c>Out-File -NoNewline</c> 无尾换行;macOS/Linux 用
+    /// <c>echo</c> 带尾换行)。任一侧格式改动都会让此用例失败,防止自更新校验静默失效。
+    /// </summary>
+    [Theory]
+    [InlineData("McKuro-win-x64-1.2.6.zip",
+        "SHA256 (McKuro-win-x64-1.2.6.zip) = " + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    [InlineData("McKuro-osx-arm64-1.2.6.zip",
+        "SHA256 (McKuro-osx-arm64-1.2.6.zip) = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")]
+    [InlineData("McKuro-linux-x64-1.2.6.tar.gz",
+        "SHA256 (McKuro-linux-x64-1.2.6.tar.gz) = cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\n")]
+    [InlineData("McKuro-setup-1.2.6.exe",
+        "SHA256 (McKuro-setup-1.2.6.exe) = dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd")]
+    public void CiGeneratedSha256Manifest_IsParsable_BothPaths(string asset, string content)
+    {
+        var byName = UpdateChecksum.ParseSha256(content, asset);
+        var single = UpdateChecksum.ParseSingleSha256(content);
+        Assert.NotNull(byName);
+        Assert.NotNull(single);
+        Assert.Equal(byName, single);          // 两条解析路径结论必须一致
+        Assert.Equal(64, byName!.Length);      // 规范化后为纯 64 位小写 hex
+        Assert.Equal(byName.ToLowerInvariant(), byName);
+    }
+
     // ---------- 下载 + 完整性校验端到端 ----------
 
     /// <summary>起一个本地 HTTP 服务器回放固定字节;用于验证下载链路与摘要校验的实际交互。</summary>

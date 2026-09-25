@@ -763,7 +763,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _appUpdateAutoInstall = s.AppUpdateAutoInstall;
         _appUpdateIpFronting = s.AppUpdateIpFronting;
         _appUpdateAccelerator = s.AppUpdateAccelerator;
-        _appUpdateMirrorUrl = s.AppUpdateMirrorUrl;
         // 域前置是进程级开关,设置加载后立即同步(下载用 handler 每次读取)
         McKuro.Core.Services.Update.GitHubIpFronting.Enabled = s.AppUpdateIpFronting;
         _themeIndex = s.Theme switch
@@ -964,18 +963,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Save();
     }
 
-    /// <summary>镜像源地址(空 = 不启用;填写后优先镜像、失败回退官方通道)。</summary>
-    [ObservableProperty]
-    private string _appUpdateMirrorUrl = "";
-
-    partial void OnAppUpdateMirrorUrlChanged(string value)
-    {
-        AppServices.Settings.Current.AppUpdateMirrorUrl = value ?? "";
-        AppServices.Settings.Save();
-    }
 
     /// <summary>检查应用更新(GitHub Releases latest;跳过已跳过的版本)。public:供主窗口启动自动检查调用。
-    /// 多通道优先级:镜像(用户配置)→ GitHub API → GitHub HTML 回退;加速模板只影响下载地址。
+    /// 通道优先级:GitHub API → GitHub HTML 回退;加速模板只影响下载地址。
     /// 结果缓存 5 分钟,自动检查走缓存;用户手动点击或已发现新版时强制刷新。</summary>
     [RelayCommand]
     public async Task CheckAppUpdateAsync()
@@ -1010,8 +1000,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             var info = await AppServices.AppUpdate.CheckAsync(
                 repo,
                 forceRefresh: forceRefresh,
-                accelerator: settings.AppUpdateAccelerator,
-                mirrorUrl: settings.AppUpdateMirrorUrl);
+                accelerator: settings.AppUpdateAccelerator);
             if (info is null)
             {
                 AppUpdateStatusText = LanguageService.Format("Update.CheckFailed");

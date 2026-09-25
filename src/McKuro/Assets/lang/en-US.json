@@ -578,8 +578,6 @@
   "Settings.UpdateIpFronting": "Bypass DNS and connect to GitHub IPs directly (for DNS pollution; off by default)",
   "Settings.UpdateAccelerator": "Download accelerator template",
   "Settings.UpdateAccelerator.Watermark": "https://gh-proxy.example/{downloadUrl}",
-  "Settings.UpdateMirrorUrl": "Mirror source URL (optional; takes priority over official)",
-  "Settings.UpdateMirrorUrl.Watermark": "Leave empty to use GitHub official channels only",
   "Settings.VideoFiles": "Video files",
   "Settings.VideoSource": "Video Source",
   "Settings.VideoSource.Desc": "Custom mode loads a local video or a Wallpaper Engine video wallpaper as the launcher background",

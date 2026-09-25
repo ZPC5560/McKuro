@@ -753,11 +753,6 @@
                                                   IsChecked="{Binding AppUpdateIpFronting, Mode=TwoWay}" />
                                 </Grid>
                                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="{loc:Localize Key=Settings.UpdateMirrorUrl}" FontSize="13" VerticalAlignment="Center" />
-                                    <TextBox Grid.Column="1" Text="{Binding AppUpdateMirrorUrl, Mode=TwoWay}"
-                                             PlaceholderText="{loc:Localize Key=Settings.UpdateMirrorUrl.Watermark}" />
-                                </Grid>
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
                                     <TextBlock Text="{loc:Localize Key=Settings.UpdateAccelerator}" FontSize="13" VerticalAlignment="Center" />
                                     <TextBox Grid.Column="1" Text="{Binding AppUpdateAccelerator, Mode=TwoWay}"
                                              PlaceholderText="{loc:Localize Key=Settings.UpdateAccelerator.Watermark}" />
