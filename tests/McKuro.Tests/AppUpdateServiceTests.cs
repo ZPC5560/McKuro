@@ -111,6 +111,62 @@ public class AppUpdateServiceTests
         Assert.Null(await service.CheckAsync("   "));
     }
 
+    // 固定 Release 响应:断言只看"哪个客户端被命中",不依赖平台资产选择(Linux 无自动更新资产,结果为 null)
+    private const string CannedReleaseJson =
+        """{"tag_name":"v9.9.9","assets":[{"name":"McKuro-win-x64-9.9.9.zip","size":1024,"browser_download_url":"https://github.com/o/r/releases/download/v9.9.9/McKuro-win-x64-9.9.9.zip"}]}""";
+
+    /// <summary>记录命中次数的假 handler,任何请求都返回罐头 Release JSON。</summary>
+    private sealed class RecordingHandler : HttpMessageHandler
+    {
+        public int Hits;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Interlocked.Increment(ref Hits);
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(CannedReleaseJson),
+            });
+        }
+    }
+
+    [Fact]
+    public async Task Check_FrontingDisabled_UsesSharedClient()
+    {
+        var shared = new RecordingHandler();
+        var service = new AppUpdateService(new HttpClient(shared));
+        try
+        {
+            await service.CheckAsync("owner/repo", forceRefresh: true);
+            Assert.True(shared.Hits >= 1);
+        }
+        finally
+        {
+            GitHubIpFronting.Enabled = false; // 静态全局,测试后必须还原
+        }
+    }
+
+    [Fact]
+    public async Task Check_FrontingEnabled_RoutesCheckThroughFrontingClient()
+    {
+        // 回归:此前域前置仅下载通道生效,DNS 污染用户开开关后"检查更新"仍走系统 DNS
+        GitHubIpFronting.Enabled = true;
+        var shared = new RecordingHandler();
+        var fronted = new RecordingHandler();
+        var service = new AppUpdateService(new HttpClient(shared));
+        service.FrontingClientFactory = _ => new HttpClient(fronted);
+        try
+        {
+            await service.CheckAsync("owner/repo", forceRefresh: true);
+            Assert.True(fronted.Hits >= 1, "检查请求应走域前置客户端");
+            Assert.Equal(0, shared.Hits);
+        }
+        finally
+        {
+            GitHubIpFronting.Enabled = false;
+        }
+    }
+
     [Fact]
     public async Task Download_From_Local_Http_Server()
     {

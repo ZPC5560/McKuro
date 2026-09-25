@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -30,6 +31,13 @@ public sealed class AppUpdateInfo
 public sealed class AppUpdateService
 {
     private readonly HttpClient _http;
+
+    /// <summary>
+    /// 域前置开启时检查请求所用客户端的工厂(每次检查新建、用完即弃;检查有 5 分钟缓存限频,
+    /// 不跨检查复用连接池可接受)。默认按 <see cref="GitHubIpFronting.CreateHandler"/> 构建;
+    /// 单元测试注入假工厂以离线验证"检查通道遵循域前置开关"的路由契约。
+    /// </summary>
+    internal Func<IWebProxy?, HttpClient>? FrontingClientFactory { get; set; }
 
     /// <summary>Releases 结果缓存(对齐 Haiyu 的 5 分钟 <c>_cacheInfo</c>):避免启动自动检查 +
     /// 用户手动点击在短时间内重复打满匿名 API 配额(60 次/小时/IP)。</summary>
@@ -76,8 +84,8 @@ public sealed class AppUpdateService
                 return ApplyAccelerator(cached!, accelerator);
             }
 
-            var info = await CheckViaApiAsync(trimmed, ct).ConfigureAwait(false)
-                ?? await CheckViaHtmlAsync(trimmed, ct).ConfigureAwait(false);
+            var info = await UseCheckClientAsync(http => CheckViaApiAsync(trimmed, http, ct), ct).ConfigureAwait(false)
+                ?? await UseCheckClientAsync(http => CheckViaHtmlAsync(trimmed, http, ct), ct).ConfigureAwait(false);
 
             _cached = info;
             _cachedAt = DateTime.UtcNow;
@@ -123,8 +131,29 @@ public sealed class AppUpdateService
         _cachedAt = default;
     }
 
+    /// <summary>
+    /// 检查请求客户端选择:域前置关闭走注入的共享客户端(与既有行为一致);
+    /// 开启时改走 GitHub IP 直连客户端——否则 DNS 污染用户打开开关后检查通道仍走系统 DNS,
+    /// 救不了"检查更新一直转圈"(此前仅下载通道遵循该开关)。
+    /// </summary>
+    private async Task<T> UseCheckClientAsync<T>(Func<HttpClient, Task<T>> check, CancellationToken ct)
+    {
+        if (!GitHubIpFronting.Enabled)
+        {
+            return await check(_http).ConfigureAwait(false);
+        }
+
+        var factory = FrontingClientFactory
+            ?? (proxy => new HttpClient(GitHubIpFronting.CreateHandler(proxy))
+            {
+                Timeout = TimeSpan.FromSeconds(60),
+            });
+        using var http = factory(McKuro.Core.Services.Infrastructure.SystemProxyDetector.Detect());
+        return await check(http).ConfigureAwait(false);
+    }
+
     /// <summary>标准通道:GitHub Releases API(匿名限 60 次/小时/IP)。</summary>
-    private async Task<AppUpdateInfo?> CheckViaApiAsync(string trimmed, CancellationToken ct)
+    private async Task<AppUpdateInfo?> CheckViaApiAsync(string trimmed, HttpClient http, CancellationToken ct)
     {
         try
         {
@@ -133,7 +162,7 @@ public sealed class AppUpdateService
                 $"https://api.github.com/repos/{trimmed}/releases/latest");
             request.Headers.TryAddWithoutValidation("User-Agent", "McKuro");
             request.Headers.TryAddWithoutValidation("Accept", "application/vnd.github+json");
-            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+            using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 return null;
@@ -161,7 +190,7 @@ public sealed class AppUpdateService
                 AssetSize = asset.Size ?? 0,
                 DownloadUrl = asset.BrowserDownloadUrl!,
                 Sha256 = UpdateChecksum.ParseSha256(release.Body, asset.Name!)
-                         ?? await FetchAssetSha256Async(release, asset.Name!, ct).ConfigureAwait(false),
+                         ?? await FetchAssetSha256Async(release, asset.Name!, http, ct).ConfigureAwait(false),
                 ReleaseUrl = string.IsNullOrWhiteSpace(release.HtmlUrl) ? null : release.HtmlUrl,
             };
         }
@@ -175,7 +204,7 @@ public sealed class AppUpdateService
     /// 资产旁若附有 <c>&lt;资产名&gt;.sha256</c> 小文件则取用其摘要(发布方未在正文写摘要时的兜底)。
     /// 拉取失败一律返回 null(视为"无摘要",不阻断更新)。
     /// </summary>
-    private async Task<string?> FetchAssetSha256Async(GitHubRelease release, string assetName, CancellationToken ct)
+    private async Task<string?> FetchAssetSha256Async(GitHubRelease release, string assetName, HttpClient http, CancellationToken ct)
     {
         var manifest = release.Assets?.FirstOrDefault(a =>
             string.Equals(a.Name, assetName + ".sha256", StringComparison.OrdinalIgnoreCase));
@@ -185,7 +214,7 @@ public sealed class AppUpdateService
         }
         try
         {
-            var text = await _http.GetStringAsync(manifest.BrowserDownloadUrl, ct).ConfigureAwait(false);
+            var text = await http.GetStringAsync(manifest.BrowserDownloadUrl, ct).ConfigureAwait(false);
             return UpdateChecksum.ParseSingleSha256(text)
                    ?? UpdateChecksum.ParseSha256(text, assetName);
         }
@@ -201,13 +230,13 @@ public sealed class AppUpdateService
     /// 再抓 releases/expanded_assets/{tag} 片段解析资产下载链接(该端点无 API 配额限制;
     /// 片段不含文件大小,AssetSize 报 0,UI 侧自动省略大小)。
     /// </summary>
-    private async Task<AppUpdateInfo?> CheckViaHtmlAsync(string trimmed, CancellationToken ct)
+    private async Task<AppUpdateInfo?> CheckViaHtmlAsync(string trimmed, HttpClient http, CancellationToken ct)
     {
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, $"https://github.com/{trimmed}/releases/latest");
             request.Headers.TryAddWithoutValidation("User-Agent", "McKuro");
-            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+            using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 return null;
@@ -219,7 +248,7 @@ public sealed class AppUpdateService
             }
             var tag = Uri.UnescapeDataString(tagMatch.Groups[1].Value);
 
-            var fragment = await _http.GetStringAsync(
+            var fragment = await http.GetStringAsync(
                 $"https://github.com/{trimmed}/releases/expanded_assets/{Uri.EscapeDataString(tag)}", ct)
                 .ConfigureAwait(false);
             var names = Regex.Matches(fragment, $"href=\"/{Regex.Escape(trimmed)}/releases/download/[^\"/]+/([^\"?]+)\"")
