@@ -619,6 +619,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private double _appUpdateProgress;
 
+    /// <summary>完整性校验结果文案(下载/安装后显示;无摘要时不显示)。</summary>
+    [ObservableProperty]
+    private string _appUpdateIntegrityText = "";
+
+    /// <summary>是否显示完整性校验结果行。</summary>
+    [ObservableProperty]
+    private bool _appUpdateIntegrityVisible;
+
     private AppUpdateInfo? _pendingUpdate;
 
     /// <summary>当前应用版本(读程序集版本)。</summary>
@@ -753,6 +761,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _startupPageIndex = s.StartupPage == "Launcher" ? 1 : 0;
         _appUpdateAutoCheck = s.AppUpdateAutoCheck;
         _appUpdateAutoInstall = s.AppUpdateAutoInstall;
+        _appUpdateIpFronting = s.AppUpdateIpFronting;
+        _appUpdateAccelerator = s.AppUpdateAccelerator;
+        _appUpdateMirrorUrl = s.AppUpdateMirrorUrl;
+        // 域前置是进程级开关,设置加载后立即同步(下载用 handler 每次读取)
+        McKuro.Core.Services.Update.GitHubIpFronting.Enabled = s.AppUpdateIpFronting;
         _themeIndex = s.Theme switch
         {
             "Light" => 1,
@@ -929,12 +942,55 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Save();
     }
 
-    /// <summary>检查应用更新(GitHub Releases latest;跳过已跳过的版本)。public:供主窗口启动自动检查调用。</summary>
+    /// <summary>GitHub IP 域前置:绕过 DNS 直连内置 IP 表,应对解析污染导致的检查超时(默认关闭)。</summary>
+    [ObservableProperty]
+    private bool _appUpdateIpFronting;
+
+    partial void OnAppUpdateIpFrontingChanged(bool value)
+    {
+        AppServices.Settings.Current.AppUpdateIpFronting = value;
+        // 进程级开关:下载链路每次新建 handler 时读取,无需重启即可生效
+        McKuro.Core.Services.Update.GitHubIpFronting.Enabled = value;
+        AppServices.Settings.Save();
+    }
+
+    /// <summary>下载加速模板(含 {downloadUrl} 占位符;空 = 不加速)。</summary>
+    [ObservableProperty]
+    private string _appUpdateAccelerator = "";
+
+    partial void OnAppUpdateAcceleratorChanged(string value)
+    {
+        AppServices.Settings.Current.AppUpdateAccelerator = value ?? "";
+        AppServices.Settings.Save();
+    }
+
+    /// <summary>镜像源地址(空 = 不启用;填写后优先镜像、失败回退官方通道)。</summary>
+    [ObservableProperty]
+    private string _appUpdateMirrorUrl = "";
+
+    partial void OnAppUpdateMirrorUrlChanged(string value)
+    {
+        AppServices.Settings.Current.AppUpdateMirrorUrl = value ?? "";
+        AppServices.Settings.Save();
+    }
+
+    /// <summary>检查应用更新(GitHub Releases latest;跳过已跳过的版本)。public:供主窗口启动自动检查调用。
+    /// 多通道优先级:镜像(用户配置)→ GitHub API → GitHub HTML 回退;加速模板只影响下载地址。
+    /// 结果缓存 5 分钟,自动检查走缓存;用户手动点击或已发现新版时强制刷新。</summary>
     [RelayCommand]
     public async Task CheckAppUpdateAsync()
     {
+        await CheckAppUpdateCoreAsync(forceRefresh: true);
+    }
+
+    /// <summary>启动自动检查入口:允许走 5 分钟缓存,避免与用户手动检查重复打满 API 配额。</summary>
+    public Task CheckAppUpdateCachedAsync() => CheckAppUpdateCoreAsync(forceRefresh: false);
+
+    private async Task CheckAppUpdateCoreAsync(bool forceRefresh)
+    {
         // 仓库由配置提供(默认 ZPC5560/McKuro),设置页不再提供输入框
-        var repo = AppServices.Settings.Current.AppUpdateRepo.Trim();
+        var settings = AppServices.Settings.Current;
+        var repo = settings.AppUpdateRepo.Trim();
         if (string.IsNullOrWhiteSpace(repo))
         {
             AppUpdateStatusText = LanguageService.Format("Update.NoRepo");
@@ -951,7 +1007,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _pendingUpdate = null;
         try
         {
-            var info = await AppServices.AppUpdate.CheckAsync(repo);
+            var info = await AppServices.AppUpdate.CheckAsync(
+                repo,
+                forceRefresh: forceRefresh,
+                accelerator: settings.AppUpdateAccelerator,
+                mirrorUrl: settings.AppUpdateMirrorUrl);
             if (info is null)
             {
                 AppUpdateStatusText = LanguageService.Format("Update.CheckFailed");
@@ -978,6 +1038,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
             AppUpdateStatusText = info.AssetSize > 0
                 ? LanguageService.Format("Update.Size", FormatAppUpdateSize(info.AssetSize), info.AssetName)
                 : info.AssetName;
+            // 下载前如实告知是否带完整性校验(HTML 回退通道/镜像源通常无摘要)
+            AppUpdateIntegrityText = string.IsNullOrWhiteSpace(info.Sha256)
+                ? LanguageService.Format("Update.NoChecksum")
+                : LanguageService.Format("Update.ChecksumOk");
+            AppUpdateIntegrityVisible = true;
         }
         catch (Exception ex)
         {
@@ -1005,7 +1070,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
             var progress = new Progress<double>(p => AppUpdateProgress = p * 100);
             var destDir = Path.Combine(AppServices.AppDataDir, "updates");
             var localPath = await AppServices.AppUpdate.DownloadAsync(
-                _pendingUpdate.DownloadUrl, destDir, progress);
+                _pendingUpdate.DownloadUrl, destDir, progress,
+                expectedSha256: _pendingUpdate.Sha256);
             if (localPath is null)
             {
                 AppUpdateStatusText = LanguageService.Format("Update.DownloadFailed");

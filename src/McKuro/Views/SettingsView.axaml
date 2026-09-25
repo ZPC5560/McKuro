@@ -746,6 +746,22 @@
                                     <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
                                                   IsChecked="{Binding AppUpdateAutoInstall, Mode=TwoWay}" />
                                 </Grid>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                                    <TextBlock Text="{loc:Localize Key=Settings.UpdateIpFronting}" FontSize="13"
+                                               VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
+                                                  IsChecked="{Binding AppUpdateIpFronting, Mode=TwoWay}" />
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                                    <TextBlock Text="{loc:Localize Key=Settings.UpdateMirrorUrl}" FontSize="13" VerticalAlignment="Center" />
+                                    <TextBox Grid.Column="1" Text="{Binding AppUpdateMirrorUrl, Mode=TwoWay}"
+                                             PlaceholderText="{loc:Localize Key=Settings.UpdateMirrorUrl.Watermark}" />
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                                    <TextBlock Text="{loc:Localize Key=Settings.UpdateAccelerator}" FontSize="13" VerticalAlignment="Center" />
+                                    <TextBox Grid.Column="1" Text="{Binding AppUpdateAccelerator, Mode=TwoWay}"
+                                             PlaceholderText="{loc:Localize Key=Settings.UpdateAccelerator.Watermark}" />
+                                </Grid>
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <Button Content="{loc:Localize Key=Common.CheckUpdate}" Command="{Binding CheckAppUpdateCommand}"
                                             IsEnabled="{Binding !AppUpdateChecking}" />
@@ -763,6 +779,9 @@
                                            IsVisible="{Binding AppUpdateAvailable}" />
                                 <TextBlock Text="{Binding AppUpdateStatusText}" FontSize="12"
                                            Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding AppUpdateIntegrityText}" FontSize="12"
+                                           Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap"
+                                           IsVisible="{Binding AppUpdateIntegrityVisible}" />
                             </StackPanel>
                         </Grid>
                     </Border>

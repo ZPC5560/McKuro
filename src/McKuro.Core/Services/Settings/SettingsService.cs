@@ -194,6 +194,24 @@ public sealed class AppSettings
 
     /// <summary>自动下载并安装更新(零点击:下载→替换→重启新版;关闭则弹窗由用户确认)。</summary>
     public bool AppUpdateAutoInstall { get; set; }
+
+    /// <summary>
+    /// GitHub IP 域前置(默认关闭)。开启后绕过系统 DNS 直连内置 GitHub IP 表,
+    /// 用于应对 DNS 污染/解析不可达导致的"检查更新超时"。仅在遇到解析问题时开启:
+    /// IP 是固定值,上游换 IP 后会失效,此时应关闭回退系统 DNS。
+    /// </summary>
+    public bool AppUpdateIpFronting { get; set; }
+
+    /// <summary>
+    /// 下载加速模板(默认空 = 不加速)。须含 <c>{downloadUrl}</c> 占位符,
+    /// 例:<c>https://gh-proxy.example/{downloadUrl}</c>。仅做字符串替换,不校验第三方可用性。
+    /// </summary>
+    public string AppUpdateAccelerator { get; set; } = "";
+
+    /// <summary>
+    /// 镜像源地址(默认空 = 不启用)。填写后优先走镜像检查更新,失败自动回退 GitHub 官方通道。
+    /// </summary>
+    public string AppUpdateMirrorUrl { get; set; } = "";
 }
 
 /// <summary>设置持久化服务(JSON 文件,支持原子写入与异步合并落盘)。</summary>

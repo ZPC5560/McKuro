@@ -181,7 +181,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             // 延迟让启动页视频/账号头像等先走,不抢带宽与 UI
             await Task.Delay(5000);
-            await _settings.CheckAppUpdateAsync();
+            // 走缓存通道:用户若在 5 分钟内手动点过检查,启动检查复用结果,不重复占用匿名 API 配额
+            await _settings.CheckAppUpdateCachedAsync();
             Console.Error.WriteLine($"MCKURO-UPDATE auto: available={_settings.AppUpdateAvailable} autoInstall={AppServices.Settings.Current.AppUpdateAutoInstall} status={_settings.AppUpdateStatusText}");
             if (!_settings.AppUpdateAvailable)
             {

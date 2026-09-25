@@ -11,6 +11,12 @@ public sealed class AppUpdateInfo
     public required string AssetName { get; init; }
     public required long AssetSize { get; init; }
     public required string DownloadUrl { get; init; }
+
+    /// <summary>发布方提供的 sha256(小写 hex);未提供时为 null,此时跳过校验不阻断更新。</summary>
+    public string? Sha256 { get; init; }
+
+    /// <summary>Release 页面地址(供 UI「查看发布说明」跳转);可能为 null。</summary>
+    public string? ReleaseUrl { get; init; }
 }
 
 /// <summary>
@@ -25,6 +31,14 @@ public sealed class AppUpdateService
 {
     private readonly HttpClient _http;
 
+    /// <summary>Releases 结果缓存(对齐 Haiyu 的 5 分钟 <c>_cacheInfo</c>):避免启动自动检查 +
+    /// 用户手动点击在短时间内重复打满匿名 API 配额(60 次/小时/IP)。</summary>
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
+
+    private readonly SemaphoreSlim _cacheGate = new(1, 1);
+    private AppUpdateInfo? _cached;
+    private DateTime _cachedAt;
+
     public AppUpdateService(HttpClient http)
     {
         _http = http;
@@ -34,8 +48,14 @@ public sealed class AppUpdateService
     public static bool IsNewer(string currentVersion, string remoteVersion) =>
         McKuro.Core.Services.Game.GameUpdater.IsVersionOlder(currentVersion, remoteVersion);
 
-    /// <summary>检查指定 GitHub 仓库(owner/repo)的最新 Release:API 优先,失败回退 HTML 通道。</summary>
-    public async Task<AppUpdateInfo?> CheckAsync(string repo, CancellationToken ct = default)
+    /// <summary>检查指定 GitHub 仓库(owner/repo)的最新 Release:API 优先,失败回退 HTML 通道。
+    /// 结果缓存 5 分钟(<paramref name="forceRefresh"/> 为真时绕过缓存,供用户手动点「检查更新」)。</summary>
+    public async Task<AppUpdateInfo?> CheckAsync(
+        string repo,
+        CancellationToken ct = default,
+        bool forceRefresh = false,
+        string? accelerator = null,
+        string? mirrorUrl = null)
     {
         var trimmed = repo.Trim();
         if (string.IsNullOrWhiteSpace(trimmed))
@@ -43,9 +63,117 @@ public sealed class AppUpdateService
             return null;
         }
 
-        return await CheckViaApiAsync(trimmed, ct).ConfigureAwait(false)
-            ?? await CheckViaHtmlAsync(trimmed, ct).ConfigureAwait(false);
+        if (!forceRefresh && TryGetCached(out var cached))
+        {
+            return ApplyAccelerator(cached!, accelerator);
+        }
+
+        await _cacheGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            // 双检:并发调用(启动自动检查 + 用户手动点击)只发一次网络请求
+            if (!forceRefresh && TryGetCached(out cached))
+            {
+                return ApplyAccelerator(cached!, accelerator);
+            }
+
+            var info = await CheckViaMirrorAsync(mirrorUrl, ct).ConfigureAwait(false)
+                ?? await CheckViaApiAsync(trimmed, ct).ConfigureAwait(false)
+                ?? await CheckViaHtmlAsync(trimmed, ct).ConfigureAwait(false);
+
+            _cached = info;
+            _cachedAt = DateTime.UtcNow;
+            return ApplyAccelerator(info, accelerator);
+        }
+        finally
+        {
+            _cacheGate.Release();
+        }
     }
+
+    /// <summary>把加速模板套到下载地址上(模板无效时原样返回)。</summary>
+    private static AppUpdateInfo? ApplyAccelerator(AppUpdateInfo? info, string? accelerator)
+    {
+        if (info is null || !GitHubIpFronting.IsValidAccelerator(accelerator))
+        {
+            return info;
+        }
+        var accelerated = GitHubIpFronting.ApplyAccelerator(accelerator, info.DownloadUrl);
+        return string.Equals(accelerated, info.DownloadUrl, StringComparison.Ordinal)
+            ? info
+            : new AppUpdateInfo
+            {
+                Version = info.Version,
+                AssetName = info.AssetName,
+                AssetSize = info.AssetSize,
+                DownloadUrl = accelerated,
+                Sha256 = info.Sha256,
+                ReleaseUrl = info.ReleaseUrl,
+            };
+    }
+
+    private bool TryGetCached(out AppUpdateInfo? info)
+    {
+        info = _cached;
+        return info is not null && DateTime.UtcNow - _cachedAt <= CacheTtl;
+    }
+
+    /// <summary>清空缓存(测试与「强制刷新」用)。</summary>
+    public void InvalidateCache()
+    {
+        _cached = null;
+        _cachedAt = default;
+    }
+
+    /// <summary>
+    /// 镜像源(mirrorchyan,对齐 Haiyu <c>MirrorUpdateService</c>):国内可达性最好的一条通道。
+    /// 仅在用户显式配置镜像地址时启用;返回的版本/资产交给统一平台过滤规则,避免镜像与实际平台错配。
+    /// 镜像响应中带 md5 而非 sha256,故此处只透出大小,不做摘要绑定。
+    /// </summary>
+    private async Task<AppUpdateInfo?> CheckViaMirrorAsync(string? mirrorUrl, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(mirrorUrl))
+        {
+            return null;
+        }
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, mirrorUrl.Trim());
+            request.Headers.TryAddWithoutValidation("User-Agent", "McKuro");
+            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            var mirror = JsonSerializer.Deserialize(json, GitHubJsonContext.Default.MirrorResponse);
+            if (mirror is null || mirror.Code != 0 || mirror.Data is null)
+            {
+                return null;
+            }
+            if (string.IsNullOrWhiteSpace(mirror.Data.Url) || string.IsNullOrWhiteSpace(mirror.Data.VersionName))
+            {
+                return null;
+            }
+
+            return new AppUpdateInfo
+            {
+                Version = mirror.Data.VersionName.TrimStart('v', 'V'),
+                AssetName = Path.GetFileName(new Uri(mirror.Data.Url).AbsolutePath),
+                AssetSize = mirror.Data.Filesize ?? 0,
+                DownloadUrl = mirror.Data.Url,
+                Sha256 = null,
+                ReleaseUrl = $"https://github.com/{RepoOf(mirror.Data)}/releases",
+            };
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static string RepoOf(MirrorData data) =>
+        string.IsNullOrWhiteSpace(data.Repo) ? "ZPC5560/McKuro" : data.Repo;
 
     /// <summary>标准通道:GitHub Releases API(匿名限 60 次/小时/IP)。</summary>
     private async Task<AppUpdateInfo?> CheckViaApiAsync(string trimmed, CancellationToken ct)
@@ -84,7 +212,34 @@ public sealed class AppUpdateService
                 AssetName = asset.Name!,
                 AssetSize = asset.Size ?? 0,
                 DownloadUrl = asset.BrowserDownloadUrl!,
+                Sha256 = UpdateChecksum.ParseSha256(release.Body, asset.Name!)
+                         ?? await FetchAssetSha256Async(release, asset.Name!, ct).ConfigureAwait(false),
+                ReleaseUrl = string.IsNullOrWhiteSpace(release.HtmlUrl) ? null : release.HtmlUrl,
             };
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 资产旁若附有 <c>&lt;资产名&gt;.sha256</c> 小文件则取用其摘要(发布方未在正文写摘要时的兜底)。
+    /// 拉取失败一律返回 null(视为"无摘要",不阻断更新)。
+    /// </summary>
+    private async Task<string?> FetchAssetSha256Async(GitHubRelease release, string assetName, CancellationToken ct)
+    {
+        var manifest = release.Assets?.FirstOrDefault(a =>
+            string.Equals(a.Name, assetName + ".sha256", StringComparison.OrdinalIgnoreCase));
+        if (manifest is null || string.IsNullOrWhiteSpace(manifest.BrowserDownloadUrl))
+        {
+            return null;
+        }
+        try
+        {
+            var text = await _http.GetStringAsync(manifest.BrowserDownloadUrl, ct).ConfigureAwait(false);
+            return UpdateChecksum.ParseSingleSha256(text)
+                   ?? UpdateChecksum.ParseSha256(text, assetName);
         }
         catch (Exception)
         {
@@ -134,6 +289,9 @@ public sealed class AppUpdateService
                 AssetName = asset,
                 AssetSize = 0,
                 DownloadUrl = $"https://github.com/{trimmed}/releases/download/{tag}/{Uri.EscapeDataString(asset)}",
+                // 该通道不含 Release 正文,摘要留给下载后的 *.sha256 见证/用户自校验
+                Sha256 = null,
+                ReleaseUrl = $"https://github.com/{trimmed}/releases/tag/{tag}",
             };
         }
         catch (Exception)
@@ -184,12 +342,15 @@ public sealed class AppUpdateService
     /// <summary>下载安装包到目标目录,返回本地路径;失败返回 null。
     /// 可靠性:独立长超时 HttpClient(共享客户端 60s 超时对大文件/慢速代理不够);
     /// 系统代理自动注入(macOS 上 DefaultProxy 不读系统设置);
-    /// 断点续传(.part 分块 + HTTP Range)+ 卡死重试(单次读取 60s 无数据即断,最多 4 次)。</summary>
+    /// GitHub IP 域前置(见 <see cref="GitHubIpFronting"/>,默认关闭,应对 DNS 污染/解析不可达);
+    /// 断点续传(.part 分块 + HTTP Range)+ 卡死重试(单次读取 60s 无数据即断,最多 4 次)。
+    /// <paramref name="expectedSha256"/> 非空时校验下载产物,摘要不符则丢弃并重试(见 <see cref="UpdateChecksum"/>)。</summary>
     public async Task<string?> DownloadAsync(
         string url,
         string destDir,
         IProgress<double>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? expectedSha256 = null)
     {
         const int maxAttempts = 4;
         try
@@ -210,19 +371,14 @@ public sealed class AppUpdateService
                     var resumeFrom = File.Exists(partPath) ? new FileInfo(partPath).Length : 0;
                     var detectedProxy = McKuro.Core.Services.Infrastructure.SystemProxyDetector.Detect();
                     System.Console.Error.WriteLine(
-                        $"MCKURO-UPDATE dl: 第 {attempt}/{maxAttempts} 次 resume={resumeFrom} proxy={(detectedProxy is null ? "默认" : detectedProxy.ToString())}");
+                        $"MCKURO-UPDATE dl: 第 {attempt}/{maxAttempts} 次 resume={resumeFrom} proxy={(detectedProxy is null ? "默认" : detectedProxy.ToString())} fronting={GitHubIpFronting.Enabled}");
                     using var request = new HttpRequestMessage(HttpMethod.Get, url);
                     if (resumeFrom > 0)
                     {
                         request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(resumeFrom, null);
                     }
-                    using var downloader = new HttpClient(new SocketsHttpHandler
-                    {
-                        PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-                        UseProxy = true,
-                        // 显式注入系统代理(macOS 上 DefaultProxy 不读系统设置;未检测到时保留默认解析)
-                        Proxy = detectedProxy ?? HttpClient.DefaultProxy,
-                    })
+                    // 域前置 handler 内部已注入系统代理并设定连接池/超时参数
+                    using var downloader = new HttpClient(GitHubIpFronting.CreateHandler(detectedProxy))
                     {
                         Timeout = TimeSpan.FromMinutes(15),
                     };
@@ -268,6 +424,28 @@ public sealed class AppUpdateService
                             progress?.Report(total > 0 ? (double)downloaded / total : 0);
                         }
                     }
+                    // 完整性校验:仅在发布方提供摘要时执行。不符说明传输损坏或被篡改,
+                    // 删除 .part 让下一轮从头下载(已下载字节不可信,不能续传)。
+                    if (!string.IsNullOrWhiteSpace(expectedSha256))
+                    {
+                        var actual = await UpdateChecksum.ComputeSha256Async(partPath, ct).ConfigureAwait(false);
+                        if (!UpdateChecksum.Matches(expectedSha256, actual))
+                        {
+                            System.Console.Error.WriteLine(
+                                $"MCKURO-UPDATE dl: sha256 不符 期望={expectedSha256} 实际={actual ?? "计算失败"}");
+                            try
+                            {
+                                File.Delete(partPath);
+                            }
+                            catch (Exception)
+                            {
+                                // 删除失败不影响重试判定,下一轮 Create 会覆盖
+                            }
+                            throw new InvalidDataException("下载包 sha256 校验失败");
+                        }
+                        System.Console.Error.WriteLine("MCKURO-UPDATE dl: sha256 校验通过");
+                    }
+
                     File.Move(partPath, destPath, true);
                     return destPath;
                 }
@@ -300,6 +478,13 @@ public sealed class GitHubRelease
     [JsonPropertyName("tag_name")]
     public string? TagName { get; set; }
 
+    /// <summary>Release 正文(Markdown);发布方常在此写 sha256 摘要。</summary>
+    [JsonPropertyName("body")]
+    public string? Body { get; set; }
+
+    [JsonPropertyName("html_url")]
+    public string? HtmlUrl { get; set; }
+
     [JsonPropertyName("assets")]
     public List<GitHubAsset>? Assets { get; set; }
 }
@@ -316,6 +501,33 @@ public sealed class GitHubAsset
     public string? BrowserDownloadUrl { get; set; }
 }
 
+/// <summary>镜像源(mirrorchyan 风格)响应模型,对齐 Haiyu <c>MirrorReponseModel</c>。</summary>
+public sealed class MirrorResponse
+{
+    [JsonPropertyName("code")]
+    public int Code { get; set; }
+
+    [JsonPropertyName("data")]
+    public MirrorData? Data { get; set; }
+}
+
+public sealed class MirrorData
+{
+    [JsonPropertyName("version_name")]
+    public string? VersionName { get; set; }
+
+    [JsonPropertyName("url")]
+    public string? Url { get; set; }
+
+    [JsonPropertyName("filesize")]
+    public long? Filesize { get; set; }
+
+    /// <summary>镜像返回的源仓库("owner/repo"),仅用于拼发布页地址。</summary>
+    [JsonPropertyName("repo")]
+    public string? Repo { get; set; }
+}
+
 [JsonSerializable(typeof(GitHubRelease))]
 [JsonSerializable(typeof(List<GitHubAsset>))]
+[JsonSerializable(typeof(MirrorResponse))]
 public sealed partial class GitHubJsonContext : JsonSerializerContext;
