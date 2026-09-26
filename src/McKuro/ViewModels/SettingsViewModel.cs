@@ -588,6 +588,53 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Save();
     }
 
+    // ---- 消息通知(悬浮提醒类别开关;触发时除设置页外全局弹出) ----
+
+    [ObservableProperty]
+    private bool _notifSignEnabled;
+
+    [ObservableProperty]
+    private bool _notifActivityEnabled;
+
+    [ObservableProperty]
+    private bool _notifLoginEnabled;
+
+    [ObservableProperty]
+    private bool _notifWeeklyEnabled;
+
+    [ObservableProperty]
+    private bool _notifLivenessEnabled;
+
+    partial void OnNotifSignEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.NotifSignEnabled = value;
+        AppServices.Settings.Save();
+    }
+
+    partial void OnNotifActivityEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.NotifActivityEnabled = value;
+        AppServices.Settings.Save();
+    }
+
+    partial void OnNotifLoginEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.NotifLoginEnabled = value;
+        AppServices.Settings.Save();
+    }
+
+    partial void OnNotifWeeklyEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.NotifWeeklyEnabled = value;
+        AppServices.Settings.Save();
+    }
+
+    partial void OnNotifLivenessEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.NotifLivenessEnabled = value;
+        AppServices.Settings.Save();
+    }
+
     // 签到设置(AutoSignEnabled/AutoKuroClientTaskEnabled)已迁移至「签到」页管理,
     // 此处不再持有副本:避免保存其他设置时用启动时的旧值回滚签到页的新值
     [ObservableProperty]
@@ -753,6 +800,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
         IsLive2DCoreAvailable = Live2DLocator.IsCoreAvailable;
         ScanLive2DModels();
         _autoSkipVerifyDelete = s.AutoSkipVerifyDelete;
+        _notifSignEnabled = s.NotifSignEnabled;
+        _notifActivityEnabled = s.NotifActivityEnabled;
+        _notifLoginEnabled = s.NotifLoginEnabled;
+        _notifWeeklyEnabled = s.NotifWeeklyEnabled;
+        _notifLivenessEnabled = s.NotifLivenessEnabled;
         foreach (var p in s.SkipVerifyFiles)
         {
             SkipVerifyFiles.Add(p);

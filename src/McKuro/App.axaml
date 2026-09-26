@@ -37,6 +37,15 @@
                     <SolidColorBrush x:Key="McKuroContentTint" Color="#9E050A18" />
                     <!-- 浮层弹窗面:不透明(半透明 ContentTint 叠在页面文字上会透出,且 Avalonia 12.1 无窗口内 backdrop 模糊 API) -->
                     <SolidColorBrush x:Key="McKuroDialogFill" Color="#FF18223A" />
+                    <!-- 通知卡片/Toast 面:用不透明面色。
+                         原先用 ExperimentalAcrylicBorder + DynamicResource Material:该组合在把卡片加入可视树时
+                         (SetParent → DynamicResourceExpression.ActualThemeVariantChanged → UpdateMaterialSubscription)
+                         会在 Avalonia 12.1.2 内抛 NullReferenceException,且是未处理异常 → 进程直接终止,
+                         表现为"通知一来软件就卡死/消失"。原材质 TintOpacity=0.88、MaterialOpacity=0.85,
+                         等效观感已接近不透明,故改为等效面色后视觉几乎不变,并彻底消除该崩溃路径。 -->
+                    <SolidColorBrush x:Key="McKuroCardFill" Color="#E618223A" />
+                    <SolidColorBrush x:Key="McKuroCardStroke" Color="#59FFFFFF" />
+                    <BoxShadows x:Key="McKuroCardShadow">0 14 40 0 #8C000000</BoxShadows>
                     <SolidColorBrush x:Key="McKuroHomeScrim" Color="#48070C18" />
                     <!-- 桥接 Semi 基础表面/主色，让业务页半透明玻璃与 McKuro 语义一致(对齐原 ThemePaletteService) -->
                     <SolidColorBrush x:Key="SemiColorBg0" Color="#070C18" />
@@ -48,6 +57,15 @@
                     <SolidColorBrush x:Key="SemiColorText3" Color="#66FFFFFF" />
                     <SolidColorBrush x:Key="SemiColorPrimary" Color="#5A8DEE" />
                     <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#78A2F1" />
+                    <!-- 判定徽章语义色(UP/歪/保底规则):tint 胶囊底 + 文字色,暗色提亮文字保证可读 -->
+                    <SolidColorBrush x:Key="McKuroSuccess" Color="#73D13D" />
+                    <SolidColorBrush x:Key="McKuroSuccessTint" Color="#1A52C41A" />
+                    <SolidColorBrush x:Key="McKuroDanger" Color="#FF7875" />
+                    <SolidColorBrush x:Key="McKuroDangerTint" Color="#29F53F3F" />
+                    <SolidColorBrush x:Key="McKuroInfo" Color="#4096FF" />
+                    <SolidColorBrush x:Key="McKuroInfoTint" Color="#241677FF" />
+                    <SolidColorBrush x:Key="McKuroWarning" Color="#FFC53D" />
+                    <SolidColorBrush x:Key="McKuroWarningTint" Color="#29FA8C16" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="McKuroAccent" Color="#5A8DEE" />
@@ -69,6 +87,10 @@
                     <SolidColorBrush x:Key="McKuroContentTint" Color="#94F6F9FD" />
                     <!-- 浮层弹窗面:不透明(半透明 ContentTint 叠在页面文字上会透出,且 Avalonia 12.1 无窗口内 backdrop 模糊 API) -->
                     <SolidColorBrush x:Key="McKuroDialogFill" Color="#FFFFFFFF" />
+                    <!-- 通知卡片/Toast 面:浅色主题等效面色(理由同暗色主题:Acrylic + DynamicResource 会崩溃) -->
+                    <SolidColorBrush x:Key="McKuroCardFill" Color="#F2FFFFFF" />
+                    <SolidColorBrush x:Key="McKuroCardStroke" Color="#8CFFFFFF" />
+                    <BoxShadows x:Key="McKuroCardShadow">0 12 36 0 #42000000</BoxShadows>
                     <SolidColorBrush x:Key="McKuroHomeScrim" Color="#26EEF3FA" />
                     <SolidColorBrush x:Key="SemiColorBg0" Color="#EEF3FA" />
                     <SolidColorBrush x:Key="SemiColorBg1" Color="#ACFFFFFF" />
@@ -79,6 +101,15 @@
                     <SolidColorBrush x:Key="SemiColorText3" Color="#66000000" />
                     <SolidColorBrush x:Key="SemiColorPrimary" Color="#5A8DEE" />
                     <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#4F7CD1" />
+                    <!-- 判定徽章语义色(亮色主题:文字用深色调保证白底可读) -->
+                    <SolidColorBrush x:Key="McKuroSuccess" Color="#389E0D" />
+                    <SolidColorBrush x:Key="McKuroSuccessTint" Color="#1A52C41A" />
+                    <SolidColorBrush x:Key="McKuroDanger" Color="#CF1322" />
+                    <SolidColorBrush x:Key="McKuroDangerTint" Color="#1AF53F3F" />
+                    <SolidColorBrush x:Key="McKuroInfo" Color="#0958D9" />
+                    <SolidColorBrush x:Key="McKuroInfoTint" Color="#1A1677FF" />
+                    <SolidColorBrush x:Key="McKuroWarning" Color="#D48806" />
+                    <SolidColorBrush x:Key="McKuroWarningTint" Color="#1AFA8C16" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

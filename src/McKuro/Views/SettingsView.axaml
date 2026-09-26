@@ -653,6 +653,92 @@
                 </StackPanel>
             </Border>
 
+            <!-- ============ 消息通知(悬浮提醒;触发时除设置页外全局弹出) ============ -->
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
+                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
+                        VerticalAlignment="Center" />
+                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.Notifications}" VerticalAlignment="Center" />
+            </StackPanel>
+            <Border Classes="section">
+                <StackPanel>
+                    <!-- 游戏签到提醒 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="CalendarCheckmark" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Notif.SignToggle}" />
+                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.SignToggleDesc}" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                          IsChecked="{Binding NotifSignEnabled, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+                    <!-- 活动临期提醒 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="CalendarStar" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Notif.ActivityToggle}" />
+                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.ActivityToggleDesc}" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                          IsChecked="{Binding NotifActivityEnabled, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+                    <!-- 登录状态提醒 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="PersonCircle" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Notif.LoginToggle}" />
+                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.LoginToggleDesc}" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                          IsChecked="{Binding NotifLoginEnabled, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+                    <!-- 周本收尾提醒 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="Trophy" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Notif.WeeklyToggle}" />
+                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.WeeklyToggleDesc}" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                          IsChecked="{Binding NotifWeeklyEnabled, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+                    <!-- 活跃度提醒 -->
+                    <Border Classes="row">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                            <Border Classes="tile">
+                                <ic:FluentIcon Icon="Fire" IconVariant="Regular" IconSize="Size20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Notif.LivenessToggle}" />
+                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.LivenessToggleDesc}" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                          IsChecked="{Binding NotifLivenessEnabled, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
+
             <!-- ============ 下载 ============ -->
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
                 <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"

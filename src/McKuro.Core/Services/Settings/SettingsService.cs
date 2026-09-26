@@ -131,6 +131,23 @@ public sealed class AppSettings
     /// <summary>活动页已忽略临期提醒的活动 Key(标题+起止时间;版本活动刷新后仅保留仍存在的 Key)。</summary>
     public List<string> IgnoredEndingActivityIds { get; set; } = [];
 
+    // ---------- 消息通知(悬浮提醒,设置页可按类配置) ----------
+
+    /// <summary>游戏签到提醒(角色当日未签到)。</summary>
+    public bool NotifSignEnabled { get; set; } = true;
+
+    /// <summary>活动临期提醒(版本/卡池活动结束前 3 天内)。</summary>
+    public bool NotifActivityEnabled { get; set; } = true;
+
+    /// <summary>登录状态提醒(库街区/云鸣潮/攻略站会话失效)。</summary>
+    public bool NotifLoginEnabled { get; set; } = true;
+
+    /// <summary>周本收尾提醒(本周最后一天仍未打满)。</summary>
+    public bool NotifWeeklyEnabled { get; set; } = true;
+
+    /// <summary>活跃度提醒(19 点后当日活跃度仍为 0)。</summary>
+    public bool NotifLivenessEnabled { get; set; } = true;
+
     // ---------- mcguide 攻略站 ----------
 
     /// <summary>mcguide x-token(攻略站登录后服务端返回)。</summary>

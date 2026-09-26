@@ -3,6 +3,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:McKuro.ViewModels"
+        xmlns:svc="using:McKuro.Services"
         xmlns:views="using:McKuro.Views"
         xmlns:ic="using:FluentIcons.Avalonia"
         xmlns:controls="using:McKuro.Controls"
@@ -250,20 +251,61 @@
             </Border>
         </Panel>
 
-        <!-- 悬浮通知(Toast):内容区中间靠上,3 秒自动关闭,不拦截点击 -->
+        <!-- 悬浮提醒通知:右上角堆叠卡片;除设置页外全局显示,8 秒自动消失,可手动关闭/前往 -->
+        <ItemsControl ItemsSource="{Binding ReminderCards}"
+                      IsVisible="{Binding IsReminderOverlayVisible}"
+                      HorizontalAlignment="Right" VerticalAlignment="Top"
+                      Margin="0,60,16,0"
+                      ZIndex="280">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="svc:ReminderCardItem">
+                    <!-- 卡片面用不透明面色:原先的 ExperimentalAcrylicBorder + DynamicResource 会在卡片
+                         加入可视树时抛 NullReferenceException(Avalonia 12.1.2)并终止进程 —— 即"通知一来就卡死" -->
+                    <Border Margin="0,0,0,10" CornerRadius="14" Width="356"
+                            Background="{DynamicResource McKuroCardFill}"
+                            BorderBrush="{DynamicResource McKuroCardStroke}" BorderThickness="1"
+                            BoxShadow="{DynamicResource McKuroCardShadow}">
+                        <Grid Margin="14,12" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="11">
+                                <!-- 类别图标(签到蓝/活动橙/登录红/周本紫/活跃度橙红) -->
+                                <Border Width="32" Height="32" CornerRadius="16" VerticalAlignment="Top"
+                                        Background="{Binding Kind, Converter={x:Static svc:NotificationKindBrushConverter.Instance}}">
+                                    <ic:FluentIcon Icon="{Binding Kind, Converter={x:Static svc:NotificationKindIconConverter.Instance}}"
+                                                   IconSize="Size16" IconVariant="Filled" Foreground="White"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Top">
+                                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource SemiColorText1}" />
+                                    <TextBlock Text="{Binding Message}" FontSize="12" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource SemiColorText2}" />
+                                    <Button Classes="primary" Content="{loc:Localize Key=Notif.Go}" FontSize="11" Padding="9,2"
+                                            HorizontalAlignment="Left" Margin="0,3,0,0"
+                                            IsVisible="{Binding NavKey, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                            Command="{Binding GoCommand}" />
+                                </StackPanel>
+                                <Button Grid.Column="2" Content="✕" FontSize="10" Padding="6,0" BorderThickness="0"
+                                        Background="Transparent" VerticalAlignment="Top"
+                                        Foreground="{DynamicResource SemiColorText3}"
+                                        Command="{Binding DismissCommand}" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- 悬浮通知(Toast):内容区中间靠上,3 秒自动关闭,不拦截点击;面色与通知卡片同款 -->
         <Panel IsHitTestVisible="False" ZIndex="300">
             <Border MaxWidth="420"
-                    Padding="16,10"
                     CornerRadius="10"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Top"
                     Margin="0,28,0,0"
-                    Background="{DynamicResource McKuroDialogFill}"
-                    BorderBrush="{DynamicResource SemiColorBorder}"
+                    Background="{DynamicResource McKuroCardFill}"
+                    BorderBrush="{DynamicResource McKuroCardStroke}"
                     BorderThickness="1"
-                    BoxShadow="0 6 24 0 #33000000"
+                    BoxShadow="{DynamicResource McKuroCardShadow}"
                     IsVisible="{Binding ToastVisible}">
-                <StackPanel Orientation="Horizontal" Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="16,10">
                     <TextBlock Text="✓" FontSize="14" FontWeight="Bold"
                                Foreground="{DynamicResource SemiColorPrimary}"
                                VerticalAlignment="Center" />

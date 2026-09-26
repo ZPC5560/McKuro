@@ -81,6 +81,12 @@ public static class AppServices
     public static PlatformCapabilities Capabilities => Services.GetRequiredService<PlatformCapabilities>();
 
     /// <summary>
+    /// 提醒通知器(悬浮提醒出口):提醒调度器经 Raise 弹出,
+    /// 主窗口 ViewModel 订阅 Raised 事件展示卡片(设置页除外)。
+    /// </summary>
+    public static ReminderNotifier Reminders => Services.GetRequiredService<ReminderNotifier>();
+
+    /// <summary>
     /// 游戏进程监控(启动中 → 20 秒稳定 → 游戏中 → 退出回空闲)。
     /// 全局单例:LauncherViewModel 订阅状态驱动启动按钮文案,游戏结束动作(保持原样/显示主窗口/退出)也由该事件驱动。
     /// </summary>
@@ -334,6 +340,9 @@ public static class AppServices
             logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<RedemptionCodeService>()));
         services.AddSingleton<GeetVerifyService>();
         services.AddSingleton<AppUpdateService>();
+
+        // ---- 提醒通知器(notifications.json 当日台账,重启不重复打扰;类别开关见设置页) ----
+        services.AddSingleton(sp => new ReminderNotifier(dataDir));
 
         // ---- 角色图标磁盘持久化缓存(库街区正常时缓存, mcguide 兜底时按名称复用) ----
         services.AddSingleton(sp => new IconDiskCacheService(cacheDir: Path.Combine(dataDir, "icon_cache")));

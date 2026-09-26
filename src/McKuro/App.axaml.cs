@@ -11,6 +11,8 @@ namespace McKuro;
 public partial class App : Application
 {
     private DailyTaskScheduler? _scheduler;
+    private ReminderScheduler? _reminderScheduler;
+
 
     public override void Initialize()
     {
@@ -22,6 +24,12 @@ public partial class App : Application
         // 诊断:确认启动线程模型(App 初始化线程 vs 平台线程是否同一条)
         System.Console.Error.WriteLine(
             $"MCKURO-THREAD app-init tid={Environment.CurrentManagedThreadId} apt={Thread.CurrentThread.GetApartmentState()}");
+
+        // UI 线程心跳诊断(仅 McKuro_UI_HEARTBEAT=1):量化"界面卡死/通知迟滞"是否真实存在
+        if (Environment.GetEnvironmentVariable("McKuro_UI_HEARTBEAT") == "1")
+        {
+            Dispatcher.UIThread.Post(UiHeartbeat.Start, DispatcherPriority.Background);
+        }
 
         // 数据目录可经 McKuro_DATA_DIR 重定向(自更新流程模拟测试/多实例隔离用;默认 %AppData%/McKuro)
         AppServices.Initialize(Environment.GetEnvironmentVariable("McKuro_DATA_DIR"));
@@ -62,6 +70,17 @@ public partial class App : Application
         _scheduler = new DailyTaskScheduler();
         _scheduler.Start();
 
+        // 提醒调度(签到状态/活动临期/登录状态/周本/每日活跃度;冒烟模式不启动,保持无网络副作用)
+        if (Environment.GetEnvironmentVariable("McKuro_SMOKE") != "1")
+        {
+            // 首轮提醒与自动签到同期(15 秒):把"等自动签到结束"显式注入,
+            // 避免签到进行中就把账号报成"未签到"(原实现靠首轮延迟 75 秒错峰)
+            var dailyScheduler = _scheduler;
+            _reminderScheduler = new ReminderScheduler(
+                timeout => dailyScheduler is null ? Task.CompletedTask : dailyScheduler.WaitForFirstRunAsync(timeout));
+            _reminderScheduler.Start();
+        }
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var vm = new MainWindowViewModel();
@@ -72,6 +91,30 @@ public partial class App : Application
 
             // 单实例:主窗口就绪后开始监听「唤起」信号(次实例启动→本实例显示并聚焦)。
             SingleInstanceGuard.StartActivationListener();
+
+            // 诊断:稳态提醒延迟测试(McKuro_NOTIF_DELAY_TEST=<秒>)。
+            // 与 McKuro_SMOKE_NOTIF 的构造期播种不同,这里等窗口完全渲染后再由后台线程触发提醒,
+            // 才能测到"真实跑起来之后,一条通知从触发到画上屏幕"的耗时(派发/布局/渲染各段)。
+            if (double.TryParse(Environment.GetEnvironmentVariable("McKuro_NOTIF_DELAY_TEST"), out var notifDelay)
+                && notifDelay > 0)
+            {
+                DispatcherTimer.RunOnce(() =>
+                {
+                    UiHeartbeat.Mark("notif-test-timer-fired");
+                    // 后台线程触发:模拟真实调度器(ReminderScheduler 在 Task.Run 里调用 Raise)
+                    Task.Run(() =>
+                    {
+                        UiHeartbeat.Mark("notif-raise-begin(background)");
+                        AppServices.Reminders.Raise(
+                            $"delaytest:{DateTime.Now:HHmmss}",
+                            NotificationKind.ActivityEnding,
+                            "延迟测试通知",
+                            "用于测量通知从触发到绘制到屏幕的耗时",
+                            NavigationKeys.Activity);
+                        UiHeartbeat.Mark("notif-raise-returned(background)");
+                    });
+                }, TimeSpan.FromSeconds(notifDelay));
+            }
 
             // 自测模式:自动导航(默认抽卡分析页,验证 AOT 下图表页渲染),4 秒后退出
             // McKuro_SMOKE_NAV 可指到其他页(如 Settings/Launcher)用于页面级验证

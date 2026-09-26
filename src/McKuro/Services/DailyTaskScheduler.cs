@@ -13,6 +13,12 @@ public sealed class DailyTaskScheduler : IDisposable
     private readonly CancellationTokenSource _cts = new();
     private Task? _loop;
 
+    /// <summary>启动后首次执行的延迟(秒)。提醒调度器会 <see cref="WaitForFirstRunAsync"/> 等它跑完。</summary>
+    public static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(15);
+
+    /// <summary>本次启动的自动签到任务已完成(提醒侧据此避免"刚签完就误报未签到")。</summary>
+    private readonly TaskCompletionSource _firstRunDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public void Start()
     {
         if (_loop is not null)
@@ -22,16 +28,33 @@ public sealed class DailyTaskScheduler : IDisposable
         _loop = Task.Run(() => RunOnceAfterStartupAsync(_cts.Token));
     }
 
+    /// <summary>
+    /// 等本次启动的自动签到跑完(带超时兜底)。供提醒调度器在检查"游戏签到状态"前调用:
+    /// 即使把首轮提醒延迟调短,也不会在签到进行中就把账号报成"未签到"。
+    /// </summary>
+    public async Task WaitForFirstRunAsync(TimeSpan timeout)
+    {
+        var completed = await Task.WhenAny(_firstRunDone.Task, Task.Delay(timeout)).ConfigureAwait(false);
+        System.Console.Error.WriteLine(completed == _firstRunDone.Task
+            ? "MCKURO-REMINDER sign-check: 自动签到已结束(等到了)"
+            : $"MCKURO-REMINDER sign-check: 等自动签到超时({timeout.TotalSeconds:F0}s),继续检查");
+    }
+
     private async Task RunOnceAfterStartupAsync(CancellationToken ct)
     {
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
+            await Task.Delay(StartupDelay, ct).ConfigureAwait(false);
             await TryRunDailyTasksAsync(ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             // 正常退出
+        }
+        finally
+        {
+            // 无论成功/失败/跳过都要放行提醒侧,避免它一直等
+            _firstRunDone.TrySetResult();
         }
     }
 

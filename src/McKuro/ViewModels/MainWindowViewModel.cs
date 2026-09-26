@@ -75,6 +75,82 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>设置页实例(自更新状态与命令供主窗口更新弹窗绑定;子 VM 全部启动即建,天然单例)。</summary>
     public SettingsViewModel SettingsPage => _settings;
 
+    // ---------- 悬浮提醒通知(除设置页外全局显示) ----------
+
+    /// <summary>同时堆叠的提醒卡片上限(超出挤掉最旧的)。</summary>
+    private const int MaxReminderCards = 3;
+
+    /// <summary>提醒卡片自动消失时长。</summary>
+    private static readonly TimeSpan ReminderCardLifetime = TimeSpan.FromSeconds(8);
+
+    /// <summary>当前堆叠的提醒卡片(右上角,新的在下)。</summary>
+    public System.Collections.ObjectModel.ObservableCollection<ReminderCardItem> ReminderCards { get; } = [];
+
+    /// <summary>悬浮提醒是否可见:有卡片且当前页不是设置页(设置页承载提醒开关配置,不叠加遮挡)。</summary>
+    public bool IsReminderOverlayVisible => ReminderCards.Count > 0 && CurrentPage is not SettingsViewModel;
+
+    /// <summary>订阅提醒通知器:弹出卡片并启动自动消失计时。</summary>
+    private void HookReminders()
+    {
+        AppServices.Reminders.Raised += reminder => ShowReminderCard(new ReminderCardItem
+        {
+            Kind = reminder.Kind,
+            Title = reminder.Title,
+            Message = reminder.Message,
+            NavKey = reminder.NavKey,
+        });
+    }
+
+    private void ShowReminderCard(ReminderCardItem card)
+    {
+        while (ReminderCards.Count >= MaxReminderCards)
+        {
+            ReminderCards.RemoveAt(0);
+        }
+        card.DismissRequested += () => RemoveReminderCard(card);
+        card.GoRequested += _ => RemoveReminderCard(card);
+        ReminderCards.Add(card);
+        OnPropertyChanged(nameof(IsReminderOverlayVisible));
+
+        // 诊断:卡片入列(数据层可见)→ 实际渲染完成。用 DispatcherPriority.Render + 再等一帧
+        // (Background 回调),区分"只是排进了渲染队列"与"这一帧真的画完了"。
+        if (McKuro.Services.UiHeartbeat.Enabled)
+        {
+            var addedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+            System.Console.Error.WriteLine($"MCKURO-NOTIF card_added kind={card.Kind} t={DateTime.Now:HH:mm:ss.fff}");
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                var renderMs = System.Diagnostics.Stopwatch.GetElapsedTime(addedAt).TotalMilliseconds;
+                System.Console.Error.WriteLine(
+                    $"MCKURO-NOTIF card_render_queued kind={card.Kind} afterAdd={renderMs:F0}ms t={DateTime.Now:HH:mm:ss.fff}");
+                // 渲染优先级回调之后的第一帧(Background 低于 Render,必然晚于本次渲染提交)
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    var paintMs = System.Diagnostics.Stopwatch.GetElapsedTime(addedAt).TotalMilliseconds;
+                    System.Console.Error.WriteLine(
+                        $"MCKURO-NOTIF card_painted kind={card.Kind} afterAdd={paintMs:F0}ms t={DateTime.Now:HH:mm:ss.fff}");
+                }, Avalonia.Threading.DispatcherPriority.Background);
+            }, Avalonia.Threading.DispatcherPriority.Render);
+        }
+
+        // 自动消失:每张卡片独立计时(UI 线程 DispatcherTimer;先到先移除)
+        var timer = new Avalonia.Threading.DispatcherTimer { Interval = ReminderCardLifetime };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            RemoveReminderCard(card);
+        };
+        timer.Start();
+    }
+
+    private void RemoveReminderCard(ReminderCardItem card)
+    {
+        if (ReminderCards.Remove(card))
+        {
+            OnPropertyChanged(nameof(IsReminderOverlayVisible));
+        }
+    }
+
     /// <summary>发现新版本的询问弹窗(自动检查触发;AutoInstall 开启时不弹,直接升级)。</summary>
     [ObservableProperty]
     private bool _appUpdatePromptVisible;
@@ -118,6 +194,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         // 悬浮通知(兑换码复制成功等):主窗口统一展示,3 秒自动关闭
         WeakReferenceMessenger.Default.Register<MainWindowViewModel, ShowToastMessage>(this,
             static (recipient, message) => recipient.ShowToast(message.Value));
+
+        // 悬浮提醒(签到/活动/登录/周本/活跃度):提醒通知器触发 → 右上角卡片(设置页外显示)
+        HookReminders();
+
+        // 诊断冒烟(McKuro_SMOKE_NOTIF=1):预置三类示例提醒供悬浮通知 UI 验证;不触碰网络
+        if (Environment.GetEnvironmentVariable("McKuro_SMOKE_NOTIF") == "1")
+        {
+            SeedSmokeReminders();
+        }
 
         var home = new HomeViewModel();
         var launcher = new LauncherViewModel();
@@ -223,6 +308,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         AppUpdatePromptVisible = false;
     }
 
+    /// <summary>冒烟模式(McKuro_SMOKE_NOTIF=1)示例提醒:覆盖三类不同图标配别的提醒供 UI 验证。</summary>
+    private void SeedSmokeReminders()
+    {
+        var r = AppServices.Reminders;
+        r.Raise("smoke:activity", NotificationKind.ActivityEnding,
+            LanguageService.Format("Notif.ActivityTitle"),
+            LanguageService.Format("Notif.ActivityMessage", "溯洄·角色唤取", "14小时", "09-26"), NavigationKeys.Activity);
+        r.Raise("smoke:login", NotificationKind.AccountSession,
+            LanguageService.Format("Notif.LoginKuroTitle"),
+            LanguageService.Format("Notif.LoginSessionExpired", "登录已过期"), NavigationKeys.Account);
+        r.Raise("smoke:liveness", NotificationKind.DailyLiveness,
+            LanguageService.Format("Notif.LivenessTitle"),
+            LanguageService.Format("Notif.LivenessMessage", 100), NavigationKeys.Home);
+    }
+
     partial void OnSelectedNavigationItemChanged(NavigationItem? value)
     {
         if (value is not null)
@@ -230,6 +330,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             NavigateTo(value);
         }
     }
+
+    /// <summary>页面切换后重估悬浮提醒可见性(设置页不显示提醒卡片)。</summary>
+    partial void OnCurrentPageChanged(ViewModelBase? value)
+        => OnPropertyChanged(nameof(IsReminderOverlayVisible));
 
     public void NavigateTo(NavigationItem item)
     {
@@ -239,6 +343,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
         CurrentPage = item.ViewModel;
         SelectedNavigationItem = item;
+        // 页面切换留痕(诊断"某页数据不刷新/没触发重载"这类问题;stderr 非用户可见通道)
+        System.Console.Error.WriteLine($"MCKURO-NAV -> {item.Key}");
         // 导航到启动页时自动检查更新(移除手动检查按钮后)
         if (item.ViewModel is LauncherViewModel launcher)
         {
@@ -248,6 +354,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (item.ViewModel is AccountViewModel account)
         {
             account.OnNavigatedTo();
+        }
+        // 导航到深塔/海墟页时重新拉取战绩(页面 VM 只在启动时构造一次,否则永远是启动那刻的快照)
+        if (item.ViewModel is TowerViewModel tower)
+        {
+            tower.OnNavigatedTo();
         }
     }
 
