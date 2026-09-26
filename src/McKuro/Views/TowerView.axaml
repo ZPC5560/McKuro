@@ -11,13 +11,16 @@
              x:Class="McKuro.Views.TowerView"
              x:DataType="vm:TowerViewModel">
     <UserControl.Resources>
-        <!-- 增益标签(海墟/终焉矩阵共用) -->
+        <!-- 增益标签(海墟/终焉矩阵共用)。
+             注意:库街区部分 buff 图标是**纯白剪影**(RGB 255,255,255 + alpha,如
+             buff_Img/1787186054722.png 声骸技能强化),放在浅色底上会"看不见"——
+             故图标统一加一层深色底衬,白剪影与彩色图标都能看清。 -->
         <DataTemplate x:Key="BuffTemplate" x:DataType="vm:TowerBuffItem">
             <Border CornerRadius="8" Background="{DynamicResource SemiColorBg2}" Padding="8,5"
                     ToolTip.Tip="{Binding BuffDescription}">
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                     <Border Width="20" Height="20" CornerRadius="5" ClipToBounds="True"
-                            Background="{DynamicResource SemiColorBg2}">
+                            Background="#9BA0AE">
                         <controls:AsyncImage ImageUrl="{Binding BuffIcon}" Width="20" Height="20"
                                              Stretch="UniformToFill" />
                     </Border>
@@ -150,7 +153,7 @@
                     <Border Grid.Column="0" CornerRadius="12" Background="{DynamicResource SemiColorBg3}" Padding="14">
                         <Grid RowDefinitions="Auto,Auto,*,Auto,Auto,*,Auto">
                             <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="2,0,0,8">
-                                <ic:FluentIcon Icon="BookOpen" IconVariant="Regular" IconSize="Size16"
+                                <ic:FluentIcon Icon="TargetArrow" IconVariant="Regular" IconSize="Size16"
                                                VerticalAlignment="Center" />
                                 <TextBlock Text="{loc:Localize Key=Tower.ChallengeMode}" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                             </StackPanel>
@@ -165,11 +168,20 @@
                                                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
                                                         VerticalAlignment="Center">
+                                                <!-- 固定宽度 + 右对齐/居中:每行是独立 Grid,Auto 列会按各自内容宽
+                                                     排版,不固定就会出现"SSS 比 S 宽 → 分数文本左右错位" -->
                                                 <TextBlock Text="{Binding ScoreText}" FontSize="14" FontWeight="Bold"
+                                                           Width="62" TextAlignment="Right"
+                                                           VerticalAlignment="Center"
                                                            Foreground="{DynamicResource SemiColorPrimary}" />
-                                                <Border CornerRadius="6" Padding="7,2" Background="{Binding RankColor}">
+                                                <Border CornerRadius="6" Padding="0" Width="46" Height="22"
+                                                        Background="{Binding RankColor}"
+                                                        VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding RankText}" FontSize="11.5" FontWeight="Bold"
-                                                               Foreground="Black" />
+                                                               Foreground="Black"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               TextAlignment="Center" />
                                                 </Border>
                                             </StackPanel>
                                         </Grid>
@@ -243,36 +255,112 @@
                                                            Foreground="Black" />
                                             </Border>
                                         </Grid>
-                                        <!-- 配队角色 -->
-                                        <ItemsControl ItemsSource="{Binding NewTowerDetail.Roles}">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <StackPanel Orientation="Horizontal" Spacing="8" />
-                                                </ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate x:DataType="tower:NewTowerRole">
-                                                    <Border Width="44" Height="44" CornerRadius="9"
-                                                            ClipToBounds="True"
-                                                            Background="{DynamicResource SemiColorBg2}"
-                                                            BorderBrush="{DynamicResource SemiColorText3}"
-                                                            BorderThickness="1">
-                                                        <controls:AsyncImage ImageUrl="{Binding IconUrl}"
-                                                                             Width="44" Height="44"
-                                                                             Stretch="UniformToFill" />
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                        <!-- 增益 -->
-                                        <ItemsControl ItemsSource="{Binding NewTowerDetail.Buffs}"
-                                                      ItemTemplate="{StaticResource BuffTemplate}">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <WrapPanel ItemSpacing="8" />
-                                                </ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
-                                        </ItemsControl>
+                                        <!-- 每轮队伍分数:矩阵按轮次分队,每队独立积分/进度/角色/增益 -->
+                                        <Border Height="1" Background="{DynamicResource SemiColorBg2}"
+                                                IsVisible="{Binding NewTowerDetail.Rounds.Count}" />
+                                        <StackPanel Spacing="10" IsVisible="{Binding NewTowerDetail.Rounds.Count}">
+                                            <TextBlock Text="{loc:Localize Key=Tower.TeamsTitle}" FontSize="13"
+                                                       FontWeight="Bold"
+                                                       Foreground="{DynamicResource SemiColorText2}" />
+                                            <ItemsControl ItemsSource="{Binding NewTowerDetail.Rounds}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Spacing="12" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:TowerRoundItem">
+                                                        <StackPanel Spacing="6">
+                                                            <!-- 轮次标题 + 本轮合计 -->
+                                                            <Grid ColumnDefinitions="Auto,*,Auto"
+                                                                  IsVisible="{Binding RoundText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                                                <Border CornerRadius="6" Padding="8,2"
+                                                                        Background="{DynamicResource SemiColorBg2}">
+                                                                    <TextBlock Text="{Binding RoundText}" FontSize="12"
+                                                                               FontWeight="Bold" />
+                                                                </Border>
+                                                                <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                                                            Spacing="6" VerticalAlignment="Center">
+                                                                    <TextBlock Text="{loc:Localize Key=Tower.RoundTotal}"
+                                                                               FontSize="11"
+                                                                               Foreground="{DynamicResource SemiColorText3}"
+                                                                               VerticalAlignment="Center" />
+                                                                    <TextBlock Text="{Binding RoundScoreText}" FontSize="13"
+                                                                               FontWeight="Bold"
+                                                                               Foreground="{DynamicResource SemiColorPrimary}" />
+                                                                </StackPanel>
+                                                            </Grid>
+                                                            <!-- 本轮各队 -->
+                                                            <ItemsControl ItemsSource="{Binding Teams}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <StackPanel Spacing="6" />
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:DataType="vm:TowerTeamItem">
+                                                                        <Border CornerRadius="8"
+                                                                                Background="{DynamicResource SemiColorBg2}"
+                                                                                Padding="10,8">
+                                                                            <Grid ColumnDefinitions="Auto,Auto,*,Auto"
+                                                                                  ColumnSpacing="10">
+                                                                                <TextBlock Text="{Binding TeamNoText}"
+                                                                                           FontSize="12" FontWeight="Bold"
+                                                                                           VerticalAlignment="Center"
+                                                                                           Foreground="{DynamicResource SemiColorText2}" />
+                                                                                <StackPanel Grid.Column="1" Spacing="1"
+                                                                                            VerticalAlignment="Center">
+                                                                                    <TextBlock Text="{Binding ScoreText}"
+                                                                                               FontSize="15" FontWeight="Bold"
+                                                                                               Foreground="{DynamicResource SemiColorPrimary}" />
+                                                                                    <TextBlock Text="{loc:Localize Key=Tower.Score}"
+                                                                                               FontSize="10"
+                                                                                               Foreground="{DynamicResource SemiColorText3}" />
+                                                                                </StackPanel>
+                                                                                <!-- 该队角色 -->
+                                                                                <ItemsControl Grid.Column="2"
+                                                                                              ItemsSource="{Binding Roles}"
+                                                                                              VerticalAlignment="Center">
+                                                                                    <ItemsControl.ItemsPanel>
+                                                                                        <ItemsPanelTemplate>
+                                                                                            <StackPanel Orientation="Horizontal"
+                                                                                                        Spacing="6" />
+                                                                                        </ItemsPanelTemplate>
+                                                                                    </ItemsControl.ItemsPanel>
+                                                                                    <ItemsControl.ItemTemplate>
+                                                                                        <DataTemplate x:DataType="tower:NewTowerRole">
+                                                                                            <Border Width="34" Height="34"
+                                                                                                    CornerRadius="7"
+                                                                                                    ClipToBounds="True"
+                                                                                                    Background="{DynamicResource SemiColorBg3}">
+                                                                                                <controls:AsyncImage ImageUrl="{Binding IconUrl}"
+                                                                                                                     Width="34" Height="34"
+                                                                                                                     Stretch="UniformToFill" />
+                                                                                            </Border>
+                                                                                        </DataTemplate>
+                                                                                    </ItemsControl.ItemTemplate>
+                                                                                </ItemsControl>
+                                                                                <StackPanel Grid.Column="3" Orientation="Horizontal"
+                                                                                            Spacing="8"
+                                                                                            VerticalAlignment="Center">
+                                                                                    <TextBlock Text="{Binding PassText}"
+                                                                                               FontSize="12" FontWeight="Bold"
+                                                                                               VerticalAlignment="Center"
+                                                                                               Foreground="{DynamicResource SemiColorText2}" />
+                                                                                    <ItemsControl ItemsSource="{Binding Buffs}"
+                                                                                                  ItemTemplate="{StaticResource BuffTemplate}"
+                                                                                                  VerticalAlignment="Center" />
+                                                                                </StackPanel>
+                                                                            </Grid>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>

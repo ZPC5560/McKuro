@@ -101,9 +101,11 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="gacha:FiveStarEntry">
                                     <Border Margin="0,2"
-                                            Padding="8,7"
+                                            Padding="10,8"
                                             Background="{DynamicResource SemiColorBg3}"
-                                            CornerRadius="8">
+                                            BorderBrush="{DynamicResource McKuroNavDivider}"
+                                            BorderThickness="1"
+                                            CornerRadius="10">
                                         <Grid ColumnDefinitions="Auto,*,44" RowDefinitions="Auto,Auto">
                                             <Border Grid.RowSpan="2"
                                                     Width="32" Height="32"
@@ -121,15 +123,20 @@
                                                        Margin="8,0,0,0"
                                                        FontSize="13"
                                                        FontWeight="Bold"
+                                                       VerticalAlignment="Center"
                                                        Text="{Binding Record.Name}"
                                                        TextTrimming="CharacterEllipsis" />
+                                            <!-- 判定胶囊:tint 淡底 + 语义色文字(实色块改为轻量判定印章) -->
                                             <Border Grid.Column="2"
                                                     Grid.RowSpan="2"
-                                                    CornerRadius="4"
-                                                    Padding="8,2"
+                                                    CornerRadius="999"
+                                                    Padding="9,2"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
                                                     Background="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagConverter.Instance}}"
                                                     IsVisible="{Binding IsOffBanner, Converter={x:Static vm:UpFlagVisibleConverter.Instance}}">
-                                                <TextBlock FontSize="11" Foreground="White"
+                                                <TextBlock FontSize="11" FontWeight="SemiBold"
+                                                           Foreground="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagTextBrushConverter.Instance}}"
                                                            HorizontalAlignment="Center"
                                                            Text="{Binding IsOffBanner, Converter={x:Static vm:FiveStarFlagTextConverter.Instance}}" />
                                             </Border>
@@ -382,9 +389,12 @@
                                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding DisplayName}" FontSize="16" FontWeight="Bold" />
-                                                <Border CornerRadius="4" Padding="6,2"
-                                                        Background="{Binding GuaranteeBadgeKind, Converter={x:Static vm:GuaranteeBadgeBrushConverter.Instance}}">
-                                                    <TextBlock Text="{Binding GuaranteeBadgeText}" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                                <!-- 保底规则判定胶囊:tint 淡底 + 语义色文字 -->
+                                                <Border CornerRadius="999" Padding="9,2"
+                                                        VerticalAlignment="Center"
+                                                        Background="{Binding GuaranteeBadgeKind, Converter={x:Static vm:GuaranteeBadgeTintConverter.Instance}}">
+                                                    <TextBlock Text="{Binding GuaranteeBadgeText}" FontSize="11" FontWeight="SemiBold"
+                                                               Foreground="{Binding GuaranteeBadgeKind, Converter={x:Static vm:GuaranteeBadgeTextBrushConverter.Instance}}" />
                                                 </Border>
                                             </StackPanel>
                                             <TextBlock Grid.Column="1" Text="{Binding TotalPullsText}"

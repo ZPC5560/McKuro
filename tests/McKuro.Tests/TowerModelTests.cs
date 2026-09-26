@@ -1,5 +1,6 @@
 using System.Text.Json;
 using McKuro.Core.Models.Tower;
+using McKuro.ViewModels;
 
 namespace McKuro.Tests;
 
@@ -155,5 +156,84 @@ public class TowerModelTests
         Assert.Equal("21天16小时后刷新", TowerSeasonParser.RefreshText(1_874_134_021));
         Assert.Equal("", TowerSeasonParser.RefreshText(null));
         Assert.Equal("", TowerSeasonParser.RefreshText(0));
+    }
+
+    [Fact]
+    public void IsSeasonEnded_NegativeOrZeroRemaining()
+    {
+        // 实机:账号还没打新一期时,深塔 seasonEndTime=-1068656700(已结束 12.4 天)、
+        // 海墟 seasonEndTime=-2278256901(已结束 26.4 天),接口仍返回上一期数据且 code=200;
+        // 这两种情况必须能被识别成"本期已结束",否则页面会出现"分数照旧、倒计时消失"的假象
+        Assert.True(TowerSeasonParser.IsSeasonEnded(-1_068_656_700));
+        Assert.True(TowerSeasonParser.IsSeasonEnded(-2_278_256_901));
+        Assert.True(TowerSeasonParser.IsSeasonEnded(0));
+        Assert.False(TowerSeasonParser.IsSeasonEnded(null));      // 字段缺失:不判为已结束
+        Assert.False(TowerSeasonParser.IsSeasonEnded(1_349_731_707)); // 本期剩余 15.6 天
+        Assert.False(TowerSeasonParser.IsSeasonEnded(140_131_497));   // 本期剩余 1.6 天
+    }
+
+    /// <summary>实机 newTowerDetail:modeId=1(奇点扩张) 44065 分 rank=5,share 6 队分两轮。</summary>
+    private static List<NewTowerTeam> RealTeams() =>
+    [
+        new() { Round = 1, Score = 12002, PassBoss = 3, BossCount = 5 },
+        new() { Round = 1, Score = 8197, PassBoss = 5, BossCount = 5 },
+        new() { Round = 2, Score = 8238, PassBoss = 1, BossCount = 5 },
+        new() { Round = 2, Score = 5167, PassBoss = 1, BossCount = 5 },
+        new() { Round = 2, Score = 6432, PassBoss = 2, BossCount = 5 },
+        new() { Round = 2, Score = 4029, PassBoss = 3, BossCount = 5 },
+    ];
+
+    [Fact]
+    public void GroupTeamsByRound_SplitsRoundsAndSumsPerRoundScore()
+    {
+        var rounds = TowerViewModel.GroupTeamsByRound(RealTeams());
+
+        Assert.Equal(2, rounds.Count);
+        // 第1轮:12002 + 8197 = 20199;第2轮:8238 + 5167 + 6432 + 4029 = 23866
+        Assert.Equal("20199", rounds[0].RoundScoreText);
+        Assert.Equal("23866", rounds[1].RoundScoreText);
+        Assert.Equal(2, rounds[0].Teams.Count);
+        Assert.Equal(4, rounds[1].Teams.Count);
+        // 每队保留自己的分数(这正是"细化每轮队伍分数"要展示的东西)
+        Assert.Equal(["12002", "8197"], rounds[0].Teams.Select(t => t.ScoreText));
+        Assert.Equal(["8238", "5167", "6432", "4029"], rounds[1].Teams.Select(t => t.ScoreText));
+        // 队伍进度按队保留(3/5、5/5 与模式级 3/5 不同,不能混成一锅)
+        Assert.Equal("3/5", rounds[0].Teams[0].PassText);
+        Assert.Equal("5/5", rounds[0].Teams[1].PassText);
+        // 轮次升序
+        Assert.Equal("第1轮", rounds[0].RoundText);
+        Assert.Equal("第2轮", rounds[1].RoundText);
+    }
+
+    [Fact]
+    public void GroupTeamsByRound_StableModeHasNoRoundTitleAndKeepsAllTeams()
+    {
+        // 稳态协议(round=0/缺失):不显示轮次标题,队伍仍要全部列出(实机 2 队:7215 + 3608 = 10823)
+        var rounds = TowerViewModel.GroupTeamsByRound(
+        [
+            new() { Round = 0, Score = 7215, PassBoss = 4, BossCount = 4 },
+            new() { Round = 0, Score = 3608, PassBoss = 4, BossCount = 4 },
+        ]);
+
+        Assert.Single(rounds);
+        Assert.Equal("", rounds[0].RoundText);
+        Assert.Equal("10823", rounds[0].RoundScoreText);
+        Assert.Equal(2, rounds[0].Teams.Count);
+    }
+
+    [Fact]
+    public void GroupTeamsByRound_HandlesNoTeams()
+    {
+        Assert.Empty(TowerViewModel.GroupTeamsByRound(null));
+        Assert.Empty(TowerViewModel.GroupTeamsByRound([]));
+    }
+
+    [Fact]
+    public void RankText_CoversSixGradesFromRealData()
+    {
+        // 实机 rank:稳态协议=3(S)、奇点扩张=5(SSS)。旧实现只映射 0..3,rank=5 会被显示成 C
+        Assert.Equal("S", TowerViewModel.RankTextOf(3));
+        Assert.Equal("SSS", TowerViewModel.RankTextOf(5));
+        Assert.Equal(["C", "B", "A", "S", "SS", "SSS"], Enumerable.Range(0, 6).Select(TowerViewModel.RankTextOf));
     }
 }

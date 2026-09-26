@@ -720,18 +720,36 @@ public sealed class UpFlagVisibleConverter : Avalonia.Data.Converters.IValueConv
         => throw new NotSupportedException();
 }
 
-/// <summary>五星 UP/歪 标记背景:true→红,false→绿,null→灰。</summary>
+/// <summary>徽章语义色工具:按当前主题变体(亮/暗)查应用资源画刷。</summary>
+internal static class BadgeThemeBrush
+{
+    public static Avalonia.Styling.ThemeVariant CurrentVariant
+        => Avalonia.Application.Current?.ActualThemeVariant ?? Avalonia.Styling.ThemeVariant.Default;
+
+    public static object? Get(string key)
+        => Avalonia.Application.Current?.TryGetResource(key, CurrentVariant, out var brush) == true ? brush : null;
+}
+
+/// <summary>五星 UP/歪 徽章:tint 胶囊底(true→危险红 tint,false→成功绿 tint)。
+/// 语义淡底替代旧实色块,判定色不再喧宾夺主。</summary>
 public sealed class FiveStarFlagConverter : Avalonia.Data.Converters.IValueConverter
 {
     public static readonly FiveStarFlagConverter Instance = new();
 
     public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
-        => value switch
-        {
-            true => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#F53F3F")),
-            false => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#52C41A")),
-            _ => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#8C8C8C")),
-        };
+        => value is true ? BadgeThemeBrush.Get("McKuroDangerTint") : BadgeThemeBrush.Get("McKuroSuccessTint");
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>五星 UP/歪 徽章文字色(随主题取可读深浅:亮色主题深字,暗色主题亮字)。</summary>
+public sealed class FiveStarFlagTextBrushConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly FiveStarFlagTextBrushConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value is true ? BadgeThemeBrush.Get("McKuroDanger") : BadgeThemeBrush.Get("McKuroSuccess");
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
         => throw new NotSupportedException();
@@ -796,7 +814,43 @@ public sealed class PityColorConverter : Avalonia.Data.Converters.IValueConverte
 }
 
 
-/// <summary>保底状态徽标背景色:guaranteed→蓝(必中),fifty→琥珀(50/50),always→绿(必UP),none→灰(无UP)。</summary>
+/// <summary>保底状态徽标 tint 胶囊底:guaranteed→info 蓝,fifty→warning 琥珀,always→success 绿,none→中性灰。</summary>
+public sealed class GuaranteeBadgeTintConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly GuaranteeBadgeTintConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value switch
+        {
+            "guaranteed" => BadgeThemeBrush.Get("McKuroInfoTint"),
+            "fifty" => BadgeThemeBrush.Get("McKuroWarningTint"),
+            "always" => BadgeThemeBrush.Get("McKuroSuccessTint"),
+            _ => BadgeThemeBrush.Get("McKuroCardStroke"),
+        };
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>保底状态徽标文字色(随主题取可读深浅)。</summary>
+public sealed class GuaranteeBadgeTextBrushConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly GuaranteeBadgeTextBrushConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value switch
+        {
+            "guaranteed" => BadgeThemeBrush.Get("McKuroInfo"),
+            "fifty" => BadgeThemeBrush.Get("McKuroWarning"),
+            "always" => BadgeThemeBrush.Get("McKuroSuccess"),
+            _ => BadgeThemeBrush.Get("SemiColorText2"),
+        };
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>保底进度条实色(guaranteed→蓝,fifty→琥珀,always→绿,none→灰);徽章胶囊请用 Tint/Text 成对转换器。</summary>
 public sealed class GuaranteeBadgeBrushConverter : Avalonia.Data.Converters.IValueConverter
 {
     public static readonly GuaranteeBadgeBrushConverter Instance = new();
@@ -804,8 +858,8 @@ public sealed class GuaranteeBadgeBrushConverter : Avalonia.Data.Converters.IVal
     public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
         => value switch
         {
-            "guaranteed" => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#1677FF")),
-            "fifty" => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#FA8C16")),
+            "guaranteed" => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#4096FF")),
+            "fifty" => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#FAAD14")),
             "always" => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#52C41A")),
             _ => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#8C8C8C")),
         };

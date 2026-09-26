@@ -9,12 +9,6 @@
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.ActivityView"
              x:DataType="vm:ActivityViewModel">
-    <UserControl.Resources>
-        <vm:GanttWidthConverter x:Key="GanttWidth" />
-        <vm:GanttMarginConverter x:Key="GanttMargin" />
-        <vm:GanttTodayLabelMarginConverter x:Key="GanttTodayLabelMargin" />
-        <vm:OngoingOpacityConverter x:Key="OngoingOpacity" />
-    </UserControl.Resources>
     <Grid RowDefinitions="Auto,*" Margin="20,16,20,16">
         <!-- 标题 -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
@@ -120,11 +114,11 @@
                                        Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <!-- 甘特图主体(固定 940 参考宽,窄窗口可横向滚动) -->
-                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                            <Grid ColumnDefinitions="230,940" ColumnSpacing="14">
+                        <!-- 甘特图主体:左列(logo+名称+时间)固定可见;仅时间轴横向滚动
+                             (内容宽=完整历史 56px/天 最低 720;默认滚动到"今天"居中,左侧完成段被视口部分隐藏,拖动回看) -->
+                        <Grid ColumnDefinitions="230,*" ColumnSpacing="14">
                                 <!-- 左列:活动 logo + 名称 + 时间 -->
-                                <StackPanel Spacing="10">
+                                <StackPanel Spacing="16">
                                     <TextBlock Text="{loc:Localize Key=Activity.GanttLabel}" FontSize="11" Foreground="{DynamicResource SemiColorText3}"
                                                Height="18" />
                                     <ItemsControl ItemsSource="{Binding VersionActivities}">
@@ -167,34 +161,45 @@
                                     </ItemsControl>
                                 </StackPanel>
 
-                                <!-- 右列:时间轴 + 甘特条(表头高 28 与左列"活动"标签对齐) -->
-                                <Grid Grid.Column="1">
+                                <!-- 右列:时间轴 + 甘特条(宽度=完整历史内容宽,星号列随其等比缩放;表头高 28 与左列对齐)。
+                                     横向滚动只作用于本列,左列活动图片/名称始终可见 -->
+                                <ScrollViewer x:Name="GanttScroll" Grid.Column="1"
+                                              HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                <Grid Width="{Binding GanttTimelineWidth}" HorizontalAlignment="Left">
                                     <Grid.RowDefinitions>
-                                        <RowDefinition Height="28" />
+                                        <!-- 表头 34 与左列"活动"标签(18 + 间距 16)对齐 -->
+                                        <RowDefinition Height="34" />
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
-                                    <!-- 当前日期竖线(跨整列) -->
-                                    <Border Grid.RowSpan="2" Width="2" Background="#e33737"
-                                            HorizontalAlignment="Left"
-                                            Margin="{Binding GanttTodayPercent, Converter={StaticResource GanttMargin}}"
-                                            IsHitTestVisible="False" />
-                                    <!-- 时间轴刻度(文本顶对齐,与左列"活动"标签同基线) -->
-                                    <Grid Grid.Row="0" ColumnDefinitions="*,*">
-                                        <TextBlock Text="{Binding GanttStartText}" FontSize="10"
-                                                   VerticalAlignment="Top"
-                                                   Foreground="{DynamicResource SemiColorText3}" />
-                                        <TextBlock Grid.Column="1" Text="{Binding GanttEndText}" FontSize="10"
-                                                   Foreground="{DynamicResource SemiColorText3}"
-                                                   HorizontalAlignment="Right" VerticalAlignment="Top" />
-                                    </Grid>
-                                        <!-- 今天日期标注(红色,在今日竖线位置) -->
-                                        <Border Background="#e33737" CornerRadius="3" Padding="4,1"
-                                                HorizontalAlignment="Left" VerticalAlignment="Center"
-                                                Margin="{Binding GanttTodayPercent, Converter={StaticResource GanttTodayLabelMargin}}">
-                                            <TextBlock Text="{Binding GanttTodayLabel}" FontSize="9" Foreground="White"
-                                                       FontWeight="Bold" />
-                                        </Border>
-                                    <!-- 甘特条区(带背景轨):行距 8 与左列一致(每行 40+8=48,保证左右对齐) -->
+                                    <!-- 时间轴日期刻度:约 8 个均匀分布的 MM-dd(纯像素定位)。
+                                         居中视图下起止日期标签必然落在视口外,均匀刻度保证任何滚动位置
+                                         都有日期参照;刻度贴表头下缘、今天芯片贴表头上缘,二者互不遮挡 -->
+                                    <ItemsControl Grid.Row="0" ItemsSource="{Binding GanttTicks}"
+                                                  Width="{Binding GanttTimelineWidth}" Height="34"
+                                                  HorizontalAlignment="Left">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <Canvas />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.Styles>
+                                            <!-- Canvas 面板下由容器承载像素定位(Canvas.Left/Top;容器以自身左上角
+                                                 为锚点,故显式钉住 Left/Top 对齐,不随默认拉伸改动) -->
+                                            <Style Selector="ContentPresenter" x:DataType="vm:GanttTick">
+                                                <Setter Property="Canvas.Left" Value="{Binding LeftPx}" />
+                                                <Setter Property="Canvas.Top" Value="20" />
+                                                <Setter Property="HorizontalAlignment" Value="Left" />
+                                                <Setter Property="VerticalAlignment" Value="Top" />
+                                            </Style>
+                                        </ItemsControl.Styles>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:GanttTick">
+                                                <TextBlock Text="{Binding Text}" FontSize="10"
+                                                           Foreground="{DynamicResource SemiColorText3}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <!-- 甘特条区:每行一个 Canvas,甘特条按像素坐标定位(56px/天) -->
                                     <ItemsControl Grid.Row="1" ItemsSource="{Binding VersionActivities}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
@@ -203,37 +208,47 @@
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="vm:ActivityGanttItem">
-                                                <Grid Height="40" HorizontalAlignment="Stretch">
+                                                <Canvas Height="40">
                                                     <!-- 时间轴背景轨 -->
-                                                    <Border Background="{DynamicResource SemiColorBg3}" CornerRadius="6"
-                                                            Opacity="0.5" />
-                                                    <!-- 甘特条:活动主色 + 进度(已进行部分实色) -->
-                                                    <Border CornerRadius="6" Height="30" VerticalAlignment="Center"
-                                                            HorizontalAlignment="Left"
-                                                            Margin="{Binding LeftPercent, Converter={StaticResource GanttMargin}}"
-                                                            Width="{Binding WidthPercent, Converter={StaticResource GanttWidth}}"
-                                                            ClipToBounds="True">
-                                                        <Grid>
-                                                            <!-- 底层:整条(未进行/剩余部分,半透明) -->
-                                                            <Border Background="{Binding BarBrush}" Opacity="0.35" />
-                                                            <!-- 进度层:已进行部分(宽=条宽×进度,相对条自身绘制) -->
-                                                            <Border Background="{Binding BarBrush}"
-                                                                    HorizontalAlignment="Left"
-                                                                    Width="{Binding ProgressWidthPercent, Converter={StaticResource GanttWidth}}" />
-                                                            <!-- 进度百分比文本 -->
-                                                            <TextBlock Text="{Binding ProgressPercent, StringFormat={}{0:0}%}"
-                                                                       FontSize="9" Foreground="White"
-                                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                                       Margin="0,0,4,0" />
-                                                        </Grid>
-                                                    </Border>
-                                                </Grid>
+                                                    <Border Canvas.Left="0" Canvas.Top="5" Width="{Binding RowWidthPx}"
+                                                            Height="30" CornerRadius="6" Opacity="0.5"
+                                                            Background="{DynamicResource SemiColorBg3}" />
+                                                    <!-- 已完成段(实色,右缘=今日线) -->
+                                                    <Border Canvas.Left="{Binding BarLeftPx}" Canvas.Top="5"
+                                                            Width="{Binding DoneWidthPx}" Height="30"
+                                                            Background="{Binding BarBrush}" CornerRadius="6,0,0,6"
+                                                            IsVisible="{Binding HasDone}" />
+                                                    <!-- 未进行段(半透明) -->
+                                                    <Border Canvas.Left="{Binding RemainLeftPx}" Canvas.Top="5"
+                                                            Width="{Binding RemainWidthPx}" Height="30"
+                                                            Background="{Binding BarBrush}" Opacity="0.35"
+                                                            CornerRadius="0,6,6,0" IsVisible="{Binding HasRemain}" />
+                                                    <!-- 进度百分比文本(条右端内侧) -->
+                                                    <TextBlock Canvas.Left="{Binding LabelLeftPx}" Canvas.Top="11"
+                                                               Text="{Binding ProgressPercent, StringFormat={}{0:0}%}"
+                                                               FontSize="9" Foreground="White" FontWeight="Bold" />
+                                                </Canvas>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
+                                    <!-- 今日线(与条内完成/未进行分界同一像素公式,严格对齐):仅贯穿甘特条区
+                                         (表头段由今天芯片接续,视觉上仍是连续一条) -->
+                                    <Canvas Grid.Row="1" IsHitTestVisible="False">
+                                        <Border Canvas.Left="{Binding TodayLineX}" Width="2"
+                                                Height="{Binding RowsHeightPx}" Background="#e33737" />
+                                    </Canvas>
+                                    <!-- 今天芯片(表头内跨今日线居中;左缘先锚在今日线上,视图在布局提交后
+                                         按芯片实际宽度折算成居中位置 —— 芯片宽度随语言/字体变化,不可写死) -->
+                                    <Canvas Grid.Row="0" IsHitTestVisible="False">
+                                        <Border x:Name="TodayChip" Canvas.Left="{Binding TodayLineX}" Canvas.Top="2"
+                                                Background="#e33737" CornerRadius="3" Padding="4,1">
+                                            <TextBlock Text="{Binding GanttTodayLabel}" FontSize="9" Foreground="White"
+                                                       FontWeight="Bold" />
+                                        </Border>
+                                    </Canvas>
                                 </Grid>
+                                </ScrollViewer>
                             </Grid>
-                        </ScrollViewer>
                     </StackPanel>
                 </Border>
             </StackPanel>

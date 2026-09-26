@@ -320,6 +320,9 @@ public sealed class KujiequApiClient
                 roleId, env?.Code, env?.Msg);
             return null;
         }
+        _logger.LogInformation("towerDataDetail 返回: code={Code} msg={Msg} dataLen={Len}", env?.Code, env?.Msg, dataStr.Length);
+        _logger.LogDebug("towerDataDetail payload 片段: {Snippet}", Truncate(dataStr, 700));
+        DumpPayload("tower", dataStr);
         return JsonSerializer.Deserialize(dataStr, TowerJsonContext.Default.TowerSeasonData);
     }
 
@@ -343,6 +346,9 @@ public sealed class KujiequApiClient
                 roleId, env?.Code, env?.Msg);
             return null;
         }
+        _logger.LogInformation("newTowerDetail 返回: code={Code} msg={Msg} dataLen={Len}", env?.Code, env?.Msg, dataStr.Length);
+        _logger.LogDebug("newTowerDetail payload 片段: {Snippet}", Truncate(dataStr, 1200));
+        DumpPayload("newTower", dataStr);
         return JsonSerializer.Deserialize(dataStr, TowerJsonContext.Default.NewTowerData);
     }
 
@@ -368,7 +374,35 @@ public sealed class KujiequApiClient
                 roleId, env?.Code, env?.Msg);
             return null;
         }
+        _logger.LogInformation("slashDetail 返回: code={Code} msg={Msg} dataLen={Len}", env?.Code, env?.Msg, dataStr.Length);
+        _logger.LogDebug("slashDetail payload 片段: {Snippet}", Truncate(dataStr, 700));
+        DumpPayload("slash", dataStr);
         return JsonSerializer.Deserialize(dataStr, TowerJsonContext.Default.SlashData);
+    }
+
+    /// <summary>
+    /// 诊断用:把原始 payload 落盘(仅当 MCKURO_DUMP_PAYLOAD=1),便于离线核对接口字段与"数据是不是旧的"。
+    /// 生产默认关闭,不写用户数据到磁盘。
+    /// </summary>
+    private void DumpPayload(string name, string json)
+    {
+        if (Environment.GetEnvironmentVariable("MCKURO_DUMP_PAYLOAD") != "1")
+        {
+            return;
+        }
+        try
+        {
+            var dir = Path.Combine(AppContext.BaseDirectory, "logs", "payload");
+            Directory.CreateDirectory(dir);
+            var file = Path.Combine(dir, $"{name}-{DateTime.Now:HHmmss}.json");
+            File.WriteAllText(file, json);
+            _logger.LogInformation("payload 已落盘: {File}", file);
+        }
+        catch (Exception ex)
+        {
+            // 诊断失败不影响主流程,但要留痕(否则"没生成文件"无从判断)
+            _logger.LogWarning(ex, "payload 落盘失败: {Name}", name);
+        }
     }
 
     /// <summary>

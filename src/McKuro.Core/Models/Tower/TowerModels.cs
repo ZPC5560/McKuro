@@ -98,7 +98,7 @@ public static class TowerSeasonParser
         ];
     }
 
-    /// <summary>剩余毫秒 → "X天Y小时后刷新"(对齐 WutheringWavesTool updateSeasonEndTime)。</summary>
+    /// <summary>剩余毫秒 → "X天Y小时后刷新"(对齐 WutheringWavesTool updateSeasonEndTime);非正/缺失返回空串。</summary>
     public static string RefreshText(long? remainingMillis)
     {
         if (remainingMillis is not { } ms || ms <= 0)
@@ -109,6 +109,13 @@ public static class TowerSeasonParser
         var hours = ms % 86_400_000 / 3_600_000;
         return $"{days}天{hours}小时后刷新";
     }
+
+    /// <summary>
+    /// 接口返回的这一期是否**已经结束**(剩余毫秒 ≤ 0)。
+    /// 账号还没打新一期时,库街区会把上一期的数据连同一个早已过去的 seasonEndTime 一起返回(code 200),
+    /// 页面若不区分就会"分数照旧、倒计时消失",看起来像"数据没刷新";VM 据此提示"本期已结束"。
+    /// </summary>
+    public static bool IsSeasonEnded(long? remainingMillis) => remainingMillis is { } ms && ms <= 0;
 }
 
 /// <summary>深塔模式详情(modeId:0=稳态,1=奇点)。</summary>
@@ -129,6 +136,10 @@ public sealed class NewTowerTeam
 {
     [JsonPropertyName("score")] public int Score { get; set; }
     [JsonPropertyName("round")] public int Round { get; set; }
+    /// <summary>该队已通过 boss 数(实机 payload 含此字段,用于"每轮队伍分数"里的队伍进度)。</summary>
+    [JsonPropertyName("passBoss")] public int PassBoss { get; set; }
+    /// <summary>该队 boss 总数。</summary>
+    [JsonPropertyName("bossCount")] public int BossCount { get; set; }
     [JsonPropertyName("buffs")] public List<NewTowerBuff>? Buffs { get; set; }
     [JsonPropertyName("roleList")] public List<NewTowerRole>? RoleList { get; set; }
 }

@@ -58,6 +58,31 @@ public sealed class TowerModeItem
     public required string RankColor { get; init; }
     public required List<NewTowerRole> Roles { get; init; }
     public required List<TowerBuffItem> Buffs { get; init; }
+    /// <summary>按轮次分组的队伍明细(每队一条:轮次/该队积分/进度/角色/增益)。</summary>
+    public List<TowerRoundItem> Rounds { get; init; } = [];
+}
+
+/// <summary>终焉矩阵-一轮(一轮内可有多支队伍)。</summary>
+public sealed class TowerRoundItem
+{
+    /// <summary>轮次标题,如 "第1轮";无轮次信息时为空(不显示)。</summary>
+    public required string RoundText { get; init; }
+    /// <summary>本轮合计积分。</summary>
+    public required string RoundScoreText { get; init; }
+    /// <summary>本轮队伍列表。</summary>
+    public required List<TowerTeamItem> Teams { get; init; }
+}
+
+/// <summary>终焉矩阵-单支队伍(矩阵按轮次分队,每队有独立积分)。</summary>
+public sealed class TowerTeamItem
+{
+    /// <summary>队伍序号文本(按该轮内顺序,如 "第1队")。</summary>
+    public required string TeamNoText { get; init; }
+    public required string ScoreText { get; init; }
+    /// <summary>该队进度,如 "3/5"。</summary>
+    public required string PassText { get; init; }
+    public required List<NewTowerRole> Roles { get; init; }
+    public required List<TowerBuffItem> Buffs { get; init; }
 }
 
 /// <summary>终焉矩阵往期历史条目(一期,按赛季结束时间标识,对齐 WutheringWavesTool initHistory)。</summary>
@@ -245,10 +270,43 @@ public sealed partial class TowerViewModel : ViewModelBase
         OnPropertyChanged(nameof(NewTowerShowWaiting));
     }
 
-    /// <summary>把矩阵模式详情映射为展示项(rank 0-3 → C/B/A/S,对齐 RANK_MAP)。</summary>
+    /// <summary>
+    /// 矩阵队伍按轮次分组(纯函数,供单测):轮次升序,每轮给出轮内合计积分与各队明细。
+    /// 稳态协议(round=0/缺失)不显示轮次标题,归入同一组。
+    /// </summary>
+    public static List<TowerRoundItem> GroupTeamsByRound(IEnumerable<NewTowerTeam>? teams)
+        => (teams ?? [])
+            .GroupBy(t => t.Round)
+            .OrderBy(g => g.Key)
+            .Select(g => new TowerRoundItem
+            {
+                RoundText = g.Key > 0 ? LanguageService.Format("Tower.RoundNo", g.Key) : "",
+                RoundScoreText = $"{g.Sum(t => t.Score)}",
+                Teams = g.Select((t, i) => new TowerTeamItem
+                {
+                    TeamNoText = LanguageService.Format("Tower.TeamNo", i + 1),
+                    ScoreText = $"{t.Score}",
+                    PassText = $"{t.PassBoss}/{t.BossCount}",
+                    Roles = t.RoleList ?? [],
+                    Buffs = (t.Buffs ?? [])
+                        .Select(b => new TowerBuffItem
+                        {
+                            BuffName = b.BuffName ?? LanguageService.Format("Tower.SpecialBuff"),
+                            BuffIcon = b.BuffIcon,
+                            BuffDescription = b.Desc,
+                        }).ToList(),
+                }).ToList(),
+            })
+            .ToList();
+
+    /// <summary>把矩阵模式详情映射为展示项(rank 0-5 → C/B/A/S/SS/SSS,见 RankTextOf)。</summary>
     private static TowerModeItem BuildModeItem(NewTowerModeDetail m, string prefix = "")
     {
-        var rank = m.Rank is >= 0 and <= 3 ? m.Rank : 0;
+        var rank = m.Rank is >= 0 and <= 5 ? m.Rank : 0;
+        var teams = m.Teams ?? [];
+        // 按轮次分组(每轮给出轮内合计积分,便于对照"每轮队伍分数")
+        var rounds = GroupTeamsByRound(teams);
+
         return new TowerModeItem
         {
             ModeName = prefix + (m.ModeId == 0 ? LanguageService.Format("Tower.ModeStable") : LanguageService.Format("Tower.ModeSingularity")),
@@ -256,16 +314,17 @@ public sealed partial class TowerViewModel : ViewModelBase
             ProgressText = m.ModeId == 0
                 ? $"{m.PassBoss}/{m.BossCount}"
                 : LanguageService.Format("Tower.RoundInfo", m.Round, m.PassBoss, m.BossCount),
-            RankText = RankToText(rank),
+            RankText = RankTextOf(rank),
             RankColor = RankToColor(rank),
-            Roles = m.Teams?.SelectMany(t => t.RoleList ?? []).ToList() ?? [],
-            Buffs = m.Teams?.SelectMany(t => t.Buffs ?? [])
+            Roles = teams.SelectMany(t => t.RoleList ?? []).ToList(),
+            Buffs = teams.SelectMany(t => t.Buffs ?? [])
                 .Select(b => new TowerBuffItem
                 {
                     BuffName = b.BuffName ?? LanguageService.Format("Tower.SpecialBuff"),
                     BuffIcon = b.BuffIcon,
                     BuffDescription = b.Desc,
-                }).ToList() ?? [],
+                }).ToList(),
+            Rounds = rounds,
         };
     }
 
@@ -287,9 +346,9 @@ public sealed partial class TowerViewModel : ViewModelBase
         {
             TowerAreas.Add(area);
         }
-        // 对齐 WutheringWavesTool TowerView:仅最高难度(difficulty==3)显示赛季刷新倒计时
-        TowerSeasonEndText = value.ShowSeasonEnd ? TowerSeasonParser.RefreshText(
-            _towerSeasonEndMillis) : "";
+        // 对齐 WutheringWavesTool TowerView:仅最高难度(difficulty==3)显示赛季刷新倒计时;
+        // 若这一期已结束(库街区返回的是上一期数据),明确提示"本期已结束",而不是让倒计时凭空消失
+        TowerSeasonEndText = value.ShowSeasonEnd ? SeasonEndText(_towerSeasonEndMillis) : "";
     }
 
     private long? _towerSeasonEndMillis;
@@ -301,6 +360,32 @@ public sealed partial class TowerViewModel : ViewModelBase
         _ = LoadAsync();
     }
 
+    /// <summary>上次成功/尝试拉取的时间(进入页面时的"新鲜度"判断,避免反复切页狂刷接口)。</summary>
+    private DateTime _lastLoadAt = DateTime.MinValue;
+
+    /// <summary>进入页面的最小重新拉取间隔(秒):越快于它反复切页就不重复请求,规避风控。</summary>
+    private const int ReloadMinIntervalSeconds = 60;
+
+    /// <summary>
+    /// 导航到深塔/海墟页时调用:重新拉取数据。
+    /// 页面 VM 在 App 启动时就全部建好并只构造一次(见 MainWindowViewModel),构造函数里的
+    /// 那次加载发生在启动瞬间;没有这个入口,页面上永远是启动那一刻的战绩快照
+    /// —— 这正是"深塔海墟数据不刷新"的原因(游戏内打完再进来还是旧分,只能重启 App)。
+    /// </summary>
+    public void OnNavigatedTo()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+        // 刚拉过就不重复拉(切页很频繁;接口还有风控风险)
+        if (DateTime.Now - _lastLoadAt < TimeSpan.FromSeconds(ReloadMinIntervalSeconds))
+        {
+            return;
+        }
+        _ = LoadAsync();
+    }
+
     [RelayCommand]
     private async Task LoadAsync()
     {
@@ -309,6 +394,7 @@ public sealed partial class TowerViewModel : ViewModelBase
             return;
         }
         IsBusy = true;
+        _lastLoadAt = DateTime.Now;
         StatusText = LanguageService.Format("Common.Loading");
         try
         {
@@ -403,7 +489,7 @@ public sealed partial class TowerViewModel : ViewModelBase
                 // 总积分与刷新倒计时(difficulty:1=再生海域,2=无尽湍渊;0=禁忌海域不计)
                 var regen = slash.DifficultyList.FirstOrDefault(d => d.Difficulty == 1);
                 var turbid = slash.DifficultyList.FirstOrDefault(d => d.Difficulty == 2);
-                SlashSeasonEndText = TowerSeasonParser.RefreshText(slash.SeasonEndTime);
+                SlashSeasonEndText = SeasonEndText(slash.SeasonEndTime);
                 if (regen is not null && regen.AllScore > 0)
                 {
                     SlashTotalScoreText = $"{regen.AllScore} / {regen.MaxScore}";
@@ -468,12 +554,29 @@ public sealed partial class TowerViewModel : ViewModelBase
         }
     }
 
-    private static string RankToText(int rank) => rank switch
+    /// <summary>
+    /// 赛季剩余时间文案:正常 → "X天Y小时后刷新";≤0(接口返回的这一期已结束)→ "本期已结束"。
+    /// 后者是"看起来数据没刷新"的常见成因:账号没打新一期时接口会把上一期数据连着已过去的
+    /// seasonEndTime 一起返回,旧实现此时返回空串,倒计时消失但分数照旧显示。
+    /// </summary>
+    private static string SeasonEndText(long? remainingMillis)
+        => TowerSeasonParser.IsSeasonEnded(remainingMillis)
+            ? LanguageService.Format("Tower.SeasonEnded")
+            : TowerSeasonParser.RefreshText(remainingMillis);
+
+    /// <summary>
+    /// 矩阵评级 rank → 字母(公开供单测)。实机数据 rank 值域 0..5(稳态协议 3=S、奇点扩张 44065 分 rank=5),
+    /// 参考实现只有 4 级 {"C","B","A","S"},rank≥4 会落到范围外被显示成 C(实测 44065 分被标成 C),
+    /// 故按库街区 6 级补全:sss/ss/s/a/b/c。
+    /// </summary>
+    public static string RankTextOf(int rank) => rank switch
     {
         0 => "C",
         1 => "B",
         2 => "A",
         3 => "S",
+        4 => "SS",
+        5 => "SSS",
         _ => "?",
     };
 
@@ -483,6 +586,8 @@ public sealed partial class TowerViewModel : ViewModelBase
         1 => "#4caf50",
         2 => "#2196f3",
         3 => "#f8f05c",
+        4 => "#f8f05c",
+        5 => "#f8f05c",
         _ => "#9e9e9e",
     };
 

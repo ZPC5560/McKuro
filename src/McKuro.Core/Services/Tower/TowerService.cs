@@ -42,6 +42,9 @@ public sealed class TowerService
     /// </summary>
     public async Task<(TowerSeasonData? Tower, NewTowerData? NewTower, SlashData? Slash, string Error, string RoleId)> GetTowerDataAsync(CancellationToken ct = default)
     {
+        // 诊断"深塔/海墟数据不刷新"这类问题:每次真正发起拉取都留一行(含调用时刻),
+        // 若进入页面后日志没有新行,说明是该页面根本没重新拉(reload 触发问题),不是接口/缓存问题。
+        _logger.LogInformation("Tower: 开始拉取深塔/海墟数据 {Time:HH:mm:ss.fff}", DateTime.Now);
         var account = _accounts.Current;
         if (account is null)
         {
@@ -57,6 +60,8 @@ public sealed class TowerService
         }
         var role = gamer.Data[0];
         var roleId = role.RoleId ?? "";
+        _logger.LogInformation("Tower: 角色列表 {Count} 个,本次使用 roleId={RoleId} roleName={RoleName} serverId={ServerId}",
+            gamer.Data.Count, roleId, role.RoleName, role.ServerId);
         if (string.IsNullOrEmpty(roleId))
         {
             return (null, null, null, CoreStrings.T("Core.Tower.NoRoleId", "角色 ID 为空"), "");
@@ -106,6 +111,28 @@ public sealed class TowerService
         {
             return (null, null, null, CoreStrings.T("Core.Tower.EmptyData", "接口返回空数据(可能受风控)"), roleId);
         }
+        // 三个接口各自的关键量(诊断"某页签数据不刷新":能区分"没重新拉"还是"接口返回的就是旧值")
+        // 注意 seasonEndTime/endTime 是"剩余毫秒"而非绝对时间,这里折算成剩余时长便于阅读
+        static string Remain(long? ms) => ms is { } v
+            ? TimeSpan.FromMilliseconds(v) is { TotalDays: > 0 } t ? $"{t.Days}天{t.Hours}小时" : $"{v / 3600000.0:F1}小时"
+            : "无";
+        _logger.LogInformation(
+            "Tower: 拉取完成 | 深塔:难度{TD}个 剩余{TSE} | 矩阵:模式{NTM}个/共{NTAll}个 剩余{NTSE} | 海墟:难度{SDR}个 关卡{SC}关 剩余{SSE}",
+            tower?.DifficultyList?.Count ?? -1, Remain(tower?.SeasonEndTime),
+            newTower?.ModeDetails?.Count(m => m.HasRecord && m.Score > 0) ?? -1, newTower?.ModeDetails?.Count ?? -1, Remain(newTower?.EndTime),
+            slash?.DifficultyList?.Count ?? -1,
+            slash?.DifficultyList?.Sum(d => d.ChallengeList?.Count ?? 0) ?? -1, Remain(slash?.SeasonEndTime));
+        _logger.LogInformation(
+            "Tower: 海墟难度明细(难度:总积分/满积分) {Detail}",
+            string.Join(" | ", slash?.DifficultyList?.Select(d => $"{d.Difficulty}:{d.AllScore}/{d.MaxScore}") ?? []));
+        // 原始值:用于判定 seasonEndTime/endTime 究竟是"剩余毫秒"还是绝对时间戳
+        // (剩余毫秒按 now+值 折算成结束时刻;若原值本身就是 epoch 毫秒,这里的绝对值会接近 1.7e12)
+        static string RawMs(long? ms) => ms is { } v
+            ? $"{v} (≈now{(v >= 0 ? "+" : "-")}{TimeSpan.FromMilliseconds(Math.Abs(v)).TotalDays:F1}天)"
+            : "null";
+        _logger.LogInformation(
+            "Tower: 原始时间字段 | 深塔.seasonEndTime={TSE} | 矩阵.endTime={NTE} | 海墟.seasonEndTime={SSE}",
+            RawMs(tower?.SeasonEndTime), RawMs(newTower?.EndTime), RawMs(slash?.SeasonEndTime));
         return (tower, newTower, slash, "", roleId);
     }
 

@@ -34,6 +34,9 @@ public partial class MainWindow : Window
 
     private IntPtr _hwnd;
 
+    /// <summary>首次布局提交里程碑是否已记录(诊断用)。</summary>
+    private bool _firstLayoutMarked;
+
     /// <summary>系统托盘图标(隐藏到托盘时显示;从托盘恢复后隐藏)。</summary>
     private TrayIcon? _trayIcon;
 
@@ -47,6 +50,18 @@ public partial class MainWindow : Window
         _aspectTimer.Tick += (_, _) => ApplyAspectCorrection();
         PropertyChanged += OnWindowPropertyChanged;
         Opened += (_, _) => InstallSizeAspectHook();
+        // 诊断里程碑:窗口创建/打开/首次布局提交(配合 MCKURO-NOTIF 与 UI 心跳定位延迟所处阶段)
+        UiHeartbeat.Mark("mainwindow-ctor-end");
+        Opened += (_, _) => UiHeartbeat.Mark("window-opened");
+        LayoutUpdated += (_, _) =>
+        {
+            // 只记第一次布局提交(该事件每次布局都会触发,不去重会刷屏且掩盖关键时间点)
+            if (!_firstLayoutMarked)
+            {
+                _firstLayoutMarked = true;
+                UiHeartbeat.Mark("first-layout-updated");
+            }
+        };
         InitTrayIcon();
         InitSystemMaterial();
         HookNavPill();
