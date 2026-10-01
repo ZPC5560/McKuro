@@ -33,17 +33,17 @@ public class RoleCacheFallbackTests : IDisposable
         }
     }
 
-    private static RoleDetail CompleteRole(string name) => new()
+    private static RoleDetail CompleteRole(string name, int cardId = 1) => new()
     {
-        Role = new RoleInfo { RoleName = name, RoleId = 1, StarLevel = 5 },
+        Role = new RoleInfo { RoleName = name, RoleId = cardId, StarLevel = 5 },
         WeaponData = new WeaponData { Weapon = new WeaponInfo { WeaponName = "晨光" } },
         Skills = [new SkillInfo { SkillLevel = 1, Skill = new SkillBase { SkillName = "剑心" } }],
         Attributes = [new RoleAttribute { AttributeName = "攻击", AttributeValue = "123" }],
     };
 
-    private static RoleDetail BaseOnlyRole(string name) => new()
+    private static RoleDetail BaseOnlyRole(string name, int cardId = 1) => new()
     {
-        Role = new RoleInfo { RoleName = name, RoleId = 1, StarLevel = 5 },
+        Role = new RoleInfo { RoleName = name, RoleId = cardId, StarLevel = 5 },
     };
 
     private static List<RoleDetail> SerializeRoundTrip(List<RoleDetail> roles)
@@ -127,19 +127,41 @@ public class RoleCacheFallbackTests : IDisposable
     }
 
     [Fact]
-    public void LoadFromCache_FallsBack_To_Legacy_Row_When_Account_Row_Incomplete()
+    public void LoadFromCache_Fills_Detail_From_Legacy_Row_Keeping_Account_Role_Set()
     {
         using var db = new AppDatabase(_tmpDir);
-        // 当前账号行:某次同步被风控,只有基础列表(详情为 null)
+        // 当前账号行:列表同步写入,角色集合最新但大多只有基础信息(详情按点击补)
         Insert(db, "account-a", "player-1", [BaseOnlyRole("秧秧")]);
-        // 旧版空账号键:上次完整同步
+        // 旧版空账号键:上次完整同步(含详情)
         Insert(db, "", "player-1", [CompleteRole("秧秧"), CompleteRole("凌阳")]);
 
         var result = CreateService(db).LoadFromCache("account-a", "player-1");
+
+        // 角色集合以当前账号行为准(它的角色列表最新),旧缓存只用来**补详情**:
+        // 不能因为"整行不完整"就把账号行换成旧的空账号键缓存 —— 那会把刚同步到的
+        // 整份角色列表退回旧版那几条,表现为"重开后角色又变少了"。
         Assert.True(result.IsSuccess);
-        Assert.Equal(2, result.Roles.Count);
-        Assert.True(result.Roles[0].IsDetailComplete);
+        var role = Assert.Single(result.Roles);
+        Assert.Equal("秧秧", role.RoleName);
+        Assert.True(role.IsDetailComplete); // 详情由旧版缓存补全
         Assert.Contains("旧版", result.Message ?? "");
+    }
+
+    [Fact]
+    public void LoadFromCache_Keeps_Account_Role_Set_Even_When_Legacy_Has_More_Roles()
+    {
+        using var db = new AppDatabase(_tmpDir);
+        // 账号行 3 个角色(列表同步结果),旧版缓存 2 个但都带详情。
+        // 注意各角色需用不同 cardRoleId(按 cardRoleId 匹配补详情)。
+        Insert(db, "account-a", "player-1",
+            [BaseOnlyRole("秧秧", 1001), BaseOnlyRole("凌阳", 1002), BaseOnlyRole("安可", 1003)]);
+        Insert(db, "", "player-1", [CompleteRole("秧秧", 1001), CompleteRole("凌阳", 1002)]);
+
+        var result = CreateService(db).LoadFromCache("account-a", "player-1");
+
+        // 角色数量以账号行为准(3),不因旧缓存只有 2 个而被截断
+        Assert.Equal(3, result.Roles.Count);
+        Assert.Equal(2, result.Roles.Count(r => r.IsDetailComplete));
     }
 
     [Fact]

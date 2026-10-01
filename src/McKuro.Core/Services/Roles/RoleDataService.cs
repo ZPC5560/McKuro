@@ -143,6 +143,11 @@ public sealed class RoleDataService : IRoleDataService
             //    上次同步/已点击查看过的角色详情区在页面加载后即有数据,未命中的由点击时按需拉取
             MergeCachedDetails(list, _userId, roleId);
 
+            // 5. 把合并后的整份列表写回缓存:旧实现只在单角色详情拉取成功时回写,列表同步本身不落盘,
+            //    导致「同步拿到的新角色关掉页面就没了、重开又退回上次缓存里那几个」。
+            //    合并写回会按 cardRoleId 保留缓存中已有的详情区块,不会丢上次的完整数据。
+            MergeListIntoCachedRoles(_userId, roleId, list);
+
             return new RoleDataLoadResult
             {
                 Source = RoleDataSource.Kujiequ,
@@ -278,6 +283,50 @@ public sealed class RoleDataService : IRoleDataService
         return true;
     }
 
+    /// <summary>
+    /// 把整份角色列表合并进缓存并落盘(列表同步收尾)。
+    /// <para>
+    /// 合并规则(以新列表为准,但绝不用"只有基础信息"的列表项覆盖缓存里的完整详情):
+    /// 新列表项按 cardRoleId 命中缓存时,用 <see cref="MergeMissingSections"/> 补齐详情后替换该行;
+    /// 未命中的作为新行加入;缓存里有而新列表没有的角色(如已下架的角色条目)保留,不丢弃。
+    /// </para>
+    /// </summary>
+    private void MergeListIntoCachedRoles(string userId, string roleId, IReadOnlyList<RoleDetail> freshList)
+    {
+        if (freshList.Count == 0)
+        {
+            return; // 空列表多为接口异常,不覆盖已有缓存(与"风控不覆盖完整缓存"同一原则)
+        }
+        var roles = ReadCacheRoles(userId, roleId) ?? ReadCacheRoles("", roleId) ?? [];
+        var indexByCardId = new Dictionary<int, int>();
+        for (var i = 0; i < roles.Count; i++)
+        {
+            if (roles[i].Role?.RoleId is int id and > 0)
+            {
+                indexByCardId[id] = i;
+            }
+        }
+        foreach (var fresh in freshList)
+        {
+            if (fresh.Role?.RoleId is not int cardId || cardId <= 0)
+            {
+                continue; // 无 cardRoleId 的条目无法稳定去重,不写入(避免重复堆积)
+            }
+            if (indexByCardId.TryGetValue(cardId, out var idx))
+            {
+                // 详情以缓存为准补进新列表项(列表项本身只有基础信息时不会清空已有详情)
+                MergeMissingSections(fresh, roles[idx]);
+                roles[idx] = fresh;
+            }
+            else
+            {
+                indexByCardId[cardId] = roles.Count;
+                roles.Add(fresh);
+            }
+        }
+        SaveCache(userId, roleId, roles);
+    }
+
     /// <summary>把缓存中已同步过的角色详情合并进新拉取的列表项(按 cardRoleId 匹配;保留列表已有的最新基础信息)。</summary>
     private void MergeCachedDetails(IReadOnlyList<RoleDetail> freshList, string userId, string roleId)
     {
@@ -393,19 +442,20 @@ public sealed class RoleDataService : IRoleDataService
             var roles = ReadCacheRoles(accountId ?? "", playerId);
             if (roles is not null)
             {
-                // 当前账号缓存详情不完整(某次同步被风控写入)→ 回退旧版完整缓存
-                if (!roles.All(static r => r.IsDetailComplete))
+                // 当前账号行以列表同步写入,天然含有只有基础信息的角色(详情按点击补),
+                // 因此不能再用"整行是否全部完整"来决定是否换成旧的空账号键缓存 ——
+                // 那会把刚同步到的整份角色列表换回旧版那几条(表现为"重开又退回几个角色")。
+                // 正确做法:以当前账号行为准(它是最新的角色集合),仅用旧版缓存**补全详情**。
+                var merged = MergeLegacyDetailInto(roles, ReadCacheRoles("", playerId));
+                var usedLegacy = merged is not null;
+                return new RoleDataLoadResult
                 {
-                    var legacy = ReadCompleteCacheRoles("", playerId);
-                    if (legacy is not null)
-                    {
-                        return new RoleDataLoadResult
-                        {
-                            Source = RoleDataSource.Local, Roles = legacy, Message = CoreStrings.T("Core.Roles.FromLegacyCache", "来自本地完整缓存(旧版账号键)"),
-                        };
-                    }
-                }
-                return new RoleDataLoadResult { Source = RoleDataSource.Local, Roles = roles, Message = CoreStrings.T("Core.Roles.FromCache", "来自本地缓存") };
+                    Source = RoleDataSource.Local,
+                    Roles = usedLegacy ? merged! : roles,
+                    Message = usedLegacy
+                        ? CoreStrings.T("Core.Roles.FromLegacyCache", "来自本地完整缓存(旧版账号键)")
+                        : CoreStrings.T("Core.Roles.FromCache", "来自本地缓存"),
+                };
             }
 
             // 兼容旧版:早期账号登录态未持久化时缓存以空账号键保存,同一玩家数据仍有效
@@ -423,6 +473,47 @@ public sealed class RoleDataService : IRoleDataService
         {
             return new RoleDataLoadResult { Source = RoleDataSource.None, Message = CoreStrings.T("Core.Roles.CacheReadFailed", "缓存读取失败") };
         }
+    }
+
+    /// <summary>
+    /// 用旧版(空账号键)缓存补全当前账号行的详情:角色集合仍以 <paramref name="accountRoles"/> 为准
+    /// (不因旧缓存多/少而增删),只把按 cardRoleId 命中的详情区块补进缺失项。
+    /// 需至少补到一条才返回结果,否则返回 null 表示无需回退(调用方沿用原行并给常规提示)。
+    /// </summary>
+    private static List<RoleDetail>? MergeLegacyDetailInto(
+        List<RoleDetail> accountRoles,
+        List<RoleDetail>? legacyRoles)
+    {
+        if (legacyRoles is not { Count: > 0 })
+        {
+            return null;
+        }
+        var byCardId = new Dictionary<int, RoleDetail>();
+        foreach (var r in legacyRoles)
+        {
+            if (r.Role?.RoleId is int id and > 0 && r.IsDetailComplete)
+            {
+                byCardId[id] = r;
+            }
+        }
+        if (byCardId.Count == 0)
+        {
+            return null;
+        }
+        var filled = false;
+        foreach (var role in accountRoles)
+        {
+            if (role.IsDetailComplete || role.Role?.RoleId is not int id || id <= 0)
+            {
+                continue;
+            }
+            if (byCardId.TryGetValue(id, out var legacy))
+            {
+                MergeMissingSections(role, legacy);
+                filled = true;
+            }
+        }
+        return filled ? accountRoles : null;
     }
 
     /// <summary>读缓存行(account_id, player_id);无记录返回 null。</summary>
