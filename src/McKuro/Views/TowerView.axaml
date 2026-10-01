@@ -75,7 +75,9 @@
                         <ItemsControl ItemsSource="{Binding TowerAreas}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <WrapPanel ItemSpacing="14" />
+                                    <!-- ItemSpacing 只管同一行内的水平间距,换行后的**行间距**由 LineSpacing 决定
+                                         (默认 0 → 上下两排卡片会贴在一起,故与 ItemSpacing 取同值) -->
+                                    <WrapPanel ItemSpacing="14" LineSpacing="14" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
@@ -404,7 +406,8 @@
                         <ItemsControl ItemsSource="{Binding SlashChallenges}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <WrapPanel ItemSpacing="14" />
+                                    <!-- 同上:海墟关卡卡片换行后同样需要行间距,否则上下两排贴死 -->
+                                    <WrapPanel ItemSpacing="14" LineSpacing="14" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>

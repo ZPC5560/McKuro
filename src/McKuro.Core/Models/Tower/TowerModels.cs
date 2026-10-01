@@ -116,6 +116,71 @@ public static class TowerSeasonParser
     /// 页面若不区分就会"分数照旧、倒计时消失",看起来像"数据没刷新";VM 据此提示"本期已结束"。
     /// </summary>
     public static bool IsSeasonEnded(long? remainingMillis) => remainingMillis is { } ms && ms <= 0;
+
+    /// <summary>
+    /// 冥歌海墟「再生海域-海隙」中**跨赛季延续**的关卡号:第 7、8 关。
+    /// <para>
+    /// 依据官方规则:上期海隙第 7、8 关达 S、海隙总分 ≥15000 且湍渊 ≥4500 时,下期第 7、8 关会以
+    /// 相同配队/信物**自动覆盖挑战记录** —— 这只有在 7/8 的关卡内容不随赛季更换时才成立;
+    /// 第 9/10/11 关则每期更换内容、进度清零重打(第 12 关为无尽湍渊,每期重打)。
+    /// </para>
+    /// <para>
+    /// 这里的关卡号取自接口 <c>challengeId</c>,与界面文案「第{0}关」同源,不是任意阈值;
+    /// 接口没有任何字段标记「常驻关」,唯一可判别赛季是否翻新的信号是
+    /// <see cref="IsSeasonEnded"/>。故仅在赛季已结束时才用它裁剪残留关卡。
+    /// </para>
+    /// </summary>
+    public static bool IsCrossSeasonSlashChallenge(int challengeId) => challengeId is 7 or 8;
+
+    /// <summary>海墟关卡筛选结果(供界面直接消费)。</summary>
+    /// <param name="Challenge">关卡原始数据。</param>
+    /// <param name="IsTurbid">是否属于无尽湍渊(difficulty=2),影响关卡号文案。</param>
+    public sealed record SlashChallengeSelection(SlashChallenge Challenge, bool IsTurbid);
+
+    /// <summary>
+    /// 筛选海墟要展示的关卡(纯函数,供单测)。
+    /// <para>赛季进行中(<paramref name="seasonEnded"/> = false):difficulty 1/2 的关卡全量展示(原行为)。</para>
+    /// <para>
+    /// 赛季已结束(= true,接口返回的是上一期残留):只保留「再生海域-海隙」中跨赛季延续的第 7、8 关;
+    /// 丢弃每期清零重打的第 9/10/11 关,以及同样每期重置的无尽湍渊 —— 否则页面会把上赛季的
+    /// 满档成绩当作本期成绩展示(实机:赛季翻了 3 天后接口仍返回 9/10/11 各 4440 分)。
+    /// </para>
+    /// </summary>
+    public static List<SlashChallengeSelection> SelectSlashChallenges(
+        IEnumerable<SlashDifficulty>? difficultyList,
+        bool seasonEnded)
+    {
+        var selected = new List<SlashChallengeSelection>();
+        if (difficultyList is null)
+        {
+            return selected;
+        }
+        // 过滤 difficulty==0(禁忌海域)与 allScore==0;无尽湍渊(2)排在再生海域(1)之前
+        var validDiffs = difficultyList
+            .Where(d => d.Difficulty is 1 or 2 && d.AllScore > 0)
+            .OrderByDescending(d => d.Difficulty);
+        foreach (var diff in validDiffs)
+        {
+            var isTurbid = diff.Difficulty == 2;
+            if (seasonEnded && isTurbid)
+            {
+                continue; // 湍渊每期重置,上期成绩不展示
+            }
+            foreach (var challenge in diff.ChallengeList ?? [])
+            {
+                if ((challenge.HalfList?.Count ?? 0) == 0)
+                {
+                    continue; // 无上/下半队伍数据的关卡不展示
+                }
+                if (seasonEnded && !IsCrossSeasonSlashChallenge(challenge.ChallengeId))
+                {
+                    continue; // 上一期残留的非延续关卡(9/10/11)
+                }
+                selected.Add(new SlashChallengeSelection(challenge, isTurbid));
+            }
+        }
+        return selected;
+    }
 }
 
 /// <summary>深塔模式详情(modeId:0=稳态,1=奇点)。</summary>

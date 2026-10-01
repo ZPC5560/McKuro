@@ -463,11 +463,18 @@ public sealed partial class TowerViewModel : ViewModelBase
             if (newTower is not null)
             {
                 NewTowerUnlocked = newTower.IsUnlock;
-                foreach (var m in newTower.ModeDetails?.Where(x => x.HasRecord && x.Score > 0) ?? [])
+                // 本期已结束时(endTime ≤ 0),接口返回的是**上一期**的战绩:这批数据已由
+                // TowerService.SaveNewTowerHistory 落库为历史一期,不应再挂在「挑战模式」(本期)下,
+                // 否则同一期数据同时出现在"本期"和"往期历史"两处,看起来像本期已出成绩。
+                var newTowerEnded = TowerSeasonParser.IsSeasonEnded(newTower.EndTime);
+                if (!newTowerEnded)
                 {
-                    TowerModes.Add(BuildModeItem(m));
+                    foreach (var m in newTower.ModeDetails?.Where(x => x.HasRecord && x.Score > 0) ?? [])
+                    {
+                        TowerModes.Add(BuildModeItem(m));
+                    }
+                    SelectedTowerMode = TowerModes.FirstOrDefault();
                 }
-                SelectedTowerMode = TowerModes.FirstOrDefault();
             }
 
             // 往期历史(本地库,按赛季结束时间降序;对齐 WutheringWavesTool initHistory)
@@ -486,57 +493,65 @@ public sealed partial class TowerViewModel : ViewModelBase
             // ---- 海墟(slashDetail,对齐 SlashViewModel.updateDate/updateScore) ----
             if (slash is { DifficultyList: not null })
             {
-                // 总积分与刷新倒计时(difficulty:1=再生海域,2=无尽湍渊;0=禁忌海域不计)
+                // difficulty:1=再生海域-海隙,2=无尽湍渊;0=禁忌海域不计
                 var regen = slash.DifficultyList.FirstOrDefault(d => d.Difficulty == 1);
                 var turbid = slash.DifficultyList.FirstOrDefault(d => d.Difficulty == 2);
                 SlashSeasonEndText = SeasonEndText(slash.SeasonEndTime);
-                if (regen is not null && regen.AllScore > 0)
-                {
-                    SlashTotalScoreText = $"{regen.AllScore} / {regen.MaxScore}";
-                }
-                if (turbid is not null && turbid.AllScore > 0)
-                {
-                    SlashTurbidScoreText = LanguageService.Format("Tower.TurbidScore", turbid.AllScore, turbid.MaxScore);
-                    SlashHasTurbidScore = true;
-                }
 
                 // 1. 过滤 difficulty==0(禁忌海域)与 allScore==0
                 // 2. 无尽湍渊(difficulty=2)的关卡插到「再生海域」(difficulty=1)列表头
-                var validDiffs = slash.DifficultyList
-                    .Where(d => d.Difficulty is 1 or 2 && d.AllScore > 0)
-                    .OrderByDescending(d => d.Difficulty)
-                    .ToList();
-                foreach (var diff in validDiffs)
+                // 3. 赛季已结束时接口返回的是上一期残留:只保留跨赛季延续的第 7、8 关,
+                //    丢弃每期清零的 9/10/11 与无尽湍渊(否则会拿上赛季满档成绩充当本期成绩)
+                var seasonEnded = TowerSeasonParser.IsSeasonEnded(slash.SeasonEndTime);
+                var selected = TowerSeasonParser.SelectSlashChallenges(slash.DifficultyList, seasonEnded);
+
+                // 总积分:赛季已结束时不能沿用接口的整季合计(含已清零的 9/10/11),
+                // 否则会把上赛季的 19220 当成"本期总积分";改按实际展示的关卡求和 ——
+                // 7/8 跨赛季延续计为已有成绩,每期重打的关卡本期为 0。
+                if (seasonEnded)
                 {
-                    bool isTurbid = diff.Difficulty == 2;
-                    foreach (var c in diff.ChallengeList ?? [])
+                    var regenShown = selected.Where(s => !s.IsTurbid).Sum(s => s.Challenge.Score);
+                    if (regen is not null && regenShown > 0)
                     {
-                        var halves = c.HalfList ?? [];
-                        if (halves.Count == 0)
-                        {
-                            continue;
-                        }
-                        SlashChallenges.Add(new SlashChallengeItem
-                        {
-                            ChallengeId = c.ChallengeId,
-                            ChallengeNoText = LanguageService.Format("Tower.ChallengeNo", c.ChallengeId),
-                            ChallengeName = isTurbid
-                                ? (c.ChallengeName ?? LanguageService.Format("Tower.TurbidName", c.ChallengeId))
-                                : (c.ChallengeName ?? LanguageService.Format("Tower.LevelName", c.ChallengeId)),
-                            ScoreText = $"{c.Score}",
-                            RankText = SlashRankText(c.Rank),
-                            RankColor = SlashRankColor(c.Rank),
-                            Teams = halves.Select((h, i) => new SlashTeamItem
-                            {
-                                TeamName = i == 0 ? LanguageService.Format("Tower.TeamFirst") : LanguageService.Format("Tower.TeamSecond"),
-                                ScoreText = $"{h.Score}",
-                                BuffName = string.IsNullOrWhiteSpace(h.BuffName) ? LanguageService.Format("Tower.NoBuff") : h.BuffName!,
-                                BuffIcon = h.BuffIcon,
-                                BuffDescription = h.BuffDescription,
-                                Roles = h.RoleList ?? [],
-                            }).ToList(),
-                        });
+                        SlashTotalScoreText = $"{regenShown} / {regen.MaxScore}";
                     }
+                }
+                else
+                {
+                    if (regen is not null && regen.AllScore > 0)
+                    {
+                        SlashTotalScoreText = $"{regen.AllScore} / {regen.MaxScore}";
+                    }
+                    if (turbid is not null && turbid.AllScore > 0)
+                    {
+                        SlashTurbidScoreText = LanguageService.Format("Tower.TurbidScore", turbid.AllScore, turbid.MaxScore);
+                        SlashHasTurbidScore = true;
+                    }
+                }
+
+                foreach (var (c, isTurbid) in selected)
+                {
+                    var halves = c.HalfList!;
+                    SlashChallenges.Add(new SlashChallengeItem
+                    {
+                        ChallengeId = c.ChallengeId,
+                        ChallengeNoText = LanguageService.Format("Tower.ChallengeNo", c.ChallengeId),
+                        ChallengeName = isTurbid
+                            ? (c.ChallengeName ?? LanguageService.Format("Tower.TurbidName", c.ChallengeId))
+                            : (c.ChallengeName ?? LanguageService.Format("Tower.LevelName", c.ChallengeId)),
+                        ScoreText = $"{c.Score}",
+                        RankText = SlashRankText(c.Rank),
+                        RankColor = SlashRankColor(c.Rank),
+                        Teams = halves.Select((h, i) => new SlashTeamItem
+                        {
+                            TeamName = i == 0 ? LanguageService.Format("Tower.TeamFirst") : LanguageService.Format("Tower.TeamSecond"),
+                            ScoreText = $"{h.Score}",
+                            BuffName = string.IsNullOrWhiteSpace(h.BuffName) ? LanguageService.Format("Tower.NoBuff") : h.BuffName!,
+                            BuffIcon = h.BuffIcon,
+                            BuffDescription = h.BuffDescription,
+                            Roles = h.RoleList ?? [],
+                        }).ToList(),
+                    });
                 }
                 SlashHasRecord = SlashChallenges.Count > 0;
             }
