@@ -12,7 +12,7 @@
              x:Class="McKuro.Views.LauncherView"
              x:DataType="vm:LauncherViewModel">
     <UserControl.Styles>
-        <!-- 操作区胶囊按钮:常态弱玻璃,悬停强玻璃 + 强调描边(与主页 splashBtn 同方向,修正悬停/常态颠倒) -->
+        <!-- 操作区胶囊按钮:常态弱玻璃,悬停强玻璃 + 强调描边(修正悬停/常态观感颠倒) -->
         <Style Selector="Button.opBtn">
             <Setter Property="Background" Value="{DynamicResource McKuroGlassFill}" />
             <Setter Property="BorderBrush" Value="{DynamicResource McKuroGlassStroke}" />
@@ -32,6 +32,40 @@
         </Style>
         <Style Selector="Button.bannerClose:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#99000000" />
+        </Style>
+        <!-- 资源等级卡片(对齐官方启动器:深色圆角块,悬停提亮,选中项描边强调) -->
+        <Style Selector="Button.levelCard">
+            <Setter Property="Background" Value="#33FFFFFF" />
+            <Setter Property="BorderBrush" Value="#26FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="12,8" />
+        </Style>
+        <Style Selector="Button.levelCard:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#4DFFFFFF" />
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccent}" />
+        </Style>
+        <Style Selector="Button.levelCard:pointerover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="Button.levelCard:disabled">
+            <Setter Property="Opacity" Value="0.6" />
+        </Style>
+        <!-- 左侧菜单项:整行可点,悬停提亮 -->
+        <Style Selector="Button.menuItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Foreground" Value="{DynamicResource McKuroTextOnWallpaper}" />
+        </Style>
+        <Style Selector="Button.menuItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#33FFFFFF" />
+        </Style>
+        <Style Selector="Button.menuItem:pointerover">
+            <Setter Property="Opacity" Value="1" />
         </Style>
     </UserControl.Styles>
     <Grid RowDefinitions="Auto,*,Auto">
@@ -121,32 +155,49 @@
                             </Border>
                         </Grid>
                     </Border>
-                    <!-- 操作 卡片(背景全透明,仅按钮本身为半透明玻璃) -->
-                    <Border CornerRadius="10" Padding="10" Margin="0,6,0,0">
-                        <StackPanel Spacing="6">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Button Classes="opBtn" Command="{Binding OpenGameFolderCommand}">
-                                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <ic:FluentIcon Icon="Folder" IconVariant="Regular" IconSize="Size16"
-                                                               Foreground="{DynamicResource McKuroTextOnWallpaper}" VerticalAlignment="Center" />
-                                                <TextBlock Text="{loc:Localize Key=Launcher.OpenDir}" FontSize="11" VerticalAlignment="Center"
-                                                           Foreground="{DynamicResource McKuroTextOnWallpaper}" />
-                                            </StackPanel>
+                    <!-- 操作区:左侧菜单按钮(点击展开功能项,对齐官方启动器左上角菜单)。
+                         原「打开目录/修复游戏」已并入菜单,保持界面简洁。
+                         外层 Grid 无列定义 → 菜单面板是纯覆盖层:它再宽也不会改变按钮的布局尺寸
+                         (曾与按钮同处一个 Auto 列,面板 MinWidth 把该列撑宽导致按钮拉伸、图标位移)。 -->
+                    <Grid Margin="0,6,0,0">
+                        <Button HorizontalAlignment="Left" VerticalAlignment="Top"
+                                Classes="opBtn" Padding="10,8"
+                                Command="{Binding ToggleGameMenuCommand}">
+                            <ic:FluentIcon Icon="LineHorizontal3" IconVariant="Regular" IconSize="Size20"
+                                           Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                        </Button>
+
+                        <!-- 功能菜单(点击左侧按钮展开;绝对覆盖在按钮下方,不参与按钮测量) -->
+                        <Border ZIndex="20"
+                                Margin="0,52,0,0"
+                                MinWidth="176"
+                                HorizontalAlignment="Left" VerticalAlignment="Top"
+                                CornerRadius="12" ClipToBounds="True"
+                                IsVisible="{Binding IsGameMenuOpen}">
+                            <Grid>
+                                <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.92" CornerRadius="12" />
+                                <Border Background="{DynamicResource SemiColorBg2}" Opacity="0.85"
+                                        Padding="6" CornerRadius="12">
+                                    <StackPanel Spacing="2">
+                                        <Button Classes="menuItem" Command="{Binding CheckGameUpdateCommand}">
+                                            <TextBlock Text="{loc:Localize Key=Launcher.Menu.CheckUpdate}" FontSize="12" />
                                         </Button>
-                                        <Button Classes="opBtn"
-                                                Command="{Binding RepairGameCommand}"
-                                                IsEnabled="{Binding IsInstalled}"
-                                                IsVisible="{Binding ShowRepairButton}">
-                                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <ic:FluentIcon Icon="Wrench" IconVariant="Regular" IconSize="Size16"
-                                                               Foreground="{DynamicResource McKuroTextOnWallpaper}" VerticalAlignment="Center" />
-                                                <TextBlock Text="{loc:Localize Key=Launcher.RepairGame}" FontSize="11" VerticalAlignment="Center"
-                                                           Foreground="{DynamicResource McKuroTextOnWallpaper}" />
-                                            </StackPanel>
+                                        <Button Classes="menuItem" Command="{Binding RepairGameFromMenuCommand}"
+                                                IsEnabled="{Binding IsInstalled}">
+                                            <TextBlock Text="{loc:Localize Key=Launcher.Menu.Repair}" FontSize="12" />
+                                        </Button>
+                                        <Button Classes="menuItem" Command="{Binding CreateDesktopShortcutCommand}">
+                                            <TextBlock Text="{loc:Localize Key=Launcher.Menu.CreateShortcut}" FontSize="12" />
+                                        </Button>
+                                        <Button Classes="menuItem" Command="{Binding ForceExitGameCommand}"
+                                                IsEnabled="{Binding CanForceExitGame}">
+                                            <TextBlock Text="{loc:Localize Key=Launcher.Menu.ForceExit}" FontSize="12" />
                                         </Button>
                                     </StackPanel>
-                        </StackPanel>
-                    </Border>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
                 </StackPanel>
             </Grid>
 
@@ -161,7 +212,9 @@
                         ClipToBounds="True"
                         IsVisible="{Binding IsSlideShowVisible}">
                     <Grid>
-                        <Carousel x:Name="SlideCarousel" ItemsSource="{Binding Slideshows}">
+                        <!-- 双击轮播图 → 在默认浏览器打开该图的 jumpUrl(官方 slideshow 的跳转链接) -->
+                        <Carousel x:Name="SlideCarousel" ItemsSource="{Binding Slideshows}"
+                                  DoubleTapped="OnSlideshowDoubleTapped">
                             <Carousel.ItemTemplate>
                                 <DataTemplate x:DataType="game:SlideshowItem">
                                     <controls:AsyncImage ImageUrl="{Binding Url}"
@@ -244,10 +297,13 @@
                                                                FontSize="13" />
                                     </Grid>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                        <!-- 仅在真正可暂停的下载阶段显示暂停/继续;
+                                             校验/差分合成/解压/资源安装阶段暂停是空操作,整体隐藏。 -->
                                         <Button Content="{Binding PreDownloadButtonText}"
                                                 Classes="primary"
                                                 Command="{Binding TogglePreDownloadCommand}"
                                                 IsEnabled="{Binding PreDownloadButtonEnabled}"
+                                                IsVisible="{Binding PreDownloadButtonVisible}"
                                                 HorizontalAlignment="Left"
                                                 Padding="14,6" />
                                     </StackPanel>
@@ -257,10 +313,92 @@
                     </Grid>
                 </Border>
 
+                <!-- 资源等级卡片列表(对齐官方启动器:默认收起,点「高清 ▾」小按钮后向上弹出)
+                     与进度卡互斥(下载/切换期间整体隐藏),避免同列两块面板叠在一起。 -->
+                <Border Grid.Column="2"
+                        MinWidth="240"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                        Margin="0,0,0,128"
+                        CornerRadius="12" ClipToBounds="True"
+                        IsVisible="{Binding ShowResourceLevelPanel}">
+                    <Grid>
+                        <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.9" CornerRadius="12" />
+                        <Border Background="{DynamicResource SemiColorBg2}"
+                                Opacity="0.8"
+                                Padding="14"
+                                CornerRadius="12">
+                            <StackPanel Spacing="8" MaxWidth="300">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{loc:Localize Key=Launcher.LevelPanelTitle}" FontSize="14"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                    <TextBlock Text="{loc:Localize Key=Launcher.LevelPanelHint}" FontSize="10"
+                                               TextWrapping="Wrap"
+                                               Foreground="{DynamicResource SemiColorText2}" />
+                                </StackPanel>
+                                <ItemsControl ItemsSource="{Binding ResourceLevelItems}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ResourceLevelItem">
+                                            <Button Classes="levelCard"
+                                                    Command="{Binding $parent[ItemsControl].((vm:LauncherViewModel)DataContext).SelectResourceLevelCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    IsEnabled="{Binding $parent[ItemsControl].((vm:LauncherViewModel)DataContext).ResourceLevelEnabled}"
+                                                    HorizontalAlignment="Stretch"
+                                                    HorizontalContentAlignment="Stretch"
+                                                    Margin="0,3">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                                    <StackPanel Grid.Column="0" Spacing="2">
+                                                        <TextBlock Text="{Binding DisplayName}" FontSize="13"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                                        <TextBlock Text="{Binding SizeText}" FontSize="11"
+                                                                   Foreground="{DynamicResource SemiColorText2}" />
+                                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                                    IsVisible="{Binding ShowInstalledBadge}">
+                                                            <ic:FluentIcon Icon="CheckmarkCircle" IconVariant="Filled"
+                                                                           IconSize="Size12"
+                                                                           Foreground="{DynamicResource SemiColorPrimary}"
+                                                                           VerticalAlignment="Center" />
+                                                            <TextBlock Text="{loc:Localize Key=Launcher.LevelInstalledBadge}"
+                                                                       FontSize="10"
+                                                                       Foreground="{DynamicResource SemiColorText2}"
+                                                                       VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                    <ic:FluentIcon Grid.Column="1" Icon="Checkmark" IconVariant="Regular"
+                                                                   IconSize="Size16"
+                                                                   VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource McKuroTextOnWallpaper}"
+                                                                   IsVisible="{Binding IsCurrent}" />
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+
                 <!-- 启动/安装大按钮(从底部排列,底边与轮播图/进度卡对齐,无背景) -->
                 <StackPanel Grid.Column="2" Width="220"
                             HorizontalAlignment="Right" VerticalAlignment="Bottom" Spacing="10"
                             Margin="0,0,0,8">
+                    <!-- 资源等级小按钮(对齐官方启动器:仅显示当前等级,点击才展开卡片列表) -->
+                    <Button Classes="opBtn"
+                            HorizontalAlignment="Right"
+                            Padding="10,4"
+                            Command="{Binding ToggleResourceLevelPickerCommand}"
+                            IsVisible="{Binding ShowResourceLevelPill}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding CurrentResourceLevelText}" FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                            <ic:FluentIcon Icon="ChevronUp" IconVariant="Regular" IconSize="Size12"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                        </StackPanel>
+                    </Button>
                     <Button Height="56"
                             Padding="0"
                             FontSize="15"
@@ -282,8 +420,12 @@
                             </Style>
                         </Button.Styles>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" VerticalAlignment="Center">
-                            <TextBlock Text="{loc:Localize Key=Launcher.DownloadInstall}" FontSize="15" FontWeight="Bold" />
-                            <TextBlock Text="{Binding ServerVersionText}" FontSize="11" />
+                            <TextBlock Text="{loc:Localize Key=Launcher.DownloadInstall}" FontSize="15" FontWeight="Bold"
+                                       VerticalAlignment="Center" />
+                            <!-- 版本号基线对齐:小字号与大字号在 StackPanel 里按行盒居中时视觉上会偏高,
+                                 显式居中 + 轻微下移补偿字体度量差(对齐官方按钮内版本号观感)。 -->
+                            <TextBlock Text="{Binding ServerVersionText}" FontSize="11"
+                                       VerticalAlignment="Center" Margin="0,2,0,0" />
                         </StackPanel>
                     </Button>
                     <Button Height="56"
@@ -308,8 +450,10 @@
                             </Style>
                         </Button.Styles>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding LaunchButtonText}" FontSize="15" FontWeight="Bold" />
-                            <TextBlock Text="{Binding ServerVersionText}" FontSize="11" />
+                            <TextBlock Text="{Binding LaunchButtonText}" FontSize="15" FontWeight="Bold"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding ServerVersionText}" FontSize="11"
+                                       VerticalAlignment="Center" Margin="0,2,0,0" />
                         </StackPanel>
                     </Button>
                     <Button Height="56"
@@ -324,8 +468,10 @@
                             IsVisible="{Binding ShowInstallUpdate}"
                             HorizontalAlignment="Stretch">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" VerticalAlignment="Center">
-                            <TextBlock Text="{loc:Localize Key=Launcher.InstallUpdate}" FontSize="15" FontWeight="Bold" />
-                            <TextBlock Text="{Binding ServerVersionText}" FontSize="11" />
+                            <TextBlock Text="{loc:Localize Key=Launcher.InstallUpdate}" FontSize="15" FontWeight="Bold"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding ServerVersionText}" FontSize="11"
+                                       VerticalAlignment="Center" Margin="0,2,0,0" />
                         </StackPanel>
                     </Button>
                 </StackPanel>

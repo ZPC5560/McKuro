@@ -6,6 +6,8 @@ using Xunit;
 
 namespace McKuro.Tests;
 
+/// <summary>加入 IconCatalog 串行集合:本类断言 IconCatalog 的静态兜底行为,不能与注入远程目录的测试并行。</summary>
+[Collection(IconCatalogCollection.Name)]
 public class LauncherInfoTests
 {
     [Fact]
@@ -60,6 +62,33 @@ public class LauncherInfoTests
 
         // 未知 ID → 空串
         Assert.Equal("", IconCatalog.GetRoleIconUrl(999999));
+    }
+
+    /// <summary>
+    /// 新五星角色/武器必须在目录中:缺失时 <see cref="IconCatalog.GetRoleIconUrl"/> 返回空串,
+    /// 抽卡分析页五星列表/表格的头像位会留空(表现为"抽到新角色没有头像")。
+    /// 数据源:mc.appfeng.com/json/avatar.json 与 weapon.json。
+    /// </summary>
+    [Theory]
+    [InlineData(1311, "T_IconRoleHead256_75_UI")] // 心(梦州版本新增)
+    [InlineData(1312, "T_IconRoleHead256_76_UI")] // 锁暝
+    [InlineData(1212, "T_IconRoleHead256_74_UI")] // 景燃
+    [InlineData(1413, "T_IconRoleHead256_73_UI")] // 清宵
+    public void IconCatalog_NewFiveStarRoles_AreMapped(int resourceId, string expectedIcon)
+    {
+        var url = IconCatalog.GetRoleIconUrl(resourceId);
+        Assert.Equal($"https://mc.appfeng.com/ui/avatar/{expectedIcon}.png", url);
+    }
+
+    [Theory]
+    [InlineData(21010076, "T_IconWeapon21010076_UI")] // 千般渡
+    [InlineData(21020106, "T_IconWeapon21020106_UI")] // 云琅
+    [InlineData(21020107, "T_IconWeapon21020107_UI")] // 沉冥
+    [InlineData(21050116, "T_IconWeapon21050116_UI")] // 玉阙玄华
+    public void IconCatalog_NewFiveStarWeapons_AreMapped(int resourceId, string expectedIcon)
+    {
+        var url = IconCatalog.GetWeaponIconUrl(resourceId);
+        Assert.Equal($"https://mc.appfeng.com/ui/weapon/{expectedIcon}.png", url);
     }
 
     [Fact]

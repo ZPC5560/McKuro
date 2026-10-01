@@ -53,8 +53,28 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>暂停/继续按钮文案。</summary>
     public string PauseResumeText => DownloadPaused ? LanguageService.Format("Launcher.Resume") : LanguageService.Format("Launcher.Pause");
 
-    /// <summary>是否显示暂停/继续按钮(下载进行中)。</summary>
-    public bool ShowPauseResume => IsDownloading;
+    /// <summary>
+    /// 当前进度阶段是否可暂停,由进度回调按 <see cref="DownloadProgress.CanPause"/> 驱动。
+    /// 校验本地文件 / 合成分组差分(hpatchz 外部进程)/ 解压 / 资源安装等阶段不产生可暂停的
+    /// 字节读取,暂停是空操作,此时必须隐藏暂停按钮(对齐上游 IProgressSetup.CanPause)。
+    /// </summary>
+    [ObservableProperty]
+    private bool _canPauseCurrentPhase;
+
+    partial void OnCanPauseCurrentPhaseChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowPauseResume));
+        OnPropertyChanged(nameof(PreDownloadButtonVisible));
+    }
+
+    /// <summary>是否在真正可暂停的下载阶段(下载进行中且当前阶段允许暂停)。</summary>
+    public bool ShowPauseResume => IsDownloading && CanPauseCurrentPhase;
+
+    /// <summary>
+    /// 合并下载按钮是否可见:未下载时显示(预下载/预下载完成),
+    /// 下载中只在可暂停的下载阶段显示暂停/继续,非下载阶段整体隐藏。
+    /// </summary>
+    public bool PreDownloadButtonVisible => !IsDownloading || CanPauseCurrentPhase;
 
     /// <summary>合并按钮文案:未下载时"预下载"(已完成显示"预下载完成"),下载中"暂停下载"/"继续下载"。</summary>
     public string PreDownloadButtonText => IsDownloading
@@ -69,8 +89,12 @@ public sealed partial class LauncherViewModel : ViewModelBase
         OnPropertyChanged(nameof(PreDownloadButtonText));
         OnPropertyChanged(nameof(PreDownloadButtonEnabled));
         OnPropertyChanged(nameof(ShowPauseResume));
+        OnPropertyChanged(nameof(PreDownloadButtonVisible));
         OnPropertyChanged(nameof(IsPreDownloadActive));
         OnPropertyChanged(nameof(ShowDownloadCard));
+        // 下载/安装期间隐藏资源等级面板(与进度卡同列,避免重叠)
+        OnPropertyChanged(nameof(ShowResourceLevelPanel));
+        OnPropertyChanged(nameof(ResourceLevelEnabled));
     }
 
     partial void OnHasPredownloadChanged(bool value)
@@ -101,6 +125,12 @@ public sealed partial class LauncherViewModel : ViewModelBase
     {
         if (IsDownloading)
         {
+            // 非下载阶段(校验/差分合成/解压/资源安装)没有可暂停的字节读取,
+            // 切换暂停只会留下一个污染后续下载批次的暂停门 → 直接忽略。
+            if (!CanPauseCurrentPhase)
+            {
+                return;
+            }
             if (AppServices.Downloader.IsPaused)
             {
                 AppServices.Downloader.Resume();
@@ -212,6 +242,33 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>切换轮播图显示/隐藏。</summary>
     [RelayCommand]
     private void ToggleSlideShow() => IsSlideShowVisible = !IsSlideShowVisible;
+
+    /// <summary>
+    /// 双击轮播图在默认浏览器中打开该图的跳转链接(官方 slideshow 的 jumpUrl)。
+    /// 无链接时不做任何事,并给出提示,避免用户以为"双击没反应"。
+    /// </summary>
+    [RelayCommand]
+    private void OpenSlideshowLink(SlideshowItem? item)
+    {
+        if (item is null || string.IsNullOrWhiteSpace(item.JumpUrl))
+        {
+            StatusText = LanguageService.Format("Launcher.SlideNoLink");
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = item.JumpUrl,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception)
+        {
+            StatusText = LanguageService.Format("Status.OpenWebFailed");
+        }
+    }
 
     /// <summary>公告列表。</summary>
     public ObservableCollection<AnnouncementItem> Notices { get; } = [];
@@ -354,6 +411,9 @@ public sealed partial class LauncherViewModel : ViewModelBase
         {
             _ = CheckUpdateAsync();
         }
+
+        // 资源等级面板随渠道/安装状态刷新(渠道决定端点是否可用)
+        _ = RefreshResourceLevelsAsync();
     }
 
     /// <summary>
@@ -643,38 +703,14 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
 
         IsDownloading = true;
+        // 新任务开始:先按「不可暂停」起步,直到进度回调确认进入真正的下载阶段。
+        // 避免沿用上一轮残留的 CanPause=true,让暂停按钮在无字节可暂停的阶段短暂闪现。
+        CanPauseCurrentPhase = false;
         ProgressPercent = 0;
         ProgressText = LanguageService.Format("Launcher.Predownloading");
         StatusText = LanguageService.Format("Launcher.PredownloadStatus");
 
-        var progress = new Progress<DownloadProgress>(p =>
-        {
-            // 非下载安装阶段(差分合成/解压/资源安装):只切文案,不动进度条
-            if (p.StageText is not null)
-            {
-                ProgressText = p.StageText;
-                CurrentFileText = p.CurrentFile;
-                SpeedText = "";
-                return;
-            }
-            // 校验阶段(BytesTotal==0):进度按文件数显示,告知用户"正在校验本地文件"
-            if (p.BytesTotal <= 0 && p.FileTotal > 0)
-            {
-                ProgressPercent = Math.Clamp(p.FileIndex * 100.0 / p.FileTotal, 0, 100);
-                ProgressText = LanguageService.Format("Launcher.Verifying", p.FileIndex, p.FileTotal);
-                CurrentFileText = p.CurrentFile;
-                SpeedText = "";
-                return;
-            }
-            ProgressPercent = p.Percent * 100;
-            // 速度只在 SpeedText 显示一处(对齐上游 1.6 修复:避免进度行与速度行重复显示)
-            ProgressText = LanguageService.Format("Launcher.FileProgress", p.FileIndex, p.FileTotal, FormatSize(p.BytesDownloaded), FormatSize(p.BytesTotal));
-            CurrentFileText = p.CurrentFile;
-            SpeedText = FormatSpeed(p.SpeedBps);
-            BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
-            UpdateRemainingTime(p.BytesTotal - p.BytesDownloaded, p.SpeedBps);
-            SampleSpeedHistory(p.SpeedBps);
-        });
+        var progress = new Progress<DownloadProgress>(p => HandleProgress(p));
 
         try
         {
@@ -735,33 +771,10 @@ public sealed partial class LauncherViewModel : ViewModelBase
     {
         ProgressPercent = 0;
         StatusText = LanguageService.Format("Launcher.Installing");
+        // 安装阶段以补丁合成/校验/落位为主,先按不可暂停起步,进下载阶段后由回调打开。
+        CanPauseCurrentPhase = false;
 
-        var progress = new Progress<DownloadProgress>(p =>
-        {
-            // 非下载安装阶段(差分合成/解压/资源安装):只切文案,不动进度条
-            if (p.StageText is not null)
-            {
-                ProgressText = p.StageText;
-                CurrentFileText = p.CurrentFile;
-                SpeedText = "";
-                return;
-            }
-            var now = DateTime.UtcNow;
-            var isFinal = p.FileTotal > 0 && p.FileIndex >= p.FileTotal;
-            if (!isFinal && (now - _lastInstallUiUpdate).TotalMilliseconds < 500)
-            {
-                return;
-            }
-
-            _lastInstallUiUpdate = now;
-            ProgressPercent = p.Percent * 100;
-            ProgressText = LanguageService.Format("Launcher.FileProgress", p.FileIndex, p.FileTotal, FormatSize(p.BytesDownloaded), FormatSize(p.BytesTotal));
-            CurrentFileText = p.CurrentFile;
-            SpeedText = FormatSpeed(p.SpeedBps);
-            BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
-            UpdateRemainingTime(p.BytesTotal - p.BytesDownloaded, p.SpeedBps);
-            SampleSpeedHistory(p.SpeedBps);
-        });
+        var progress = new Progress<DownloadProgress>(p => HandleProgress(p));
 
         try
         {
@@ -777,6 +790,57 @@ public sealed partial class LauncherViewModel : ViewModelBase
         {
             StatusText = LanguageService.Format("Launcher.InstallFailedWith", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// 统一的进度回调处理(预下载/安装/修复共用,避免三份实现漂移):
+    /// ① 非下载阶段(差分合成/解压/资源安装/迁移)只切文案,不动进度条;
+    /// ② 校验阶段(BytesTotal==0)按文件数显示「正在校验本地文件 x/y…」,不再退化成 "0 B/0 B";
+    /// ③ 下载阶段显示百分比/速度/剩余时间,并按 <see cref="DownloadProgress.CanPause"/> 决定暂停按钮可见。
+    /// </summary>
+    private void HandleProgress(DownloadProgress p)
+    {
+        // 可暂停性以 Core 的显式契约为准:非下载阶段暂停是空操作,必须隐藏按钮。
+        CanPauseCurrentPhase = p.CanPause;
+
+        // 非下载安装阶段(差分合成/解压/资源安装/迁移):只切文案,不动进度条
+        if (p.Phase == DownloadPhase.Stage)
+        {
+            ProgressText = p.StageText!;
+            CurrentFileText = p.CurrentFile;
+            SpeedText = "";
+            return;
+        }
+
+        // 校验阶段(BytesTotal==0):进度按文件数显示,告知用户"正在校验本地文件"
+        if (p.Phase == DownloadPhase.Verify)
+        {
+            ProgressPercent = Math.Clamp(p.FileIndex * 100.0 / p.FileTotal, 0, 100);
+            ProgressText = LanguageService.Format("Launcher.Verifying", p.FileIndex, p.FileTotal);
+            CurrentFileText = p.CurrentFile;
+            SpeedText = "";
+            BytesText = "";
+            RemainingTimeText = "";
+            return;
+        }
+
+        // 下载阶段:界面最多每 500ms 刷新一次(下载线程可高频上报),最后一次强制刷新
+        var now = DateTime.UtcNow;
+        var isFinal = p.FileTotal > 0 && p.FileIndex >= p.FileTotal;
+        if (!isFinal && (now - _lastInstallUiUpdate).TotalMilliseconds < 500)
+        {
+            return;
+        }
+
+        _lastInstallUiUpdate = now;
+        ProgressPercent = p.Percent * 100;
+        // 速度只在 SpeedText 显示一处(对齐上游 1.6 修复:避免进度行与速度行重复显示)
+        ProgressText = LanguageService.Format("Launcher.FileProgress", p.FileIndex, p.FileTotal, FormatSize(p.BytesDownloaded), FormatSize(p.BytesTotal));
+        CurrentFileText = p.CurrentFile;
+        SpeedText = FormatSpeed(p.SpeedBps);
+        BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
+        UpdateRemainingTime(p.BytesTotal - p.BytesDownloaded, p.SpeedBps);
+        SampleSpeedHistory(p.SpeedBps);
     }
 
     [RelayCommand]
@@ -808,28 +872,12 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
 
         IsDownloading = true;
+        CanPauseCurrentPhase = false;
         ProgressPercent = 0;
         ProgressText = LanguageService.Format("Launcher.Repairing");
         StatusText = LanguageService.Format("Launcher.RepairStatus");
 
-        var progress = new Progress<DownloadProgress>(p =>
-        {
-            // 非下载安装阶段(差分合成/解压/资源安装):只切文案,不动进度条
-            if (p.StageText is not null)
-            {
-                ProgressText = p.StageText;
-                CurrentFileText = p.CurrentFile;
-                SpeedText = "";
-                return;
-            }
-            ProgressPercent = p.Percent * 100;
-            ProgressText = LanguageService.Format("Launcher.FileProgress", p.FileIndex, p.FileTotal, FormatSize(p.BytesDownloaded), FormatSize(p.BytesTotal));
-            CurrentFileText = p.CurrentFile;
-            SpeedText = FormatSpeed(p.SpeedBps);
-            BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
-            UpdateRemainingTime(p.BytesTotal - p.BytesDownloaded, p.SpeedBps);
-            SampleSpeedHistory(p.SpeedBps);
-        });
+        var progress = new Progress<DownloadProgress>(p => HandleProgress(p));
 
         try
         {

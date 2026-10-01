@@ -117,9 +117,6 @@ public sealed class DailyItem : System.ComponentModel.INotifyPropertyChanged
 public sealed partial class HomeViewModel : ViewModelBase
 {
     [ObservableProperty]
-    private string _statusText = "";
-
-    [ObservableProperty]
     private bool _isInstalled;
 
     [ObservableProperty]
@@ -310,20 +307,12 @@ public sealed partial class HomeViewModel : ViewModelBase
     [RelayCommand]
     private void Refresh() => RefreshState();
 
-    /// <summary>导航到启动器页。</summary>
-    [RelayCommand]
-    private void GoLauncher() => SendNav(NavigationKeys.Launcher);
-
-    /// <summary>导航到抽卡分析页。</summary>
-    [RelayCommand]
-    private void GoGacha() => SendNav(NavigationKeys.Gacha);
-
-    /// <summary>导航到角色数据页。</summary>
-    [RelayCommand]
-    private void GoRoles() => SendNav(NavigationKeys.Roles);
-
-    private static void SendNav(string key)
-        => WeakReferenceMessenger.Default.Send(new NavigationRequestedMessage(key));
+    /// <summary>
+    /// 主页已精简:不再提供「进入游戏/抽卡分析/角色数据」快捷按钮(左侧主导航已可直达),
+    /// 故移除对应导航命令。
+    /// </summary>
+    private static void NotifyUser(string message)
+        => WeakReferenceMessenger.Default.Send(new ShowToastMessage(message));
 
     /// <summary>拉取角色每日数据(优先本地游戏缓存 + PC 启动器 SDK,失败回退库街区接口)。</summary>
     [RelayCommand]
@@ -335,7 +324,6 @@ public sealed partial class HomeViewModel : ViewModelBase
         }
         RefreshState();
         IsBusy = true;
-        StatusText = LanguageService.Format("Home.FetchingDaily");
         try
         {
             // 先用本地缓存头像占位(离线/慢网也立即显示,参照 Java 版 assets/header 本地文件优先)
@@ -345,7 +333,7 @@ public sealed partial class HomeViewModel : ViewModelBase
             var local = await AppServices.LocalDaily.GetDailyDataAsync();
             if (local is not null)
             {
-                ApplyDailyData(local, LanguageService.Format("Home.SrcLocal"));
+                ApplyDailyData(local);
                 // 本地 SDK 数据不含头像 URL:从库街区 gamer 接口补齐并落盘缓存
                 await ResolveAvatarAsync(local.HeadUrl, local.RoleId);
                 return;
@@ -354,9 +342,9 @@ public sealed partial class HomeViewModel : ViewModelBase
             // ② 回退库街区接口(需登录)
             if (!IsLoggedIn)
             {
+                // 未登录/未装游戏属正常状态(不是错误):静默留白,不弹提示打扰
                 ClearProfile();
                 DailyItems.Clear();
-                StatusText = LanguageService.Format("Home.NoLocalData");
                 return;
             }
             var data = await AppServices.DailyData.GetDailyDataAsync();
@@ -364,16 +352,17 @@ public sealed partial class HomeViewModel : ViewModelBase
             {
                 ClearProfile();
                 DailyItems.Clear();
-                StatusText = LanguageService.Format("Home.FetchDailyFailed");
+                NotifyUser(LanguageService.Format("Home.FetchDailyFailed"));
                 return;
             }
-            ApplyDailyData(data, LanguageService.Format("Home.SrcKuro"));
+            ApplyDailyData(data);
             // 库街区路径 HeadUrl 已含头像:只需确保落盘缓存并切换为本地路径
             await ResolveAvatarAsync(data.HeadUrl, data.RoleId);
         }
         catch (Exception ex)
         {
-            StatusText = LanguageService.Format("Status.LoadFailedWith", ex.Message);
+            // 页面不再有状态栏,真实错误改走悬浮提示,避免"静默失败"无迹可寻
+            NotifyUser(LanguageService.Format("Status.LoadFailedWith", ex.Message));
         }
         finally
         {
@@ -395,7 +384,7 @@ public sealed partial class HomeViewModel : ViewModelBase
     }
 
     /// <summary>应用全量每日数据(缺字段的项自动跳过)。</summary>
-    private void ApplyDailyData(RoleDailyData data, string source)
+    private void ApplyDailyData(RoleDailyData data)
     {
         DailyItems.Clear();
         ApplyProfile(data);
@@ -415,8 +404,7 @@ public sealed partial class HomeViewModel : ViewModelBase
         AddItem(data.RougeData, Icon.Door, LanguageService.Format("Home.ItemRouge"), curOnly: true);
         AddItem(data.WeeklyFrameData, Icon.Map, LanguageService.Format("Home.ItemWeeklyFrame"), curOnly: true);
         AddBattlePass(data.BattlePassData);
-        // 只显示数据来源与更新状态,不显示账号信息(角色名/角色 ID)
-        StatusText = LanguageService.Format("Home.Updated", source);
+        // 页面已精简:不再展示「已更新(来源)」这类成功提示(数据本身即反馈)。
     }
 
     /// <summary>填充资料卡:昵称/等级/游玩天数/头像/开服玩家徽章(参照 Java WutheringWavesTool 角色卡)。</summary>
