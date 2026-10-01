@@ -103,13 +103,16 @@ if (canvas && hero && supportsGL()) {
     const b2 = new THREE.Box3().setFromObject(src);
     src.position.set(-(b2.min.x + b2.max.x) / 2, -b2.min.y, -(b2.min.z + b2.max.z) / 2);
 
-    // three's default lighting leaves it flat; a touch of environment response helps
+    // The GLB carries KHR_materials_unlit (GLTFLoader gives MeshBasicMaterial), which is
+    // what these toon-shaded characters want: the atlas already has baked shading, and
+    // pushing it through PBR washed the whites out. Only the colour space needs stating.
     src.traverse((n) => {
       if (!n.isMesh) return;
       (Array.isArray(n.material) ? n.material : [n.material]).forEach((m) => {
-        m.envMapIntensity = 1.0;
-        if (m.map) { m.map.colorSpace = THREE.SRGBColorSpace; }
-        m.needsUpdate = true;
+        if (m.map && m.map.colorSpace !== THREE.SRGBColorSpace) {
+          m.map.colorSpace = THREE.SRGBColorSpace;
+          m.needsUpdate = true;
+        }
       });
     });
 
