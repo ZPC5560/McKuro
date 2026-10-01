@@ -243,6 +243,30 @@ public static class KuroEndpoints
         _ => PunishCnIndex,
     };
 
+    // ---- 新版协议(按资源等级拆分;含 resourcePacks/bundles) ----
+
+    /// <summary>新版协议使用的 CN 官方 appKey(与旧协议的 appKey 不同)。</summary>
+    public const string CnOfficialAppKey = "10003_oLNgHF1CESo51DGHN2odtp40e3oI1HfZ";
+
+    /// <summary>
+    /// CN 官方新版协议 index.json(含 resourcePacks/bundles,可据以切换资源等级)。
+    /// <para>实测:仅 CN 官方(及 volcdn 镜像)提供该端点;哔哩哔哩/WeGame/国际服的
+    /// <c>official</c> 段均返回 404,故资源等级切换目前只支持国服官方。</para>
+    /// </summary>
+    public const string CnResourcePackIndex =
+        "https://prod-cn-alicdn-gamestarter.kurogame.com/launcher/game/"
+        + CnOfficialAppKey + "/G152/official/index.json";
+
+    /// <summary>
+    /// 取某渠道的新版协议端点(不支持时返回 null,调用方应回退到「不可切换等级」的逻辑)。
+    /// </summary>
+    public static string? ResourcePackIndexForServerType(
+        McKuro.Core.Services.Game.GameServerType type) =>
+        type is McKuro.Core.Services.Game.GameServerType.Official
+            or McKuro.Core.Services.Game.GameServerType.Unknown
+            ? CnResourcePackIndex
+            : null;
+
     /// <summary>按游戏类型获取 index.json 地址。</summary>
     public static string ForGame(McKuro.Core.Services.Game.KuroGame game, McKuro.Core.Services.Game.GameServerType type) =>
         game == McKuro.Core.Services.Game.KuroGame.Punish ? ForPunishServerType(type) : ForServerType(type);

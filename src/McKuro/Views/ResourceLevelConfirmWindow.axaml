@@ -1,0 +1,55 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ic="using:FluentIcons.Avalonia"
+        xmlns:loc="clr-namespace:McKuro.Services"
+        mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="250"
+        x:Class="McKuro.Views.ResourceLevelConfirmWindow"
+        Title="{loc:Localize Key=Launcher.LevelConfirmTitle}"
+        Width="440" SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+  <!-- 资源等级切换二次确认:切换可能需要下载几十 GB,必须由用户明确点击才继续,
+       避免在等级卡片上误点一下就触发大体积下载。
+       按钮只改文字颜色,不改变按键背景(保留默认中性按钮外观):
+       取消=强调蓝,#5A8DEE;下载并切换=绿色,与启动页「启动游戏」按钮同款 #52C41A。 -->
+  <Window.Styles>
+    <Style Selector="Button.dlgCancel">
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="18,8" />
+    </Style>
+
+    <Style Selector="Button.dlgConfirm">
+      <Setter Property="Foreground" Value="#52C41A" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="18,8" />
+    </Style>
+  </Window.Styles>
+  <Border Padding="22" Background="{DynamicResource SemiColorBg1}">
+    <StackPanel Spacing="14">
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <Border Width="36" Height="36" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+          <ic:FluentIcon Icon="ArrowDownload" IconVariant="Regular" IconSize="Size20"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Foreground="{DynamicResource SemiColorPrimary}" />
+        </Border>
+        <TextBlock x:Name="TitleText" FontSize="16" FontWeight="Bold"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource SemiColorText0}" />
+      </StackPanel>
+
+      <TextBlock x:Name="BodyText" FontSize="13" TextWrapping="Wrap" LineHeight="20"
+                 Foreground="{DynamicResource SemiColorText1}" />
+
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+        <Button x:Name="CancelButton" MinWidth="88" Classes="dlgCancel"
+                Content="{loc:Localize Key=Launcher.LevelCancel}" />
+        <Button x:Name="ConfirmButton" MinWidth="120" Classes="dlgConfirm"
+                Content="{loc:Localize Key=Launcher.LevelConfirmOk}" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>

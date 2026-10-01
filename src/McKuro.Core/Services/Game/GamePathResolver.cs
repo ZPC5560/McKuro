@@ -30,6 +30,7 @@ public enum KuroGame
 ///   Client/Binaries/Win64/Client-Win64-Shipping.exe
 ///   Client/Saved/Logs/Client.log
 ///   Client/Saved/LocalStorage/LocalStorage.db
+///   DiffData/&lt;版本&gt;/           预下载暂存(启动器写入,安装时消费后删除)
 /// 战双目录结构(Windows 端):
 ///   PGR.exe
 ///   Client/Binaries/Win64/Client-Win64-Shipping.exe
@@ -41,6 +42,15 @@ public sealed class GamePathResolver
     public const string LogRelative = "Client/Saved/Logs";
     public const string ClientLogRelative = "Client/Saved/Logs/Client.log";
     public const string LocalStorageRelative = "Client/Saved/LocalStorage/LocalStorage.db";
+
+    /// <summary>预下载暂存目录名(位于游戏目录下,不占用系统盘)。</summary>
+    public const string DiffDataDirName = "DiffData";
+
+    /// <summary>补丁包临时下载目录名(位于 DiffData 下,补丁装完即删)。</summary>
+    public const string InstallTempDirName = "install_tmp";
+
+    /// <summary>分组差分合成的临时目录名(位于游戏目录下,安装结束后删除)。</summary>
+    public const string PatchTempDirName = ".McKuro_patch";
 
     private readonly Func<string?> _rootDirGetter;
 
@@ -71,6 +81,31 @@ public sealed class GamePathResolver
 
     public string? LocalStorageDbPath =>
         GameRootDir is null ? null : Path.Combine(GameRootDir, LocalStorageRelative);
+
+    /// <summary>
+    /// 预下载暂存根目录(游戏目录下 DiffData)。游戏目录未设置时为 null,
+    /// 调用方(如预下载)应据此报"未设置游戏目录"而不是回退到数据目录 —
+    /// 预载包必须与游戏同盘,安装时才能用同卷改名而不是跨卷复制。
+    /// </summary>
+    public string? DiffDataDir =>
+        GameRootDir is null ? null : Path.Combine(GameRootDir, DiffDataDirName);
+
+    /// <summary>指定版本的预下载暂存目录(游戏目录下 DiffData/&lt;版本&gt;)。</summary>
+    public string? PredownloadStagingDir(string version) =>
+        DiffDataDir is null || string.IsNullOrWhiteSpace(version)
+            ? null
+            : Path.Combine(DiffDataDir, version);
+
+    /// <summary>
+    /// 补丁包临时下载目录(DiffData/install_tmp)。与游戏同盘,补丁装完即删;
+    /// 游戏目录未设置时为 null(调用方应报"未设置游戏目录",不要回退到数据目录)。
+    /// </summary>
+    public string? InstallTempDir =>
+        DiffDataDir is null ? null : Path.Combine(DiffDataDir, InstallTempDirName);
+
+    /// <summary>本次安装专用的一次性临时目录(DiffData/install_tmp/&lt;guid&gt;)。</summary>
+    public string? NewInstallTempDir() =>
+        InstallTempDir is null ? null : Path.Combine(InstallTempDir, Guid.NewGuid().ToString("N"));
 
     /// <summary>检测服务器/渠道类型(依据 SDK 目录)。</summary>
     public GameServerType DetectServerType()

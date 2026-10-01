@@ -53,6 +53,9 @@ public sealed class LocalFileVersion
 /// <summary>游戏更新编排:检查更新、预下载、安装、启动。</summary>
 public sealed class GameUpdater : IGameUpdater
 {
+    /// <summary>预下载标记文件名(位于暂存目录内)。</summary>
+    private const string MarkerFileName = "predownload.json";
+
     private readonly GameManifestLoader _loader;
     private readonly DownloadEngine _downloader;
     private readonly UpdateInstaller _installer;
@@ -167,6 +170,11 @@ public sealed class GameUpdater : IGameUpdater
         }
         var installedVersion = ReadInstalledVersion(root);
         var notInstalled = !_paths.IsGameInstalled;
+
+        // [过渡代码 · 下个版本移除] 启动即后台把旧版数据目录里的预载包搬到游戏目录 DiffData。
+        // 不 await:几十 GB 的跨盘搬迁可能要几分钟,不能卡住「检查更新」;
+        // 真正要消费预载包的 PreDownloadAsync / InstallAsync 会 await 同一个任务。
+        StartLegacyPredownloadMigrationInBackground();
 
         // 自愈:游戏已安装但本地无版本记录(用户用官方启动器装好后首次设置目录),
         // 用清单关键文件做廉价存在性校验,通过则记录版本并判定无更新(否则每次检查都误报有更新)
@@ -351,7 +359,15 @@ public sealed class GameUpdater : IGameUpdater
         var patchFiles = patchLoad.Manifest.Files;
         // 预下载目标版本号记录,暂存目录按版本隔离。保留已有 .part 文件以支持断点续传。
         var downloadBytes = patchFiles.Sum(f => f.Size);
-        if (!HasFreeSpace(_appDataDir, downloadBytes))
+        // 暂存目录在游戏目录下的 DiffData:下载盘即游戏盘。
+        var staging = _paths.PredownloadStagingDir(targetVersion);
+        if (string.IsNullOrEmpty(staging))
+        {
+            return (false, null, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
+        }
+        // [过渡代码 · 下个版本移除] 先把旧版数据目录里的预载包搬到游戏目录,再继续(可断点续传)。
+        await MigrateLegacyPredownloadAsync(root, progress).WaitAsync(ct).ConfigureAwait(false);
+        if (!HasFreeSpace(staging, downloadBytes))
         {
             return (false, null, CoreStrings.F("Core.Updater.DownloadDiskFull", $"预载下载盘空间不足: {FormatBytes(downloadBytes)}", FormatBytes(downloadBytes)));
         }
@@ -360,7 +376,6 @@ public sealed class GameUpdater : IGameUpdater
         {
             return (false, null, CoreStrings.F("Core.Updater.GameDiskFull", $"游戏盘空间不足: {FormatBytes(requiredBytes)}", FormatBytes(requiredBytes)));
         }
-        var staging = Path.Combine(_appDataDir, "predownload", targetVersion);
         Directory.CreateDirectory(staging);
         var existingMeta = await ReadPreDownloadMetaAsync(staging, ct).ConfigureAwait(false);
         if (existingMeta is null
@@ -477,6 +492,9 @@ public sealed class GameUpdater : IGameUpdater
 
         var manifest = load.Manifest;
         var installedVersion = ReadInstalledVersion(root);
+        // [过渡代码 · 下个版本移除] 等旧位置的预载包搬完再找暂存目录,
+        // 否则升级后第一次点「安装更新」会在旧位置消费预载包(跨卷复制,慢)。
+        await MigrateLegacyPredownloadAsync(root, progress).WaitAsync(ct).ConfigureAwait(false);
         var stagingDir = FindStaging(manifest.Version, serverType, installedVersion);
         ManifestLoadResult? patchLoad = null;
 
@@ -525,7 +543,13 @@ public sealed class GameUpdater : IGameUpdater
                     var patchFiles = patchLoad.Manifest.Files;
                     var patchDownloadBytes = patchFiles.Sum(f => f.Size);
                     var patchDiskBytes = patchConfig.Ext?.RequiredDiskSpace ?? patchConfig.UnCompressSize ?? 0;
-                    if (!HasFreeSpace(_appDataDir, patchDownloadBytes))
+                    // 补丁包临时目录也在游戏目录下的 DiffData:下载盘即游戏盘,装完即删。
+                    var tempDir = _paths.NewInstallTempDir();
+                    if (string.IsNullOrEmpty(tempDir))
+                    {
+                        return (false, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
+                    }
+                    if (!HasFreeSpace(tempDir, patchDownloadBytes))
                     {
                         return (false, CoreStrings.F("Core.Updater.DownloadDiskFull", $"更新下载盘空间不足: {FormatBytes(patchDownloadBytes)}", FormatBytes(patchDownloadBytes)));
                     }
@@ -533,7 +557,7 @@ public sealed class GameUpdater : IGameUpdater
                     {
                         return (false, CoreStrings.F("Core.Updater.GameDiskFull", $"游戏盘空间不足: {FormatBytes(patchDiskBytes)}", FormatBytes(patchDiskBytes)));
                     }
-                    stagingDir = Path.Combine(_appDataDir, "install_tmp", Guid.NewGuid().ToString("N"));
+                    stagingDir = tempDir;
                     Directory.CreateDirectory(stagingDir);
                     var (_, failures) = await _downloader.DownloadManyAsync(
                         patchFiles,
@@ -776,6 +800,283 @@ public sealed class GameUpdater : IGameUpdater
         }
     }
 
+    // ================== [过渡代码 · 下个版本整段删除] ==================
+    // 旧版把预载包放在数据目录 %AppData%\McKuro\predownload\<版本>,吃掉系统盘空间且安装时
+    // 必须跨卷复制;现改为游戏目录下的 DiffData\<版本>(与游戏同盘,安装即同卷改名)。
+    // 这里负责把旧位置已有的预载包搬到新位置,让已经预下载好的用户不必重新下载几十 GB。
+    //
+    // 移除清单(删净后行为依旧正确 —— 新位置找不到就等于没预载过):
+    //   1. 本区块的字段与方法(含 CleanLegacyInstallTemp);
+    //   2. FindStaging 中的 LegacyStagingDir 回退分支;
+    //   3. CheckUpdateAsync / PreDownloadAsync / InstallAsync 里的 MigrateLegacyPredownloadAsync 调用。
+    // ==========================================================================
+
+    private readonly object _legacyPredownloadSync = new();
+    private Task? _legacyPredownloadTask;
+
+    /// <summary>[过渡代码] 旧版预下载根目录(数据目录下的 predownload)。</summary>
+    private string LegacyPredownloadRoot => Path.Combine(_appDataDir, "predownload");
+
+    /// <summary>[过渡代码] 旧位置中指定版本的暂存目录。</summary>
+    private string LegacyStagingDir(string version) => Path.Combine(LegacyPredownloadRoot, version);
+
+    /// <summary>
+    /// [过渡代码] 把旧版数据目录里的预载包搬到游戏目录 DiffData 下;并发调用共享同一次执行。
+    /// 逐文件移动、标记文件最后搬,因此中途被打断时旧目录仍是一个完整可用的预载包,下次可续跑。
+    /// 迁移失败不影响功能:<see cref="FindStaging"/> 会继续在旧位置找到预载包。
+    /// </summary>
+    /// <remarks>
+    /// 共享任务刻意不绑定任何调用方的 CancellationToken(否则先调用方的取消会毒化后续调用方),
+    /// 调用方若要支持自己的取消,请对返回的 Task 使用 <c>WaitAsync(ct)</c>。
+    /// </remarks>
+    internal Task MigrateLegacyPredownloadAsync(
+        string gameRoot,
+        IProgress<DownloadProgress>? progress = null)
+    {
+        if (string.IsNullOrEmpty(gameRoot) || string.IsNullOrEmpty(_paths.DiffDataDir) || !HasLegacyWork())
+        {
+            return Task.CompletedTask;
+        }
+
+        lock (_legacyPredownloadSync)
+        {
+            _legacyPredownloadTask ??= RunLegacyPredownloadMigrationAsync(progress);
+            return _legacyPredownloadTask;
+        }
+    }
+
+    /// <summary>[过渡代码] 数据目录里是否还有需要处理的旧版遗留(预载包或补丁临时目录)。</summary>
+    private bool HasLegacyWork() =>
+        Directory.Exists(LegacyPredownloadRoot) || Directory.Exists(Path.Combine(_appDataDir, "install_tmp"));
+
+    /// <summary>
+    /// [过渡代码] 后台触发一次旧预载目录迁移(不阻塞检查更新/界面)。
+    /// 与 <see cref="MigrateLegacyPredownloadAsync"/> 共享同一个任务,重复调用无副作用。
+    /// </summary>
+    private void StartLegacyPredownloadMigrationInBackground()
+    {
+        var root = _paths.GameRootDir;
+        if (string.IsNullOrEmpty(root) || !HasLegacyWork())
+        {
+            return;
+        }
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await MigrateLegacyPredownloadAsync(root).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "后台迁移旧预载目录失败(不影响功能)");
+            }
+        });
+    }
+
+    private async Task RunLegacyPredownloadMigrationAsync(IProgress<DownloadProgress>? progress)
+    {
+        var legacyRoot = LegacyPredownloadRoot;
+        var destRoot = _paths.DiffDataDir!;
+        var succeeded = false;
+        try
+        {
+            List<string> versionDirs;
+            try
+            {
+                versionDirs = Directory.Exists(legacyRoot)
+                    ? Directory.EnumerateDirectories(legacyRoot)
+                        .Where(dir => File.Exists(Path.Combine(dir, MarkerFileName)))
+                        .ToList()
+                    : [];
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "枚举旧预载目录失败: {Path}", legacyRoot);
+                CleanLegacyInstallTemp();
+                succeeded = true;
+                return;
+            }
+            if (versionDirs.Count == 0)
+            {
+                // 没有待迁移的旧预载包,清掉空壳根目录后收工
+                TryDeleteDirectory(legacyRoot);
+                succeeded = true;
+                CleanLegacyInstallTemp();
+                return;
+            }
+
+            _logger.LogInformation(
+                "开始迁移旧预载目录到游戏目录: {From} → {To}({Count} 个版本)",
+                legacyRoot,
+                destRoot,
+                versionDirs.Count);
+            var migratingText = CoreStrings.T("Core.Updater.MigratingPredownload", "正在把已预下载的数据迁移到游戏目录…");
+            progress?.Report(new DownloadProgress
+            {
+                CurrentFile = migratingText,
+                FileIndex = 0,
+                FileTotal = 0,
+                BytesDownloaded = 0,
+                BytesTotal = 0,
+                SpeedBps = 0,
+                StageText = migratingText,
+            });
+
+            var allMoved = true;
+            foreach (var legacyVersionDir in versionDirs)
+            {
+                try
+                {
+                    if (!await MigrateLegacyVersionAsync(legacyVersionDir, destRoot).ConfigureAwait(false))
+                    {
+                        allMoved = false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    allMoved = false;
+                    _logger.LogWarning(ex, "迁移旧预载版本失败,保留原目录: {Path}", legacyVersionDir);
+                }
+            }
+
+            succeeded = allMoved;
+            if (allMoved)
+            {
+                TryDeleteDirectory(legacyRoot);
+                _logger.LogInformation("旧预载目录迁移完成: {Path}", legacyRoot);
+            }
+            CleanLegacyInstallTemp();
+        }
+        finally
+        {
+            // 中途失败时清掉缓存的任务,让下次调用(下次启动或下次预下载)重试;
+            // 否则一次失败会把迁移永久锁死。成功时保留已完成任务,重复调用即空操作。
+            if (!succeeded)
+            {
+                lock (_legacyPredownloadSync)
+                {
+                    _legacyPredownloadTask = null;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// [过渡代码] 清掉旧版留在数据目录的空壳 install_tmp。补丁临时目录已挪到游戏目录下的
+    /// DiffData/install_tmp,旧目录里的内容都是上次安装的残留临时文件,不会再被复用。
+    /// </summary>
+    private void CleanLegacyInstallTemp()
+    {
+        var legacy = Path.Combine(_appDataDir, "install_tmp");
+        if (Directory.Exists(legacy))
+        {
+            TryDeleteDirectory(legacy);
+            _logger.LogInformation("已清理旧版补丁临时目录: {Path}", legacy);
+        }
+    }
+
+    /// <summary>[过渡代码] 迁移单个版本的预载目录到 DiffData 下的同名目录;返回是否已处理完毕。</summary>
+    private async Task<bool> MigrateLegacyVersionAsync(string legacyVersionDir, string destRoot)
+    {
+        var version = Path.GetFileName(legacyVersionDir);
+        var destDir = Path.Combine(destRoot, version);
+        var markerName = MarkerFileName;
+
+        if (Directory.Exists(destDir))
+        {
+            // 新位置已有同版本目录:标记已就位说明搬完了,清掉旧副本;
+            // 否则(新位置是正在下载的半成品)保留旧数据,等下次再判断。
+            var marker = Path.Combine(destDir, markerName);
+            if (File.Exists(marker))
+            {
+                TryDeleteDirectory(legacyVersionDir);
+                return true;
+            }
+            _logger.LogWarning("新位置已有未完成的同版本预载目录,跳过迁移: {Path}", destDir);
+            return false;
+        }
+
+        List<string> files;
+        try
+        {
+            files = Directory.EnumerateFiles(legacyVersionDir, "*", SearchOption.AllDirectories).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "枚举旧预载文件失败: {Path}", legacyVersionDir);
+            return false;
+        }
+        if (files.Count == 0)
+        {
+            // 空目录没有迁移价值,直接清掉
+            TryDeleteDirectory(legacyVersionDir);
+            return true;
+        }
+
+        // 标记文件必须最后搬:标记出现在新目录即代表文件已全部就位,
+        // 因此中途被打断时旧目录仍是完整可用的预载包而非半成品。
+        files = files
+            .OrderBy(f => string.Equals(Path.GetFileName(f), markerName, StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+            .ToList();
+
+        Directory.CreateDirectory(destDir);
+        var moved = 0;
+        var failed = 0;
+        foreach (var file in files)
+        {
+            var relative = Path.GetRelativePath(legacyVersionDir, file);
+            var dest = Path.Combine(destDir, relative);
+            var destParent = Path.GetDirectoryName(dest);
+            if (!string.IsNullOrEmpty(destParent))
+            {
+                Directory.CreateDirectory(destParent);
+            }
+
+            try
+            {
+                if (File.Exists(dest) && new FileInfo(dest).Length == new FileInfo(file).Length)
+                {
+                    // 上次迁移已搬过这个文件(同大小视为已就位),删掉旧副本即可续跑
+                    File.Delete(file);
+                    continue;
+                }
+                MoveFileAcrossVolumes(file, dest);
+                moved++;
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                _logger.LogWarning(ex, "迁移预载文件失败(保留旧副本): {Path}", file);
+            }
+        }
+
+        if (failed > 0)
+        {
+            _logger.LogWarning("旧预载版本迁移未完整完成: {Version}(成功 {Moved}/{Total},失败 {Failed})",
+                version, moved, files.Count, failed);
+            return false;
+        }
+
+        _logger.LogInformation("已迁移旧预载版本到游戏目录: {Version}({Moved}/{Total} 个文件)", version, moved, files.Count);
+        TryDeleteDirectory(legacyVersionDir);
+        return true;
+    }
+
+    /// <summary>[过渡代码] 跨卷移动文件:同卷走改名,跨卷退化为复制 + 删源。</summary>
+    private static void MoveFileAcrossVolumes(string source, string dest)
+    {
+        try
+        {
+            File.Move(source, dest, overwrite: true);
+        }
+        catch (IOException)
+        {
+            // 跨卷时改名会失败(目标在不同卷),显式退化为复制 + 删源
+            File.Copy(source, dest, overwrite: true);
+            File.Delete(source);
+        }
+    }
+
     /// <summary>
     /// 修复游戏:对比清单重新下载并安装缺失/损坏的文件。
     /// 对齐 Haiyu 的 RepirGame:跳过用户配置的校验文件,并按设置决定是否删除被跳过的文件。
@@ -897,7 +1198,33 @@ public sealed class GameUpdater : IGameUpdater
     }
 
     /// <summary>
-    /// 启动游戏(对齐 Haiyu StartGameAsync:可选 exe + `Client -dx11 -slno {自定义参数}` 命令行)。
+    /// 按当前设置组装游戏启动命令行(供启动与测试共用)。
+    /// <para>
+    /// 资源等级优先级:用户设置 → 按游戏目录里已安装的资源包自动探测(官方启动器在
+    /// <c>launcherDownloadConfig\</c> 下留标记)→ 官方默认 hd。
+    /// <c>-krqlv</c> 始终存在(缺失会导致游戏启动即崩溃)。
+    /// </para>
+    /// </summary>
+    public string BuildLaunchCommandLine()
+    {
+        var s = _settings?.Current;
+        return LaunchArguments.Build(s?.UseDx11 == true, ResolveResourceLevel(s), s?.StartGameArguments);
+    }
+
+    /// <summary>解析生效的资源等级:显式设置优先,其次按已装资源包探测,最后回退官方默认。</summary>
+    private string ResolveResourceLevel(AppSettings? settings)
+    {
+        if (!string.IsNullOrWhiteSpace(settings?.ResourceLevel))
+        {
+            return settings!.ResourceLevel!;
+        }
+
+        return LaunchArguments.DetectInstalledResourceLevel(_paths.GameRootDir)
+            ?? LaunchArguments.DefaultResourceLevel;
+    }
+
+    /// <summary>
+    /// 启动游戏(对齐官方启动器:可选 exe + `Client -dx11 -slno -krqlv={资源等级} {自定义参数}` 命令行)。
     /// </summary>
     public bool LaunchGame(out string? error)
     {
@@ -920,22 +1247,14 @@ public sealed class GameUpdater : IGameUpdater
 
         try
         {
-            // 对齐 Haiyu WavesLauncheOption.ToString():Client -dx11 -slno {arguments}
-            var args = new System.Text.StringBuilder("Client");
-            if (s?.UseDx11 == true)
-            {
-                args.Append(" -dx11 -slno");
-            }
-            var extra = s?.StartGameArguments?.Trim();
-            if (!string.IsNullOrEmpty(extra))
-            {
-                args.Append(' ').Append(extra);
-            }
+            // 对齐官方启动器:Client -dx11 -slno -krqlv=hd {自定义参数}
+            // -krqlv 是鸣潮 3.x 起必需的引导参数,缺失会导致游戏启动即崩溃退出。
+            var args = BuildLaunchCommandLine();
 
             var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = exe,
-                Arguments = args.ToString(),
+                Arguments = args,
                 WorkingDirectory = root,
                 UseShellExecute = true,
             };
@@ -1065,8 +1384,26 @@ public sealed class GameUpdater : IGameUpdater
 
     private string? FindStaging(string version, GameServerType? serverType = null, string? sourceVersion = null)
     {
-        var staging = Path.Combine(_appDataDir, "predownload", version);
-        var marker = Path.Combine(staging, "predownload.json");
+        // 现行位置:游戏目录下 DiffData/<版本>。
+        var staging = _paths.PredownloadStagingDir(version);
+        var hit = InspectStaging(staging, version, serverType, sourceVersion);
+        if (hit is not null)
+        {
+            return hit;
+        }
+        // [过渡代码 · 下个版本删除] 回退到旧位置(数据目录 predownload/<版本>):
+        // 迁移尚未跑过(如用户升级后直接点「安装更新」)时,旧位置的完整预载包仍应被消费。
+        return InspectStaging(LegacyStagingDir(version), version, serverType, sourceVersion);
+    }
+
+    /// <summary>校验暂存目录:目录与标记存在、标记完整且版本/来源版本/渠道匹配时返回该目录,否则 null。</summary>
+    private string? InspectStaging(string? staging, string version, GameServerType? serverType, string? sourceVersion)
+    {
+        if (string.IsNullOrEmpty(staging))
+        {
+            return null;
+        }
+        var marker = Path.Combine(staging, MarkerFileName);
         if (!Directory.Exists(staging) || !File.Exists(marker))
         {
             return null;

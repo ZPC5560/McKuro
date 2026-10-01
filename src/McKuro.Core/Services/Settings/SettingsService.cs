@@ -36,7 +36,14 @@ public sealed class AppSettings
     /// <summary>禁用 DLSS(存配置;与 Haiyu 一致,当前不影响启动命令行)。</summary>
     public bool DisableDlss { get; set; }
 
-    /// <summary>自定义启动参数(追加到命令行末尾)。</summary>
+    /// <summary>
+    /// 游戏资源等级(uhd/hd/sd),对应官方启动器「选择资源等级」。
+    /// 决定启动参数 <c>-krqlv=&lt;值&gt;</c>;该参数是鸣潮 3.x 起必需的引导参数,
+    /// 缺失时游戏会直接崩溃退出。空 = 未设置(按官方默认 hd 处理)。
+    /// </summary>
+    public string ResourceLevel { get; set; } = "";
+
+    /// <summary>自定义启动参数(追加到命令行末尾;其中的 -krqlv 由 <see cref="ResourceLevel"/> 统一管理)。</summary>
     public string StartGameArguments { get; set; } = "";
 
     /// <summary>启动 exe 文件名(空 = 自动:Wuthering Waves.exe → Client-Win64-Shipping.exe)。</summary>
@@ -132,6 +139,12 @@ public sealed class AppSettings
     public List<string> IgnoredEndingActivityIds { get; set; } = [];
 
     // ---------- 消息通知(悬浮提醒,设置页可按类配置) ----------
+
+    /// <summary>
+    /// 通知总开关(默认开)。设置页「通知」的二级菜单开关:关闭时一切悬浮提醒都不触发,
+    /// 但下面各具体类别开关保持各自的状态,重新打开总开关即原样恢复。
+    /// </summary>
+    public bool NotifEnabled { get; set; } = true;
 
     /// <summary>游戏签到提醒(角色当日未签到)。</summary>
     public bool NotifSignEnabled { get; set; } = true;
@@ -369,7 +382,11 @@ public sealed class SettingsService : ISettingsService
             if (File.Exists(_settingsPath))
             {
                 var json = File.ReadAllText(_settingsPath);
-                return JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings) ?? new AppSettings();
+                var loaded = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings);
+                if (loaded is not null)
+                {
+                    return Migrate(loaded);
+                }
             }
         }
         catch (Exception ex)
@@ -377,6 +394,29 @@ public sealed class SettingsService : ISettingsService
             _logger.LogWarning(ex, "读取设置失败,使用默认值: {Path}", _settingsPath);
         }
         return new AppSettings();
+    }
+
+    /// <summary>
+    /// 旧配置升级:早期版本把资源等级写在自定义参数里手工填写(如 <c>-krqlv=uhd</c>)。
+    /// 升级后该参数由 <see cref="AppSettings.ResourceLevel"/> 统一管理,这里把它迁移到
+    /// 结构化设置中,避免用户升级后画质被静默改回默认 hd。
+    /// </summary>
+    private static AppSettings Migrate(AppSettings settings)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.ResourceLevel))
+        {
+            return settings;
+        }
+
+        var stripped = LaunchArguments.StripResourceLevel(settings.StartGameArguments, out var level);
+        if (level is null)
+        {
+            return settings;
+        }
+
+        settings.ResourceLevel = level;
+        settings.StartGameArguments = stripped;
+        return settings;
     }
 }
 
