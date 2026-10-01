@@ -72,6 +72,25 @@ Windows 发布会按 RID 条件带上 `Endpne.LibMPV.Windows`(libmpv-2.dll),不�
 
 应用将运行日志写入日志目录(**Windows: exe 所在目录\logs;macOS/Linux: %AppData%\McKuro\logs**),**按类型分目录**(如 `SmsLogin`/`GeetVerifyService`/`GameUpdater`),目录内**按日期分文件**(`McKuro-yyyyMMdd.log`),跨天自动新建当日文件、旧文件保留。内容覆盖极验验证(本地服务端口/页面地址/回调提取结果)、短信验证码发送响应、更新与下载等关键流程,便于本地排查。设置页「打开日志目录」按钮可直达日志根目录。
 
+## 官网
+
+项目官网发布在 GitHub Pages:<https://zpc5560.github.io/McKuro/>
+
+- `website/` 是构建产物(直接可浏览),`website-src/` 是可维护的源文件。
+- 源文件按职责分片:`website-src/html/`、`css/`、`js/`,按文件名顺序拼接;图标放 `website-src/src/icons/`(Phosphor,MIT),字体源放 `website-src/font-src/`。
+- 重新构建:
+
+  ```bash
+  pip install fonttools brotli
+  python website-src/build.py
+  ```
+
+  构建会把中文字体裁剪到页面实际用到的字形(约 3.4 MB → 约 220 KB),并把所有图标内联成 SVG 雪碧图。页面不请求任何 CDN。
+
+- `.github/workflows/website.yml` 在 `website/` 或 `website-src/` 变更时重新构建并部署。它会比对构建结果与已提交产物,不一致就直接失败,避免线上跑的是过期副本。
+
+> 页面里的界面截图均为**网页重绘**,使用示例数据,不含任何真实账号信息。
+
 ## 安装包
 
 `installer/setup.iss` 为 Inno Setup 脚本,由 GitHub Actions 的 `setup` job 在发布 tag(v*) 或手动触发时编译为 `McKuro-setup-<version>.exe`(中文/英文向导、桌面快捷方式、卸载)。

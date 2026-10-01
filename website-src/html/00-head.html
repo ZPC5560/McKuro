@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>McKuro · 鸣潮桌面启动器</title>
+<meta name="description" content="McKuro 是一个用 .NET 10 与 Avalonia 12 编写的《鸣潮》桌面启动器：游戏启动与修复、抽卡分析、角色数据、深塔海墟、每日签到与消息提醒，全部收在一个本地应用里。">
+<link rel="canonical" href="https://zpc5560.github.io/McKuro/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="McKuro · 鸣潮桌面启动器">
+<meta property="og:description" content="游戏启动与修复、抽卡分析、角色数据、深塔海墟、每日签到，收在一个本地应用里。">
+<meta property="og:url" content="https://zpc5560.github.io/McKuro/">
+<meta property="og:image" content="https://zpc5560.github.io/McKuro/assets/icon-512.webp">
+<meta name="theme-color" content="#E8EDF4">
+<link rel="icon" href="assets/icon-32.webp" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/icon-180.webp">
+<link rel="preload" href="fonts/noto-serif-sc-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="site.css">
+<script>document.documentElement.classList.add("js")</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到主内容</a>
+
+<header class="nav" id="nav">
+  <div class="nav__pill">
+    <a class="brand" href="#top" aria-label="McKuro 首页">
+      <img class="brand__mark" src="assets/icon-32.webp" width="32" height="32" alt="" decoding="async">
+      <span class="brand__name">McKuro</span>
+    </a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="#demo">实机演示</a>
+      <a href="#modules">功能</a>
+      <a href="#look">外观</a>
+      <a href="#platforms">平台</a>
+      <a href="#faq">常见问题</a>
+    </nav>
+    <div class="nav__end">
+      <a class="nav__src" href="https://github.com/ZPC5560/McKuro" target="_blank" rel="noopener">源码</a>
+      <a class="nav__dl" href="#download">下载</a>
+    </div>
+    <button class="nav__burger" id="burger" type="button" aria-label="打开菜单" aria-expanded="false" aria-controls="drawer">
+      <span></span><span></span>
+    </button>
+  </div>
+  <div class="drawer" id="drawer" hidden>
+    <a href="#demo">实机演示</a>
+    <a href="#modules">功能</a>
+    <a href="#look">外观</a>
+    <a href="#platforms">平台</a>
+    <a href="#faq">常见问题</a>
+    <a class="drawer__cta" href="#download">下载 McKuro</a>
+  </div>
+</header>
+
+<main id="main">

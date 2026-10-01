@@ -1,0 +1,93 @@
+
+              <!-- ===== 每日数据: the same five cards the home page really shows ===== -->
+              <section class="panel" id="p-daily" role="tabpanel" aria-labelledby="t-daily" tabindex="0" hidden>
+                <header class="phead">
+                  <div>
+                    <h3 class="phead__h"><svg class="ico" aria-hidden="true"><use href="#i-lightning"></use></svg>今日数据</h3>
+                    <p class="phead__s">库街区数据源 · 本地 PC 启动器 SDK 回退</p>
+                  </div>
+                  <span class="pbtn">同步</span>
+                </header>
+                <div class="daily">
+                  <article class="stat">
+                    <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-lightning"></use></svg>体力</span>
+                    <span class="stat__mid"><b class="mono">140<i>/240</i></b><em class="mono">58%</em></span>
+                    <span class="stat__bar"><b style="width:58%"></b></span>
+                    <span class="stat__s">预计 9:59:47 后满</span>
+                  </article>
+                  <article class="stat">
+                    <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-sparkle"></use></svg>结晶单质</span>
+                    <span class="stat__mid"><b class="mono">17<i>/480</i></b><em class="mono">4%</em></span>
+                    <span class="stat__bar"><b style="width:4%"></b></span>
+                    <span class="stat__s">随体力溢出累积</span>
+                  </article>
+                  <article class="stat">
+                    <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-star"></use></svg>活跃度</span>
+                    <span class="stat__mid"><b class="mono">0<i>/100</i></b><em class="mono">0%</em></span>
+                    <span class="stat__bar"><b style="width:0"></b></span>
+                    <span class="stat__s">完成今日活跃任务</span>
+                  </article>
+                  <article class="stat">
+                    <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-trophy"></use></svg>周本</span>
+                    <span class="stat__mid"><b class="mono">0<i>/3</i></b><em class="mono">0%</em></span>
+                    <span class="stat__bar"><b style="width:0"></b></span>
+                    <span class="stat__s">周一 4:00 刷新</span>
+                  </article>
+                  <article class="stat">
+                    <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-bell-ringing"></use></svg>电台</span>
+                    <span class="stat__mid"><b class="mono">LV.07</b><em class="mono">40%</em></span>
+                    <span class="stat__bar"><b style="width:40%"></b></span>
+                    <span class="stat__s">经验：400/1000</span>
+                  </article>
+                </div>
+              </section>
+
+              <!-- ===== 签到: account rows + month grid ===== -->
+              <section class="panel" id="p-sign" role="tabpanel" aria-labelledby="t-sign" tabindex="0" hidden>
+                <header class="phead">
+                  <div>
+                    <h3 class="phead__h"><svg class="ico" aria-hidden="true"><use href="#i-calendar-check"></use></svg>每日签到</h3>
+                    <p class="phead__s">每日 8:00 自动签到全部角色</p>
+                  </div>
+                  <span class="pbtn">一键签到</span>
+                </header>
+                <ul class="accts">
+                  <li class="acct acct--sel"><span class="acct__av">漂</span><span class="acct__n">漂泊者 · 国服</span><span class="acct__id mono">UID 1•••••••</span><span class="tag tag--up">已签到</span></li>
+                  <li class="acct"><span class="acct__av">漂</span><span class="acct__n">漂泊者 · 国际服</span><span class="acct__id mono">UID 5•••••••</span><span class="tag tag--up">已签到</span></li>
+                </ul>
+                <!-- 2026-09 starts on a Tuesday (Monday-first grid: one blank cell). Only <span> are days; site.js marks them. -->
+                <div class="cal" aria-label="国服 2026 年 9 月签到（示例）" style="--done:17">
+                  <b>一</b><b>二</b><b>三</b><b>四</b><b>五</b><b>六</b><b>日</b>
+                  <i></i><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+                  <span>7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span><span>13</span>
+                  <span>14</span><span>15</span><span>16</span><span>17</span><span>18</span><span>19</span><span>20</span>
+                  <span>21</span><span>22</span><span>23</span><span>24</span><span>25</span><span>26</span><span>27</span>
+                  <span>28</span><span>29</span><span>30</span>
+                </div>
+                <p class="panel__note">国服 · 2026 年 9 月 · 已签 17 天 · 连续 17 天</p>
+              </section>
+
+            </div>
+          </div>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="演示页面">
+          <button class="tab is-on" id="t-gacha" type="button" role="tab" aria-selected="true" aria-controls="p-gacha" data-tab="gacha">
+            <svg class="ico" aria-hidden="true"><use href="#i-chart-donut"></use></svg><span>抽卡分析</span>
+          </button>
+          <button class="tab" id="t-roles" type="button" role="tab" aria-selected="false" aria-controls="p-roles" data-tab="roles" tabindex="-1">
+            <svg class="ico" aria-hidden="true"><use href="#i-users-three"></use></svg><span>角色数据</span>
+          </button>
+          <button class="tab" id="t-tower" type="button" role="tab" aria-selected="false" aria-controls="p-tower" data-tab="tower" tabindex="-1">
+            <svg class="ico" aria-hidden="true"><use href="#i-trophy"></use></svg><span>深塔海墟</span>
+          </button>
+          <button class="tab" id="t-daily" type="button" role="tab" aria-selected="false" aria-controls="p-daily" data-tab="daily" tabindex="-1">
+            <svg class="ico" aria-hidden="true"><use href="#i-lightning"></use></svg><span>每日数据</span>
+          </button>
+          <button class="tab" id="t-sign" type="button" role="tab" aria-selected="false" aria-controls="p-sign" data-tab="sign" tabindex="-1">
+            <svg class="ico" aria-hidden="true"><use href="#i-calendar-check"></use></svg><span>签到</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>

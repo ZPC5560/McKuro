@@ -1,0 +1,118 @@
+
+  <!-- ============ DEMO: the app window redrawn in HTML, matching the real layout ============ -->
+  <section class="sec sec--demo" id="demo">
+    <div class="wrap">
+      <header class="sec__head">
+        <h2 class="sec__h2">点一下同步，数据就到位</h2>
+        <p class="sec__sub">下面是用网页重画的 McKuro 界面。数字是示例值，不是任何人的账号数据。</p>
+      </header>
+
+      <div class="stage">
+        <div class="app" data-demo>
+          <!-- Windows chrome, like the real window -->
+          <div class="app__bar" aria-hidden="true">
+            <span class="app__title">McKuro · 鸣潮启动器</span>
+            <span class="app__win">
+              <button tabindex="-1"><svg class="ico ico--xs"><use href="#i-minus"></use></svg></button>
+              <button tabindex="-1"><svg class="ico ico--xs"><use href="#i-square"></use></svg></button>
+              <button tabindex="-1" class="app__close"><svg class="ico ico--xs"><use href="#i-x"></use></svg></button>
+            </span>
+          </div>
+
+          <div class="app__body">
+            <!-- sidebar: icon over label, like the real nav rail -->
+            <ul class="app__rail" aria-hidden="true">
+              <li class="app__av"><img src="assets/icon-32.webp" width="34" height="34" alt=""></li>
+              <li><svg class="ico"><use href="#i-house"></use></svg><span>主页</span></li>
+              <li><svg class="ico"><use href="#i-game-controller"></use></svg><span>鸣潮</span></li>
+              <li data-rail-for="gacha"><svg class="ico"><use href="#i-chart-donut"></use></svg><span>抽卡分析</span></li>
+              <li data-rail-for="roles"><svg class="ico"><use href="#i-users-three"></use></svg><span>角色数据</span></li>
+              <li data-rail-for="sign"><svg class="ico"><use href="#i-calendar-check"></use></svg><span>签到</span></li>
+              <li><svg class="ico"><use href="#i-star"></use></svg><span>活动</span></li>
+              <li><svg class="ico"><use href="#i-stack"></use></svg><span>资讯</span></li>
+              <li><svg class="ico"><use href="#i-gift"></use></svg><span>兑换码</span></li>
+              <li><svg class="ico"><use href="#i-clock"></use></svg><span>游玩统计</span></li>
+              <li data-rail-for="tower"><svg class="ico"><use href="#i-trophy"></use></svg><span>深塔海墟</span></li>
+              <li class="app__rail-end"><svg class="ico"><use href="#i-users-three"></use></svg><span>账号</span></li>
+              <li><svg class="ico"><use href="#i-sliders-horizontal"></use></svg><span>设置</span></li>
+            </ul>
+
+            <div class="app__main">
+
+              <!-- ===== 抽卡分析: real layout is list on the left, stats + ring + area chart on the right ===== -->
+              <section class="panel is-on" id="p-gacha" role="tabpanel" aria-labelledby="t-gacha" tabindex="0">
+                <header class="phead">
+                  <div>
+                    <h3 class="phead__h"><svg class="ico" aria-hidden="true"><use href="#i-chart-donut"></use></svg>抽卡分析</h3>
+                    <p class="phead__s">已加载本地记录</p>
+                  </div>
+                  <div class="phead__right">
+                    <span class="pselect mono">1024•••• <svg class="ico ico--xs" aria-hidden="true"><use href="#i-caret-right"></use></svg></span>
+                    <span class="pbtn" data-demo-status-wrap><span class="app__pulse" data-demo-status-pulse></span><span data-demo-status>同步</span></span>
+                  </div>
+                </header>
+                <div class="ptabs" aria-hidden="true"><b class="on">综合分析</b><b>统计卡片</b><b>表格</b></div>
+
+                <div class="gacha">
+                  <div class="gacha__list">
+                    <div class="gacha__lhead">
+                      <span class="pselect pselect--sm">角色活动 <svg class="ico ico--xs" aria-hidden="true"><use href="#i-caret-right"></use></svg></span>
+                      <span class="gacha__avg mono">平均 49.3 抽 · UP 后垫抽：0 抽</span>
+                    </div>
+                    <ul class="items">
+                      <li><span class="items__av" data-el="spectro">守</span><span class="items__n">守岸人</span><span class="items__bar"><b style="width:84%"></b></span><span class="items__c mono">67</span><span class="tag tag--up">UP</span></li>
+                      <li><span class="items__av" data-el="havoc">卡</span><span class="items__n">卡卡罗</span><span class="items__bar"><b style="width:84%"></b></span><span class="items__c mono">67</span><span class="tag tag--off">歪</span></li>
+                      <li><span class="items__av" data-el="glacio">今</span><span class="items__n">今汐</span><span class="items__bar"><b style="width:86%"></b></span><span class="items__c mono">69</span><span class="tag tag--up">UP</span></li>
+                      <li><span class="items__av" data-el="aero">秧</span><span class="items__n">秧秧</span><span class="items__bar"><b class="is-teal" style="width:5%"></b></span><span class="items__c mono">4</span><span class="tag tag--up">UP</span></li>
+                      <li><span class="items__av" data-el="fusion">长</span><span class="items__n">长离</span><span class="items__bar"><b class="is-teal" style="width:66%"></b></span><span class="items__c mono">53</span><span class="tag tag--up">UP</span></li>
+                      <li><span class="items__av" data-el="electro">鉴</span><span class="items__n">鉴心</span><span class="items__bar"><b class="is-teal" style="width:64%"></b></span><span class="items__c mono">51</span><span class="tag tag--off">歪</span></li>
+                    </ul>
+                  </div>
+
+                  <div class="gacha__side">
+                    <!-- 17 of 959 pulls were 5★ = 1.77%; the top 8 tiles are the stats the app itself shows -->
+                <dl class="gstats">
+                      <div><dt>总抽数</dt><dd class="mono">959</dd></div>
+                      <div><dt>称号</dt><dd class="gstats__rank">小欧皇</dd></div>
+                      <div><dt>双金次数</dt><dd class="mono">2</dd></div>
+                      <div><dt>歪的次数</dt><dd class="mono">3</dd></div>
+                      <div><dt>综合评分</dt><dd class="mono">70.8</dd></div>
+                      <div><dt>平均出货</dt><dd class="mono">49.9 抽</dd></div>
+                      <div><dt>出货率</dt><dd class="mono">1.77%</dd></div>
+                      <div><dt>记录天数</dt><dd class="mono">177 天</dd></div>
+                    </dl>
+
+                    <div class="gblock">
+                      <div class="gblock__h"><b>保底状态</b><span class="pselect pselect--sm">保底状态 <svg class="ico ico--xs" aria-hidden="true"><use href="#i-caret-right"></use></svg></span></div>
+                      <p class="gblock__s">保底状态：角色活动 · 歪率 33.33%</p>
+                      <div class="ring-wrap">
+                        <div class="ring" style="--p:66.7" role="img" aria-label="五星记录：中 66.7%，歪 33.3%">
+                          <span class="ring__c"><b class="mono">17</b><i>5星</i></span>
+                        </div>
+                        <dl class="legend">
+                          <div><dt><i class="dot dot--mid"></i>中</dt><dd class="mono">66.7</dd></div>
+                          <div><dt><i class="dot dot--off"></i>歪</dt><dd class="mono">33.3</dd></div>
+                        </dl>
+                      </div>
+                    </div>
+
+                    <div class="gblock">
+                      <b class="gblock__h2">每日抽数</b>
+                      <svg class="area" viewBox="0 0 520 120" preserveAspectRatio="none" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0" stop-color="#5A8DEE" stop-opacity=".35"/>
+                            <stop offset="1" stop-color="#5A8DEE" stop-opacity="0"/>
+                          </linearGradient>
+                        </defs>
+                        <g stroke="#E3E9F2" stroke-width="1">
+                          <line x1="0" y1="0" x2="520" y2="0"/><line x1="0" y1="30" x2="520" y2="30"/>
+                          <line x1="0" y1="60" x2="520" y2="60"/><line x1="0" y1="90" x2="520" y2="90"/>
+                        </g>
+                        <path d="M0,118 L0,112 C30,110 40,20 62,20 C84,20 88,96 106,96 C124,96 130,64 150,64 C170,64 176,108 200,104 C224,100 232,88 258,88 C284,88 292,106 320,102 C348,98 356,60 384,60 C412,60 420,104 448,100 C476,96 484,12 520,10 L520,118 Z" fill="url(#ag)"/>
+                        <path d="M0,112 C30,110 40,20 62,20 C84,20 88,96 106,96 C124,96 130,64 150,64 C170,64 176,108 200,104 C224,100 232,88 258,88 C284,88 292,106 320,102 C348,98 356,60 384,60 C412,60 420,104 448,100 C476,96 484,12 520,10" fill="none" stroke="#3B7DE0" stroke-width="2"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </section>

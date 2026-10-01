@@ -1,0 +1,103 @@
+
+              <!-- ===== 角色数据: header + filter row + card grid, detail panel on the right ===== -->
+              <section class="panel" id="p-roles" role="tabpanel" aria-labelledby="t-roles" tabindex="0" hidden>
+                <header class="phead">
+                  <div>
+                    <h3 class="phead__h"><svg class="ico" aria-hidden="true"><use href="#i-users-three"></use></svg>角色数据</h3>
+                    <p class="phead__s">已从本地缓存读取 5 个角色 <span class="phead__src">数据源：本地缓存/文件</span></p>
+                  </div>
+                  <span class="pbtn">同步</span>
+                </header>
+                <div class="filters" aria-hidden="true">
+                  <span class="pselect pselect--sm">全部属性 <svg class="ico ico--xs"><use href="#i-caret-right"></use></svg></span>
+                  <span class="pselect pselect--sm">星级 <svg class="ico ico--xs"><use href="#i-caret-right"></use></svg></span>
+                  <span class="filters__hint">「同步」仅拉取角色列表；点击角色卡片时才会获取该角色完整详情</span>
+                </div>
+                <div class="roles">
+                  <div class="roles__grid">
+                    <article class="rcard is-on"><span class="rcard__av" data-el="glacio">丽</span><b>丽贝卡</b><i>Lv.90</i></article>
+                    <article class="rcard"><span class="rcard__av" data-el="spectro">今</span><b>今汐</b><i>Lv.90</i></article>
+                    <article class="rcard"><span class="rcard__av" data-el="havoc">千</span><b>千咲</b><i>Lv.90</i></article>
+                    <article class="rcard"><span class="rcard__av" data-el="fusion">安</span><b>安可</b><i>Lv.90</i></article>
+                    <article class="rcard"><span class="rcard__av" data-el="aero">弗</span><b>弗洛洛</b><i>Lv.90</i></article>
+                  </div>
+                  <div class="rdetail">
+                    <div class="rdetail__hero">
+                      <div class="rdetail__info">
+                        <span class="rdetail__name">丽贝卡<b>5★</b></span>
+                        <p class="rdetail__meta">Lv.90 · 突破 6 · 导电 共鸣链 0/6</p>
+                        <div class="rdetail__weapon">
+                          <span class="rdetail__wico" aria-hidden="true"></span>
+                          <span><b>相位涟漪</b><i>Lv.90 · 突破 6 · 精炼 1</i></span>
+                        </div>
+                        <div class="rdetail__skills" aria-hidden="true">
+                          <i>Lv.6</i><i>Lv.10</i><i>Lv.10</i><i>Lv.6</i><i>Lv.10</i><i>Lv.1</i>
+                        </div>
+                      </div>
+                      <span class="rdetail__art" aria-hidden="true">丽</span>
+                    </div>
+                    <div class="rdetail__stats">
+                      <span class="rdetail__k">属性</span>
+                      <dl class="rstats">
+                        <div><dt>生命</dt><dd class="mono">19 160</dd></div>
+                        <div><dt>攻击</dt><dd class="mono">2 557</dd></div>
+                        <div><dt>防御</dt><dd class="mono">1 483</dd></div>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ===== 深塔与海墟: three tabs, floor grid, sea stage rows ===== -->
+              <section class="panel" id="p-tower" role="tabpanel" aria-labelledby="t-tower" tabindex="0" hidden>
+                <header class="phead">
+                  <div>
+                    <h3 class="phead__h"><svg class="ico" aria-hidden="true"><use href="#i-trophy"></use></svg>深塔 / 海墟</h3>
+                    <p class="phead__s">加载完成（逆境深塔 4 难度 / 终焉矩阵 0 模式 / 海墟 2 关）</p>
+                  </div>
+                </header>
+                <div class="ptabs ptabs--left" aria-hidden="true"><b>逆境深塔</b><b>终焉矩阵</b><b class="on">海墟</b></div>
+
+                <div class="blk">
+                  <p class="blk__lead"><span class="blk__lbl">本期总积分</span><b class="mono">5900</b><span class="blk__of mono">/ 15500</span><em class="blk__end">本期已结束（游戏内刷新后重进本页可同步）</em></p>
+                  <div class="seacards">
+                    <article class="seacard">
+                      <header class="seacard__h">
+                        <span class="seacard__no">第 8 关</span>
+                        <b class="seacard__name">湍流</b>
+                        <span class="seacard__score"><b class="mono">3000</b><i>分数</i></span>
+                        <span class="rank rank--s">S</span>
+                      </header>
+                      <div class="half">
+                        <span class="half__k">上半</span><b class="half__v mono">1420</b>
+                        <span class="half__buff"><svg class="ico ico--xs" aria-hidden="true"><use href="#i-shield-check"></use></svg>遗落令旗 · 布道</span>
+                        <span class="avatars"><i>守</i><i>长</i><i>今</i></span>
+                      </div>
+                      <div class="half">
+                        <span class="half__k">下半</span><b class="half__v mono">1580</b>
+                        <span class="half__buff"><svg class="ico ico--xs" aria-hidden="true"><use href="#i-sparkle"></use></svg>珍奇契约 · 眷属</span>
+                        <span class="avatars"><i>椿</i><i>卡</i><i>维</i></span>
+                      </div>
+                    </article>
+                    <article class="seacard">
+                      <header class="seacard__h">
+                        <span class="seacard__no">第 7 关</span>
+                        <b class="seacard__name">险滩</b>
+                        <span class="seacard__score"><b class="mono">2900</b><i>分数</i></span>
+                        <span class="rank rank--s">S</span>
+                      </header>
+                      <div class="half">
+                        <span class="half__k">上半</span><b class="half__v mono">1410</b>
+                        <span class="half__buff"><svg class="ico ico--xs" aria-hidden="true"><use href="#i-shield-check"></use></svg>锈蚀古币 · 衍射</span>
+                        <span class="avatars"><i>秧</i><i>安</i><i>散</i></span>
+                      </div>
+                      <div class="half">
+                        <span class="half__k">下半</span><b class="half__v mono">1490</b>
+                        <span class="half__buff"><svg class="ico ico--xs" aria-hidden="true"><use href="#i-sparkle"></use></svg>珍奇契约 · 眷属</span>
+                        <span class="avatars"><i>今</i><i>弗</i><i>千</i></span>
+                      </div>
+                    </article>
+                  </div>
+                  <p class="blk__note">第 7、8 关按官方规则跨赛季保留；第 9 关起每期更换内容，进度清零。</p>
+                </div>
+              </section>

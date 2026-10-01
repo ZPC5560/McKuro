@@ -1,3 +1,19 @@
 # 打包/构建脚本必须在 Linux/macOS runner 上以 LF 运行(CRLF 会让 bash 报错)
 *.sh text eol=lf
 *.bash text eol=lf
+# workflow 的 run: 块在 Linux runner 上执行,同样必须 LF
+*.yml text eol=lf
+
+# 官网:build.py 以 LF 写出,CI 会重新构建并比对 git diff,
+# 若被 autocrlf 转成 CRLF 会导致比对永远不通过
+website/index.html text eol=lf
+website/fonts.css text eol=lf
+website/**/*.js  text eol=lf
+website/**/*.css text eol=lf
+website-src/**   text eol=lf
+
+# 字体与三方库按二进制处理,不做换行转换
+*.woff2 binary
+*.webp  binary
+*.ico   binary
+website/vendor/** binary

@@ -1,0 +1,69 @@
+
+  <!-- ============ HERO ============ -->
+  <section class="hero" id="top">
+    <canvas class="hero__gl" id="hero-gl" aria-hidden="true"></canvas>
+    <div class="hero__fallback" aria-hidden="true"></div>
+    <div class="wrap hero__in">
+      <p class="eyebrow"><span class="eyebrow__dot" aria-hidden="true"></span>鸣潮 · 桌面启动器</p>
+      <h1 class="hero__h1">把鸣潮的一整天，<br>收进一个窗口。</h1>
+      <p class="hero__sub"><span class="nw">启动游戏、</span><span class="nw">读抽卡、</span><span class="nw">看角色、</span><span class="nw">查深塔海墟、</span><span class="nw">每日签到。</span><span class="nw">数据只留在你的电脑上。</span></p>
+      <div class="hero__cta">
+        <a class="btn btn--primary btn--lg" data-dl-primary href="https://github.com/ZPC5560/McKuro/releases/latest" target="_blank" rel="noopener">
+          <span>下载 McKuro</span>
+          <span class="btn__end"><svg class="ico" aria-hidden="true"><use href="#i-download-simple"></use></svg></span>
+        </a>
+        <a class="btn btn--ghost btn--lg" href="https://github.com/ZPC5560/McKuro" target="_blank" rel="noopener">
+          <svg class="ico" aria-hidden="true"><use href="#i-github-logo"></use></svg>
+          <span>查看源码</span>
+        </a>
+      </div>
+      <p class="hero__meta mono">最新版 <b data-rail="version">v1.3.0</b> · <span data-rail="date">2026-10-01</span> · Windows / macOS / Linux</p>
+    </div>
+  </section>
+
+  <!-- ============ WHERE THE CARDS LAND: scroll collapses them into the window ============ -->
+  <section class="intake" id="intake">
+    <div class="intake__sticky" data-intake>
+      <p class="intake__hint" data-intake-hint>向下滚动，数据会自己归位</p>
+
+      <div class="intake__desk">
+        <!-- the five cards the app really shows on its home page -->
+        <article class="dcard" data-i="0">
+          <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-lightning"></use></svg>体力</span>
+          <span class="dcard__mid"><b class="mono">140<i>/240</i></b><em class="mono">58%</em></span>
+          <span class="dcard__bar"><b style="width:58%"></b></span>
+          <span class="dcard__note">预计 9:59:47 后满</span>
+        </article>
+        <article class="dcard" data-i="1">
+          <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-sparkle"></use></svg>结晶单质</span>
+          <span class="dcard__mid"><b class="mono">17<i>/480</i></b><em class="mono">4%</em></span>
+          <span class="dcard__bar"><b style="width:4%"></b></span>
+          <span class="dcard__note">随体力溢出累积</span>
+        </article>
+        <article class="dcard" data-i="2">
+          <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-star"></use></svg>活跃度</span>
+          <span class="dcard__mid"><b class="mono">0<i>/100</i></b><em class="mono">0%</em></span>
+          <span class="dcard__bar"><b style="width:0"></b></span>
+          <span class="dcard__note">完成今日活跃任务</span>
+        </article>
+        <article class="dcard" data-i="3">
+          <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-trophy"></use></svg>周本</span>
+          <span class="dcard__mid"><b class="mono">0<i>/3</i></b><em class="mono">0%</em></span>
+          <span class="dcard__bar"><b style="width:0"></b></span>
+          <span class="dcard__note">周一 4:00 刷新</span>
+        </article>
+        <article class="dcard" data-i="4">
+          <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-bell-ringing"></use></svg>电台</span>
+          <span class="dcard__mid"><b class="mono">LV.07</b><em class="mono">40%</em></span>
+          <span class="dcard__bar"><b style="width:40%"></b></span>
+          <span class="dcard__note">经验：400/1000</span>
+        </article>
+      </div>
+
+      <!-- the window the cards land in -->
+      <div class="intake__win" aria-hidden="true">
+        <span class="intake__bar"><i></i><i></i><i></i><b>今日数据</b></span>
+        <span class="intake__slots" data-slots></span>
+      </div>
+    </div>
+  </section>

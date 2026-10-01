@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>McKuro · 鸣潮桌面启动器</title>
+<meta name="description" content="McKuro 是一个用 .NET 10 与 Avalonia 12 编写的《鸣潮》桌面启动器：游戏启动与修复、抽卡分析、角色数据、深塔海墟、每日签到与消息提醒，全部收在一个本地应用里。">
+<link rel="canonical" href="https://zpc5560.github.io/McKuro/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="McKuro · 鸣潮桌面启动器">
+<meta property="og:description" content="游戏启动与修复、抽卡分析、角色数据、深塔海墟、每日签到，收在一个本地应用里。">
+<meta property="og:url" content="https://zpc5560.github.io/McKuro/">
+<meta property="og:image" content="https://zpc5560.github.io/McKuro/assets/icon-512.webp">
+<meta name="theme-color" content="#E8EDF4">
+<link rel="icon" href="assets/icon-32.webp" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/icon-180.webp">
+<link rel="preload" href="fonts/noto-serif-sc-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="site.css">
+<script>document.documentElement.classList.add("js")</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到主内容</a>
+
+<header class="nav" id="nav">
+  <div class="nav__pill">
+    <a class="brand" href="#top" aria-label="McKuro 首页">
+      <img class="brand__mark" src="assets/icon-32.webp" width="32" height="32" alt="" decoding="async">
+      <span class="brand__name">McKuro</span>
+    </a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="#demo">实机演示</a>
+      <a href="#modules">功能</a>
+      <a href="#look">外观</a>
+      <a href="#platforms">平台</a>
+      <a href="#faq">常见问题</a>
+    </nav>
+    <div class="nav__end">
+      <a class="nav__src" href="https://github.com/ZPC5560/McKuro" target="_blank" rel="noopener">源码</a>
+      <a class="nav__dl" href="#download">下载</a>
+    </div>
+    <button class="nav__burger" id="burger" type="button" aria-label="打开菜单" aria-expanded="false" aria-controls="drawer">
+      <span></span><span></span>
+    </button>
+  </div>
+  <div class="drawer" id="drawer" hidden>
+    <a href="#demo">实机演示</a>
+    <a href="#modules">功能</a>
+    <a href="#look">外观</a>
+    <a href="#platforms">平台</a>
+    <a href="#faq">常见问题</a>
+    <a class="drawer__cta" href="#download">下载 McKuro</a>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ============ HERO ============ -->
+  <section class="hero" id="top">
+    <canvas class="hero__gl" id="hero-gl" aria-hidden="true"></canvas>
+    <div class="hero__fallback" aria-hidden="true"></div>
+    <div class="wrap hero__in">
+      <p class="eyebrow"><span class="eyebrow__dot" aria-hidden="true"></span>鸣潮 · 桌面启动器</p>
+      <h1 class="hero__h1">把鸣潮的一整天，<br>收进一个窗口。</h1>
+      <p class="hero__sub"><span class="nw">启动游戏、</span><span class="nw">读抽卡、</span><span class="nw">看角色、</span><span class="nw">查深塔海墟、</span><span class="nw">每日签到。</span><span class="nw">数据只留在你的电脑上。</span></p>
+      <div class="hero__cta">
+        <a class="btn btn--primary btn--lg" data-dl-primary href="https://github.com/ZPC5560/McKuro/releases/latest" target="_blank" rel="noopener">
+          <span>下载 McKuro</span>
+          <span class="btn__end"><svg class="ico" aria-hidden="true"><use href="#i-download-simple"></use></svg></span>
+        </a>
+        <a class="btn btn--ghost btn--lg" href="https://github.com/ZPC5560/McKuro" target="_blank" rel="noopener">
+          <svg class="ico" aria-hidden="true"><use href="#i-github-logo"></use></svg>
+          <span>查看源码</span>
+        </a>
+      </div>
+      <p class="hero__meta mono">最新版 <b data-rail="version">v1.3.0</b> · <span data-rail="date">2026-10-01</span> · Windows / macOS / Linux</p>
+    </div>
+  </section>
+
+  <!-- ============ WHERE THE CARDS LAND: scroll collapses them into the window ============ -->
+  <section class="intake" id="intake">
+    <div class="intake__sticky" data-intake>
+      <p class="intake__hint" data-intake-hint>向下滚动，数据会自己归位</p>
+
+      <div class="intake__desk">
+        <!-- the five cards the app really shows on its home page -->
+        <article class="dcard" data-i="0">
+          <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-lightning"></use></svg>体力</span>
+          <span class="dcard__mid"><b class="mono">140<i>/240</i></b><em class="mono">58%</em></span>
+          <span class="dcard__bar"><b style="width:58%"></b></span>
+          <span class="dcard__note">预计 9:59:47 后满</span>
+        </article>
+        <article class="dcard" data-i="1">
+          <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-sparkle"></use></svg>结晶单质</span>
+          <span class="dcard__mid"><b class="mono">17<i>/480</i></b><em class="mono">4%</em></span>
+          <span class="dcard__bar"><b style="width:4%"></b></span>
+          <span class="dcard__note">随体力溢出累积</span>
+        </article>
+        <article class="dcard" data-i="2">
+          <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-star"></use></svg>活跃度</span>
+          <span class="dcard__mid"><b class="mono">0<i>/100</i></b><em class="mono">0%</em></span>
+          <span class="dcard__bar"><b style="width:0"></b></span>
+          <span class="dcard__note">完成今日活跃任务</span>
+        </article>
+        <article class="dcard" data-i="3">
+          <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-trophy"></use></svg>周本</span>
+          <span class="dcard__mid"><b class="mono">0<i>/3</i></b><em class="mono">0%</em></span>
+          <span class="dcard__bar"><b style="width:0"></b></span>
+          <span class="dcard__note">周一 4:00 刷新</span>
+        </article>
+        <article class="dcard" data-i="4">
+          <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-bell-ringing"></use></svg>电台</span>
+          <span class="dcard__mid"><b class="mono">LV.07</b><em class="mono">40%</em></span>
+          <span class="dcard__bar"><b style="width:40%"></b></span>
+          <span class="dcard__note">经验：400/1000</span>
+        </article>
+      </div>
+
+      <!-- the window the cards land in -->
+      <div class="intake__win" aria-hidden="true">
+        <span class="intake__bar"><i></i><i></i><i></i><b>今日数据</b></span>
+        <span class="intake__slots" data-slots></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DEMO: the app window redrawn in HTML, matching the real layout ============ -->
+  <section class="sec sec--demo" id="demo">
+    <div class="wrap">
+      <header class="sec__head">
+        <h2 class="sec__h2">点一下同步，数据就到位</h2>
+        <p class="sec__sub">下面是用网页重画的 McKuro 界面。数字是示例值，不是任何人的账号数据。</p>
+      </header>
+
+      <div class="stage">
+        <div class="app" data-demo>
+          <!-- Windows chrome, like the real window -->
+          <div class="app__bar" aria-hidden="true">
+            <span class="app__title">McKuro · 鸣潮启动器</span>
+            <span class="app__win">
+              <button tabindex="-1"><svg class="ico ico--xs"><use href="#i-minus"></use></svg></button>
+              <button tabindex="-1"><svg class="ico ico--xs"><use href="#i-square"></use></svg></button>
+              <button tabindex="-1" class="app__close"><svg class="ico ico--xs"><use href="#i-x"></use></svg></button>
+            </span>
+          </div>
+
+          <div class="app__body">
+            <!-- sidebar: icon over label, like the real nav rail -->
+            <ul class="app__rail" aria-hidden="true">
+              <li class="app__av"><img src="assets/icon-32.webp" width="34" height="34" alt=""></li>
+              <li><svg class="ico"><use href="#i-house"></use></svg><span>主页</span></li>
+              <li><svg class="ico"><use href="#i-game-controller"></use></svg><span>鸣潮</span></li>
+              <li data-rail-for="gacha"><svg class="ico"><use href="#i-chart-donut"></use></svg><span>抽卡分析</span></li>
+              <li data-rail-for="roles"><svg class="ico"><use href="#i-users-three"></use></svg><span>角色数据</span></li>
+              <li data-rail-for="sign"><svg class="ico"><use href="#i-calendar-check"></use></svg><span>签到</span></li>
+              <li><svg class="ico"><use href="#i-star"></use></svg><span>活动</span></li>
+              <li><svg class="ico"><use href="#i-stack"></use></svg><span>资讯</span></li>
+              <li><svg class="ico"><use href="#i-gift"></use></svg><span>兑换码</span></li>
+              <li><svg class="ico"><use href="#i-clock"></use></svg><span>游玩统计</span></li>
+              <li data-rail-for="tower"><svg class="ico"><use href="#i-trophy"></use></svg><span>深塔海墟</span></li>
+              <li class="app__rail-end"><svg class="ico"><use href="#i-users-three"></use></svg><span>账号</span></li>
+              <li><svg class="ico"><use href="#i-sliders-horizontal"></use></svg><span>设置</span></li>
+            </ul>
+
+            <div class="app__main">
+
+              <!-- ===== 抽卡分析: real layout is list on the left, stats + ring + area chart on the right ===== -->
+              <section class="panel is-on" id="p-gacha" role="tabpanel" aria-labelledby="t-gacha" tabindex="0">
+                <header class="phead">
+                  <div>
+                    <h3 class="phead__h"><svg class="ico" aria-hidden="true"><use href="#i-chart-donut"></use></svg>抽卡分析</h3>
+                    <p class="phead__s">已加载本地记录</p>
+                  </div>
+                  <div class="phead__right">
+                    <span class="pselect mono">1024•••• <svg class="ico ico--xs" aria-hidden="true"><use href="#i-caret-right"></use></svg></span>
+                    <span class="pbtn" data-demo-status-wrap><span class="app__pulse" data-demo-status-pulse></span><span data-demo-status>同步</span></span>
+                  </div>
+                </header>
+                <div class="ptabs" aria-hidden="true"><b class="on">综合分析</b><b>统计卡片</b><b>表格</b></div>
+
+                <div class="gacha">
+                  <div class="gacha__list">
+                    <div class="gacha__lhead">
+                      <span class="pselect pselect--sm">角色活动 <svg class="ico ico--xs" aria-hidden="true"><use href="#i-caret-right"></use></svg></span>
+                      <span class="gacha__avg mono">平均 49.3 抽 · UP 后垫抽：0 抽</span>
+                    </div>
+                    <ul class="items">
+                      <li><span class="items__av" data-el="spectro">守</span><span class="items__n">守岸人</span><span class="items__bar"><b style="width:84%"></b></span><span class="items__c mono">67</span><span class="tag tag--up">UP</span></li>
+                      <li><span class="items__av" data-el="havoc">卡</span><span class="items__n">卡卡罗</span><span class="items__bar"><b style="width:84%"></b></span><span class="items__c mono">67</span><span class="tag tag--off">歪</span></li>
+                      <li><span class="items__av" data-el="glacio">今</span><span class="items__n">今汐</span><span class="items__bar"><b style="width:86%"></b></span><span class="items__c mono">69</span><span class="tag tag--up">UP</span></li>
+                      <li><span class="items__av" data-el="aero">秧</span><span class="items__n">秧秧</span><span class="items__bar"><b class="is-teal" style="width:5%"></b></span><span class="items__c mono">4</span><span class="tag tag--up">UP</span></li>
+                      <li><span class="items__av" data-el="fusion">长</span><span class="items__n">长离</span><span class="items__bar"><b class="is-teal" style="width:66%"></b></span><span class="items__c mono">53</span><span class="tag tag--up">UP</span></li>
+                      <li><span class="items__av" data-el="electro">鉴</span><span class="items__n">鉴心</span><span class="items__bar"><b class="is-teal" style="width:64%"></b></span><span class="items__c mono">51</span><span class="tag tag--off">歪</span></li>
+                    </ul>
+                  </div>
+
+                  <div class="gacha__side">
+                    <!-- 17 of 959 pulls were 5★ = 1.77%; the top 8 tiles are the stats the app itself shows -->
+                <dl class="gstats">
+                      <div><dt>总抽数</dt><dd class="mono">959</dd></div>
+                      <div><dt>称号</dt><dd class="gstats__rank">小欧皇</dd></div>
+                      <div><dt>双金次数</dt><dd class="mono">2</dd></div>
+                      <div><dt>歪的次数</dt><dd class="mono">3</dd></div>
+                      <div><dt>综合评分</dt><dd class="mono">70.8</dd></div>
+                      <div><dt>平均出货</dt><dd class="mono">49.9 抽</dd></div>
+                      <div><dt>出货率</dt><dd class="mono">1.77%</dd></div>
+                      <div><dt>记录天数</dt><dd class="mono">177 天</dd></div>
+                    </dl>
+
+                    <div class="gblock">
+                      <div class="gblock__h"><b>保底状态</b><span class="pselect pselect--sm">保底状态 <svg class="ico ico--xs" aria-hidden="true"><use href="#i-caret-right"></use></svg></span></div>
+                      <p class="gblock__s">保底状态：角色活动 · 歪率 33.33%</p>
+                      <div class="ring-wrap">
+                        <div class="ring" style="--p:66.7" role="img" aria-label="五星记录：中 66.7%，歪 33.3%">
+                          <span class="ring__c"><b class="mono">17</b><i>5星</i></span>
+                        </div>
+                        <dl class="legend">
+                          <div><dt><i class="dot dot--mid"></i>中</dt><dd class="mono">66.7</dd></div>
+                          <div><dt><i class="dot dot--off"></i>歪</dt><dd class="mono">33.3</dd></div>
+                        </dl>
+                      </div>
+                    </div>
+
+                    <div class="gblock">
+                      <b class="gblock__h2">每日抽数</b>
+                      <svg class="area" viewBox="0 0 520 120" preserveAspectRatio="none" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0" stop-color="#5A8DEE" stop-opacity=".35"/>
+                            <stop offset="1" stop-color="#5A8DEE" stop-opacity="0"/>
+                          </linearGradient>
+                        </defs>
+                        <g stroke="#E3E9F2" stroke-width="1">
+                          <line x1="0" y1="0" x2="520" y2="0"/><line x1="0" y1="30" x2="520" y2="30"/>
+                          <line x1="0" y1="60" x2="520" y2="60"/><line x1="0" y1="90" x2="520" y2="90"/>
+                        </g>
+                        <path d="M0,118 L0,112 C30,110 40,20 62,20 C84,20 88,96 106,96 C124,96 130,64 150,64 C170,64 176,108 200,104 C224,100 232,88 258,88 C284,88 292,106 320,102 C348,98 356,60 384,60 C412,60 420,104 448,100 C476,96 484,12 520,10 L520,118 Z" fill="url(#ag)"/>
+                        <path d="M0,112 C30,110 40,20 62,20 C84,20 88,96 106,96 C124,96 130,64 150,64 C170,64 176,108 200,104 C224,100 232,88 258,88 C284,88 292,106 320,102 C348,98 356,60 384,60 C412,60 420,104 448,100 C476,96 484,12 520,10" fill="none" stroke="#3B7DE0" stroke-width="2"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ===== 角色数据: header + filter row + card grid, detail panel on the right ===== -->
+              <section class="panel" id="p-roles" role="tabpanel" aria-labelledby="t-roles" tabindex="0" hidden>
+                <header class="phead">
+                  <div>
+                    <h3 class="phead__h"><svg class="ico" aria-hidden="true"><use href="#i-users-three"></use></svg>角色数据</h3>
+                    <p class="phead__s">已从本地缓存读取 5 个角色 <span class="phead__src">数据源：本地缓存/文件</span></p>
+                  </div>
+                  <span class="pbtn">同步</span>
+                </header>
+                <div class="filters" aria-hidden="true">
+                  <span class="pselect pselect--sm">全部属性 <svg class="ico ico--xs"><use href="#i-caret-right"></use></svg></span>
+                  <span class="pselect pselect--sm">星级 <svg class="ico ico--xs"><use href="#i-caret-right"></use></svg></span>
+                  <span class="filters__hint">「同步」仅拉取角色列表；点击角色卡片时才会获取该角色完整详情</span>
+                </div>
+                <div class="roles">
+                  <div class="roles__grid">
+                    <article class="rcard is-on"><span class="rcard__av" data-el="glacio">丽</span><b>丽贝卡</b><i>Lv.90</i></article>
+                    <article class="rcard"><span class="rcard__av" data-el="spectro">今</span><b>今汐</b><i>Lv.90</i></article>
+                    <article class="rcard"><span class="rcard__av" data-el="havoc">千</span><b>千咲</b><i>Lv.90</i></article>
+                    <article class="rcard"><span class="rcard__av" data-el="fusion">安</span><b>安可</b><i>Lv.90</i></article>
+                    <article class="rcard"><span class="rcard__av" data-el="aero">弗</span><b>弗洛洛</b><i>Lv.90</i></article>
+                  </div>
+                  <div class="rdetail">
+                    <div class="rdetail__hero">
+                      <div class="rdetail__info">
+                        <span class="rdetail__name">丽贝卡<b>5★</b></span>
+                        <p class="rdetail__meta">Lv.90 · 突破 6 · 导电 共鸣链 0/6</p>
+                        <div class="rdetail__weapon">
+                          <span class="rdetail__wico" aria-hidden="true"></span>
+                          <span><b>相位涟漪</b><i>Lv.90 · 突破 6 · 精炼 1</i></span>
+                        </div>
+                        <div class="rdetail__skills" aria-hidden="true">
+                          <i>Lv.6</i><i>Lv.10</i><i>Lv.10</i><i>Lv.6</i><i>Lv.10</i><i>Lv.1</i>
+                        </div>
+                      </div>
+                      <span class="rdetail__art" aria-hidden="true">丽</span>
+                    </div>
+                    <div class="rdetail__stats">
+                      <span class="rdetail__k">属性</span>
+                      <dl class="rstats">
+                        <div><dt>生命</dt><dd class="mono">19 160</dd></div>
+                        <div><dt>攻击</dt><dd class="mono">2 557</dd></div>
+                        <div><dt>防御</dt><dd class="mono">1 483</dd></div>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- ===== 深塔与海墟: three tabs, floor grid, sea stage rows ===== -->
+              <section class="panel" id="p-tower" role="tabpanel" aria-labelledby="t-tower" tabindex="0" hidden>
+                <header class="phead">
+                  <div>
+                    <h3 class="phead__h"><svg class="ico" aria-hidden="true"><use href="#i-trophy"></use></svg>深塔 / 海墟</h3>
+                    <p class="phead__s">加载完成（逆境深塔 4 难度 / 终焉矩阵 0 模式 / 海墟 2 关）</p>
+                  </div>
+                </header>
+                <div class="ptabs ptabs--left" aria-hidden="true"><b>逆境深塔</b><b>终焉矩阵</b><b class="on">海墟</b></div>
+
+                <div class="blk">
+                  <p class="blk__lead"><span class="blk__lbl">本期总积分</span><b class="mono">5900</b><span class="blk__of mono">/ 15500</span><em class="blk__end">本期已结束（游戏内刷新后重进本页可同步）</em></p>
+                  <div class="seacards">
+                    <article class="seacard">
+                      <header class="seacard__h">
+                        <span class="seacard__no">第 8 关</span>
+                        <b class="seacard__name">湍流</b>
+                        <span class="seacard__score"><b class="mono">3000</b><i>分数</i></span>
+                        <span class="rank rank--s">S</span>
+                      </header>
+                      <div class="half">
+                        <span class="half__k">上半</span><b class="half__v mono">1420</b>
+                        <span class="half__buff"><svg class="ico ico--xs" aria-hidden="true"><use href="#i-shield-check"></use></svg>遗落令旗 · 布道</span>
+                        <span class="avatars"><i>守</i><i>长</i><i>今</i></span>
+                      </div>
+                      <div class="half">
+                        <span class="half__k">下半</span><b class="half__v mono">1580</b>
+                        <span class="half__buff"><svg class="ico ico--xs" aria-hidden="true"><use href="#i-sparkle"></use></svg>珍奇契约 · 眷属</span>
+                        <span class="avatars"><i>椿</i><i>卡</i><i>维</i></span>
+                      </div>
+                    </article>
+                    <article class="seacard">
+                      <header class="seacard__h">
+                        <span class="seacard__no">第 7 关</span>
+                        <b class="seacard__name">险滩</b>
+                        <span class="seacard__score"><b class="mono">2900</b><i>分数</i></span>
+                        <span class="rank rank--s">S</span>
+                      </header>
+                      <div class="half">
+                        <span class="half__k">上半</span><b class="half__v mono">1410</b>
+                        <span class="half__buff"><svg class="ico ico--xs" aria-hidden="true"><use href="#i-shield-check"></use></svg>锈蚀古币 · 衍射</span>
+                        <span class="avatars"><i>秧</i><i>安</i><i>散</i></span>
+                      </div>
+                      <div class="half">
+                        <span class="half__k">下半</span><b class="half__v mono">1490</b>
+                        <span class="half__buff"><svg class="ico ico--xs" aria-hidden="true"><use href="#i-sparkle"></use></svg>珍奇契约 · 眷属</span>
+                        <span class="avatars"><i>今</i><i>弗</i><i>千</i></span>
+                      </div>
+                    </article>
+                  </div>
+                  <p class="blk__note">第 7、8 关按官方规则跨赛季保留；第 9 关起每期更换内容，进度清零。</p>
+                </div>
+              </section>
+
+              <!-- ===== 每日数据: the same five cards the home page really shows ===== -->
+              <section class="panel" id="p-daily" role="tabpanel" aria-labelledby="t-daily" tabindex="0" hidden>
+                <header class="phead">
+                  <div>
+                    <h3 class="phead__h"><svg class="ico" aria-hidden="true"><use href="#i-lightning"></use></svg>今日数据</h3>
+                    <p class="phead__s">库街区数据源 · 本地 PC 启动器 SDK 回退</p>
+                  </div>
+                  <span class="pbtn">同步</span>
+                </header>
+                <div class="daily">
+                  <article class="stat">
+                    <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-lightning"></use></svg>体力</span>
+                    <span class="stat__mid"><b class="mono">140<i>/240</i></b><em class="mono">58%</em></span>
+                    <span class="stat__bar"><b style="width:58%"></b></span>
+                    <span class="stat__s">预计 9:59:47 后满</span>
+                  </article>
+                  <article class="stat">
+                    <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-sparkle"></use></svg>结晶单质</span>
+                    <span class="stat__mid"><b class="mono">17<i>/480</i></b><em class="mono">4%</em></span>
+                    <span class="stat__bar"><b style="width:4%"></b></span>
+                    <span class="stat__s">随体力溢出累积</span>
+                  </article>
+                  <article class="stat">
+                    <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-star"></use></svg>活跃度</span>
+                    <span class="stat__mid"><b class="mono">0<i>/100</i></b><em class="mono">0%</em></span>
+                    <span class="stat__bar"><b style="width:0"></b></span>
+                    <span class="stat__s">完成今日活跃任务</span>
+                  </article>
+                  <article class="stat">
+                    <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-trophy"></use></svg>周本</span>
+                    <span class="stat__mid"><b class="mono">0<i>/3</i></b><em class="mono">0%</em></span>
+                    <span class="stat__bar"><b style="width:0"></b></span>
+                    <span class="stat__s">周一 4:00 刷新</span>
+                  </article>
+                  <article class="stat">
+                    <span class="dcard__top"><svg class="ico" aria-hidden="true"><use href="#i-bell-ringing"></use></svg>电台</span>
+                    <span class="stat__mid"><b class="mono">LV.07</b><em class="mono">40%</em></span>
+                    <span class="stat__bar"><b style="width:40%"></b></span>
+                    <span class="stat__s">经验：400/1000</span>
+                  </article>
+                </div>
+              </section>
+
+              <!-- ===== 签到: account rows + month grid ===== -->
+              <section class="panel" id="p-sign" role="tabpanel" aria-labelledby="t-sign" tabindex="0" hidden>
+                <header class="phead">
+                  <div>
+                    <h3 class="phead__h"><svg class="ico" aria-hidden="true"><use href="#i-calendar-check"></use></svg>每日签到</h3>
+                    <p class="phead__s">每日 8:00 自动签到全部角色</p>
+                  </div>
+                  <span class="pbtn">一键签到</span>
+                </header>
+                <ul class="accts">
+                  <li class="acct acct--sel"><span class="acct__av">漂</span><span class="acct__n">漂泊者 · 国服</span><span class="acct__id mono">UID 1•••••••</span><span class="tag tag--up">已签到</span></li>
+                  <li class="acct"><span class="acct__av">漂</span><span class="acct__n">漂泊者 · 国际服</span><span class="acct__id mono">UID 5•••••••</span><span class="tag tag--up">已签到</span></li>
+                </ul>
+                <!-- 2026-09 starts on a Tuesday (Monday-first grid: one blank cell). Only <span> are days; site.js marks them. -->
+                <div class="cal" aria-label="国服 2026 年 9 月签到（示例）" style="--done:17">
+                  <b>一</b><b>二</b><b>三</b><b>四</b><b>五</b><b>六</b><b>日</b>
+                  <i></i><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+                  <span>7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span><span>13</span>
+                  <span>14</span><span>15</span><span>16</span><span>17</span><span>18</span><span>19</span><span>20</span>
+                  <span>21</span><span>22</span><span>23</span><span>24</span><span>25</span><span>26</span><span>27</span>
+                  <span>28</span><span>29</span><span>30</span>
+                </div>
+                <p class="panel__note">国服 · 2026 年 9 月 · 已签 17 天 · 连续 17 天</p>
+              </section>
+
+            </div>
+          </div>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="演示页面">
+          <button class="tab is-on" id="t-gacha" type="button" role="tab" aria-selected="true" aria-controls="p-gacha" data-tab="gacha">
+            <svg class="ico" aria-hidden="true"><use href="#i-chart-donut"></use></svg><span>抽卡分析</span>
+          </button>
+          <button class="tab" id="t-roles" type="button" role="tab" aria-selected="false" aria-controls="p-roles" data-tab="roles" tabindex="-1">
+            <svg class="ico" aria-hidden="true"><use href="#i-users-three"></use></svg><span>角色数据</span>
+          </button>
+          <button class="tab" id="t-tower" type="button" role="tab" aria-selected="false" aria-controls="p-tower" data-tab="tower" tabindex="-1">
+            <svg class="ico" aria-hidden="true"><use href="#i-trophy"></use></svg><span>深塔海墟</span>
+          </button>
+          <button class="tab" id="t-daily" type="button" role="tab" aria-selected="false" aria-controls="p-daily" data-tab="daily" tabindex="-1">
+            <svg class="ico" aria-hidden="true"><use href="#i-lightning"></use></svg><span>每日数据</span>
+          </button>
+          <button class="tab" id="t-sign" type="button" role="tab" aria-selected="false" aria-controls="p-sign" data-tab="sign" tabindex="-1">
+            <svg class="ico" aria-hidden="true"><use href="#i-calendar-check"></use></svg><span>签到</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MODULES: compact list, one line each ============ -->
+  <section class="sec" id="modules">
+    <div class="wrap">
+      <header class="sec__head">
+        <h2 class="sec__h2">十一个模块，共用一套数据</h2>
+        <p class="sec__sub">账号登录一次，所有页面都读同一份本地缓存。</p>
+      </header>
+      <ul class="mods">
+        <li class="mod mod--wide">
+          <span class="mod__ico"><svg class="ico" aria-hidden="true"><use href="#i-download-simple"></use></svg></span>
+          <div><h3>启动与更新</h3><p>检查更新、可暂停的预下载、边下边更，替换前自动备份。支持修复游戏、跳过校验、下载限速，以及 DX11 / DLSS 启动参数和 DLSS / XeSS 版本检测。</p></div>
+        </li>
+        <li class="mod mod--wide">
+          <span class="mod__ico"><svg class="ico" aria-hidden="true"><use href="#i-house"></use></svg></span>
+          <div><h3>主页总览</h3><p>资料卡和每日数据网格：体力、结晶单质、活跃度、周本、终焉矩阵、冥歌海墟、千道门扉、周度游历、电台经验，带回满倒计时。</p></div>
+        </li>
+        <li class="mod">
+          <span class="mod__ico"><svg class="ico" aria-hidden="true"><use href="#i-chart-donut"></use></svg></span>
+          <div><h3>抽卡分析</h3><p>解密本地日志或走云鸣潮接口，按池统计保底、垫抽、歪率和欧气评分。</p></div>
+        </li>
+        <li class="mod">
+          <span class="mod__ico"><svg class="ico" aria-hidden="true"><use href="#i-users-three"></use></svg></span>
+          <div><h3>角色数据</h3><p>库街区与 mcguide 双数据源，技能、共鸣链、声骸、属性面板，列表同步后落盘。</p></div>
+        </li>
+        <li class="mod">
+          <span class="mod__ico"><svg class="ico" aria-hidden="true"><use href="#i-trophy"></use></svg></span>
+          <div><h3>深塔与海墟</h3><p>逆境深塔、终焉矩阵、海墟统一解析，按轮次展示每队分数，往期历史本地保存。</p></div>
+        </li>
+        <li class="mod">
+          <span class="mod__ico"><svg class="ico" aria-hidden="true"><use href="#i-calendar-check"></use></svg></span>
+          <div><h3>签到</h3><p>多账号一键签到，每日 8:00 自动执行，保留签到统计。</p></div>
+        </li>
+        <li class="mod">
+          <span class="mod__ico"><svg class="ico" aria-hidden="true"><use href="#i-bell-ringing"></use></svg></span>
+          <div><h3>消息提醒</h3><p>签到未完成、活动临期、账号失效、周本收尾、活跃度未满，五类各自开关。</p></div>
+        </li>
+        <li class="mod">
+          <span class="mod__ico"><svg class="ico" aria-hidden="true"><use href="#i-gift"></use></svg></span>
+          <div><h3>兑换码</h3><p>远程拉取国服与国际服兑换码，有效的排在前面，点一下复制。</p></div>
+        </li>
+        <li class="mod">
+          <span class="mod__ico"><svg class="ico" aria-hidden="true"><use href="#i-clock"></use></svg></span>
+          <div><h3>游玩统计</h3><p>最近七天逐日时长，加一张 7×24 时段热力格。</p></div>
+        </li>
+        <li class="mod">
+          <span class="mod__ico"><svg class="ico" aria-hidden="true"><use href="#i-sparkle"></use></svg></span>
+          <div><h3>活动与资讯</h3><p>活动甘特图带今日线，资讯页聚合 wiki、公告和快捷入口。</p></div>
+        </li>
+        <li class="mod">
+          <span class="mod__ico"><svg class="ico" aria-hidden="true"><use href="#i-translate"></use></svg></span>
+          <div><h3>双语界面</h3><p>简体中文和 English 全量切换，包括动态消息和服务层状态。</p></div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ LOOK: dark full-bleed, curved wall of HTML-rendered windows ============ -->
+  <section class="look" id="look">
+    <div class="wrap look__in">
+      <header class="sec__head sec__head--dark">
+        <h2 class="sec__h2">窗口跟着系统走</h2>
+        <p class="sec__sub">Windows 11 用 Mica，Windows 10 用 Acrylic，macOS 走毛玻璃，Linux 透明背景加应用染色。导航栏是液态玻璃质感，选中项是一枚会滑动的胶囊。</p>
+      </header>
+
+      <div class="wall" aria-hidden="true">
+        <div class="wall__ring" data-wall>
+          <div class="win win--mica" style="--i:-2"><span class="win__bar"><i></i><i></i><i></i><b>Mica</b></span><span class="win__rail"></span><span class="win__body"><s></s><s></s><s></s><s></s></span></div>
+          <div class="win win--acrylic" style="--i:-1"><span class="win__bar"><i></i><i></i><i></i><b>Acrylic</b></span><span class="win__rail"></span><span class="win__body"><s></s><s></s><s></s><s></s></span></div>
+          <div class="win win--dark" style="--i:0"><span class="win__bar"><i></i><i></i><i></i><b>深色主题</b></span><span class="win__rail"></span><span class="win__body"><s></s><s></s><s></s><s></s></span></div>
+          <div class="win win--frost" style="--i:1"><span class="win__bar"><i></i><i></i><i></i><b>毛玻璃</b></span><span class="win__rail"></span><span class="win__body"><s></s><s></s><s></s><s></s></span></div>
+          <div class="win win--tint" style="--i:2"><span class="win__bar"><i></i><i></i><i></i><b>透明染色</b></span><span class="win__rail"></span><span class="win__body"><s></s><s></s><s></s><s></s></span></div>
+        </div>
+      </div>
+
+      <ul class="looks">
+        <li>
+          <svg class="ico" aria-hidden="true"><use href="#i-monitor"></use></svg>
+          <h3>跟随系统材质</h3>
+          <p>四种原生材质按平台自动选择。</p>
+        </li>
+        <li>
+          <svg class="ico" aria-hidden="true"><use href="#i-palette"></use></svg>
+          <h3>主题即时切换</h3>
+          <p>跟随系统、浅色或深色，切换立刻生效，不用重启。</p>
+        </li>
+        <li>
+          <svg class="ico" aria-hidden="true"><use href="#i-video-camera"></use></svg>
+          <h3>动态壁纸</h3>
+          <p>本地视频，或扫描 Wallpaper Engine 视频壁纸，带封面网格预览。</p>
+        </li>
+        <li>
+          <svg class="ico" aria-hidden="true"><use href="#i-sparkle"></use></svg>
+          <h3>Live2D 模型</h3>
+          <p>Windows x64 上把 Cubism 模型叠在壁纸之上、内容之下，视线跟随鼠标。Cubism Core 需自行下载，模型由你提供。</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ STEPS ============ -->
+  <section class="sec" id="start">
+    <div class="wrap">
+      <header class="sec__head">
+        <h2 class="sec__h2">四步就能用</h2>
+      </header>
+      <ol class="steps">
+        <li><span class="steps__n mono">01</span><h3>下载并安装</h3><p>Windows 用安装包或绿色包，macOS 与 Linux 解压后直接运行。</p></li>
+        <li><span class="steps__n mono">02</span><h3>指向游戏目录</h3><p>选中目录后自动识别渠道，库街区、Bilibili 与 WeGame 都能认出。</p></li>
+        <li><span class="steps__n mono">03</span><h3>登录一次账号</h3><p>短信加应用内极验完成登录，多个接口按手机号判定是否同一账号。</p></li>
+        <li><span class="steps__n mono">04</span><h3>开始同步</h3><p>抽卡、角色与每日数据一键同步，之后每次打开都是最新的。</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============ PLATFORMS + UPDATE CHAIN ============ -->
+  <section class="sec" id="platforms">
+    <div class="wrap">
+      <header class="sec__head">
+        <h2 class="sec__h2">三个平台，一份代码</h2>
+      </header>
+      <div class="plat">
+        <div class="ptable-wrap">
+          <table class="ptable">
+            <caption class="sr">各平台支持情况</caption>
+            <thead>
+              <tr><th scope="col">平台</th><th scope="col">下载</th><th scope="col">视频与壁纸</th><th scope="col">Live2D</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Windows x64</th><td>安装包 / 绿色包</td><td class="yes">内置 libmpv</td><td class="yes">支持</td></tr>
+              <tr><th scope="row">macOS arm64 / x64</th><td>zip / .app / dmg</td><td class="part">arm64 内置，x64 回退首帧</td><td class="no">暂不支持</td></tr>
+              <tr><th scope="row">Linux x64</th><td>tar.gz / deb / rpm</td><td class="part">需系统 libmpv</td><td class="no">暂不支持</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="chain">
+          <h3>更新链路会自己找路</h3>
+          <p>检查更新按四级依次降级，任一级能通就能更新。下载支持断点续传和卡死重试。</p>
+          <ol class="chain__list">
+            <li><span class="chain__k mono">1</span>GitHub API</li>
+            <li><span class="chain__k mono">2</span>GitHub HTML 回退</li>
+            <li><span class="chain__k mono">3</span>自定义加速模板</li>
+            <li><span class="chain__k mono">4</span>IP 域前置直连</li>
+          </ol>
+          <p class="chain__note">发布方提供 sha256 时会校验完整性，不符自动重下；未提供则不阻断更新。</p>
+        </div>
+      </div>
+      <dl class="facts">
+        <div><dt>单元测试</dt><dd class="mono" data-count="521">521</dd></div>
+        <div><dt>语言键</dt><dd class="mono" data-count="787">787</dd></div>
+        <div><dt>功能模块</dt><dd class="mono" data-count="11">11</dd></div>
+        <div><dt>提醒类别</dt><dd class="mono" data-count="5">5</dd></div>
+        <div><dt>发布平台</dt><dd class="mono" data-count="3">3</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- ============ FAQ ============ -->
+  <section class="sec" id="faq">
+    <div class="wrap wrap--narrow">
+      <header class="sec__head">
+        <h2 class="sec__h2">常见问题</h2>
+      </header>
+      <div class="faq">
+        <details>
+          <summary>我的账号和抽卡数据会上传吗？</summary>
+          <p>不会。抽卡记录、角色数据和登录凭据只保存在本机，McKuro 没有自己的服务器。它只直连库街区、云鸣潮等官方接口，以及 GitHub 检查更新。</p>
+        </details>
+        <details>
+          <summary>macOS 打开时提示“无法验证开发者”？</summary>
+          <p>macOS 版本没有签名。第一次请在 Finder 里右键应用选“打开”，之后就能正常双击启动。</p>
+        </details>
+        <details>
+          <summary>Live2D 模型从哪里来？</summary>
+          <p>McKuro 不附带模型和 Cubism Core。请从 Live2D 官网下载 Cubism Core，并使用你有权使用的模型文件，在设置页导入即可。</p>
+        </details>
+        <details>
+          <summary>会影响游戏本身吗？</summary>
+          <p>McKuro 只读取游戏目录和日志，按官方启动器的参数启动游戏，不注入、不修改游戏进程。</p>
+        </details>
+        <details>
+          <summary>遇到问题去哪里反馈？</summary>
+          <p>请到 GitHub Issues 提交，附上设置页导出的日志会更快定位。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DOWNLOAD ============ -->
+  <section class="dl" id="download">
+    <div class="wrap">
+      <div class="dl__card">
+        <div class="dl__copy">
+          <h2 class="dl__h2">装好就能用</h2>
+          <p>最新版 <b class="mono" data-rail="version">v1.3.0</b>，发布于 <b class="mono" data-rail="date">2026-10-01</b>。启动器内置更新检查，之后每个新版本都能在应用里直接升级。</p>
+        </div>
+        <div class="dl__acts">
+          <a class="btn btn--primary btn--lg" data-dl-primary href="https://github.com/ZPC5560/McKuro/releases/latest" target="_blank" rel="noopener">
+            <span>下载 McKuro</span>
+            <span class="btn__end"><svg class="ico" aria-hidden="true"><use href="#i-download-simple"></use></svg></span>
+          </a>
+          <a class="btn btn--ghost btn--lg" href="https://github.com/ZPC5560/McKuro" target="_blank" rel="noopener">
+            <svg class="ico" aria-hidden="true"><use href="#i-github-logo"></use></svg>
+            <span>查看源码</span>
+          </a>
+          <p class="dl__hint" data-dl-hint>在 Releases 页面按你的系统选对应文件；macOS 未签名，首次需右键打开。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot__in">
+    <div class="foot__brand">
+      <img src="assets/icon-32.webp" width="26" height="26" alt="" loading="lazy" decoding="async">
+      <b>McKuro</b>
+      <span class="mono" data-rail="version">v1.3.0</span>
+    </div>
+    <nav class="foot__links" aria-label="页脚导航">
+      <a href="https://github.com/ZPC5560/McKuro" target="_blank" rel="noopener">GitHub 仓库</a>
+      <a href="https://github.com/ZPC5560/McKuro/releases" target="_blank" rel="noopener">发布记录</a>
+      <a href="https://github.com/ZPC5560/McKuro/issues" target="_blank" rel="noopener">问题反馈</a>
+    </nav>
+    <div class="foot__credits">
+      <p>设计与实现参考了这些开源项目：<a href="https://github.com/HaiyuGame/Haiyu" target="_blank" rel="noopener">Haiyu</a>、<a href="https://github.com/leck995/WutheringWavesTool" target="_blank" rel="noopener">WutheringWavesTool</a>、<a href="https://github.com/Mozi216/Sparkle.Live2DView" target="_blank" rel="noopener">Sparkle.Live2DView</a>、<a href="https://github.com/Coloryr/Live2DCSharpSDK" target="_blank" rel="noopener">Live2DCSharpSDK</a>。首屏 3D 场景使用 <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a>（MIT）。</p>
+      <p class="foot__legal">McKuro 是非官方工具，与库洛游戏没有隶属或背书关系。应用图标使用守岸人官方图标（萌娘共享 CC-BY-NC-SA）。页面中的界面均为网页重绘，数据为示例。本仓库未声明开源许可证。</p>
+    </div>
+  </div>
+</footer>
+
+<svg class="sr" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg"><defs><symbol id="i-arrow-up-right" viewBox="0 0 256 256" fill="currentColor"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></symbol><symbol id="i-bell-ringing" viewBox="0 0 256 256" fill="currentColor"><path d="M224,71.1a8,8,0,0,1-10.78-3.42,94.13,94.13,0,0,0-33.46-36.91,8,8,0,1,1,8.54-13.54,111.46,111.46,0,0,1,39.12,43.09A8,8,0,0,1,224,71.1ZM35.71,72a8,8,0,0,0,7.1-4.32A94.13,94.13,0,0,1,76.27,30.77a8,8,0,1,0-8.54-13.54A111.46,111.46,0,0,0,28.61,60.32,8,8,0,0,0,35.71,72Zm186.1,103.94A16,16,0,0,1,208,200H167.2a40,40,0,0,1-78.4,0H48a16,16,0,0,1-13.79-24.06C43.22,160.39,48,138.28,48,112a80,80,0,0,1,160,0C208,138.27,212.78,160.38,221.81,175.94ZM150.62,200H105.38a24,24,0,0,0,45.24,0ZM208,184c-10.64-18.27-16-42.49-16-72a64,64,0,0,0-128,0c0,29.52-5.38,53.74-16,72Z"/></symbol><symbol id="i-calendar-check" viewBox="0 0 256 256" fill="currentColor"><path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Zm-38.34-85.66a8,8,0,0,1,0,11.32l-48,48a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L116,164.69l42.34-42.35A8,8,0,0,1,169.66,122.34Z"/></symbol><symbol id="i-caret-right" viewBox="0 0 256 256" fill="currentColor"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"/></symbol><symbol id="i-chart-donut" viewBox="0 0 256 256" fill="currentColor"><path d="M128,24a8,8,0,0,0-8,8V88a8,8,0,0,0,8,8,32,32,0,1,1-27.72,16,8,8,0,0,0-2.93-10.93l-48.5-28A8,8,0,0,0,37.92,76,104,104,0,1,0,128,24ZM48.09,91.1,83,111.26A48.09,48.09,0,0,0,80,128c0,1.53.08,3,.22,4.52L41.28,143A88.16,88.16,0,0,1,48.09,91.1Zm-2.67,67.31,39-10.44A48.1,48.1,0,0,0,120,175.32v40.31A88.2,88.2,0,0,1,45.42,158.41ZM136,215.63V175.32a48,48,0,0,0,0-94.65V40.36a88,88,0,0,1,0,175.27Z"/></symbol><symbol id="i-check-circle" viewBox="0 0 256 256" fill="currentColor"><path d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></symbol><symbol id="i-clock-countdown" viewBox="0 0 256 256" fill="currentColor"><path d="M232,136.66A104.12,104.12,0,1,1,119.34,24,8,8,0,0,1,120.66,40,88.12,88.12,0,1,0,216,135.34,8,8,0,0,1,232,136.66ZM120,72v56a8,8,0,0,0,8,8h56a8,8,0,0,0,0-16H136V72a8,8,0,0,0-16,0Zm40-24a12,12,0,1,0-12-12A12,12,0,0,0,160,48Zm36,24a12,12,0,1,0-12-12A12,12,0,0,0,196,72Zm24,36a12,12,0,1,0-12-12A12,12,0,0,0,220,108Z"/></symbol><symbol id="i-clock" viewBox="0 0 256 256" fill="currentColor"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"/></symbol><symbol id="i-device-mobile" viewBox="0 0 256 256" fill="currentColor"><path d="M176,16H80A24,24,0,0,0,56,40V216a24,24,0,0,0,24,24h96a24,24,0,0,0,24-24V40A24,24,0,0,0,176,16ZM72,64H184V192H72Zm8-32h96a8,8,0,0,1,8,8v8H72V40A8,8,0,0,1,80,32Zm96,192H80a8,8,0,0,1-8-8v-8H184v8A8,8,0,0,1,176,224Z"/></symbol><symbol id="i-download-simple" viewBox="0 0 256 256" fill="currentColor"><path d="M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z"/></symbol><symbol id="i-game-controller" viewBox="0 0 256 256" fill="currentColor"><path d="M176,112H152a8,8,0,0,1,0-16h24a8,8,0,0,1,0,16ZM104,96H96V88a8,8,0,0,0-16,0v8H72a8,8,0,0,0,0,16h8v8a8,8,0,0,0,16,0v-8h8a8,8,0,0,0,0-16ZM241.48,200.65a36,36,0,0,1-54.94,4.81c-.12-.12-.24-.24-.35-.37L146.48,160h-37L69.81,205.09l-.35.37A36.08,36.08,0,0,1,44,216,36,36,0,0,1,8.56,173.75a.68.68,0,0,1,0-.14L24.93,89.52A59.88,59.88,0,0,1,83.89,40H172a60.08,60.08,0,0,1,59,49.25c0,.06,0,.12,0,.18l16.37,84.17a.68.68,0,0,1,0,.14A35.74,35.74,0,0,1,241.48,200.65ZM172,144a44,44,0,0,0,0-88H83.89A43.9,43.9,0,0,0,40.68,92.37l0,.13L24.3,176.59A20,20,0,0,0,58,194.3l41.92-47.59a8,8,0,0,1,6-2.71Zm59.7,32.59-8.74-45A60,60,0,0,1,172,160h-4.2L198,194.31a20.09,20.09,0,0,0,17.46,5.39,20,20,0,0,0,16.23-23.11Z"/></symbol><symbol id="i-gift" viewBox="0 0 256 256" fill="currentColor"><path d="M216,72H180.92c.39-.33.79-.65,1.17-1A29.53,29.53,0,0,0,192,49.57,32.62,32.62,0,0,0,158.44,16,29.53,29.53,0,0,0,137,25.91a54.94,54.94,0,0,0-9,14.48,54.94,54.94,0,0,0-9-14.48A29.53,29.53,0,0,0,97.56,16,32.62,32.62,0,0,0,64,49.57,29.53,29.53,0,0,0,73.91,71c.38.33.78.65,1.17,1H40A16,16,0,0,0,24,88v32a16,16,0,0,0,16,16v64a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V136a16,16,0,0,0,16-16V88A16,16,0,0,0,216,72ZM149,36.51a13.69,13.69,0,0,1,10-4.5h.49A16.62,16.62,0,0,1,176,49.08a13.69,13.69,0,0,1-4.5,10c-9.49,8.4-25.24,11.36-35,12.4C137.7,60.89,141,45.5,149,36.51Zm-64.09.36A16.63,16.63,0,0,1,96.59,32h.49a13.69,13.69,0,0,1,10,4.5c8.39,9.48,11.35,25.2,12.39,34.92-9.72-1-25.44-4-34.92-12.39a13.69,13.69,0,0,1-4.5-10A16.6,16.6,0,0,1,84.87,36.87ZM40,88h80v32H40Zm16,48h64v64H56Zm144,64H136V136h64Zm16-80H136V88h80v32Z"/></symbol><symbol id="i-github-logo" viewBox="0 0 256 256" fill="currentColor"><path d="M208.31,75.68A59.78,59.78,0,0,0,202.93,28,8,8,0,0,0,196,24a59.75,59.75,0,0,0-48,24H124A59.75,59.75,0,0,0,76,24a8,8,0,0,0-6.93,4,59.78,59.78,0,0,0-5.38,47.68A58.14,58.14,0,0,0,56,104v8a56.06,56.06,0,0,0,48.44,55.47A39.8,39.8,0,0,0,96,192v8H72a24,24,0,0,1-24-24A40,40,0,0,0,8,136a8,8,0,0,0,0,16,24,24,0,0,1,24,24,40,40,0,0,0,40,40H96v16a8,8,0,0,0,16,0V192a24,24,0,0,1,48,0v40a8,8,0,0,0,16,0V192a39.8,39.8,0,0,0-8.44-24.53A56.06,56.06,0,0,0,216,112v-8A58.14,58.14,0,0,0,208.31,75.68ZM200,112a40,40,0,0,1-40,40H112a40,40,0,0,1-40-40v-8a41.74,41.74,0,0,1,6.9-22.48A8,8,0,0,0,80,73.83a43.81,43.81,0,0,1,.79-33.58,43.88,43.88,0,0,1,32.32,20.06A8,8,0,0,0,119.82,64h32.35a8,8,0,0,0,6.74-3.69,43.87,43.87,0,0,1,32.32-20.06A43.81,43.81,0,0,1,192,73.83a8.09,8.09,0,0,0,1,7.65A41.72,41.72,0,0,1,200,104Z"/></symbol><symbol id="i-hard-drives" viewBox="0 0 256 256" fill="currentColor"><path d="M208,136H48a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V152A16,16,0,0,0,208,136Zm0,64H48V152H208v48Zm0-160H48A16,16,0,0,0,32,56v48a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V56A16,16,0,0,0,208,40Zm0,64H48V56H208v48ZM192,80a12,12,0,1,1-12-12A12,12,0,0,1,192,80Zm0,96a12,12,0,1,1-12-12A12,12,0,0,1,192,176Z"/></symbol><symbol id="i-hourglass" viewBox="0 0 256 256" fill="currentColor"><path d="M200,75.64V40a16,16,0,0,0-16-16H72A16,16,0,0,0,56,40V76a16.07,16.07,0,0,0,6.4,12.8L114.67,128,62.4,167.2A16.07,16.07,0,0,0,56,180v36a16,16,0,0,0,16,16H184a16,16,0,0,0,16-16V180.36a16.09,16.09,0,0,0-6.35-12.77L141.27,128l52.38-39.6A16.05,16.05,0,0,0,200,75.64ZM184,216H72V180l56-42,56,42.35Zm0-140.36L128,118,72,76V40H184Z"/></symbol><symbol id="i-house" viewBox="0 0 256 256" fill="currentColor"><path d="M219.31,108.68l-80-80a16,16,0,0,0-22.62,0l-80,80A15.87,15.87,0,0,0,32,120v96a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V160h32v56a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V120A15.87,15.87,0,0,0,219.31,108.68ZM208,208H160V152a8,8,0,0,0-8-8H104a8,8,0,0,0-8,8v56H48V120l80-80,80,80Z"/></symbol><symbol id="i-lightning" viewBox="0 0 256 256" fill="currentColor"><path d="M215.79,118.17a8,8,0,0,0-5-5.66L153.18,90.9l14.66-73.33a8,8,0,0,0-13.69-7l-112,120a8,8,0,0,0,3,13l57.63,21.61L88.16,238.43a8,8,0,0,0,13.69,7l112-120A8,8,0,0,0,215.79,118.17ZM109.37,214l10.47-52.38a8,8,0,0,0-5-9.06L62,132.71l84.62-90.66L136.16,94.43a8,8,0,0,0,5,9.06l52.8,19.8Z"/></symbol><symbol id="i-lock-simple" viewBox="0 0 256 256" fill="currentColor"><path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Z"/></symbol><symbol id="i-map-pin" viewBox="0 0 256 256" fill="currentColor"><path d="M128,64a40,40,0,1,0,40,40A40,40,0,0,0,128,64Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,128Zm0-112a88.1,88.1,0,0,0-88,88c0,31.4,14.51,64.68,42,96.25a254.19,254.19,0,0,0,41.45,38.3,8,8,0,0,0,9.18,0A254.19,254.19,0,0,0,174,200.25c27.45-31.57,42-64.85,42-96.25A88.1,88.1,0,0,0,128,16Zm0,206c-16.53-13-72-60.75-72-118a72,72,0,0,1,144,0C200,161.23,144.53,209,128,222Z"/></symbol><symbol id="i-minus" viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128Z"/></symbol><symbol id="i-monitor" viewBox="0 0 256 256" fill="currentColor"><path d="M208,40H48A24,24,0,0,0,24,64V176a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V64A24,24,0,0,0,208,40Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V64a8,8,0,0,1,8-8H208a8,8,0,0,1,8,8Zm-48,48a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,224Z"/></symbol><symbol id="i-paint-brush" viewBox="0 0 256 256" fill="currentColor"><path d="M232,32a8,8,0,0,0-8-8c-44.08,0-89.31,49.71-114.43,82.63A60,60,0,0,0,32,164c0,30.88-19.54,44.73-20.47,45.37A8,8,0,0,0,16,224H92a60,60,0,0,0,57.37-77.57C182.3,121.31,232,76.08,232,32ZM92,208H34.63C41.38,198.41,48,183.92,48,164a44,44,0,1,1,44,44Zm32.42-94.45q5.14-6.66,10.09-12.55A76.23,76.23,0,0,1,155,121.49q-5.9,4.94-12.55,10.09A60.54,60.54,0,0,0,124.42,113.55Zm42.7-2.68a92.57,92.57,0,0,0-22-22c31.78-34.53,55.75-45,69.9-47.91C212.17,55.12,201.65,79.09,167.12,110.87Z"/></symbol><symbol id="i-palette" viewBox="0 0 256 256" fill="currentColor"><path d="M200.77,53.89A103.27,103.27,0,0,0,128,24h-1.07A104,104,0,0,0,24,128c0,43,26.58,79.06,69.36,94.17A32,32,0,0,0,136,192a16,16,0,0,1,16-16h46.21a31.81,31.81,0,0,0,31.2-24.88,104.43,104.43,0,0,0,2.59-24A103.28,103.28,0,0,0,200.77,53.89Zm13,93.71A15.89,15.89,0,0,1,198.21,160H152a32,32,0,0,0-32,32,16,16,0,0,1-21.31,15.07C62.49,194.3,40,164,40,128a88,88,0,0,1,87.09-88h.9a88.35,88.35,0,0,1,88,87.25A88.86,88.86,0,0,1,213.81,147.6ZM140,76a12,12,0,1,1-12-12A12,12,0,0,1,140,76ZM96,100A12,12,0,1,1,84,88,12,12,0,0,1,96,100Zm0,56a12,12,0,1,1-12-12A12,12,0,0,1,96,156Zm88-56a12,12,0,1,1-12-12A12,12,0,0,1,184,100Z"/></symbol><symbol id="i-shield-check" viewBox="0 0 256 256" fill="currentColor"><path d="M208,40H48A16,16,0,0,0,32,56v56c0,52.72,25.52,84.67,46.93,102.19,23.06,18.86,46,25.26,47,25.53a8,8,0,0,0,4.2,0c1-.27,23.91-6.67,47-25.53C198.48,196.67,224,164.72,224,112V56A16,16,0,0,0,208,40Zm0,72c0,37.07-13.66,67.16-40.6,89.42A129.3,129.3,0,0,1,128,223.62a128.25,128.25,0,0,1-38.92-21.81C61.82,179.51,48,149.3,48,112l0-56,160,0ZM82.34,141.66a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35a8,8,0,0,1,11.32,11.32l-56,56a8,8,0,0,1-11.32,0Z"/></symbol><symbol id="i-sliders-horizontal" viewBox="0 0 256 256" fill="currentColor"><path d="M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z"/></symbol><symbol id="i-sparkle" viewBox="0 0 256 256" fill="currentColor"><path d="M197.58,129.06,146,110l-19-51.62a15.92,15.92,0,0,0-29.88,0L78,110l-51.62,19a15.92,15.92,0,0,0,0,29.88L78,178l19,51.62a15.92,15.92,0,0,0,29.88,0L146,178l51.62-19a15.92,15.92,0,0,0,0-29.88ZM137,164.22a8,8,0,0,0-4.74,4.74L112,223.85,91.78,169A8,8,0,0,0,87,164.22L32.15,144,87,123.78A8,8,0,0,0,91.78,119L112,64.15,132.22,119a8,8,0,0,0,4.74,4.74L191.85,144ZM144,40a8,8,0,0,1,8-8h16V16a8,8,0,0,1,16,0V32h16a8,8,0,0,1,0,16H184V64a8,8,0,0,1-16,0V48H152A8,8,0,0,1,144,40ZM248,88a8,8,0,0,1-8,8h-8v8a8,8,0,0,1-16,0V96h-8a8,8,0,0,1,0-16h8V72a8,8,0,0,1,16,0v8h8A8,8,0,0,1,248,88Z"/></symbol><symbol id="i-square" viewBox="0 0 256 256" fill="currentColor"><path d="M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32Zm0,176H48V48H208V208Z"/></symbol><symbol id="i-stack" viewBox="0 0 256 256" fill="currentColor"><path d="M230.91,172A8,8,0,0,1,228,182.91l-96,56a8,8,0,0,1-8.06,0l-96-56A8,8,0,0,1,36,169.09l92,53.65,92-53.65A8,8,0,0,1,230.91,172ZM220,121.09l-92,53.65L36,121.09A8,8,0,0,0,28,134.91l96,56a8,8,0,0,0,8.06,0l96-56A8,8,0,1,0,220,121.09ZM24,80a8,8,0,0,1,4-6.91l96-56a8,8,0,0,1,8.06,0l96,56a8,8,0,0,1,0,13.82l-96,56a8,8,0,0,1-8.06,0l-96-56A8,8,0,0,1,24,80Zm23.88,0L128,126.74,208.12,80,128,33.26Z"/></symbol><symbol id="i-star" viewBox="0 0 256 256" fill="currentColor"><path d="M239.18,97.26A16.38,16.38,0,0,0,224.92,86l-59-4.76L143.14,26.15a16.36,16.36,0,0,0-30.27,0L90.11,81.23,31.08,86a16.46,16.46,0,0,0-9.37,28.86l45,38.83L53,211.75a16.38,16.38,0,0,0,24.5,17.82L128,198.49l50.53,31.08A16.4,16.4,0,0,0,203,211.75l-13.76-58.07,45-38.83A16.43,16.43,0,0,0,239.18,97.26Zm-15.34,5.47-48.7,42a8,8,0,0,0-2.56,7.91l14.88,62.8a.37.37,0,0,1-.17.48c-.18.14-.23.11-.38,0l-54.72-33.65a8,8,0,0,0-8.38,0L69.09,215.94c-.15.09-.19.12-.38,0a.37.37,0,0,1-.17-.48l14.88-62.8a8,8,0,0,0-2.56-7.91l-48.7-42c-.12-.1-.23-.19-.13-.5s.18-.27.33-.29l63.92-5.16A8,8,0,0,0,103,91.86l24.62-59.61c.08-.17.11-.25.35-.25s.27.08.35.25L153,91.86a8,8,0,0,0,6.75,4.92l63.92,5.16c.15,0,.24,0,.33.29S224,102.63,223.84,102.73Z"/></symbol><symbol id="i-terminal-window" viewBox="0 0 256 256" fill="currentColor"><path d="M128,128a8,8,0,0,1-3,6.25l-40,32a8,8,0,1,1-10-12.5L107.19,128,75,102.25a8,8,0,1,1,10-12.5l40,32A8,8,0,0,1,128,128Zm48,24H136a8,8,0,0,0,0,16h40a8,8,0,0,0,0-16Zm56-96V200a16,16,0,0,1-16,16H40a16,16,0,0,1-16-16V56A16,16,0,0,1,40,40H216A16,16,0,0,1,232,56ZM216,200V56H40V200H216Z"/></symbol><symbol id="i-translate" viewBox="0 0 256 256" fill="currentColor"><path d="M247.15,212.42l-56-112a8,8,0,0,0-14.31,0l-21.71,43.43A88,88,0,0,1,108,126.93,103.65,103.65,0,0,0,135.69,64H160a8,8,0,0,0,0-16H104V32a8,8,0,0,0-16,0V48H32a8,8,0,0,0,0,16h87.63A87.76,87.76,0,0,1,96,116.35a87.74,87.74,0,0,1-19-31,8,8,0,1,0-15.08,5.34A103.63,103.63,0,0,0,84,127a87.55,87.55,0,0,1-52,17,8,8,0,0,0,0,16,103.46,103.46,0,0,0,64-22.08,104.18,104.18,0,0,0,51.44,21.31l-26.6,53.19a8,8,0,0,0,14.31,7.16L148.94,192h70.11l13.79,27.58A8,8,0,0,0,240,224a8,8,0,0,0,7.15-11.58ZM156.94,176,184,121.89,211.05,176Z"/></symbol><symbol id="i-trophy" viewBox="0 0 256 256" fill="currentColor"><path d="M232,64H208V48a8,8,0,0,0-8-8H56a8,8,0,0,0-8,8V64H24A16,16,0,0,0,8,80V96a40,40,0,0,0,40,40h3.65A80.13,80.13,0,0,0,120,191.61V216H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16H136V191.58c31.94-3.23,58.44-25.64,68.08-55.58H208a40,40,0,0,0,40-40V80A16,16,0,0,0,232,64ZM48,120A24,24,0,0,1,24,96V80H48v32q0,4,.39,8Zm144-8.9c0,35.52-29,64.64-64,64.9a64,64,0,0,1-64-64V56H192ZM232,96a24,24,0,0,1-24,24h-.5a81.81,81.81,0,0,0,.5-8.9V80h24Z"/></symbol><symbol id="i-users-three" viewBox="0 0 256 256" fill="currentColor"><path d="M244.8,150.4a8,8,0,0,1-11.2-1.6A51.6,51.6,0,0,0,192,128a8,8,0,0,1-7.37-4.89,8,8,0,0,1,0-6.22A8,8,0,0,1,192,112a24,24,0,1,0-23.24-30,8,8,0,1,1-15.5-4A40,40,0,1,1,219,117.51a67.94,67.94,0,0,1,27.43,21.68A8,8,0,0,1,244.8,150.4ZM190.92,212a8,8,0,1,1-13.84,8,57,57,0,0,0-98.16,0,8,8,0,1,1-13.84-8,72.06,72.06,0,0,1,33.74-29.92,48,48,0,1,1,58.36,0A72.06,72.06,0,0,1,190.92,212ZM128,176a32,32,0,1,0-32-32A32,32,0,0,0,128,176ZM72,120a8,8,0,0,0-8-8A24,24,0,1,1,87.24,82a8,8,0,1,0,15.5-4A40,40,0,1,0,37,117.51,67.94,67.94,0,0,0,9.6,139.19a8,8,0,1,0,12.8,9.61A51.6,51.6,0,0,1,64,128,8,8,0,0,0,72,120Z"/></symbol><symbol id="i-video-camera" viewBox="0 0 256 256" fill="currentColor"><path d="M251.77,73a8,8,0,0,0-8.21.39L208,97.05V72a16,16,0,0,0-16-16H32A16,16,0,0,0,16,72V184a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V159l35.56,23.71A8,8,0,0,0,248,184a8,8,0,0,0,8-8V80A8,8,0,0,0,251.77,73ZM192,184H32V72H192V184Zm48-22.95-32-21.33V116.28L240,95Z"/></symbol><symbol id="i-wrench" viewBox="0 0 256 256" fill="currentColor"><path d="M226.76,69a8,8,0,0,0-12.84-2.88l-40.3,37.19-17.23-3.7-3.7-17.23,37.19-40.3A8,8,0,0,0,187,29.24,72,72,0,0,0,88,96,72.34,72.34,0,0,0,94,124.94L33.79,177c-.15.12-.29.26-.43.39a32,32,0,0,0,45.26,45.26c.13-.13.27-.28.39-.42L131.06,162A72,72,0,0,0,232,96,71.56,71.56,0,0,0,226.76,69ZM160,152a56.14,56.14,0,0,1-27.07-7,8,8,0,0,0-9.92,1.77L67.11,211.51a16,16,0,0,1-22.62-22.62L109.18,133a8,8,0,0,0,1.77-9.93,56,56,0,0,1,58.36-82.31l-31.2,33.81a8,8,0,0,0-1.94,7.1L141.83,108a8,8,0,0,0,6.14,6.14l26.35,5.66a8,8,0,0,0,7.1-1.94l33.81-31.2A56.06,56.06,0,0,1,160,152Z"/></symbol><symbol id="i-x" viewBox="0 0 256 256" fill="currentColor"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></symbol></defs></svg>
+
+<script src="site.js" defer></script>
+<script type="module" src="hero3d.js"></script>
+</body>
+</html>

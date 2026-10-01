@@ -1,0 +1,78 @@
+name: website
+
+# Builds the static site from website-src/ and publishes it to GitHub Pages.
+# The built output in website/ is committed too, so the site is browsable
+# straight from the repo; this workflow makes sure what is served always
+# matches the sources rather than a stale copy.
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "website-src/**"
+      - "website/**"
+      - ".github/workflows/website.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# never let two deploys race; keep one queued run
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install font subsetting tools
+        run: pip install --no-cache-dir "fonttools==4.66.1" brotli
+
+      - name: Rebuild the site from its sources
+        run: python website-src/build.py
+
+      # Guard against a stale commit: if website/ does not match a fresh build,
+      # the sources were edited without rebuilding, and the repo copy is lying.
+      # Only the hand-written outputs are compared: HTML/CSS/JS are deterministic
+      # from the sources, while the subset .woff2 bytes can legitimately differ
+      # between fontTools releases, so gating on those would break unrelated PRs.
+      - name: Verify committed output matches the sources
+        run: |
+          if ! git diff --quiet -- website/index.html website/site.css website/site.js website/hero3d.js website/fonts.css; then
+            echo "::error::website/ is out of date with website-src/. Run 'python website-src/build.py' and commit the result."
+            git --no-pager diff --stat -- website/index.html website/site.css website/site.js website/hero3d.js website/fonts.css
+            exit 1
+          fi
+          echo "committed output is up to date"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: website
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

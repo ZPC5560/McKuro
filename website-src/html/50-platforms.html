@@ -1,0 +1,73 @@
+
+  <!-- ============ PLATFORMS + UPDATE CHAIN ============ -->
+  <section class="sec" id="platforms">
+    <div class="wrap">
+      <header class="sec__head">
+        <h2 class="sec__h2">三个平台，一份代码</h2>
+      </header>
+      <div class="plat">
+        <div class="ptable-wrap">
+          <table class="ptable">
+            <caption class="sr">各平台支持情况</caption>
+            <thead>
+              <tr><th scope="col">平台</th><th scope="col">下载</th><th scope="col">视频与壁纸</th><th scope="col">Live2D</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Windows x64</th><td>安装包 / 绿色包</td><td class="yes">内置 libmpv</td><td class="yes">支持</td></tr>
+              <tr><th scope="row">macOS arm64 / x64</th><td>zip / .app / dmg</td><td class="part">arm64 内置，x64 回退首帧</td><td class="no">暂不支持</td></tr>
+              <tr><th scope="row">Linux x64</th><td>tar.gz / deb / rpm</td><td class="part">需系统 libmpv</td><td class="no">暂不支持</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="chain">
+          <h3>更新链路会自己找路</h3>
+          <p>检查更新按四级依次降级，任一级能通就能更新。下载支持断点续传和卡死重试。</p>
+          <ol class="chain__list">
+            <li><span class="chain__k mono">1</span>GitHub API</li>
+            <li><span class="chain__k mono">2</span>GitHub HTML 回退</li>
+            <li><span class="chain__k mono">3</span>自定义加速模板</li>
+            <li><span class="chain__k mono">4</span>IP 域前置直连</li>
+          </ol>
+          <p class="chain__note">发布方提供 sha256 时会校验完整性，不符自动重下；未提供则不阻断更新。</p>
+        </div>
+      </div>
+      <dl class="facts">
+        <div><dt>单元测试</dt><dd class="mono" data-count="521">521</dd></div>
+        <div><dt>语言键</dt><dd class="mono" data-count="787">787</dd></div>
+        <div><dt>功能模块</dt><dd class="mono" data-count="11">11</dd></div>
+        <div><dt>提醒类别</dt><dd class="mono" data-count="5">5</dd></div>
+        <div><dt>发布平台</dt><dd class="mono" data-count="3">3</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- ============ FAQ ============ -->
+  <section class="sec" id="faq">
+    <div class="wrap wrap--narrow">
+      <header class="sec__head">
+        <h2 class="sec__h2">常见问题</h2>
+      </header>
+      <div class="faq">
+        <details>
+          <summary>我的账号和抽卡数据会上传吗？</summary>
+          <p>不会。抽卡记录、角色数据和登录凭据只保存在本机，McKuro 没有自己的服务器。它只直连库街区、云鸣潮等官方接口，以及 GitHub 检查更新。</p>
+        </details>
+        <details>
+          <summary>macOS 打开时提示“无法验证开发者”？</summary>
+          <p>macOS 版本没有签名。第一次请在 Finder 里右键应用选“打开”，之后就能正常双击启动。</p>
+        </details>
+        <details>
+          <summary>Live2D 模型从哪里来？</summary>
+          <p>McKuro 不附带模型和 Cubism Core。请从 Live2D 官网下载 Cubism Core，并使用你有权使用的模型文件，在设置页导入即可。</p>
+        </details>
+        <details>
+          <summary>会影响游戏本身吗？</summary>
+          <p>McKuro 只读取游戏目录和日志，按官方启动器的参数启动游戏，不注入、不修改游戏进程。</p>
+        </details>
+        <details>
+          <summary>遇到问题去哪里反馈？</summary>
+          <p>请到 GitHub Issues 提交，附上设置页导出的日志会更快定位。</p>
+        </details>
+      </div>
+    </div>
+  </section>
