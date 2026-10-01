@@ -14,6 +14,8 @@
         <vm:SignedOpacityConverter x:Key="SignedOpacity" />
         <vm:SerialNumPlusOneConverter x:Key="SerialNumPlusOne" />
     </UserControl.Resources>
+    <!-- 行定义:标题 / 自动签到设置 / 角色列表(Auto,不撑高)/ 签到奖励(*,吃掉剩余高度)。
+         角色列表若放在 * 行会被拉伸,把签到奖励一路顶到页面底部(用户反馈「距离太大」)。 -->
     <Grid RowDefinitions="Auto,Auto,Auto,*">
         <!-- 标题行:左标题 + 右侧账号信息与操作(账号信息按需求移至标题栏右边) -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="20,16,20,8">
@@ -63,8 +65,11 @@
             </StackPanel>
         </Border>
 
-        <!-- 签到奖励格子 + 今日状态(参照 WutheringWavesTool goodsView) -->
-        <Border Grid.Row="2" Margin="20,0,20,10" Padding="16" CornerRadius="12"
+        <!-- 签到奖励格子 + 今日状态(参照 WutheringWavesTool goodsView)。
+             位置在角色列表之下(用户口径:「账号列表应该在签到奖励的上面」),
+             且 VerticalAlignment=Top 按内容自然高度渲染 —— 让它填满 * 行会拉出一张高而空的卡片。 -->
+        <Border Grid.Row="3" Margin="20,0,20,16" Padding="16" CornerRadius="12"
+                VerticalAlignment="Top"
                 Background="{DynamicResource SemiColorBg2}"
                 IsVisible="{Binding IsLoggedIn}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
@@ -82,8 +87,8 @@
                                    Foreground="{DynamicResource SemiColorText2}"
                                    VerticalAlignment="Center" />
                     </StackPanel>
-                    <!-- 奖励格子内部滚动(MaxHeight≈3 行):页面高度留给底部角色签到状态,
-                         31 格全量展开会把底部行挤出视口 -->
+                    <!-- 奖励格子内部滚动(MaxHeight≈3 行):31 格全量展开会把本区撑得过高,
+                         挤压上方角色列表的可视高度 -->
                     <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding SignGoods}">
                             <ItemsControl.ItemsPanel>
@@ -162,8 +167,8 @@
             </Grid>
         </Border>
 
-        <!-- 角色列表 -->
-        <Grid Grid.Row="3" Margin="20,0,20,16" IsVisible="{Binding IsLoggedIn}">
+        <!-- 角色列表(置于签到奖励之上,用户口径:「账号列表应该在签到奖励的上面」) -->
+        <Grid Grid.Row="2" Margin="20,0,20,10" IsVisible="{Binding IsLoggedIn}">
             <ListBox ItemsSource="{Binding Roles}" Background="Transparent" BorderThickness="0">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:RoleSignItem">

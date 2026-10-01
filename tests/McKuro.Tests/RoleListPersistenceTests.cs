@@ -179,6 +179,60 @@ public class RoleListPersistenceTests : IDisposable
     }
 
     [Fact]
+    public async Task ListSync_Drops_Roles_That_The_Api_No_Longer_Returns()
+    {
+        var (service, db) = CreateService();
+        using (db)
+        {
+            // 实机场景:漂泊者条目从 1406 换成 1309,旧条目残留在缓存里(两者同名 → 页面出现两个「漂泊者」)。
+            // 角色集合必须以接口新列表为准,缓存只负责补详情,不能把已消失的条目一直留着。
+            InsertCache(db, UserId, RoleId, [CompleteRole(9999, "已被替换的角色"), CompleteRole(1001, "角色1")]);
+
+            await service.LoadRoleListAsync(Token, RoleId);
+
+            var cached = service.LoadFromCache(UserId, RoleId);
+            Assert.Equal(38, cached.Roles.Count);
+            Assert.DoesNotContain(cached.Roles, r => r.Role?.RoleId == 9999);
+            // 仍命中的角色详情不被清空
+            Assert.True(cached.Roles.Single(r => r.Role?.RoleId == 1001).IsDetailComplete);
+        }
+    }
+
+    [Fact]
+    public void LoadFromCache_Falls_Back_To_Player_Row_When_Account_Key_Drifted()
+    {
+        var (service, db) = CreateService();
+        using (db)
+        {
+            InsertCache(db, UserId, RoleId, [CompleteRole(1001, "角色1"), CompleteRole(1002, "角色2")]);
+
+            // token 失效后签到页会自动移除账号 → CurrentKuroUserId 变空 → 角色页传空账号键。
+            // 此时仍应读到该 playerId 的缓存,否则页面报「无缓存」并停在旧列表上
+            // (用户看到的现象:「点了同步还是之前的缓存」)。
+            var cached = service.LoadFromCache("", RoleId);
+
+            Assert.True(cached.IsSuccess);
+            Assert.Equal(2, cached.Roles.Count);
+        }
+    }
+
+    [Fact]
+    public void LoadFromCache_Prefers_Exact_Account_Row_Over_Player_Fallback()
+    {
+        var (service, db) = CreateService();
+        using (db)
+        {
+            InsertCache(db, UserId, RoleId, [CompleteRole(1001, "新账号行")]);
+            InsertCache(db, "other-account", RoleId, [CompleteRole(2001, "别人的行")]);
+
+            var cached = service.LoadFromCache(UserId, RoleId);
+
+            Assert.Single(cached.Roles);
+            Assert.Equal("新账号行", cached.Roles[0].RoleName);
+        }
+    }
+
+    [Fact]
     public async Task Empty_List_Does_Not_Wipe_Cache()
     {
         var (service, db) = CreateService(roleCount: 0);

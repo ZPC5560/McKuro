@@ -286,9 +286,14 @@ public sealed class RoleDataService : IRoleDataService
     /// <summary>
     /// 把整份角色列表合并进缓存并落盘(列表同步收尾)。
     /// <para>
-    /// 合并规则(以新列表为准,但绝不用"只有基础信息"的列表项覆盖缓存里的完整详情):
-    /// 新列表项按 cardRoleId 命中缓存时,用 <see cref="MergeMissingSections"/> 补齐详情后替换该行;
-    /// 未命中的作为新行加入;缓存里有而新列表没有的角色(如已下架的角色条目)保留,不丢弃。
+    /// 合并规则:<b>新列表对"角色集合"有最终权威</b> —— 结果就是新列表本身(顺序也以接口为准),
+    /// 缓存只用来给命中的角色<b>补全详情</b>(<see cref="MergeMissingSections"/>)。
+    /// </para>
+    /// <para>
+    /// 早期实现是"缓存里多出来的角色保留、不丢弃",出发点是不丢数据,但副作用是
+    /// <b>角色条目一旦进了缓存就永远出不去</b>:玩家换掉/替换掉的角色(实测:漂泊者 1406 被
+    /// 1309 取代后,两者同名)会长期留在列表里,表现为"点了同步还是之前那几个/出现重复角色"。
+    /// 因此改为以新列表为准;空列表仍然不覆盖(接口异常时不致清空用户数据)。
     /// </para>
     /// </summary>
     private void MergeListIntoCachedRoles(string userId, string roleId, IReadOnlyList<RoleDetail> freshList)
@@ -297,34 +302,28 @@ public sealed class RoleDataService : IRoleDataService
         {
             return; // 空列表多为接口异常,不覆盖已有缓存(与"风控不覆盖完整缓存"同一原则)
         }
-        var roles = ReadCacheRoles(userId, roleId) ?? ReadCacheRoles("", roleId) ?? [];
-        var indexByCardId = new Dictionary<int, int>();
-        for (var i = 0; i < roles.Count; i++)
+        var cached = ReadCacheRoles(userId, roleId) ?? ReadCacheRoles("", roleId) ?? [];
+        var cachedByCardId = new Dictionary<int, RoleDetail>();
+        foreach (var r in cached)
         {
-            if (roles[i].Role?.RoleId is int id and > 0)
+            if (r.Role?.RoleId is int id and > 0)
             {
-                indexByCardId[id] = i;
+                cachedByCardId[id] = r;
             }
         }
+
+        var merged = new List<RoleDetail>(freshList.Count);
         foreach (var fresh in freshList)
         {
-            if (fresh.Role?.RoleId is not int cardId || cardId <= 0)
-            {
-                continue; // 无 cardRoleId 的条目无法稳定去重,不写入(避免重复堆积)
-            }
-            if (indexByCardId.TryGetValue(cardId, out var idx))
+            if (fresh.Role?.RoleId is int cardId and > 0
+                && cachedByCardId.TryGetValue(cardId, out var old))
             {
                 // 详情以缓存为准补进新列表项(列表项本身只有基础信息时不会清空已有详情)
-                MergeMissingSections(fresh, roles[idx]);
-                roles[idx] = fresh;
+                MergeMissingSections(fresh, old);
             }
-            else
-            {
-                indexByCardId[cardId] = roles.Count;
-                roles.Add(fresh);
-            }
+            merged.Add(fresh);
         }
-        SaveCache(userId, roleId, roles);
+        SaveCache(userId, roleId, merged);
     }
 
     /// <summary>把缓存中已同步过的角色详情合并进新拉取的列表项(按 cardRoleId 匹配;保留列表已有的最新基础信息)。</summary>
@@ -467,6 +466,23 @@ public sealed class RoleDataService : IRoleDataService
                     Source = RoleDataSource.Local, Roles = legacyRow, Message = CoreStrings.T("Core.Roles.FromLegacyCache", "来自本地完整缓存(旧版账号键)"),
                 };
             }
+
+            // 账号键漂移兜底:账号被登出/自动移除(如 token 过期时签到页会移除失效账号)后
+            // CurrentKuroUserId 会变空,而缓存仍写在真实账号键下。此时按 playerId 取最近写入的一行,
+            // 否则「同步失败 → 回读缓存」这条路会报"无缓存(或账号不一致)",页面永远停在旧列表上
+            // (用户看到的现象就是"点了同步还是之前的缓存")。playerId 本身即账号下的角色 ID,
+            // 足以区分账号,按它兜底不会串号。
+            var driftedRow = ReadNewestCacheRolesForPlayer(playerId);
+            if (driftedRow is not null)
+            {
+                var merged = MergeLegacyDetailInto(driftedRow, ReadCacheRoles("", playerId));
+                return new RoleDataLoadResult
+                {
+                    Source = RoleDataSource.Local,
+                    Roles = merged ?? driftedRow,
+                    Message = CoreStrings.T("Core.Roles.FromCache", "来自本地缓存"),
+                };
+            }
             return new RoleDataLoadResult { Source = RoleDataSource.None, Message = CoreStrings.T("Core.Roles.NoCache", "无缓存(或账号不一致)") };
         }
         catch (Exception)
@@ -534,6 +550,35 @@ public sealed class RoleDataService : IRoleDataService
     {
         var roles = ReadCacheRoles(accountId, playerId);
         return roles is { Count: > 0 } && roles.All(static r => r.IsDetailComplete) ? roles : null;
+    }
+
+    /// <summary>
+    /// 按 playerId 取最近写入的一行缓存(忽略 account_id)。
+    /// <para>用于账号键漂移的兜底:token 失效后账号被自动移除,CurrentKuroUserId 变空,
+    /// 但缓存仍写在真实账号键下;此时不应报"无缓存"。</para>
+    /// </summary>
+    private List<RoleDetail>? ReadNewestCacheRolesForPlayer(string playerId)
+    {
+        if (string.IsNullOrWhiteSpace(playerId))
+        {
+            return null;
+        }
+        using var cmd = _db.Connection.CreateCommand();
+        cmd.CommandText =
+            """
+            SELECT json FROM role_cache
+            WHERE player_id = $playerId
+            ORDER BY update_time DESC
+            LIMIT 1
+            """;
+        cmd.Parameters.AddWithValue("$playerId", playerId);
+        var json = cmd.ExecuteScalar() as string;
+        if (string.IsNullOrEmpty(json))
+        {
+            return null;
+        }
+        var roles = JsonSerializer.Deserialize(json, RoleJsonContext.Default.ListRoleDetail);
+        return roles is { Count: > 0 } ? roles : null;
     }
 
     private void SaveCache(string accountId, string playerId, IReadOnlyList<RoleDetail> roles)

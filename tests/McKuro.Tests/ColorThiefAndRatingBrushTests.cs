@@ -156,4 +156,77 @@ public class RatingBrushConverterTests
         var brush = Assert.IsType<SolidColorBrush>(c.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture));
         Assert.Equal(Color.Parse("#9e9e9e"), brush.Color);
     }
+
+    [Fact]
+    public void PropLevel_1_Is_Gray_Like_Invalid()
+    {
+        // 回归(用户反馈「无效词条应该是灰色」):level1 = 防御/生命 这类低价值词条,
+        // 必须与 level0 同为灰,不能像此前那样与 level2 同色(#007a85)而显得「有效」。
+        var c = new PropLevelBrushConverter();
+        var lv1 = Assert.IsType<SolidColorBrush>(c.Convert(1, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var lv0 = Assert.IsType<SolidColorBrush>(c.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        Assert.Equal(lv0, lv1);
+    }
+
+    [Fact]
+    public void PropLevel_Valid_Levels_Differ_From_Invalid_Gray()
+    {
+        // 有效词条(level2/3)必须与无效词条(level0/1)的灰色明显不同
+        var c = new PropLevelBrushConverter();
+        var invalidGray = Assert.IsType<SolidColorBrush>(c.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var lv2 = Assert.IsType<SolidColorBrush>(c.Convert(2, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var lv3 = Assert.IsType<SolidColorBrush>(c.Convert(3, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        Assert.NotEqual(invalidGray, lv2);
+        Assert.NotEqual(invalidGray, lv3);
+        Assert.NotEqual(lv2, lv3);
+    }
+
+    [Fact]
+    public void PropText_1_Is_Gray_Like_Invalid()
+    {
+        var c = new PropTextBrushConverter();
+        var lv1 = Assert.IsType<SolidColorBrush>(c.Convert(1, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var lv0 = Assert.IsType<SolidColorBrush>(c.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        Assert.Equal(lv0, lv1);
+    }
+
+    [Fact]
+    public void PropText_Matches_PropLevel_Bar_For_Valid_Levels()
+    {
+        // 有效词条(level2/3)装饰条与同档文字必须完全同色,避免"条一个色、字另一个色"
+        var bars = new PropLevelBrushConverter();
+        var texts = new PropTextBrushConverter();
+        foreach (var level in new[] { 2, 3 })
+        {
+            var bar = Assert.IsType<SolidColorBrush>(bars.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture));
+            var text = Assert.IsType<SolidColorBrush>(texts.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture));
+            Assert.Equal(bar.Color, text.Color);
+        }
+    }
+
+    [Fact]
+    public void PropText_And_Bar_Are_Both_Gray_For_Invalid_Levels()
+    {
+        // 无效词条(level0/1):装饰条与文字各自取灰(明度略有差异以便文字可读),
+        // 但都必须是「灰」——即三通道相近、且明显区别于有效词条的青/金。
+        var bars = new PropLevelBrushConverter();
+        var texts = new PropTextBrushConverter();
+        foreach (var level in new[] { 0, 1 })
+        {
+            var bar = Assert.IsType<SolidColorBrush>(bars.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+            var text = Assert.IsType<SolidColorBrush>(texts.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+            foreach (var c in new[] { bar, text })
+            {
+                Assert.True(Math.Max(Math.Max(c.R, c.G), c.B) - Math.Min(Math.Min(c.R, c.G), c.B) <= 8,
+                    $"invalid level {level} should be neutral gray, got {c}");
+            }
+        }
+        // 同档位下条与字一致(level1 走同一个兜底分支)
+        var b1 = Assert.IsType<SolidColorBrush>(bars.Convert(1, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var b0 = Assert.IsType<SolidColorBrush>(bars.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var t1 = Assert.IsType<SolidColorBrush>(texts.Convert(1, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var t0 = Assert.IsType<SolidColorBrush>(texts.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        Assert.Equal(b0, b1);
+        Assert.Equal(t0, t1);
+    }
 }

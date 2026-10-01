@@ -111,6 +111,23 @@ public static class TowerSeasonParser
     }
 
     /// <summary>
+    /// 赛季周期(天)。深塔/海墟在 2025-02-03 由 14 天制改为 28 天制
+    /// (对齐 WutheringWavesTool SeasonService.getSeasonCycleDays / TowerViewModel.initHistory 的 cutoffDate)。
+    /// </summary>
+    public static int SeasonCycleDays(DateTime endLocalDate)
+        => endLocalDate.Date < SeasonCutoffDate ? 14 : 28;
+
+    /// <summary>赛季制度变更截止日(该日之后为 28 天周期)。</summary>
+    private static readonly DateTime SeasonCutoffDate = new(2025, 2, 3);
+
+    /// <summary>
+    /// 由「赛季结束时刻」推算该期**起始日期**(= 结束日 - 周期天数)。
+    /// 用于往期历史条目展示「起 → 止」时间区间,而不是只给一个孤立的截止日。
+    /// </summary>
+    public static DateTime SeasonStartDate(DateTime endDate)
+        => endDate.AddDays(-SeasonCycleDays(endDate));
+
+    /// <summary>
     /// 接口返回的这一期是否**已经结束**(剩余毫秒 ≤ 0)。
     /// 账号还没打新一期时,库街区会把上一期的数据连同一个早已过去的 seasonEndTime 一起返回(code 200),
     /// 页面若不区分就会"分数照旧、倒计时消失",看起来像"数据没刷新";VM 据此提示"本期已结束"。

@@ -71,19 +71,29 @@
                                   DisplayMemberBinding="{Binding DifficultyName}" />
                     </Grid>
 
-                    <ScrollViewer Grid.Row="1" IsVisible="{Binding TowerUnlocked}">
+                    <ScrollViewer Grid.Row="1" IsVisible="{Binding TowerUnlocked}"
+                                  HorizontalScrollBarVisibility="Disabled">
                         <ItemsControl ItemsSource="{Binding TowerAreas}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <!-- ItemSpacing 只管同一行内的水平间距,换行后的**行间距**由 LineSpacing 决定
-                                         (默认 0 → 上下两排卡片会贴在一起,故与 ItemSpacing 取同值) -->
-                                    <WrapPanel ItemSpacing="14" LineSpacing="14" />
+                                    <!-- 区域卡片固定 2 列(用户口径:「深塔应该是2列显示」)。
+                                         原先用 WrapPanel + 固定 Width=512:两张卡需要 512+14+512=1038px
+                                         才排得下,窗口稍窄就整排换成 1 列,看起来像"单列列表"。
+                                         改用 UniformGrid 每格自动占一半可用宽,窄窗口也稳定 2 列。 -->
+                                    <UniformGrid Columns="2" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
+                            <ItemsControl.Styles>
+                                <!-- 卡片间距(UniformGrid 各格紧贴,需要自己留出间隙)。
+                                     只命中直接子级,避免影响卡片内部楼层/角色列表的 ContentPresenter。 -->
+                                <Style Selector="ItemsControl > ContentPresenter">
+                                    <Setter Property="Margin" Value="0,0,14,14" />
+                                </Style>
+                            </ItemsControl.Styles>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:TowerAreaItem">
                                     <Border CornerRadius="12" Background="{DynamicResource SemiColorBg3}"
-                                            Padding="18,16" Width="512">
+                                            Padding="18,16">
                                         <StackPanel Spacing="12">
                                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                                                 <TextBlock Text="{Binding AreaName}" FontSize="18" FontWeight="Bold"
@@ -202,11 +212,28 @@
                                      Background="Transparent" BorderThickness="0" Padding="0">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate x:DataType="vm:NewTowerHistoryItem">
-                                        <TextBlock Text="{Binding Label}" FontSize="13.5" Margin="2,6"
-                                                   VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource SemiColorText2}" />
+                                        <!-- 时间节点 + 区间:参考实现每条历史带一个圆点节点(选中时点亮)
+                                             与「起始日 → 结束日」两行;仅给一个孤立截止日看不出覆盖哪段时间。 -->
+                                        <StackPanel Orientation="Horizontal" Spacing="9" Margin="2,7" >
+                                            <Ellipse Width="9" Height="9" VerticalAlignment="Center"
+                                                     Stroke="{DynamicResource SemiColorText3}" StrokeThickness="1.2"
+                                                     Fill="Transparent" />
+                                            <StackPanel Spacing="1">
+                                                <TextBlock Text="{Binding PeriodText}" FontSize="13" FontWeight="Bold"
+                                                           Foreground="{DynamicResource SemiColorText1}" />
+                                                <TextBlock Text="{Binding Label}" FontSize="11.5"
+                                                           Foreground="{DynamicResource SemiColorText3}" />
+                                            </StackPanel>
+                                        </StackPanel>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
+                                <ListBox.Styles>
+                                    <!-- 选中态:节点填充(对齐参考实现 .list-cell:selected .history-marker) -->
+                                    <Style Selector="ListBoxItem:selected Ellipse">
+                                        <Setter Property="Fill" Value="{DynamicResource SemiColorPrimary}" />
+                                        <Setter Property="Stroke" Value="{DynamicResource SemiColorPrimary}" />
+                                    </Style>
+                                </ListBox.Styles>
                             </ListBox>
                             <TextBlock Grid.Row="5" Text="{loc:Localize Key=Tower.NoHistory}" FontSize="12.5" Margin="2,10,0,0"
                                        Foreground="{DynamicResource SemiColorText3}"
@@ -310,18 +337,25 @@
                                                                                            FontSize="12" FontWeight="Bold"
                                                                                            VerticalAlignment="Center"
                                                                                            Foreground="{DynamicResource SemiColorText2}" />
-                                                                                <StackPanel Grid.Column="1" Spacing="1"
+                                                                                <!-- 分数与「分数」小字同排:两行竖排时大号数值只占块的上半,
+                                                                                     视觉中心会比头像高约 5px(用户反馈「分数数据和头像需要上下对齐」)。
+                                                                                     改为单行(数值 + 小字标注)后整行中心即与头像中心重合。 -->
+                                                                                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                                                            Spacing="3"
                                                                                             VerticalAlignment="Center">
                                                                                     <TextBlock Text="{Binding ScoreText}"
                                                                                                FontSize="15" FontWeight="Bold"
+                                                                                               VerticalAlignment="Center"
                                                                                                Foreground="{DynamicResource SemiColorPrimary}" />
                                                                                     <TextBlock Text="{loc:Localize Key=Tower.Score}"
                                                                                                FontSize="10"
+                                                                                               VerticalAlignment="Center"
                                                                                                Foreground="{DynamicResource SemiColorText3}" />
                                                                                 </StackPanel>
-                                                                                <!-- 该队角色 -->
+                                                                                <!-- 该队角色:与分数块同高居中 -->
                                                                                 <ItemsControl Grid.Column="2"
                                                                                               ItemsSource="{Binding Roles}"
+                                                                                              Height="34"
                                                                                               VerticalAlignment="Center">
                                                                                     <ItemsControl.ItemsPanel>
                                                                                         <ItemsPanelTemplate>

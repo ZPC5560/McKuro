@@ -52,4 +52,32 @@ public class NewTowerHistoryTests
         var normalized = DateTimeOffset.FromUnixTimeMilliseconds(TowerService.NormalizeToHour4(local)).LocalDateTime;
         Assert.Equal(new DateTime(2026, 8, 25, 4, 0, 0, DateTimeKind.Local), normalized);
     }
+
+    [Fact]
+    public void SeasonCycleDays_Is_28_After_Cutoff()
+    {
+        // 2025-02-03 起深塔/海墟改为 28 天周期(对齐 WutheringWavesTool SeasonService)
+        Assert.Equal(28, TowerSeasonParser.SeasonCycleDays(new DateTime(2026, 9, 30)));
+        Assert.Equal(28, TowerSeasonParser.SeasonCycleDays(new DateTime(2025, 2, 3)));
+    }
+
+    [Fact]
+    public void SeasonCycleDays_Is_14_Before_Cutoff()
+    {
+        Assert.Equal(14, TowerSeasonParser.SeasonCycleDays(new DateTime(2025, 2, 2)));
+        Assert.Equal(14, TowerSeasonParser.SeasonCycleDays(new DateTime(2024, 12, 1)));
+    }
+
+    [Fact]
+    public void SeasonStartDate_Subtracts_One_Cycle()
+    {
+        // 往期历史条目的时间区间:起始日 = 结束日 - 周期。实机结束日 2026-09-30 → 起始 2026-09-02。
+        Assert.Equal(new DateTime(2026, 9, 2), TowerSeasonParser.SeasonStartDate(new DateTime(2026, 9, 30)));
+    }
+
+    [Fact]
+    public void SeasonStartDate_Uses_14_Day_Cycle_Before_Cutoff()
+    {
+        Assert.Equal(new DateTime(2025, 1, 19), TowerSeasonParser.SeasonStartDate(new DateTime(2025, 2, 2)));
+    }
 }

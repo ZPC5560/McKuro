@@ -91,6 +91,12 @@ public sealed class NewTowerHistoryItem
     public required long EndTimeMillis { get; init; }
     /// <summary>列表文案,如 "2026.08.01 前的记录"。</summary>
     public required string Label { get; init; }
+    /// <summary>该期起始日期(按赛季周期由结束日倒推),如 "2026.09.02"。</summary>
+    public required string StartDateText { get; init; }
+    /// <summary>该期结束日期,如 "2026.09.30"。</summary>
+    public required string EndDateText { get; init; }
+    /// <summary>时间区间文案,如 "2026.09.02 → 2026.09.30"。</summary>
+    public string PeriodText => $"{StartDateText} → {EndDateText}";
 }
 
 /// <summary>海墟-单个队伍(半分)展示项。</summary>
@@ -480,13 +486,29 @@ public sealed partial class TowerViewModel : ViewModelBase
             // 往期历史(本地库,按赛季结束时间降序;对齐 WutheringWavesTool initHistory)
             if (!string.IsNullOrEmpty(roleId))
             {
+                // 必须记录本次 roleId:LoadNewTowerHistoryDetailAsync 用它读历史详情。
+                // 此前该字段从未赋值(恒为空串)→ 读库必然查不到行 → 点「往期历史」右栏
+                // 永远停在"当前版本等待开放中",表现为"上期记录没有显示"。
+                _newTowerRoleId = roleId;
                 foreach (var end in AppServices.Database.GetNewTowerHistoryEndTimes(roleId))
                 {
+                    var endLocal = DateTimeOffset.FromUnixTimeMilliseconds(end).LocalDateTime;
+                    // 只显示一个孤立截止日时看不出"这一期覆盖哪段时间";按赛季周期倒推起始日,
+                    // 与参考实现(起止日期两行 + 时间节点)一致。
+                    var startLocal = TowerSeasonParser.SeasonStartDate(endLocal);
                     NewTowerHistory.Add(new NewTowerHistoryItem
                     {
                         EndTimeMillis = end,
-                        Label = LanguageService.Format("Tower.RecordBefore", DateTimeOffset.FromUnixTimeMilliseconds(end).LocalDateTime.ToString("yyyy.MM.dd")),
+                        Label = LanguageService.Format("Tower.RecordBefore", endLocal.ToString("yyyy.MM.dd")),
+                        StartDateText = startLocal.ToString("yyyy.MM.dd"),
+                        EndDateText = endLocal.ToString("yyyy.MM.dd"),
                     });
+                }
+                // 本期无成绩但有往期记录时,默认展开最近一期:否则右栏一直显示空态,
+                // 用户会以为"往期历史是坏的"。本期有成绩时不抢占,保持"本期优先"。
+                if (TowerModes.Count == 0 && NewTowerHistory.Count > 0)
+                {
+                    SelectedNewTowerHistory = NewTowerHistory[0];
                 }
             }
 

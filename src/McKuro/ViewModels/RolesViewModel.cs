@@ -733,7 +733,20 @@ public sealed class StarThumbBrushConverter : Avalonia.Data.Converters.IValueCon
         => throw new NotSupportedException();
 }
 
-/// <summary>有效词条装饰条色(参照 WutheringWavesTool thumb:level3=黄 / 2,1=青 / 0=深灰;主题自适应)。</summary>
+/// <summary>
+/// 词条装饰条色:有效词条按权重分两档着色,<b>无效词条一律灰色</b>。
+/// <para>
+/// 档位含义(通用权重表,见 <see cref="McKuro.Core.Services.Roles.EchoRatingService"/>):
+/// level3 = 暴击/暴击伤害/攻击% 等核心词条(金);
+/// level2 = 攻击/生命%/共鸣效率/各类伤害加成 等有效词条(青);
+/// level1 = 防御/生命/防御% 等低价值词条 → <b>灰(无效)</b>;
+/// level0 = 未收录词条 → 灰(无效)。
+/// </para>
+/// <para>
+/// 回归:level1 曾与 level2 同色(#007a85),使「防御/生命」这类无效词条的装饰条
+/// 看起来和「攻击/伤害加成」一样有效(用户反馈「有效词条颜色和无效的一样」)。
+/// </para>
+/// </summary>
 public sealed class PropLevelBrushConverter : Avalonia.Data.Converters.IValueConverter
 {
     public static readonly PropLevelBrushConverter Instance = new();
@@ -745,7 +758,7 @@ public sealed class PropLevelBrushConverter : Avalonia.Data.Converters.IValueCon
         {
             3 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#ffec16" : "#a88400")),
             2 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#00dde8" : "#007a85")),
-            1 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#00dde8" : "#007a85")),
+            // level1(低价值)与 level0(未收录)同属无效词条 → 灰色
             _ => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#7a7a7a" : "#9e9e9e")),
         };
     }
@@ -754,7 +767,10 @@ public sealed class PropLevelBrushConverter : Avalonia.Data.Converters.IValueCon
         => throw new NotSupportedException();
 }
 
-/// <summary>有效词条文字色(level&gt;=1 高亮;无效词条灰色;主题自适应)。</summary>
+/// <summary>
+/// 词条文字色:与 <see cref="PropLevelBrushConverter"/> 同档
+/// (level3 金 / level2 青 / level1、level0 灰 —— 无效词条文字也必须是灰的,否则仍显「有效」)。
+/// </summary>
 public sealed class PropTextBrushConverter : Avalonia.Data.Converters.IValueConverter
 {
     public static readonly PropTextBrushConverter Instance = new();
@@ -762,9 +778,12 @@ public sealed class PropTextBrushConverter : Avalonia.Data.Converters.IValueConv
     public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
     {
         bool dark = ThemeHelper.IsDarkTheme();
-        return value is int l and > 0
-            ? new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#ffec16" : "#a88400"))
-            : new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#9a9a9a" : "#8a8a8a"));
+        return value switch
+        {
+            3 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#ffec16" : "#a88400")),
+            2 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#00dde8" : "#007a85")),
+            _ => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#9a9a9a" : "#8a8a8a")),
+        };
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
