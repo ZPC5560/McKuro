@@ -17,6 +17,8 @@
 <link rel="preload" href="fonts/noto-serif-sc-600.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="site.css">
+<!-- resolved by the loader modules in vendor/, so they can import "three" by name -->
+<script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
 <script>document.documentElement.classList.add("js")</script>
 </head>
 <body>
@@ -664,7 +666,7 @@
     </nav>
     <div class="foot__credits">
       <p>设计与实现参考了这些开源项目：<a href="https://github.com/HaiyuGame/Haiyu" target="_blank" rel="noopener">Haiyu</a>、<a href="https://github.com/leck995/WutheringWavesTool" target="_blank" rel="noopener">WutheringWavesTool</a>、<a href="https://github.com/Mozi216/Sparkle.Live2DView" target="_blank" rel="noopener">Sparkle.Live2DView</a>、<a href="https://github.com/Coloryr/Live2DCSharpSDK" target="_blank" rel="noopener">Live2DCSharpSDK</a>。首屏 3D 场景使用 <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a>（MIT）。</p>
-      <p class="foot__legal">McKuro 是非官方工具，与库洛游戏没有隶属或背书关系。应用图标使用守岸人官方图标（萌娘共享 CC-BY-NC-SA）。页面中的界面均为网页重绘，数据为示例。本仓库未声明开源许可证。</p>
+      <p class="foot__legal">McKuro 是非官方工具，与库洛游戏没有隶属或背书关系。应用图标使用守岸人官方图标（萌娘共享 CC-BY-NC-SA）；首屏 3D 模型取自游戏内资源（心月狐），仅用于展示，版权归库洛游戏所有。页面中的界面均为网页重绘，数据为示例。本仓库未声明开源许可证。</p>
     </div>
   </div>
 </footer>

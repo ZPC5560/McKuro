@@ -121,17 +121,39 @@ def main():
     if missing:
         raise SystemExit("missing font sources (output left untouched):\n  " + "\n  ".join(missing))
 
-    vendored = os.path.join(HERE, "vendor", "three.module.min.js")
-    if not os.path.isfile(vendored):
-        raise SystemExit(f"missing {vendored}")
+    vendored = os.path.join(HERE, "vendor")
+    required = [
+        "three.module.min.js",
+        os.path.join("jsm", "loaders", "GLTFLoader.js"),
+        os.path.join("jsm", "utils", "BufferGeometryUtils.js"),
+    ]
+    missing_vendor = [os.path.join(vendored, r) for r in required
+                      if not os.path.isfile(os.path.join(vendored, r))]
+    if missing_vendor:
+        raise SystemExit("missing vendored libs:\n  " + "\n  ".join(missing_vendor))
+
+    model_src = os.path.join(HERE, "models", "xin-yuehu.glb")
+    if not os.path.isfile(model_src):
+        raise SystemExit(f"missing {model_src}")
 
     # ---- write page + scripts ----
     write(os.path.join(OUT, "index.html"), html)
     write(os.path.join(OUT, "site.css"), css)
     for n in js_names:
         shutil.copy2(os.path.join(HERE, "js", n), os.path.join(OUT, n))
-    os.makedirs(os.path.join(OUT, "vendor"), exist_ok=True)
-    shutil.copy2(vendored, os.path.join(OUT, "vendor", "three.module.min.js"))
+
+    # vendor/ keeps the loaders' own folder layout: GLTFLoader imports
+    # '../utils/BufferGeometryUtils.js' relative to itself, so flattening breaks it.
+    vd = os.path.join(OUT, "vendor")
+    if os.path.isdir(vd):
+        shutil.rmtree(vd)
+    for r in required:
+        dst = os.path.join(vd, r)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(os.path.join(vendored, r), dst)
+
+    os.makedirs(os.path.join(OUT, "models"), exist_ok=True)
+    shutil.copy2(model_src, os.path.join(OUT, "models", "xin-yuehu.glb"))
 
     # ---- fonts: sans covers the whole page, serif only the headings ----
     SAFE = set("0123456789%·—–、。，：；！？（）《》「」“”‘’…+/-=#@&*[]{}<>|\\~^$ "

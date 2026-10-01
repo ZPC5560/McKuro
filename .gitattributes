@@ -5,15 +5,28 @@
 *.yml text eol=lf
 
 # 官网:build.py 以 LF 写出,CI 会重新构建并比对 git diff,
-# 若被 autocrlf 转成 CRLF 会导致比对永远不通过
+# 若被 autocrlf 转成 CRLF 会导致比对永远不通过。
+# 只列出真正的文本文件,不要用 `website-src/**` 这种通配:
+# 它会把 .glb 也当成文本,转换换行会直接损坏模型。
 website/index.html text eol=lf
-website/fonts.css text eol=lf
-website/**/*.js  text eol=lf
-website/**/*.css text eol=lf
-website-src/**   text eol=lf
+website/fonts.css  text eol=lf
+website/**/*.js    text eol=lf
+website/**/*.css   text eol=lf
+website-src/*.py   text eol=lf
+website-src/**/*.html text eol=lf
+website-src/**/*.css  text eol=lf
+website-src/**/*.js   text eol=lf
 
-# 字体与三方库按二进制处理,不做换行转换
+# 二进制:一律不做换行转换
+*.glb   binary
 *.woff2 binary
 *.webp  binary
 *.ico   binary
+*.png   binary
+*.fbx   binary
+*.uemodel binary
 website/vendor/** binary
+website/models/** binary
+website-src/vendor/** binary
+website-src/models/** binary
+website-src/font-src/** binary

@@ -1,8 +1,11 @@
-/* Hero 3D: a tide of points with a faceted "resonance core" floating above it.
-   three.js is self-hosted (vendor/three.module.min.js, MIT). The canvas fades in only
-   after the first frame renders; if WebGL is missing the CSS gradient stays. Rendering
-   pauses when the hero is off screen or the tab is hidden; reduced motion gets one still frame. */
+/* Hero 3D: a tide of points with the 心月狐 figure standing over it.
+   three.js and GLTFLoader are self-hosted (vendor/, MIT). The canvas fades in only
+   after the first frame renders; the model loads separately, so a slow or missing
+   asset still leaves a working hero. If WebGL is missing the CSS gradient stays.
+   Rendering pauses when the hero is off screen or the tab is hidden; reduced motion
+   gets a single still frame. */
 import * as THREE from "./vendor/three.module.min.js";
+import { GLTFLoader } from "./vendor/jsm/loaders/GLTFLoader.js";
 
 const canvas = document.getElementById("hero-gl");
 const hero = canvas && canvas.closest(".hero");
@@ -77,33 +80,47 @@ if (canvas && hero && supportsGL()) {
   });
   scene.add(new THREE.Points(tideGeo, tideMat));
 
-  /* ---- resonance core: faceted crystal + two thin orbit rings ----
-     The hero copy is centred and fills the middle of the viewport, so the core is
-     parked to one side where there is guaranteed empty space. Its x is derived from
-     the aspect ratio in resize() to hold a constant screen fraction, because a fixed
-     world x would drift into the text on narrow viewports. */
-  const core = new THREE.Group();
-  const CORE_Y = -0.55;
-  core.position.set(0, CORE_Y, 0);
-  const crystal = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.62, 0),
-    new THREE.MeshStandardMaterial({ color: 0xe6eefc, metalness: 0.12, roughness: 0.26, flatShading: true, transparent: true, opacity: 0.78 })
-  );
-  const edges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(crystal.geometry),
-    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
-  );
-  crystal.add(edges);
-  core.add(crystal);
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0x5a8dee, transparent: true, opacity: 0.28 });
-  const ringA = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.009, 8, 160), ringMat);
-  const ringB = new THREE.Mesh(new THREE.TorusGeometry(1.3, 0.006, 8, 160), ringMat.clone());
-  ringB.material.opacity = 0.17;
-  ringA.rotation.x = Math.PI * 0.44;
-  ringB.rotation.x = Math.PI * 0.58;
-  ringB.rotation.y = 0.35;
-  core.add(ringA, ringB);
-  scene.add(core);
+  /* ---- 心月狐 model ----
+     Loaded lazily, after the tide is already on screen, so the 2.8 MB asset never
+     delays first paint. Normalised to height 1 here; resize() then scales it in
+     proportion to the viewport, which keeps its on-screen size stable. */
+  const figure = new THREE.Group();
+  figure.visible = false;
+  scene.add(figure);
+
+  let figureReady = false;
+  let figBaseY = 0;
+
+  new GLTFLoader().load("./models/xin-yuehu.glb", (gltf) => {
+    const src = gltf.scene;
+    src.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(src);
+    const size = box.getSize(new THREE.Vector3());
+    const h = size.y || 1;
+    src.scale.setScalar(1 / h);
+    src.updateWorldMatrix(true, true);
+    // origin at the feet, centred on x/z, so placement maths is simple
+    const b2 = new THREE.Box3().setFromObject(src);
+    src.position.set(-(b2.min.x + b2.max.x) / 2, -b2.min.y, -(b2.min.z + b2.max.z) / 2);
+
+    // three's default lighting leaves it flat; a touch of environment response helps
+    src.traverse((n) => {
+      if (!n.isMesh) return;
+      (Array.isArray(n.material) ? n.material : [n.material]).forEach((m) => {
+        m.envMapIntensity = 1.0;
+        if (m.map) { m.map.colorSpace = THREE.SRGBColorSpace; }
+        m.needsUpdate = true;
+      });
+    });
+
+    figure.add(src);
+    figure.visible = true;
+    figureReady = true;
+    resize();
+    // Under reduced motion only the single setup frame was drawn, which happened
+    // before the model arrived; draw once more so the figure actually appears.
+    if (reduce) { frame(); }
+  }, undefined, () => { /* keep the tide-only hero if the model cannot load */ });
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x9fb6dd, 1.6));
   const key = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -113,24 +130,28 @@ if (canvas && hero && supportsGL()) {
   rim.position.set(-4, -1, -3);
   scene.add(rim);
 
-  /* ---- layout: keep the core in the empty margin beside the centred copy ---- */
+  /* ---- layout: stand the figure in the free margin beside the centred copy ---- */
   function resize() {
     const w = hero.clientWidth, h = hero.clientHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    // Below ~820px the copy occupies the full width, so there is no free margin to
-    // put the core in; showing it anywhere would overlap the text.
-    const wide = w >= 820;
-    core.visible = wide;
+    if (!figureReady) { return; }
+    // The copy is centred and its widest line is a fixed pixel width, so the free
+    // margin shrinks in world units as the viewport narrows. Below this width the
+    // figure would sit behind the headline, so it is hidden instead.
+    const wide = w >= 1280;
+    figure.visible = wide;
     if (!wide) { return; }
-    // Hold the core at ~34% of the half-width beyond the text column, and scale it
-    // with the viewport so it never grows into the headline on small screens.
     const visH = 2 * Math.tan((camera.fov * Math.PI) / 360) * camera.position.z;
     const visW = visH * camera.aspect;
-    core.position.x = visW * 0.31;
-    core.position.y = CORE_Y;
-    core.scale.setScalar(Math.min(Math.max(visW / 22, 0.6), 1.15));
+    // Measured: at this size the figure spans ~0.83 of NDC width and its flowing
+    // cloth bleeds a little past the right edge, which reads as intentional framing.
+    // Sizing it to fit entirely would need ~0.32 and makes her noticeably smaller.
+    const fh = visW * 0.40;
+    figure.scale.setScalar(fh);
+    figBaseY = -fh * 0.5 + visH * 0.03;
+    figure.position.set(visW * 0.345, figBaseY, 0);
   }
   resize();
   window.addEventListener("resize", resize);
@@ -153,12 +174,12 @@ if (canvas && hero && supportsGL()) {
     tideMat.uniforms.uTime.value = t;
     tilt.x += (target.x - tilt.x) * 0.05;
     tilt.y += (target.y - tilt.y) * 0.05;
-    crystal.rotation.y = t * 0.25 + tilt.x * 0.5;
-    crystal.rotation.x = 0.35 + tilt.y * 0.3;
-    core.position.y = CORE_Y + Math.sin(t * 0.9) * 0.06;
-    ringA.rotation.z = t * 0.18;
-    ringB.rotation.z = -t * 0.12;
-    camera.position.x = tilt.x * 0.45;
+    if (figureReady) {
+      // shallow turntable: enough to read as 3D, never a distracting spin
+      figure.rotation.y = Math.sin(t * 0.28) * 0.24 + tilt.x * 0.09;
+      figure.position.y = figBaseY + Math.sin(t * 0.7) * 0.04;
+    }
+    camera.position.x = tilt.x * 0.4;
     camera.lookAt(0, 0.1, 0);
     renderer.render(scene, camera);
   }

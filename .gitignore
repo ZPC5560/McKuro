@@ -40,3 +40,9 @@ artifacts/
 
 # 本地接口探测脚本(含实时库街区凭据,严禁入库)
 scripts/
+
+# 官网原始模型素材(FBX + 全套贴图,约 53MB)。
+# 只在本机用于生成 website/models/xin-yuehu.glb,不入库也不发布。
+website-src/source-model/
+# 转换过程的中间产物
+website-src/font-src/*.tmp
