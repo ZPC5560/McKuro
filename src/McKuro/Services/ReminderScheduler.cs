@@ -90,6 +90,12 @@ public sealed class ReminderScheduler : IDisposable
     private async Task RunDueChecksAsync(CancellationToken ct)
     {
         var now = DateTime.Now;
+        // 总开关关闭:连轮询都不做(省掉这条链路的网络请求与读数盘开销)。
+        // 类别开关仍照旧参与判定:总开关重新打开后各类别按自身状态原样恢复。
+        if (!AppServices.Settings.Current.NotifEnabled)
+        {
+            return;
+        }
         var settings = AppServices.Settings.Current;
         // 各项检查彼此独立:并发执行,避免某一项(如签到状态要等自动签到结束)拖慢其它提醒
         var due = new List<Task>(4);

@@ -57,6 +57,10 @@
                     <SolidColorBrush x:Key="SemiColorText3" Color="#66FFFFFF" />
                     <SolidColorBrush x:Key="SemiColorPrimary" Color="#5A8DEE" />
                     <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#78A2F1" />
+                    <!-- 数值输入框面(深色主题):比卡片面更暗 + 可见描边,与卡片拉开层级 -->
+                    <SolidColorBrush x:Key="McKuroInputFill" Color="#CC0B1223" />
+                    <SolidColorBrush x:Key="McKuroInputStroke" Color="#4DFFFFFF" />
+                    <SolidColorBrush x:Key="McKuroInputStrokeHover" Color="#80CDE0FA" />
                     <!-- 判定徽章语义色(UP/歪/保底规则):tint 胶囊底 + 文字色,暗色提亮文字保证可读 -->
                     <SolidColorBrush x:Key="McKuroSuccess" Color="#73D13D" />
                     <SolidColorBrush x:Key="McKuroSuccessTint" Color="#1A52C41A" />
@@ -101,6 +105,11 @@
                     <SolidColorBrush x:Key="SemiColorText3" Color="#66000000" />
                     <SolidColorBrush x:Key="SemiColorPrimary" Color="#5A8DEE" />
                     <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#4F7CD1" />
+                    <!-- 数值输入框面(亮色主题):设置页卡片接近纯白,填纯白会"看不见框",
+                         故用淡灰底 + 清晰描边,读数与可编辑性都一目了然 -->
+                    <SolidColorBrush x:Key="McKuroInputFill" Color="#FFF2F5F9" />
+                    <SolidColorBrush x:Key="McKuroInputStroke" Color="#FFD8DFEA" />
+                    <SolidColorBrush x:Key="McKuroInputStrokeHover" Color="#FFA9B6CC" />
                     <!-- 判定徽章语义色(亮色主题:文字用深色调保证白底可读) -->
                     <SolidColorBrush x:Key="McKuroSuccess" Color="#389E0D" />
                     <SolidColorBrush x:Key="McKuroSuccessTint" Color="#1A52C41A" />

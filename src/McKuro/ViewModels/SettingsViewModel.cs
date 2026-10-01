@@ -85,6 +85,33 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Save();
     }
 
+    /// <summary>
+    /// 资源等级选项(极致 / 高清 / 流畅,对应官方启动器「选择资源等级」)。
+    /// 顺序必须与 <see cref="ResourceLevelIndex"/> 的索引语义一致。
+    /// </summary>
+    public ObservableCollection<string> ResourceLevels { get; } =
+    [
+        LanguageService.Format("Launch.ResourceLevel.Ultra"),
+        LanguageService.Format("Launch.ResourceLevel.High"),
+        LanguageService.Format("Launch.ResourceLevel.Smooth"),
+    ];
+
+    /// <summary>资源等级:0=极致(uhd),1=高清(hd,官方默认),2=流畅(sd)。</summary>
+    [ObservableProperty]
+    private int _resourceLevelIndex = 1;
+
+    /// <summary>资源等级即时保存(改动即生效,无需点保存)。</summary>
+    partial void OnResourceLevelIndexChanged(int value)
+    {
+        AppServices.Settings.Current.ResourceLevel = value switch
+        {
+            0 => "uhd",
+            2 => "sd",
+            _ => "hd",
+        };
+        AppServices.Settings.Save();
+    }
+
     [ObservableProperty]
     private string _startGameExeName = "";
 
@@ -590,6 +617,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     // ---- 消息通知(悬浮提醒类别开关;触发时除设置页外全局弹出) ----
 
+    /// <summary>通知总开关(二级菜单的父开关:关闭后不弹任何提醒,下面五类开关状态原样保留)。</summary>
+    [ObservableProperty]
+    private bool _notifEnabled = true;
+
+    partial void OnNotifEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.NotifEnabled = value;
+        AppServices.Settings.Save();
+    }
+
     [ObservableProperty]
     private bool _notifSignEnabled;
 
@@ -767,6 +804,199 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private int _selectedServerIndex;
 
+    // ---------- 设置页导航(顶部横向一级分类 + 左侧竖排二级子标签) ----------
+
+    /// <summary>顶部横向一级分类菜单。</summary>
+    public ObservableCollection<SettingsCategoryItem> Categories { get; } = [];
+
+    [ObservableProperty]
+    private SettingsCategoryItem? _selectedCategory;
+
+    /// <summary>当前分类的二级子标签(同步给左侧竖排子导航)。</summary>
+    public ObservableCollection<SettingsSubTabItem> CurrentSubTabs { get; } = [];
+
+    /// <summary>当前二级子标签(单子标签容器时即该容器本身)。</summary>
+    public SettingsSubTabItem? SelectedSubTab => SelectedCategory?.SelectedSubTab;
+
+    /// <summary>是否显示左侧二级子导航:当前分类确有多于一个子标签时才占一列。</summary>
+    public bool ShowSubNav => SelectedCategory?.HasSubNav == true;
+
+    /// <summary>一级分类切换(顶部横向菜单;命令参数为分类对象,便于按钮直接回传自身)。</summary>
+    [RelayCommand]
+    private void SelectCategory(SettingsCategoryItem? category)
+    {
+        if (category is null)
+        {
+            return;
+        }
+        SelectedCategory = category;
+    }
+
+    /// <summary>一级分类切换(顶部横向菜单):把该分类的子标签同步到左列。</summary>
+    partial void OnSelectedCategoryChanged(SettingsCategoryItem? value)
+    {
+        foreach (var c in Categories)
+        {
+            c.IsSelected = ReferenceEquals(c, value);
+        }
+        SyncSubTabs();
+    }
+
+    /// <summary>
+    /// 二级子标签切换(左侧竖排子导航;命令参数为子标签 Key)。
+    /// 用命令而非 SelectedItem 双向绑定:分类切换会整体替换子标签集合,
+    /// 绑定会在重绑定瞬间把 null 回写,导致左列丢失高亮(与主导航 NavigationItem 同款做法)。
+    /// </summary>
+    [RelayCommand]
+    private void SelectSubTab(string? key)
+    {
+        if (SelectedCategory is not { } category || string.IsNullOrEmpty(key))
+        {
+            return;
+        }
+        var tab = category.SubTabs.FirstOrDefault(t => t.Key == key);
+        if (tab is null)
+        {
+            return;
+        }
+        category.SelectedSubTab = tab;
+        foreach (var t in category.SubTabs)
+        {
+            t.IsSelected = ReferenceEquals(t, tab);
+        }
+        NotifyPanelChanged();
+    }
+
+    /// <summary>
+    /// 内容面板可见性判定(一级 Key + 可选二级 Key)。UI 与测试共用这一套规则,
+    /// 避免面板 Key 改动后 XAML 里的旧字面量导致内容永久空白。
+    /// </summary>
+    public bool IsCategoryPanelActive(string categoryKey, string? subKey = null)
+    {
+        if (SelectedCategory?.Key != categoryKey)
+        {
+            return false;
+        }
+        return subKey is null || SelectedCategory.ActivePanelKey == subKey;
+    }
+
+    // ---- 各内容面板可见性(全部派生自 IsCategoryPanelActive,单一判定来源) ----
+
+    public bool IsAppearanceInterfaceActive =>
+        IsCategoryPanelActive(SettingsCategoryKeys.Appearance, SettingsCategoryKeys.AppearanceInterface);
+
+    public bool IsAppearanceVideoActive =>
+        IsCategoryPanelActive(SettingsCategoryKeys.Appearance, SettingsCategoryKeys.AppearanceVideo);
+
+    public bool IsLive2DActive =>
+        IsCategoryPanelActive(SettingsCategoryKeys.Live2D, SettingsCategoryKeys.Single);
+
+    public bool IsGameDirActive =>
+        IsCategoryPanelActive(SettingsCategoryKeys.Game, SettingsCategoryKeys.GameDir);
+
+    public bool IsGameLaunchActive =>
+        IsCategoryPanelActive(SettingsCategoryKeys.Game, SettingsCategoryKeys.GameLaunch);
+
+    public bool IsGameRepairActive =>
+        IsCategoryPanelActive(SettingsCategoryKeys.Game, SettingsCategoryKeys.GameRepair);
+
+    public bool IsNotificationsActive =>
+        IsCategoryPanelActive(SettingsCategoryKeys.Notifications, SettingsCategoryKeys.Single);
+
+    public bool IsDownloadActive =>
+        IsCategoryPanelActive(SettingsCategoryKeys.Download, SettingsCategoryKeys.Single);
+
+    public bool IsAboutPlatformActive =>
+        IsCategoryPanelActive(SettingsCategoryKeys.About, SettingsCategoryKeys.AboutPlatform);
+
+    public bool IsAboutUpdateActive =>
+        IsCategoryPanelActive(SettingsCategoryKeys.About, SettingsCategoryKeys.AboutUpdate);
+
+    /// <summary>导航变化时需要重新求值的面板属性(与上面的派生属性一一对应)。</summary>
+    private static readonly string[] PanelPropertyNames =
+    [
+        nameof(IsAppearanceInterfaceActive),
+        nameof(IsAppearanceVideoActive),
+        nameof(IsLive2DActive),
+        nameof(IsGameDirActive),
+        nameof(IsGameLaunchActive),
+        nameof(IsGameRepairActive),
+        nameof(IsNotificationsActive),
+        nameof(IsDownloadActive),
+        nameof(IsAboutPlatformActive),
+        nameof(IsAboutUpdateActive),
+    ];
+
+    /// <summary>把当前分类的子标签同步到左列,并保证有选中项(切回时保留上次的子标签)。</summary>
+    private void SyncSubTabs()
+    {
+        CurrentSubTabs.Clear();
+        if (SelectedCategory is { } category)
+        {
+            foreach (var tab in category.SubTabs)
+            {
+                CurrentSubTabs.Add(tab);
+            }
+            category.SelectedSubTab ??= category.SubTabs.FirstOrDefault();
+            foreach (var t in category.SubTabs)
+            {
+                t.IsSelected = ReferenceEquals(t, category.SelectedSubTab);
+            }
+        }
+        NotifyPanelChanged();
+    }
+
+    /// <summary>导航状态变化后统一刷新 UI 依赖的只读属性(子标签/子导航/十个内容面板)。</summary>
+    private void NotifyPanelChanged()
+    {
+        OnPropertyChanged(nameof(SelectedSubTab));
+        OnPropertyChanged(nameof(ShowSubNav));
+        foreach (var name in PanelPropertyNames)
+        {
+            OnPropertyChanged(name);
+        }
+    }
+
+    /// <summary>
+    /// 构建顶部横向分类与其二级子标签。文案走 LanguageService(语言切换需重启,与全站一致)。
+    /// 「通知」刻意没有子标签:它的二级以「总开关打开后就地展开提醒类别」的形式呈现。
+    /// </summary>
+    private void BuildCategories()
+    {
+        SettingsCategoryItem Category(string key, string titleKey, FluentIcons.Common.Icon icon)
+            => new() { Key = key, Title = LanguageService.Format(titleKey), Icon = icon };
+
+        var appearance = Category(SettingsCategoryKeys.Appearance, "Section.Appearance", FluentIcons.Common.Icon.PaintBrush);
+        appearance.SubTabs.Add(new SettingsSubTabItem { Key = SettingsCategoryKeys.AppearanceInterface, Title = LanguageService.Format("Settings.SubTab.Interface") });
+        appearance.SubTabs.Add(new SettingsSubTabItem { Key = SettingsCategoryKeys.AppearanceVideo, Title = LanguageService.Format("Settings.SubTab.BackgroundVideo") });
+
+        var live2D = Category(SettingsCategoryKeys.Live2D, "Section.Live2D", FluentIcons.Common.Icon.Person);
+        live2D.SubTabs.Add(new SettingsSubTabItem { Key = SettingsCategoryKeys.Single, Title = LanguageService.Format("Section.Live2D") });
+
+        var game = Category(SettingsCategoryKeys.Game, "Section.Game", FluentIcons.Common.Icon.Folder);
+        game.SubTabs.Add(new SettingsSubTabItem { Key = SettingsCategoryKeys.GameDir, Title = LanguageService.Format("Section.GameDir") });
+        game.SubTabs.Add(new SettingsSubTabItem { Key = SettingsCategoryKeys.GameLaunch, Title = LanguageService.Format("Section.Launch") });
+        game.SubTabs.Add(new SettingsSubTabItem { Key = SettingsCategoryKeys.GameRepair, Title = LanguageService.Format("Section.Repair") });
+
+        var notifications = Category(SettingsCategoryKeys.Notifications, "Section.Notifications", FluentIcons.Common.Icon.Alert);
+        notifications.SubTabs.Add(new SettingsSubTabItem { Key = SettingsCategoryKeys.Single, Title = LanguageService.Format("Section.Notifications") });
+
+        var download = Category(SettingsCategoryKeys.Download, "Section.Download", FluentIcons.Common.Icon.ArrowDownload);
+        download.SubTabs.Add(new SettingsSubTabItem { Key = SettingsCategoryKeys.Single, Title = LanguageService.Format("Section.Download") });
+
+        var about = Category(SettingsCategoryKeys.About, "Section.About", FluentIcons.Common.Icon.Info);
+        about.SubTabs.Add(new SettingsSubTabItem { Key = SettingsCategoryKeys.AboutPlatform, Title = LanguageService.Format("Settings.SubTab.Platform") });
+        about.SubTabs.Add(new SettingsSubTabItem { Key = SettingsCategoryKeys.AboutUpdate, Title = LanguageService.Format("Settings.SubTab.Update") });
+
+        Categories.Add(appearance);
+        Categories.Add(live2D);
+        Categories.Add(game);
+        Categories.Add(notifications);
+        Categories.Add(download);
+        Categories.Add(about);
+        SelectedCategory = Categories[0];
+    }
+
     public SettingsViewModel()
     {
         var s = AppServices.Settings.Current;
@@ -777,6 +1007,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _disableDlss = s.DisableDlss;
         _startGameArguments = s.StartGameArguments;
         _startGameExeName = s.StartGameExeName;
+        // 空 = 未设置(旧配置/首次运行):按游戏目录里已装的资源包探测,探测不到则官方默认 hd
+        var effectiveLevel = string.IsNullOrWhiteSpace(s.ResourceLevel)
+            ? LaunchArguments.DetectInstalledResourceLevel(s.GameRootDir) ?? LaunchArguments.DefaultResourceLevel
+            : s.ResourceLevel;
+        _resourceLevelIndex = LaunchArguments.FromValue(effectiveLevel) switch
+        {
+            GameResourceLevel.Ultra => 0,
+            GameResourceLevel.Smooth => 2,
+            _ => 1,
+        };
         _minimizeOnLaunch = s.MinimizeOnLaunch;
         _minimizeLocationIndex = s.MinimizeLocationOnLaunch == "Tray" ? 1 : 0;
         _afterGameExitIndex = s.AfterGameExitAction switch
@@ -800,6 +1040,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         IsLive2DCoreAvailable = Live2DLocator.IsCoreAvailable;
         ScanLive2DModels();
         _autoSkipVerifyDelete = s.AutoSkipVerifyDelete;
+        _notifEnabled = s.NotifEnabled;
         _notifSignEnabled = s.NotifSignEnabled;
         _notifActivityEnabled = s.NotifActivityEnabled;
         _notifLoginEnabled = s.NotifLoginEnabled;
@@ -832,6 +1073,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             _ => 0,
         };
         UpdateServerTypeText();
+        BuildCategories();
     }
 
     private static string LanguageLabel(string code) => code == "en-US" ? "English (en-US)" : "简体中文 (zh-Hans)";
@@ -941,6 +1183,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.DisableDlss = DisableDlss;
         s.StartGameArguments = StartGameArguments;
         s.StartGameExeName = StartGameExeName;
+        s.ResourceLevel = ResourceLevelIndex switch
+        {
+            0 => "uhd",
+            2 => "sd",
+            _ => "hd",
+        };
         s.MinimizeOnLaunch = MinimizeOnLaunch;
         s.MinimizeLocationOnLaunch = MinimizeLocationIndex == 1 ? "Tray" : "Taskbar";
         s.AfterGameExitAction = AfterGameExitIndex switch
@@ -953,6 +1201,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.Live2DModelDir = Live2DModelDir;
         s.SkipVerifyFiles = [.. SkipVerifyFiles];
         s.AutoSkipVerifyDelete = AutoSkipVerifyDelete;
+        s.NotifEnabled = NotifEnabled;
         s.Language = LanguageIndex == 1 ? "en-US" : "zh-Hans";
         s.StartupPage = StartupPageIndex == 1 ? "Launcher" : "Home";
         s.Theme = ThemeIndex switch

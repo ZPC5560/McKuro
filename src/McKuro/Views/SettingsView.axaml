@@ -3,10 +3,10 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:McKuro.ViewModels"
-    xmlns:ic="using:FluentIcons.Avalonia"
-    xmlns:controls="clr-namespace:McKuro.Controls"
-    xmlns:wp="clr-namespace:McKuro.Core.Services.Wallpaper;assembly=McKuro.Core"
-    xmlns:loc="clr-namespace:McKuro.Services"
+             xmlns:ic="using:FluentIcons.Avalonia"
+             xmlns:controls="clr-namespace:McKuro.Controls"
+             xmlns:wp="clr-namespace:McKuro.Core.Services.Wallpaper;assembly=McKuro.Core"
+             xmlns:loc="clr-namespace:McKuro.Services"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="McKuro.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
@@ -14,11 +14,14 @@
         <vm:Live2DFloatTextConverter x:Key="Live2DFloatText" />
     </UserControl.Resources>
     <!--
-      设置页设计语言:
-      - 顶部:标题 + "改动自动保存" 徽标
-      - 平台 hero:强调色圆底徽标(Windows 窗格 Logo / macOS ⌘ / Linux 终端) + 平台名 + 能力说明 + 系统描述 + 状态徽章
-      - 主体:按 Win11 设置样式分组 —— 圆角分区容器内逐行排列(行间无隔离线),
-        每行 = 图标块 + 标题/说明 + 右侧控件;相似设置合并同卡,卡片间加大间距
+      设置页设计语言(横向一级菜单 + 按需二级菜单):
+      - 顶部:标题 +「改动自动保存」徽标;其下是一行横向分类菜单(胶囊选中态,超宽自动换行)。
+      - 二级菜单只在当前分类确有多于一个子项时出现:内容区左列竖排子标签、右列内容;
+        无二级的分类(通知/下载/Live2D)内容区直接铺满,不多占一列宽度。
+      - 二级菜单的第二种形态是「就地展开」:通知分类下,总开关打开后才渲染具体提醒类别
+        (关闭时整块不渲染,而不是灰显一排不可用的开关)。
+      - 分区卡片沿用 Semi 语义色(Win11 设置分组观感):圆角分区容器内逐行排列(行间无隔离线),
+        每行 = 图标块 + 标题/说明 + 右侧控件。
     -->
     <UserControl.Styles>
         <!-- 分区容器 -->
@@ -55,15 +58,93 @@
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
         </Style>
+        <!-- 二级子项(如各提醒类别):左侧细竖线表达"从属于上方主开关" -->
+        <Style Selector="Border.subRow">
+            <Setter Property="Padding" Value="14,10,16,10" />
+            <Setter Property="Margin" Value="20,0,0,0" />
+            <Setter Property="BorderThickness" Value="1,0,0,0" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorBg3}" />
+        </Style>
+        <!-- 横向分类菜单项:未选中为弱化文字,选中为强调色胶囊 -->
+        <Style Selector="Button.categoryTab">
+            <Setter Property="Padding" Value="12,7" />
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.categoryTab:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SemiColorBg3}" />
+        </Style>
+        <Style Selector="Button.categoryTab.selected">
+            <Setter Property="Background" Value="{DynamicResource McKuroAccent}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.categoryTab.selected:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource McKuroAccentHover}" />
+        </Style>
+        <!-- 图标的着色跟随按钮前景(未选中灰、选中白) -->
+        <Style Selector="Button.categoryTab ic|FluentIcon">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+        </Style>
+        <Style Selector="Button.categoryTab.selected ic|FluentIcon">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <!-- 左侧二级子标签 -->
+        <Style Selector="Button.subTab">
+            <Setter Property="Padding" Value="11,8" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.subTab:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SemiColorBg3}" />
+        </Style>
+        <Style Selector="Button.subTab.selected">
+            <Setter Property="Background" Value="{DynamicResource SemiColorBg3}" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText1}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <!-- 数值参数输入框(Live2D 缩放/位置/不透明度等):
+             右对齐等宽数字,读数一眼可辨;用 McKuroInputFill/Stroke 与卡片面拉开层级,
+             悬停/聚焦描边强调色(半透明模板部件名为 PART_Border,不是 WPF 的 PART_BorderElement)。 -->
+        <Style Selector="TextBox.paramBox">
+            <Setter Property="Width" Value="72" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Padding" Value="9,0" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Background" Value="{DynamicResource McKuroInputFill}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Right" />
+            <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+        </Style>
+        <Style Selector="TextBox.paramBox /template/ Border#PART_Border">
+            <Setter Property="Background" Value="{DynamicResource McKuroInputFill}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroInputStroke}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+        </Style>
+        <!-- 悬停:描边提亮 -->
+        <Style Selector="TextBox.paramBox:pointerover /template/ Border#PART_Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroInputStrokeHover}" />
+        </Style>
+        <!-- 聚焦:强调色描边 -->
+        <Style Selector="TextBox.paramBox:focus /template/ Border#PART_Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorPrimary}" />
+            <Setter Property="BorderThickness" Value="1.5" />
+        </Style>
     </UserControl.Styles>
 
-    <ScrollViewer>
-        <!-- 固定宽度列(768 内容区):MaxWidth+StackPanel 在 ScrollViewer 内不可靠(子项按视口宽度测量,星号列吸收导致溢出),改用显式 Width 的 Grid 容器 -->
-        <Grid Width="780" HorizontalAlignment="Left">
-            <StackPanel Margin="20,16,20,20" Spacing="0">
-
-            <!-- 标题区 -->
-            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+    <DockPanel>
+        <!-- ============ 顶部:标题 + 横向一级分类菜单 ============ -->
+        <StackPanel DockPanel.Dock="Top" Margin="20,16,20,0" Spacing="12">
+            <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ic:FluentIcon Icon="Settings" IconVariant="Regular" IconSize="Size24" VerticalAlignment="Center" />
                     <TextBlock Text="{loc:Localize Key=Settings.Title}" FontSize="24" FontWeight="Bold" VerticalAlignment="Center" />
@@ -79,803 +160,923 @@
                 </Border>
             </Grid>
 
-            <!-- 当前平台(简化为单行卡:平台图标 + 平台名/系统版本 + 支持徽标,与下方分区行同款设计) -->
-            <Border Classes="section">
-                <Border Classes="row">
-                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                        <Border Classes="tile">
-                            <Grid>
-                                <!-- Windows:四格窗格 Logo -->
-                                <Path Data="M2 2H9V9H2Z M11 2H18V9H11Z M2 11H9V18H2Z M11 11H18V18H11Z"
-                                      Fill="{DynamicResource SemiColorText2}" Stretch="Uniform" Width="18" Height="18"
-                                      HorizontalAlignment="Center" VerticalAlignment="Center"
-                                      IsVisible="{Binding IsPlatformWindows}" />
-                                <!-- macOS:命令符 -->
-                                <TextBlock Text="⌘" FontSize="17" Foreground="{DynamicResource SemiColorText1}"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           IsVisible="{Binding IsPlatformMacOS}" />
-                                <!-- Linux 或其他:终端图标 -->
-                                <ic:FluentIcon Icon="WindowConsole" IconVariant="Regular" IconSize="Size16"
-                                               Foreground="{DynamicResource SemiColorText2}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                                               IsVisible="{Binding IsPlatformLinux}" />
-                            </Grid>
-                        </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.CurrentPlatform}" />
-                                <TextBlock Classes="rowTitle" Text="{Binding PlatformNameText}"
-                                           Foreground="{DynamicResource SemiColorPrimary}" />
+            <!-- 横向分类菜单:超宽自动换行,窄窗口不横向截断 -->
+            <ItemsControl ItemsSource="{Binding Categories}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SettingsCategoryItem">
+                        <Button Classes="categoryTab" Classes.selected="{Binding IsSelected}"
+                                Margin="0,0,8,6"
+                                Command="{Binding $parent[ItemsControl].((vm:SettingsViewModel)DataContext).SelectCategoryCommand}"
+                                CommandParameter="{Binding}">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <ic:FluentIcon Icon="{Binding Icon}" IconVariant="Regular" IconSize="Size16"
+                                               VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding Title}" FontSize="13" VerticalAlignment="Center" />
                             </StackPanel>
-                        </StackPanel>
-                        <Border Grid.Column="2" Padding="10,5" CornerRadius="10" VerticalAlignment="Center"
-                                Background="{DynamicResource SemiColorBg3}">
-                            <TextBlock Text="{Binding PlatformSupportBadgeText}" FontSize="12" FontWeight="Bold"
-                                       Foreground="{DynamicResource SemiColorPrimary}" />
-                        </Border>
-                    </Grid>
-                </Border>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- 状态反馈(各操作的结果消息,如目录设置/跳过文件增删):跨分类常驻底部 -->
+        <Border DockPanel.Dock="Bottom" Margin="24,0,20,10">
+            <TextBlock Text="{Binding StatusText}" FontSize="13"
+                       Foreground="{DynamicResource SemiColorPrimary}"
+                       TextWrapping="Wrap" VerticalAlignment="Center" />
+        </Border>
+
+        <!-- ============ 主体:左侧二级子导航(按需) + 右侧内容 ============ -->
+        <Grid ColumnDefinitions="Auto,*" Margin="20,8,20,0">
+            <Border Grid.Column="0" Width="186" Margin="0,0,18,0" VerticalAlignment="Top"
+                    IsVisible="{Binding ShowSubNav}"
+                    CornerRadius="12" Background="{DynamicResource SemiColorBg2}"
+                    Padding="6,8">
+                <ItemsControl ItemsSource="{Binding CurrentSubTabs}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SettingsSubTabItem">
+                            <Button Classes="subTab" Classes.selected="{Binding IsSelected}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
+                                    Margin="0,1"
+                                    Command="{Binding $parent[ItemsControl].((vm:SettingsViewModel)DataContext).SelectSubTabCommand}"
+                                    CommandParameter="{Binding Key}"
+                                    Content="{Binding Title}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </Border>
 
-            <!-- ============ 外观与界面 ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
-                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
-                        VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.Appearance}" VerticalAlignment="Center" />
-            </StackPanel>
-            <Border Classes="section">
-                <StackPanel>
-                    <!-- 主题 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="PaintBrush" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.Theme}" />
-                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.Theme.Desc}" />
-                            </StackPanel>
-                            <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
-                                      ItemsSource="{Binding Themes}"
-                                      SelectedIndex="{Binding ThemeIndex, Mode=TwoWay}" />
-                        </Grid>
+            <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="0,0,4,20">
+
+<!-- ==================== 外观 · 界面与主题 ==================== -->
+<StackPanel Spacing="10" IsVisible="{Binding IsAppearanceInterfaceActive}">
+    <Border Classes="section">
+        <StackPanel>
+            <!-- 主题 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="PaintBrush" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-                    <!-- 界面语言 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="Globe" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.Language}" />
-                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.Language.Desc}" />
-                            </StackPanel>
-                            <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
-                                      ItemsSource="{Binding Languages}"
-                                      SelectedIndex="{Binding LanguageIndex, Mode=TwoWay}" />
-                        </Grid>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.Theme}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.Theme.Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                              ItemsSource="{Binding Themes}"
+                              SelectedIndex="{Binding ThemeIndex, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+            <!-- 界面语言 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Globe" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-                    <!-- 启动时打开的页面 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="WindowNew" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.StartupPage}" />
-                                <TextBlock Classes="rowDesc"
-                                           Text="{loc:Localize Key=Settings.StartupPage.Desc}" />
-                            </StackPanel>
-                            <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
-                                      ItemsSource="{Binding StartupPages}"
-                                      SelectedIndex="{Binding StartupPageIndex, Mode=TwoWay}" />
-                        </Grid>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.Language}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.Language.Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                              ItemsSource="{Binding Languages}"
+                              SelectedIndex="{Binding LanguageIndex, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+            <!-- 启动时打开的页面 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="WindowNew" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-                    <!-- 背景视频封面 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="Video" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.BackgroundVideo}" />
-                                <TextBlock Classes="rowDesc"
-                                           Text="{loc:Localize Key=Settings.BackgroundVideo.Desc}" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                          IsChecked="{Binding BackgroundVideoEnabled, Mode=TwoWay}" />
-                        </Grid>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.StartupPage}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.StartupPage.Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                              ItemsSource="{Binding StartupPages}"
+                              SelectedIndex="{Binding StartupPageIndex, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+        </StackPanel>
+    </Border>
+</StackPanel>
+
+<!-- ==================== 外观 · 背景视频 ==================== -->
+<StackPanel Spacing="10" IsVisible="{Binding IsAppearanceVideoActive}">
+    <Border Classes="section">
+        <StackPanel>
+            <!-- 背景视频封面开关 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Video" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-                    <!-- 视频来源:官方 / 自定义动态壁纸 -->
-                    <Border Classes="row" IsVisible="{Binding BackgroundVideoEnabled}">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="VideoClip" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.VideoSource}" />
-                                <TextBlock Classes="rowDesc"
-                                           Text="{loc:Localize Key=Settings.VideoSource.Desc}" />
-                            </StackPanel>
-                            <ComboBox Grid.Column="2" Width="280" VerticalAlignment="Center"
-                                      ItemsSource="{Binding VideoSources}"
-                                      SelectedIndex="{Binding BackgroundVideoMode, Mode=TwoWay}" />
-                        </Grid>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.BackgroundVideo}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.BackgroundVideo.Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{Binding BackgroundVideoEnabled, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+            <!-- 视频来源:二级设置,启用后展开 -->
+            <Border Classes="row" IsVisible="{Binding BackgroundVideoEnabled}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="VideoClip" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-                    <!-- 自定义动态壁纸:选择 / 扫描 / 预览 / 封面网格 -->
-                    <Border Classes="row" IsVisible="{Binding BackgroundVideoEnabled}">
-                        <StackPanel IsVisible="{Binding IsCustomVideoMode}" Spacing="12">
-                            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="10">
-                                <Button Command="{Binding BrowseCustomVideoCommand}" Content="{loc:Localize Key=Settings.BrowseVideo}" />
-                                <Button Grid.Column="1" Command="{Binding BrowseWallpaperEngineCommand}"
-                                        Content="{loc:Localize Key=Settings.BrowseWeFolder}" />
-                                <TextBlock Grid.Column="2" Classes="rowDesc" VerticalAlignment="Center" Margin="6,0,0,0"
-                                           TextTrimming="CharacterEllipsis" Text="{Binding WallpaperScanStatus}" />
-                            </Grid>
-                            <TextBlock Classes="rowDesc" FontSize="11" Opacity="0.75"
-                                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
-                                       IsVisible="{Binding HasCustomVideoPath}"
-                                       Text="{Binding CustomBackgroundVideoPath}" />
-                            <!-- 实时预览:选中视频自动播放,WE 封面作首帧兜底 -->
-                            <Border Width="336" Height="189" CornerRadius="8" ClipToBounds="True"
-                                    HorizontalAlignment="Left" Background="Black"
-                                    IsVisible="{Binding HasCustomVideoPath}">
-                                <controls:VideoBackgroundControl VideoUrl="{Binding CustomBackgroundVideoPath}"
-                                                                 FallbackImageUrl="{Binding CustomVideoCoverPath}"
-                                                                 IsVideoEnabled="True"
-                                                                 SyncWindowAspect="False" />
-                            </Border>
-                            <!-- WE 扫描结果:封面网格,点击选用 -->
-                            <ScrollViewer MaxHeight="380" IsVisible="{Binding HasWallpaperEntries}"
-                                          HorizontalScrollBarVisibility="Disabled"
-                                          VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding WallpaperEntries}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="wp:WallpaperVideoEntry">
-                                            <Button Padding="0" Margin="0,0,10,10" Background="Transparent"
-                                                    BorderThickness="0"
-                                                    Command="{Binding $parent[ItemsControl].((vm:SettingsViewModel)DataContext).SelectWallpaperCommand}"
-                                                    CommandParameter="{Binding}">
-                                                <StackPanel Width="172">
-                                                    <Border Height="97" CornerRadius="6" ClipToBounds="True"
-                                                            Background="{DynamicResource SemiColorBg3}">
-                                                        <controls:AsyncImage ImageUrl="{Binding CoverPath}"
-                                                                             Stretch="UniformToFill" />
-                                                    </Border>
-                                                    <TextBlock Text="{Binding Title}" FontSize="12" Margin="2,5,2,0"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                </StackPanel>
-                                            </Button>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                        </StackPanel>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.VideoSource}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.VideoSource.Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Width="280" VerticalAlignment="Center"
+                              ItemsSource="{Binding VideoSources}"
+                              SelectedIndex="{Binding BackgroundVideoMode, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+            <!-- 自定义动态壁纸:选择 / 扫描 / 预览 / 封面网格 -->
+            <Border Classes="row" IsVisible="{Binding BackgroundVideoEnabled}">
+                <StackPanel IsVisible="{Binding IsCustomVideoMode}" Spacing="12">
+                    <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="10">
+                        <Button Command="{Binding BrowseCustomVideoCommand}" Content="{loc:Localize Key=Settings.BrowseVideo}" />
+                        <Button Grid.Column="1" Command="{Binding BrowseWallpaperEngineCommand}"
+                                Content="{loc:Localize Key=Settings.BrowseWeFolder}" />
+                        <TextBlock Grid.Column="2" Classes="rowDesc" VerticalAlignment="Center" Margin="6,0,0,0"
+                                   TextTrimming="CharacterEllipsis" Text="{Binding WallpaperScanStatus}" />
+                    </Grid>
+                    <TextBlock Classes="rowDesc" FontSize="11" Opacity="0.75"
+                               TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                               IsVisible="{Binding HasCustomVideoPath}"
+                               Text="{Binding CustomBackgroundVideoPath}" />
+                    <!-- 实时预览:选中视频自动播放,WE 封面作首帧兜底 -->
+                    <Border Width="336" Height="189" CornerRadius="8" ClipToBounds="True"
+                            HorizontalAlignment="Left" Background="Black"
+                            IsVisible="{Binding HasCustomVideoPath}">
+                        <controls:VideoBackgroundControl VideoUrl="{Binding CustomBackgroundVideoPath}"
+                                                         FallbackImageUrl="{Binding CustomVideoCoverPath}"
+                                                         IsVideoEnabled="True"
+                                                         SyncWindowAspect="False" />
                     </Border>
+                    <!-- WE 扫描结果:封面网格,点击选用 -->
+                    <ScrollViewer MaxHeight="380" IsVisible="{Binding HasWallpaperEntries}"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding WallpaperEntries}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="wp:WallpaperVideoEntry">
+                                    <Button Padding="0" Margin="0,0,10,10" Background="Transparent"
+                                            BorderThickness="0"
+                                            Command="{Binding $parent[ItemsControl].((vm:SettingsViewModel)DataContext).SelectWallpaperCommand}"
+                                            CommandParameter="{Binding}">
+                                        <StackPanel Width="172">
+                                            <Border Height="97" CornerRadius="6" ClipToBounds="True"
+                                                    Background="{DynamicResource SemiColorBg3}">
+                                                <controls:AsyncImage ImageUrl="{Binding CoverPath}"
+                                                                     Stretch="UniformToFill" />
+                                            </Border>
+                                            <TextBlock Text="{Binding Title}" FontSize="12" Margin="2,5,2,0"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
                 </StackPanel>
             </Border>
+        </StackPanel>
+    </Border>
+</StackPanel>
 
-            <!-- ============ Live2D 模型(仅 Windows x64;Cubism Core 与模型由用户放置/导入) ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
-                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
-                        VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Live2D.Title}" VerticalAlignment="Center" />
-                <Border Padding="8,3" CornerRadius="8" VerticalAlignment="Center"
-                        Background="{DynamicResource SemiColorBg3}"
-                        IsVisible="{Binding !IsLive2DSupported}">
-                    <TextBlock Text="{loc:Localize Key=Live2D.PlatformUnsupported}" FontSize="11"
-                               Foreground="{DynamicResource SemiColorText3}" />
-                </Border>
-            </StackPanel>
-            <Border Classes="section" IsEnabled="{Binding IsLive2DSupported}">
-                <StackPanel>
-                    <!-- Cubism Core 状态 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="Cube" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.CoreRowTitle}" />
-                                <TextBlock Classes="rowDesc"
-                                           Text="{loc:Localize Key=Live2D.CoreHint}"
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <Border Padding="10,5" CornerRadius="10" VerticalAlignment="Center"
-                                        Background="{DynamicResource SemiColorBg3}">
-                                    <Panel>
-                                        <TextBlock FontSize="12" FontWeight="Bold"
-                                                   Foreground="{DynamicResource SemiColorPrimary}"
-                                                   IsVisible="{Binding IsLive2DCoreAvailable}"
-                                                   Text="{loc:Localize Key=Live2D.CoreFound}" />
-                                        <TextBlock FontSize="12" FontWeight="Bold"
-                                                   Foreground="{DynamicResource SemiColorText3}"
-                                                   IsVisible="{Binding !IsLive2DCoreAvailable}"
-                                                   Text="{loc:Localize Key=Live2D.CoreMissing}" />
-                                    </Panel>
-                                </Border>
-                                <Button Content="{loc:Localize Key=Live2D.OpenDir}" Command="{Binding OpenLive2DDirCommand}" />
-                                <Button Content="{loc:Localize Key=Live2D.GetSdk}" Command="{Binding OpenCoreDownloadCommand}" />
-                            </StackPanel>
-                        </Grid>
+<!-- ==================== Live2D 模型(仅 Windows x64) ==================== -->
+<StackPanel Spacing="10" IsVisible="{Binding IsLive2DActive}">
+    <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,0,0,0">
+        <Border Padding="8,3" CornerRadius="8" VerticalAlignment="Center"
+                Background="{DynamicResource SemiColorBg3}"
+                IsVisible="{Binding !IsLive2DSupported}">
+            <TextBlock Text="{loc:Localize Key=Live2D.PlatformUnsupported}" FontSize="11"
+                       Foreground="{DynamicResource SemiColorText3}" />
+        </Border>
+    </StackPanel>
+    <Border Classes="section" IsEnabled="{Binding IsLive2DSupported}">
+        <StackPanel>
+            <!-- Cubism Core 状态 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Cube" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.CoreRowTitle}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Live2D.CoreHint}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Border Padding="10,5" CornerRadius="10" VerticalAlignment="Center"
+                                Background="{DynamicResource SemiColorBg3}">
+                            <Panel>
+                                <TextBlock FontSize="12" FontWeight="Bold"
+                                           Foreground="{DynamicResource SemiColorPrimary}"
+                                           IsVisible="{Binding IsLive2DCoreAvailable}"
+                                           Text="{loc:Localize Key=Live2D.CoreFound}" />
+                                <TextBlock FontSize="12" FontWeight="Bold"
+                                           Foreground="{DynamicResource SemiColorText3}"
+                                           IsVisible="{Binding !IsLive2DCoreAvailable}"
+                                           Text="{loc:Localize Key=Live2D.CoreMissing}" />
+                            </Panel>
+                        </Border>
+                        <Button Content="{loc:Localize Key=Live2D.OpenDir}" Command="{Binding OpenLive2DDirCommand}" />
+                        <Button Content="{loc:Localize Key=Live2D.GetSdk}" Command="{Binding OpenCoreDownloadCommand}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
 
-                    <!-- 显示开关 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="Person" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.Enable}" />
-                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Live2D.EnableDesc}" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                          IsChecked="{Binding Live2DEnabled, Mode=TwoWay}" />
-                        </Grid>
+            <!-- 显示开关:子项仅在启用且 Core 就绪时展开 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Person" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.Enable}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Live2D.EnableDesc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{Binding Live2DEnabled, Mode=TwoWay}" />
+                </Grid>
+            </Border>
 
-                    <!-- 跟随鼠标 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="EyeTracking" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.FollowMouse}" />
-                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Live2D.FollowMouseDesc}" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                          IsChecked="{Binding Live2DPointerFollow, Mode=TwoWay}" />
-                        </Grid>
+            <!-- 跟随鼠标(启用 Live2D 后展开) -->
+            <Border Classes="row" IsVisible="{Binding Live2DEnabled}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="EyeTracking" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.FollowMouse}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Live2D.FollowMouseDesc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{Binding Live2DPointerFollow, Mode=TwoWay}" />
+                </Grid>
+            </Border>
 
-                    <!-- 导入模型 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="FolderArrowUp" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.ImportRowTitle}" />
-                                    <TextBlock Classes="rowDesc" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"
-                                               IsVisible="{Binding HasLive2DModelDir}"
-                                               Text="{Binding Live2DModelDir}" />
-                                </StackPanel>
-                                <TextBlock Classes="rowDesc" Text="{Binding Live2DScanStatus}"
-                                           IsVisible="{Binding Live2DScanStatus}" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <ComboBox Width="170" VerticalAlignment="Center"
-                                          ItemsSource="{Binding Live2DModelOptions}"
-                                          SelectedIndex="{Binding SelectedLive2DModelIndex, Mode=TwoWay}"
-                                          IsEnabled="{Binding HasLive2DModels}" />
-                                <Button Content="{loc:Localize Key=Live2D.Import}" Command="{Binding ImportLive2DModelCommand}" />
-                            </StackPanel>
-                        </Grid>
+            <!-- 导入模型 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="FolderArrowUp" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-
-                    <!-- 实时预览(可拖动/滚轮缩放;参数写回下方滑条) -->
-                    <Border Classes="row" IsVisible="{Binding IsLive2DPreviewVisible}">
-                        <StackPanel Spacing="10">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.Preview}" />
-                                <TextBlock Classes="rowDesc" VerticalAlignment="Center"
-                                           Text="{loc:Localize Key=Live2D.PreviewHint}" />
-                            </StackPanel>
-                            <Border Height="320" CornerRadius="10" ClipToBounds="True"
-                                    Background="{DynamicResource SemiColorBg3}" HorizontalAlignment="Left"
-                                    Width="460">
-                                <controls:Live2DModelHost Show="True"
-                                                          ModelDirectory="{Binding EffectiveLive2DModelDir}"
-                                                          ModelName="{Binding SelectedLive2DModelName}"
-                                                          Zoom="{Binding Live2DZoom, Mode=TwoWay}"
-                                                          PositionX="{Binding Live2DPositionX, Mode=TwoWay}"
-                                                          PositionY="{Binding Live2DPositionY, Mode=TwoWay}"
-                                                          ModelOpacity="{Binding Live2DOpacity, Mode=TwoWay}"
-                                                          FramesPerSecond="30"
-                                                          HorizontalAlignment="Stretch"
-                                                          VerticalAlignment="Stretch" />
-                            </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.ImportRowTitle}" />
+                            <TextBlock Classes="rowDesc" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding HasLive2DModelDir}"
+                                       Text="{Binding Live2DModelDir}" />
                         </StackPanel>
-                    </Border>
+                        <TextBlock Classes="rowDesc" Text="{Binding Live2DScanStatus}"
+                                   IsVisible="{Binding Live2DScanStatus}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <ComboBox Width="170" VerticalAlignment="Center"
+                                  ItemsSource="{Binding Live2DModelOptions}"
+                                  SelectedIndex="{Binding SelectedLive2DModelIndex, Mode=TwoWay}"
+                                  IsEnabled="{Binding HasLive2DModels}" />
+                        <Button Content="{loc:Localize Key=Live2D.Import}" Command="{Binding ImportLive2DModelCommand}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
 
-                    <!-- 显示参数 -->
-                    <Border Classes="row">
-                        <StackPanel Spacing="10">
-                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                                <Border Classes="tile">
-                                    <ic:FluentIcon Icon="Wand" IconVariant="Regular" IconSize="Size20"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                </Border>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+            <!-- 实时预览 + 显示参数(左预览 / 右参数并排;预览可拖动/滚轮缩放,参数写回滑条) -->
+            <Border Classes="row" IsVisible="{Binding IsLive2DPreviewVisible}">
+                <StackPanel Spacing="10">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.Preview}" />
+                        <TextBlock Classes="rowDesc" VerticalAlignment="Center"
+                                   Text="{loc:Localize Key=Live2D.PreviewHint}" />
+                    </StackPanel>
+
+                    <!-- 预览列自适应拉伸(*),参数列固定宽度:窗口变窄时先压缩预览,参数区不被挤坏 -->
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="18">
+                        <Border Grid.Column="0" Height="340" CornerRadius="10" ClipToBounds="True"
+                                Background="{DynamicResource SemiColorBg3}"
+                                MinWidth="320"
+                                HorizontalAlignment="Stretch">
+                            <controls:Live2DModelHost Show="True"
+                                                      ModelDirectory="{Binding EffectiveLive2DModelDir}"
+                                                      ModelName="{Binding SelectedLive2DModelName}"
+                                                      Zoom="{Binding Live2DZoom, Mode=TwoWay}"
+                                                      PositionX="{Binding Live2DPositionX, Mode=TwoWay}"
+                                                      PositionY="{Binding Live2DPositionY, Mode=TwoWay}"
+                                                      ModelOpacity="{Binding Live2DOpacity, Mode=TwoWay}"
+                                                      FramesPerSecond="30"
+                                                      HorizontalAlignment="Stretch"
+                                                      VerticalAlignment="Stretch" />
+                        </Border>
+
+                        <!-- 显示参数面板(与预览等高,纵向居中) -->
+                        <Border Grid.Column="1" Width="330" Height="340"
+                                CornerRadius="10"
+                                Background="{DynamicResource SemiColorBg3}"
+                                VerticalAlignment="Center">
+                            <StackPanel Margin="16,14" Spacing="12">
+                                <StackPanel Spacing="2">
                                     <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.DisplayRowTitle}" />
                                     <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Live2D.DisplayDesc}" />
                                 </StackPanel>
-                            </Grid>
-                            <StackPanel Margin="54,0,0,0" Spacing="10">
-                                <Grid ColumnDefinitions="64,*,Auto" ColumnSpacing="12">
-                                    <TextBlock Text="{loc:Localize Key=Live2D.Zoom}" FontSize="13" VerticalAlignment="Center" />
-                                    <Slider Grid.Column="1" Minimum="0.5" Maximum="3" Value="{Binding Live2DZoom, Mode=TwoWay}"
-                                            VerticalAlignment="Center" />
-                                    <TextBox Grid.Column="2" Width="64" Height="28" Text="{Binding Live2DZoom, Converter={StaticResource Live2DFloatText}}"
-                                             FontSize="12" VerticalContentAlignment="Center" HorizontalContentAlignment="Right"
-                                             VerticalAlignment="Center" />
-                                </Grid>
-                                <Grid ColumnDefinitions="64,*,Auto" ColumnSpacing="12">
-                                    <TextBlock Text="{loc:Localize Key=Live2D.PositionX}" FontSize="13" VerticalAlignment="Center" />
-                                    <Slider Grid.Column="1" Minimum="-2" Maximum="2" Value="{Binding Live2DPositionX, Mode=TwoWay}"
-                                            VerticalAlignment="Center" />
-                                    <TextBox Grid.Column="2" Width="64" Height="28" Text="{Binding Live2DPositionX, Converter={StaticResource Live2DFloatText}}"
-                                             FontSize="12" VerticalContentAlignment="Center" HorizontalContentAlignment="Right"
-                                             VerticalAlignment="Center" />
-                                </Grid>
-                                <Grid ColumnDefinitions="64,*,Auto" ColumnSpacing="12">
-                                    <TextBlock Text="{loc:Localize Key=Live2D.PositionY}" FontSize="13" VerticalAlignment="Center" />
-                                    <Slider Grid.Column="1" Minimum="-2" Maximum="2" Value="{Binding Live2DPositionY, Mode=TwoWay}"
-                                            VerticalAlignment="Center" />
-                                    <TextBox Grid.Column="2" Width="64" Height="28" Text="{Binding Live2DPositionY, Converter={StaticResource Live2DFloatText}}"
-                                             FontSize="12" VerticalContentAlignment="Center" HorizontalContentAlignment="Right"
-                                             VerticalAlignment="Center" />
-                                </Grid>
-                                <Grid ColumnDefinitions="64,*,Auto" ColumnSpacing="12">
-                                    <TextBlock Text="{loc:Localize Key=Live2D.Opacity}" FontSize="13" VerticalAlignment="Center" />
-                                    <Slider Grid.Column="1" Minimum="0" Maximum="1" Value="{Binding Live2DOpacity, Mode=TwoWay}"
-                                            VerticalAlignment="Center" />
-                                    <TextBox Grid.Column="2" Width="64" Height="28" Text="{Binding Live2DOpacity, Converter={StaticResource Live2DFloatText}}"
-                                             FontSize="12" VerticalContentAlignment="Center" HorizontalContentAlignment="Right"
-                                             VerticalAlignment="Center" />
-                                </Grid>
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </Border>
 
-            <!-- ============ 游戏目录 ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
-                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
-                        VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.GameDir}" VerticalAlignment="Center" />
-            </StackPanel>
-            <Border Classes="section">
-                <StackPanel>
-                    <!-- 游戏安装目录 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="Folder" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.GameDir}" />
-                                <TextBlock Classes="rowDesc"
-                                           Text="{loc:Localize Key=Settings.GameDir.Desc}" />
-                            </StackPanel>
-                            <Grid Grid.Column="2" ColumnDefinitions="*,Auto" ColumnSpacing="8" MinWidth="320"
-                                  VerticalAlignment="Center">
-                                <TextBox Grid.Column="0" Text="{Binding GameRootDir}"
-                                         PlaceholderText="{loc:Localize Key=Settings.GameDir.Placeholder}"
-                                         VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Content="{loc:Localize Key=Common.Browse}" Command="{Binding BrowseGameDirCommand}" />
-                            </Grid>
-                        </Grid>
-                    </Border>
-
-                    <!-- 服务器渠道 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="Server" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.Server}" />
-                                <TextBlock Classes="rowDesc"
-                                           Text="{loc:Localize Key=Settings.Server.Desc}" />
-                            </StackPanel>
-                            <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
-                                      ItemsSource="{Binding ServerTypes}"
-                                      SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}" />
-                        </Grid>
-                    </Border>
-                </StackPanel>
-            </Border>
-
-            <!-- ============ 游戏修复 ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
-                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
-                        VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.Repair}" VerticalAlignment="Center" />
-            </StackPanel>
-            <Border Classes="section">
-                <StackPanel>
-                    <!-- 游戏修复:跳过校验文件(对齐 Haiyu SkipVerifyFiles) -->
-                    <Border Classes="row">
-                        <StackPanel Spacing="10">
-                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                                <Border Classes="tile">
-                                    <ic:FluentIcon Icon="Wrench" IconVariant="Regular" IconSize="Size20"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                </Border>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                    <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Repair.Title}" />
-                                    <TextBlock Classes="rowDesc"
-                                               Text="{loc:Localize Key=Repair.Desc}" />
-                                </StackPanel>
-                                <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                              OffContent="{loc:Localize Key=Repair.Keep}" OnContent="{loc:Localize Key=Repair.Delete}"
-                                              IsChecked="{Binding AutoSkipVerifyDelete, Mode=TwoWay}" />
-                            </Grid>
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="54,0,0,0">
-                                <TextBox Grid.Column="0" Text="{Binding SkipVerifyInput}"
-                                         PlaceholderText="{loc:Localize Key=Repair.Placeholder}" />
-                                <Button Grid.Column="1" Content="{loc:Localize Key=Common.Add}" Command="{Binding AddSkipVerifyFileCommand}" />
-                            </Grid>
-                            <ItemsControl ItemsSource="{Binding SkipVerifyFiles}" Margin="54,0,0,0">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,2">
-                                            <Border Grid.Column="0" Padding="10,5" CornerRadius="6"
-                                                    Background="{DynamicResource SemiColorBg3}">
-                                                <TextBlock Text="{Binding}" FontSize="12" FontFamily="Consolas,monospace"
-                                                           TextTrimming="CharacterEllipsis" />
-                                            </Border>
-                                            <Button Grid.Column="1" Padding="8,4" FontSize="11"
-                                                    Command="{Binding $parent[ItemsControl].DataContext.RemoveSkipVerifyFileCommand}"
-                                                    CommandParameter="{Binding}">
-                                                <ic:FluentIcon Icon="Dismiss" IconVariant="Regular" IconSize="Size12" />
-                                            </Button>
+                                <StackPanel Spacing="14">
+                                    <!-- 每项:上行「名称 + 数值框」,下行整宽滑条(窄列里滑条更好拖) -->
+                                    <StackPanel Spacing="4">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                            <TextBlock Text="{loc:Localize Key=Live2D.Zoom}" FontSize="13"
+                                                       VerticalAlignment="Center" />
+                                            <TextBox Grid.Column="1" Classes="paramBox"
+                                                     Text="{Binding Live2DZoom, Converter={StaticResource Live2DFloatText}}" />
                                         </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <TextBlock Text="{loc:Localize Key=Repair.NoneConfigured}" FontSize="12" Foreground="{DynamicResource SemiColorText3}"
-                                       Margin="54,0,0,0"
-                                       IsVisible="{Binding !SkipVerifyFiles.Count}" />
+                                        <Slider Minimum="0.5" Maximum="3" Value="{Binding Live2DZoom, Mode=TwoWay}"
+                                                VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="4">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                            <TextBlock Text="{loc:Localize Key=Live2D.PositionX}" FontSize="13"
+                                                       VerticalAlignment="Center" />
+                                            <TextBox Grid.Column="1" Classes="paramBox"
+                                                     Text="{Binding Live2DPositionX, Converter={StaticResource Live2DFloatText}}" />
+                                        </Grid>
+                                        <Slider Minimum="-2" Maximum="2" Value="{Binding Live2DPositionX, Mode=TwoWay}"
+                                                VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="4">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                            <TextBlock Text="{loc:Localize Key=Live2D.PositionY}" FontSize="13"
+                                                       VerticalAlignment="Center" />
+                                            <TextBox Grid.Column="1" Classes="paramBox"
+                                                     Text="{Binding Live2DPositionY, Converter={StaticResource Live2DFloatText}}" />
+                                        </Grid>
+                                        <Slider Minimum="-2" Maximum="2" Value="{Binding Live2DPositionY, Mode=TwoWay}"
+                                                VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="4">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                            <TextBlock Text="{loc:Localize Key=Live2D.Opacity}" FontSize="13"
+                                                       VerticalAlignment="Center" />
+                                            <TextBox Grid.Column="1" Classes="paramBox"
+                                                     Text="{Binding Live2DOpacity, Converter={StaticResource Live2DFloatText}}" />
+                                        </Grid>
+                                        <Slider Minimum="0" Maximum="1" Value="{Binding Live2DOpacity, Mode=TwoWay}"
+                                                VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 显示参数(模型未预览时退化为整行说明,避免参数区消失后无从下手) -->
+            <Border Classes="row" IsVisible="{Binding !IsLive2DPreviewVisible}">
+                <StackPanel Spacing="10">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                        <Border Classes="tile">
+                            <ic:FluentIcon Icon="Wand" IconVariant="Regular" IconSize="Size20"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Live2D.DisplayRowTitle}" />
+                            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Live2D.DisplayDesc}" />
                         </StackPanel>
-                    </Border>
+                    </Grid>
+                    <StackPanel Margin="54,0,0,0" Spacing="10">
+                        <Grid ColumnDefinitions="64,*,Auto" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Live2D.Zoom}" FontSize="13" VerticalAlignment="Center" />
+                            <Slider Grid.Column="1" Minimum="0.5" Maximum="3" Value="{Binding Live2DZoom, Mode=TwoWay}"
+                                    VerticalAlignment="Center" />
+                            <TextBox Grid.Column="2" Classes="paramBox"
+                                     Text="{Binding Live2DZoom, Converter={StaticResource Live2DFloatText}}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="64,*,Auto" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Live2D.PositionX}" FontSize="13" VerticalAlignment="Center" />
+                            <Slider Grid.Column="1" Minimum="-2" Maximum="2" Value="{Binding Live2DPositionX, Mode=TwoWay}"
+                                    VerticalAlignment="Center" />
+                            <TextBox Grid.Column="2" Classes="paramBox"
+                                     Text="{Binding Live2DPositionX, Converter={StaticResource Live2DFloatText}}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="64,*,Auto" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Live2D.PositionY}" FontSize="13" VerticalAlignment="Center" />
+                            <Slider Grid.Column="1" Minimum="-2" Maximum="2" Value="{Binding Live2DPositionY, Mode=TwoWay}"
+                                    VerticalAlignment="Center" />
+                            <TextBox Grid.Column="2" Classes="paramBox"
+                                     Text="{Binding Live2DPositionY, Converter={StaticResource Live2DFloatText}}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="64,*,Auto" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Live2D.Opacity}" FontSize="13" VerticalAlignment="Center" />
+                            <Slider Grid.Column="1" Minimum="0" Maximum="1" Value="{Binding Live2DOpacity, Mode=TwoWay}"
+                                    VerticalAlignment="Center" />
+                            <TextBox Grid.Column="2" Classes="paramBox"
+                                     Text="{Binding Live2DOpacity, Converter={StaticResource Live2DFloatText}}" />
+                        </Grid>
+                    </StackPanel>
                 </StackPanel>
             </Border>
+        </StackPanel>
+    </Border>
+</StackPanel>
 
-            <!-- ============ 游戏启动 ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
-                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
-                        VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.Launch}" VerticalAlignment="Center" />
-            </StackPanel>
-            <Border Classes="section">
-                <StackPanel>
-                    <!-- 游戏启动参数(对齐 Haiyu StartGameOption) -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
-                            <Border Classes="tile" VerticalAlignment="Top">
-                                <ic:FluentIcon Icon="Rocket" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" Spacing="8">
-                                <StackPanel Spacing="2">
-                                    <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.LaunchArgs}" />
-                                    <TextBlock Classes="rowDesc"
-                                               Text="{loc:Localize Key=Settings.LaunchArgs.Desc}" />
-                                </StackPanel>
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="{loc:Localize Key=Launch.Dx11}" FontSize="13" VerticalAlignment="Center" />
-                                    <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
-                                                  IsChecked="{Binding UseDx11, Mode=TwoWay}" />
-                                </Grid>
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="{loc:Localize Key=Launch.DisableDlss}" FontSize="13" VerticalAlignment="Center" />
-                                    <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
-                                                  IsChecked="{Binding DisableDlss, Mode=TwoWay}" />
-                                </Grid>
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="{loc:Localize Key=Launch.CustomArgs}" FontSize="13" VerticalAlignment="Center" />
-                                    <TextBox Grid.Column="1" Text="{Binding StartGameArguments, Mode=TwoWay}"
-                                             PlaceholderText="{loc:Localize Key=Launch.CustomArgs.Placeholder}" />
-                                </Grid>
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="{loc:Localize Key=Launch.ExeName}" FontSize="13" VerticalAlignment="Center" />
-                                    <TextBox Grid.Column="1" Text="{Binding StartGameExeName, Mode=TwoWay}"
-                                             PlaceholderText="{loc:Localize Key=Launch.ExeName.Placeholder}" />
-                                </Grid>
-                            </StackPanel>
-                        </Grid>
+<!-- ==================== 游戏 · 游戏目录 ==================== -->
+<StackPanel Spacing="10" IsVisible="{Binding IsGameDirActive}">
+    <Border Classes="section">
+        <StackPanel>
+            <!-- 游戏安装目录 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Folder" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-
-                    <!-- 启动后最小化 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="ArrowMinimize" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.MinimizeOnLaunch}" />
-                                <TextBlock Classes="rowDesc"
-                                           Text="{loc:Localize Key=Settings.MinimizeOnLaunch.Desc}" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                          IsChecked="{Binding MinimizeOnLaunch, Mode=TwoWay}" />
-                        </Grid>
-                    </Border>
-                    <!-- 最小化位置(仅启用「启动后最小化」时显示) -->
-                    <Border Classes="row" IsVisible="{Binding ShowMinimizeLocationSetting}">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="DesktopArrowDown" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.MinimizeLocation}" />
-                                <TextBlock Classes="rowDesc"
-                                           Text="{loc:Localize Key=Settings.MinimizeLocation.Desc}" />
-                            </StackPanel>
-                            <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
-                                      ItemsSource="{Binding MinimizeLocations}"
-                                      SelectedIndex="{Binding MinimizeLocationIndex, Mode=TwoWay}" />
-                        </Grid>
-                    </Border>
-                    <!-- 游戏结束后窗口状态 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="Stop" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.AfterExit}" />
-                                <TextBlock Classes="rowDesc"
-                                           Text="{loc:Localize Key=Settings.AfterExit.Desc}" />
-                            </StackPanel>
-                            <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
-                                      ItemsSource="{Binding AfterGameExitActions}"
-                                      SelectedIndex="{Binding AfterGameExitIndex, Mode=TwoWay}" />
-                        </Grid>
-                    </Border>
-                </StackPanel>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.GameDir}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.GameDir.Desc}" />
+                    </StackPanel>
+                    <Grid Grid.Column="2" ColumnDefinitions="*,Auto" ColumnSpacing="8" MinWidth="320"
+                          VerticalAlignment="Center">
+                        <TextBox Grid.Column="0" Text="{Binding GameRootDir}"
+                                 PlaceholderText="{loc:Localize Key=Settings.GameDir.Placeholder}"
+                                 VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Content="{loc:Localize Key=Common.Browse}" Command="{Binding BrowseGameDirCommand}" />
+                    </Grid>
+                </Grid>
             </Border>
 
-            <!-- ============ 消息通知(悬浮提醒;触发时除设置页外全局弹出) ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
-                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
-                        VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.Notifications}" VerticalAlignment="Center" />
-            </StackPanel>
-            <Border Classes="section">
-                <StackPanel>
-                    <!-- 游戏签到提醒 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="CalendarCheckmark" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Notif.SignToggle}" />
-                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.SignToggleDesc}" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                          IsChecked="{Binding NotifSignEnabled, Mode=TwoWay}" />
-                        </Grid>
+            <!-- 服务器渠道 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Server" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-                    <!-- 活动临期提醒 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="CalendarStar" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Notif.ActivityToggle}" />
-                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.ActivityToggleDesc}" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                          IsChecked="{Binding NotifActivityEnabled, Mode=TwoWay}" />
-                        </Grid>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.Server}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.Server.Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                              ItemsSource="{Binding ServerTypes}"
+                              SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+        </StackPanel>
+    </Border>
+</StackPanel>
+
+<!-- ==================== 游戏 · 游戏启动 ==================== -->
+<StackPanel Spacing="10" IsVisible="{Binding IsGameLaunchActive}">
+    <Border Classes="section">
+        <StackPanel>
+            <!-- 游戏启动参数(对齐 Haiyu StartGameOption) -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                    <Border Classes="tile" VerticalAlignment="Top">
+                        <ic:FluentIcon Icon="Rocket" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-                    <!-- 登录状态提醒 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="PersonCircle" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Notif.LoginToggle}" />
-                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.LoginToggleDesc}" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                          IsChecked="{Binding NotifLoginEnabled, Mode=TwoWay}" />
+                    <StackPanel Grid.Column="1" Spacing="8">
+                        <StackPanel Spacing="2">
+                            <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.LaunchArgs}" />
+                            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.LaunchArgs.Desc}" />
+                        </StackPanel>
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Launch.Dx11}" FontSize="13" VerticalAlignment="Center" />
+                            <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
+                                          IsChecked="{Binding UseDx11, Mode=TwoWay}" />
                         </Grid>
-                    </Border>
-                    <!-- 周本收尾提醒 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="Trophy" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Notif.WeeklyToggle}" />
-                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.WeeklyToggleDesc}" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                          IsChecked="{Binding NotifWeeklyEnabled, Mode=TwoWay}" />
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Launch.DisableDlss}" FontSize="13" VerticalAlignment="Center" />
+                            <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
+                                          IsChecked="{Binding DisableDlss, Mode=TwoWay}" />
                         </Grid>
-                    </Border>
-                    <!-- 活跃度提醒 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="Fire" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Notif.LivenessToggle}" />
-                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.LivenessToggleDesc}" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                          IsChecked="{Binding NotifLivenessEnabled, Mode=TwoWay}" />
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Launch.ResourceLevel}" FontSize="13" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" HorizontalAlignment="Left" MinWidth="140"
+                                      ItemsSource="{Binding ResourceLevels}"
+                                      SelectedIndex="{Binding ResourceLevelIndex, Mode=TwoWay}" />
                         </Grid>
-                    </Border>
-                </StackPanel>
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Launch.CustomArgs}" FontSize="13" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1" Text="{Binding StartGameArguments, Mode=TwoWay}"
+                                     PlaceholderText="{loc:Localize Key=Launch.CustomArgs.Placeholder}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Launch.ExeName}" FontSize="13" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1" Text="{Binding StartGameExeName, Mode=TwoWay}"
+                                     PlaceholderText="{loc:Localize Key=Launch.ExeName.Placeholder}" />
+                        </Grid>
+                    </StackPanel>
+                </Grid>
             </Border>
 
-            <!-- ============ 下载 ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
-                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
-                        VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.Download}" VerticalAlignment="Center" />
-            </StackPanel>
-            <Border Classes="section">
-                <StackPanel>
-                    <!-- 并发下载数 -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="Flash" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.Concurrency}" />
-                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.Concurrency.Desc}" />
-                            </StackPanel>
-                            <NumericUpDown Grid.Column="2" Width="132" VerticalAlignment="Center"
-                                           Value="{Binding DownloadConcurrency, Mode=TwoWay}"
-                                           Minimum="1" Maximum="32" />
-                        </Grid>
+            <!-- 启动后最小化 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="ArrowMinimize" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-                    <!-- 下载限速(对齐 Haiyu LimitSpeed) -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="TopSpeed" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.SpeedLimit}" />
-                                <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.SpeedLimit.Desc}" />
-                            </StackPanel>
-                            <NumericUpDown Grid.Column="2" Width="132" VerticalAlignment="Center"
-                                           Value="{Binding LimitSpeedMbps, Mode=TwoWay}"
-                                           Minimum="0" Maximum="1024" />
-                        </Grid>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.MinimizeOnLaunch}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.MinimizeOnLaunch.Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{Binding MinimizeOnLaunch, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+            <!-- 最小化位置(仅启用「启动后最小化」时显示) -->
+            <Border Classes="row" IsVisible="{Binding ShowMinimizeLocationSetting}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="DesktopArrowDown" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.MinimizeLocation}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.MinimizeLocation.Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                              ItemsSource="{Binding MinimizeLocations}"
+                              SelectedIndex="{Binding MinimizeLocationIndex, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+            <!-- 游戏结束后窗口状态 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Stop" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.AfterExit}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.AfterExit.Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Width="200" VerticalAlignment="Center"
+                              ItemsSource="{Binding AfterGameExitActions}"
+                              SelectedIndex="{Binding AfterGameExitIndex, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+        </StackPanel>
+    </Border>
+</StackPanel>
+
+<!-- ==================== 游戏 · 游戏修复 ==================== -->
+<StackPanel Spacing="10" IsVisible="{Binding IsGameRepairActive}">
+    <Border Classes="section">
+        <StackPanel>
+            <!-- 游戏修复:跳过校验文件(对齐 Haiyu SkipVerifyFiles) -->
+            <Border Classes="row">
+                <StackPanel Spacing="10">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                        <Border Classes="tile">
+                            <ic:FluentIcon Icon="Wrench" IconVariant="Regular" IconSize="Size20"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Repair.Title}" />
+                            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Repair.Desc}" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                      OffContent="{loc:Localize Key=Repair.Keep}" OnContent="{loc:Localize Key=Repair.Delete}"
+                                      IsChecked="{Binding AutoSkipVerifyDelete, Mode=TwoWay}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="54,0,0,0">
+                        <TextBox Grid.Column="0" Text="{Binding SkipVerifyInput}"
+                                 PlaceholderText="{loc:Localize Key=Repair.Placeholder}" />
+                        <Button Grid.Column="1" Content="{loc:Localize Key=Common.Add}" Command="{Binding AddSkipVerifyFileCommand}" />
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding SkipVerifyFiles}" Margin="54,0,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,2">
+                                    <Border Grid.Column="0" Padding="10,5" CornerRadius="6"
+                                            Background="{DynamicResource SemiColorBg3}">
+                                        <TextBlock Text="{Binding}" FontSize="12" FontFamily="Consolas,monospace"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </Border>
+                                    <Button Grid.Column="1" Padding="8,4" FontSize="11"
+                                            Command="{Binding $parent[ItemsControl].DataContext.RemoveSkipVerifyFileCommand}"
+                                            CommandParameter="{Binding}">
+                                        <ic:FluentIcon Icon="Dismiss" IconVariant="Regular" IconSize="Size12" />
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="{loc:Localize Key=Repair.NoneConfigured}" FontSize="12" Foreground="{DynamicResource SemiColorText3}"
+                               Margin="54,0,0,0"
+                               IsVisible="{Binding !SkipVerifyFiles.Count}" />
                 </StackPanel>
             </Border>
+        </StackPanel>
+    </Border>
+</StackPanel>
 
-            <!-- ============ 关于 ============ -->
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,26,0,10">
-                <Border Width="3" Height="14" CornerRadius="2" Background="{DynamicResource McKuroAccent}"
-                        VerticalAlignment="Center" />
-                <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Section.About}" VerticalAlignment="Center" />
+<!-- ==================== 消息通知(总开关 → 就地展开提醒类别) ==================== -->
+<StackPanel Spacing="10" IsVisible="{Binding IsNotificationsActive}">
+    <!-- 一级:总开关 -->
+    <Border Classes="section">
+        <StackPanel>
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Alert" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Notif.Enable}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.EnableDesc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{Binding NotifEnabled, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+        </StackPanel>
+    </Border>
+
+    <!-- 二级:仅总开关打开后渲染具体类别(关闭时整块不渲染,而非灰显一排不可用开关) -->
+    <StackPanel Spacing="10" IsVisible="{Binding NotifEnabled}">
+        <StackPanel Spacing="2" Margin="4,6,0,0">
+            <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Notif.Categories}" />
+            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.CategoriesDesc}" />
+        </StackPanel>
+        <Border Classes="section">
+            <StackPanel>
+                <!-- 游戏签到提醒 -->
+                <Border Classes="subRow">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                        <ic:FluentIcon Icon="CalendarCheckmark" IconVariant="Regular" IconSize="Size16"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource SemiColorText2}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource SemiColorText1}"
+                                       Text="{loc:Localize Key=Notif.SignToggle}" />
+                            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.SignToggleDesc}" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                      IsChecked="{Binding NotifSignEnabled, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
+                <!-- 活动临期提醒 -->
+                <Border Classes="subRow">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                        <ic:FluentIcon Icon="CalendarStar" IconVariant="Regular" IconSize="Size16"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource SemiColorText2}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource SemiColorText1}"
+                                       Text="{loc:Localize Key=Notif.ActivityToggle}" />
+                            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.ActivityToggleDesc}" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                      IsChecked="{Binding NotifActivityEnabled, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
+                <!-- 登录状态提醒 -->
+                <Border Classes="subRow">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                        <ic:FluentIcon Icon="PersonCircle" IconVariant="Regular" IconSize="Size16"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource SemiColorText2}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource SemiColorText1}"
+                                       Text="{loc:Localize Key=Notif.LoginToggle}" />
+                            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.LoginToggleDesc}" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                      IsChecked="{Binding NotifLoginEnabled, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
+                <!-- 周本收尾提醒 -->
+                <Border Classes="subRow">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                        <ic:FluentIcon Icon="Trophy" IconVariant="Regular" IconSize="Size16"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource SemiColorText2}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource SemiColorText1}"
+                                       Text="{loc:Localize Key=Notif.WeeklyToggle}" />
+                            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.WeeklyToggleDesc}" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                      IsChecked="{Binding NotifWeeklyEnabled, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
+                <!-- 活跃度提醒 -->
+                <Border Classes="subRow">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                        <ic:FluentIcon Icon="Fire" IconVariant="Regular" IconSize="Size16"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource SemiColorText2}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource SemiColorText1}"
+                                       Text="{loc:Localize Key=Notif.LivenessToggle}" />
+                            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.LivenessToggleDesc}" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                      IsChecked="{Binding NotifLivenessEnabled, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
             </StackPanel>
-            <Border Classes="section">
-                <StackPanel>
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                            <Border Classes="tile">
-                                <ic:FluentIcon Icon="Info" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Classes="rowTitle" Text="{loc:Localize Key=About.AppName}" />
-                                <TextBlock Classes="rowDesc">
-                                    <Run Text="{loc:Localize Key=About.VersionPrefix}" />
-                                    <Run Text="{Binding CurrentAppVersionText}" FontWeight="Bold" />
-                                </TextBlock>
-                            </StackPanel>
-                            <Button Grid.Column="2" VerticalAlignment="Center" Content="{loc:Localize Key=Common.OpenLogDir}"
-                                    Command="{Binding OpenLogDirCommand}"
-                                    ToolTip.Tip="{Binding LogDirText}" />
-                        </Grid>
-                    </Border>
+        </Border>
+    </StackPanel>
+</StackPanel>
 
-                    <!-- 应用自更新(自「签到与更新」分区合并至此) -->
-                    <Border Classes="row">
-                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
-                            <Border Classes="tile" VerticalAlignment="Top">
-                                <ic:FluentIcon Icon="ArrowSync" IconVariant="Regular" IconSize="Size20"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" Spacing="10">
-                                <StackPanel Spacing="2">
-                                    <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.SelfUpdate}" />
-                                    <TextBlock Classes="rowDesc"
-                                               Text="{loc:Localize Key=Settings.SelfUpdate.Desc}" />
-                                </StackPanel>
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="{loc:Localize Key=Settings.AutoCheckUpdate}" FontSize="13" VerticalAlignment="Center" />
-                                    <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
-                                                  IsChecked="{Binding AppUpdateAutoCheck, Mode=TwoWay}" />
-                                </Grid>
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="{loc:Localize Key=Settings.AutoInstallUpdate}" FontSize="13" VerticalAlignment="Center" />
-                                    <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
-                                                  IsChecked="{Binding AppUpdateAutoInstall, Mode=TwoWay}" />
-                                </Grid>
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="{loc:Localize Key=Settings.UpdateIpFronting}" FontSize="13"
-                                               VerticalAlignment="Center" TextWrapping="Wrap" />
-                                    <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
-                                                  IsChecked="{Binding AppUpdateIpFronting, Mode=TwoWay}" />
-                                </Grid>
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                    <TextBlock Text="{loc:Localize Key=Settings.UpdateAccelerator}" FontSize="13" VerticalAlignment="Center" />
-                                    <TextBox Grid.Column="1" Text="{Binding AppUpdateAccelerator, Mode=TwoWay}"
-                                             PlaceholderText="{loc:Localize Key=Settings.UpdateAccelerator.Watermark}" />
-                                </Grid>
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Button Content="{loc:Localize Key=Common.CheckUpdate}" Command="{Binding CheckAppUpdateCommand}"
-                                            IsEnabled="{Binding !AppUpdateChecking}" />
-                                    <Button Content="{loc:Localize Key=Common.DownloadInstall}" Classes="primary" Command="{Binding DownloadAppUpdateCommand}"
-                                            IsVisible="{Binding AppUpdateAvailable}"
-                                            IsEnabled="{Binding !AppUpdateDownloading}" />
-                                    <Button Content="{loc:Localize Key=Update.SkipVersion}" Command="{Binding SkipAppUpdateCommand}"
-                                            IsVisible="{Binding AppUpdateAvailable}" />
-                                    <ProgressBar Width="200" Height="6" VerticalAlignment="Center"
-                                                 Value="{Binding AppUpdateProgress}" Minimum="0" Maximum="100"
-                                                 IsVisible="{Binding AppUpdateBusy}" />
-                                </StackPanel>
-                                <TextBlock Text="{Binding AppUpdateVersionText}" FontSize="13" FontWeight="Bold"
-                                           Foreground="{DynamicResource SemiColorPrimary}"
-                                           IsVisible="{Binding AppUpdateAvailable}" />
-                                <TextBlock Text="{Binding AppUpdateStatusText}" FontSize="12"
-                                           Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding AppUpdateIntegrityText}" FontSize="12"
-                                           Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap"
-                                           IsVisible="{Binding AppUpdateIntegrityVisible}" />
-                            </StackPanel>
+<!-- ==================== 下载 ==================== -->
+<StackPanel Spacing="10" IsVisible="{Binding IsDownloadActive}">
+    <Border Classes="section">
+        <StackPanel>
+            <!-- 并发下载数 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Flash" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.Concurrency}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.Concurrency.Desc}" />
+                    </StackPanel>
+                    <NumericUpDown Grid.Column="2" Width="132" VerticalAlignment="Center"
+                                   Value="{Binding DownloadConcurrency, Mode=TwoWay}"
+                                   Minimum="1" Maximum="32" />
+                </Grid>
+            </Border>
+            <!-- 下载限速(对齐 Haiyu LimitSpeed) -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="TopSpeed" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.SpeedLimit}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.SpeedLimit.Desc}" />
+                    </StackPanel>
+                    <NumericUpDown Grid.Column="2" Width="132" VerticalAlignment="Center"
+                                   Value="{Binding LimitSpeedMbps, Mode=TwoWay}"
+                                   Minimum="0" Maximum="1024" />
+                </Grid>
+            </Border>
+        </StackPanel>
+    </Border>
+</StackPanel>
+
+<!-- ==================== 关于 · 版本与平台 ==================== -->
+<StackPanel Spacing="10" IsVisible="{Binding IsAboutPlatformActive}">
+    <Border Classes="section">
+        <StackPanel>
+            <!-- 当前平台 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <Grid>
+                            <!-- Windows:四格窗格 Logo -->
+                            <Path Data="M2 2H9V9H2Z M11 2H18V9H11Z M2 11H9V18H2Z M11 11H18V18H11Z"
+                                  Fill="{DynamicResource SemiColorText2}" Stretch="Uniform" Width="18" Height="18"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  IsVisible="{Binding IsPlatformWindows}" />
+                            <!-- macOS:命令符 -->
+                            <TextBlock Text="⌘" FontSize="17" Foreground="{DynamicResource SemiColorText1}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       IsVisible="{Binding IsPlatformMacOS}" />
+                            <!-- Linux 或其他:终端图标 -->
+                            <ic:FluentIcon Icon="WindowConsole" IconVariant="Regular" IconSize="Size16"
+                                           Foreground="{DynamicResource SemiColorText2}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           IsVisible="{Binding IsPlatformLinux}" />
                         </Grid>
                     </Border>
-                </StackPanel>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.CurrentPlatform}" />
+                            <TextBlock Classes="rowTitle" Text="{Binding PlatformNameText}"
+                                       Foreground="{DynamicResource SemiColorPrimary}" />
+                        </StackPanel>
+                        <TextBlock Classes="rowDesc" Text="{Binding PlatformSupportBadgeText}" />
+                    </StackPanel>
+                </Grid>
             </Border>
 
-            <!-- 状态反馈(各操作的结果消息,如目录设置/跳过文件增删) -->
-            <StackPanel Orientation="Horizontal" Spacing="12" Margin="4,14,0,0">
-                <TextBlock Text="{Binding StatusText}" FontSize="13"
-                           Foreground="{DynamicResource SemiColorPrimary}"
-                           TextWrapping="Wrap" VerticalAlignment="Center" />
-            </StackPanel>
-            </StackPanel>
+            <!-- 应用版本 + 日志 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Info" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=About.AppName}" />
+                        <TextBlock Classes="rowDesc">
+                            <Run Text="{loc:Localize Key=About.VersionPrefix}" />
+                            <Run Text="{Binding CurrentAppVersionText}" FontWeight="Bold" />
+                        </TextBlock>
+                    </StackPanel>
+                    <Button Grid.Column="2" VerticalAlignment="Center" Content="{loc:Localize Key=Common.OpenLogDir}"
+                            Command="{Binding OpenLogDirCommand}"
+                            ToolTip.Tip="{Binding LogDirText}" />
+                </Grid>
+            </Border>
+        </StackPanel>
+    </Border>
+</StackPanel>
+
+<!-- ==================== 关于 · 应用更新 ==================== -->
+<StackPanel Spacing="10" IsVisible="{Binding IsAboutUpdateActive}">
+    <Border Classes="section">
+        <StackPanel>
+            <!-- 应用自更新 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                    <Border Classes="tile" VerticalAlignment="Top">
+                        <ic:FluentIcon Icon="ArrowSync" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="10">
+                        <StackPanel Spacing="2">
+                            <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.SelfUpdate}" />
+                            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.SelfUpdate.Desc}" />
+                        </StackPanel>
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Settings.AutoCheckUpdate}" FontSize="13" VerticalAlignment="Center" />
+                            <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
+                                          IsChecked="{Binding AppUpdateAutoCheck, Mode=TwoWay}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Settings.AutoInstallUpdate}" FontSize="13" VerticalAlignment="Center" />
+                            <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
+                                          IsChecked="{Binding AppUpdateAutoInstall, Mode=TwoWay}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Settings.UpdateIpFronting}" FontSize="13"
+                                       VerticalAlignment="Center" TextWrapping="Wrap" />
+                            <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
+                                          IsChecked="{Binding AppUpdateIpFronting, Mode=TwoWay}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Settings.UpdateAccelerator}" FontSize="13" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1" Text="{Binding AppUpdateAccelerator, Mode=TwoWay}"
+                                     PlaceholderText="{loc:Localize Key=Settings.UpdateAccelerator.Watermark}" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="8" >
+                            <Button Content="{loc:Localize Key=Common.CheckUpdate}" Command="{Binding CheckAppUpdateCommand}"
+                                    IsEnabled="{Binding !AppUpdateChecking}" />
+                            <Button Content="{loc:Localize Key=Common.DownloadInstall}" Classes="primary" Command="{Binding DownloadAppUpdateCommand}"
+                                    IsVisible="{Binding AppUpdateAvailable}"
+                                    IsEnabled="{Binding !AppUpdateDownloading}" />
+                            <Button Content="{loc:Localize Key=Update.SkipVersion}" Command="{Binding SkipAppUpdateCommand}"
+                                    IsVisible="{Binding AppUpdateAvailable}" />
+                            <ProgressBar Width="200" Height="6" VerticalAlignment="Center"
+                                         Value="{Binding AppUpdateProgress}" Minimum="0" Maximum="100"
+                                         IsVisible="{Binding AppUpdateBusy}" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding AppUpdateVersionText}" FontSize="13" FontWeight="Bold"
+                                   Foreground="{DynamicResource SemiColorPrimary}"
+                                   IsVisible="{Binding AppUpdateAvailable}" />
+                        <TextBlock Text="{Binding AppUpdateStatusText}" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding AppUpdateIntegrityText}" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap"
+                                   IsVisible="{Binding AppUpdateIntegrityVisible}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </StackPanel>
+    </Border>
+</StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
         </Grid>
-    </ScrollViewer>
+    </DockPanel>
 </UserControl>

@@ -54,12 +54,14 @@ public static class AppServices
     public static DownloadEngine Downloader => Services.GetRequiredService<DownloadEngine>();
     public static UpdateInstaller Installer => Services.GetRequiredService<UpdateInstaller>();
     public static IGameUpdater GameUpdater => Services.GetRequiredService<IGameUpdater>();
+    public static ResourceLevelService ResourceLevels => Services.GetRequiredService<ResourceLevelService>();
     public static GachaApiClient GachaApi => Services.GetRequiredService<GachaApiClient>();
     public static GachaRecordStore GachaStore => Services.GetRequiredService<GachaRecordStore>();
     public static GachaAnalysisService GachaAnalysis => Services.GetRequiredService<GachaAnalysisService>();
     public static IGachaSyncService GachaSync => Services.GetRequiredService<IGachaSyncService>();
     public static CloudGachaService CloudGacha => Services.GetRequiredService<CloudGachaService>();
     public static IUpPoolProvider UpPools => Services.GetRequiredService<IUpPoolProvider>();
+    public static GachaIconCatalogService GachaIcons => Services.GetRequiredService<GachaIconCatalogService>();
     public static KujiequApiClient KujiequApi => Services.GetRequiredService<KujiequApiClient>();
     public static LocalRoleDataReader LocalRoles => Services.GetRequiredService<LocalRoleDataReader>();
     public static IRoleDataService Roles => Services.GetRequiredService<IRoleDataService>();
@@ -286,6 +288,12 @@ public static class AppServices
             sp.GetRequiredService<AppDatabase>(),
             settings: sp.GetRequiredService<ISettingsService>(),
             logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<GameUpdater>()));
+        services.AddSingleton<ResourceLevelService>(sp => new ResourceLevelService(
+            sp.GetRequiredService<GameManifestLoader>(),
+            sp.GetRequiredService<DownloadEngine>(),
+            sp.GetRequiredService<GamePathResolver>(),
+            settings: sp.GetRequiredService<ISettingsService>(),
+            logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<ResourceLevelService>()));
 
         // ---- 抽卡 ----
         services.AddSingleton<GachaApiClient>(sp => new GachaApiClient(
@@ -302,6 +310,12 @@ public static class AppServices
         services.AddSingleton<IUpPoolProvider>(sp => new RemoteUpPoolProvider(
             sp.GetRequiredService<HttpClient>(),
             logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<RemoteUpPoolProvider>()));
+        // 图鉴图标目录:运行时拉取 avatar.json/weapon.json 注入 IconCatalog,
+        // 免除"每次版本更新手工补 ResourceId"导致的新角色无头像
+        services.AddSingleton(sp => new GachaIconCatalogService(
+            sp.GetRequiredService<HttpClient>(),
+            dataDir,
+            logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<GachaIconCatalogService>()));
 
         // ---- 库街区 ----
         services.AddSingleton<KujiequApiClient>();

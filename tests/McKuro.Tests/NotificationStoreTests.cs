@@ -29,20 +29,24 @@ public class NotificationStoreTests : IDisposable
     [Fact]
     public void SaveThenLoad_RoundTripsShownRecords()
     {
+        // 日期必须相对"今天"取:台账有 2 天保留期,写死绝对日期会让测试
+        // 在两天后自行失效(曾写死 2026-09-25,到期后 Save 即被 Prune 掉)。
+        var today = DateTime.Now.ToString("yyyy-MM-dd");
+        var stamp = DateTime.Now.ToString("yyyyMMdd");
         var store = CreateStore();
         store.Save(new ReminderLedger
         {
             Shown =
             [
-                new StoredShownReminder { Key = "progress:liveness:20260925", Day = "2026-09-25" },
-                new StoredShownReminder { Key = "login:kuro:20260925", Day = "2026-09-25" },
+                new StoredShownReminder { Key = $"progress:liveness:{stamp}", Day = today },
+                new StoredShownReminder { Key = $"login:kuro:{stamp}", Day = today },
             ],
         });
 
         var loaded = CreateStore().Load();
         Assert.Equal(2, loaded.Shown.Count);
-        Assert.Contains(loaded.Shown, s => s.Key == "progress:liveness:20260925" && s.Day == "2026-09-25");
-        Assert.Contains(loaded.Shown, s => s.Key == "login:kuro:20260925");
+        Assert.Contains(loaded.Shown, s => s.Key == $"progress:liveness:{stamp}" && s.Day == today);
+        Assert.Contains(loaded.Shown, s => s.Key == $"login:kuro:{stamp}");
     }
 
     [Fact]

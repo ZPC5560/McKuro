@@ -22,7 +22,8 @@ public enum NotificationKind
 /// <summary>
 /// 提醒通知器:提醒调度器的出口。按「稳定 Key + 当日台账」去重 ——
 /// 同一提醒(同 Key)一天只弹一次悬浮通知,重启不重复打扰(台账持久化到 notifications.json);
-/// 类别开关由设置页配置(Notif*Enabled),关闭的类别直接跳过(台账不记录,重新开启后下轮恢复)。
+/// 类别开关由设置页配置(Notif*Enabled),关闭的类别直接跳过(台账不记录,重新开启后下轮恢复);
+/// 总开关(NotifEnabled)关闭时全部跳过 —— 判定统一走 <see cref="NotificationPreferences"/>。
 /// </summary>
 public sealed class ReminderNotifier
 {
@@ -93,18 +94,7 @@ public sealed class ReminderNotifier
     public event Action<RaisedReminder>? Raised;
 
     private static bool IsKindEnabled(NotificationKind kind)
-    {
-        var s = AppServices.Settings.Current;
-        return kind switch
-        {
-            NotificationKind.Sign => s.NotifSignEnabled,
-            NotificationKind.ActivityEnding => s.NotifActivityEnabled,
-            NotificationKind.AccountSession => s.NotifLoginEnabled,
-            NotificationKind.WeeklyBoss => s.NotifWeeklyEnabled,
-            NotificationKind.DailyLiveness => s.NotifLivenessEnabled,
-            _ => true,
-        };
-    }
+        => NotificationPreferences.IsEnabled(kind);
 }
 
 /// <summary>一条已触发待展示的提醒。</summary>
