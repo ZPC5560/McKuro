@@ -108,6 +108,21 @@ public sealed class PoolStats
     /// <summary>小保底歪率(0~1,无法判定时为 null)。</summary>
     public double? OffBannerRate { get; init; }
 
+    /// <summary>
+    /// 歪率百分比显示值(保留两位小数)。
+    /// <para>
+    /// 必须在模型层取整:直接把 <c>OffBannerRate * 100</c> 交给格式化会输出 double 全精度
+    /// (界面曾显示"歪率 33.33333333333333%")。口径与统计条"出货率"一致
+    /// (见 <c>GachaAnalysisService</c> 的 <c>Math.Round(..., 2)</c>)。
+    /// </para>
+    /// </summary>
+    public double OffBannerPercent => Math.Round((OffBannerRate ?? 0) * 100, 2);
+
+    /// <summary>保底状态标题("保底状态: {卡池} · 歪率 {x}%")。</summary>
+    public string GuaranteeHeaderText
+        => CoreStrings.F("Gacha.PityHeader", $"保底状态: {DisplayName} · 歪率 {OffBannerPercent}%",
+            DisplayName, OffBannerPercent);
+
     /// <summary>四星数量。</summary>
     public int FourStarCount { get; init; }
 
@@ -124,6 +139,15 @@ public sealed class PoolStats
 
     /// <summary>是否有 UP/歪 判定可用(常驻/新手等无 UP 池为 false,界面据此隐藏"不歪率"等行)。</summary>
     public bool CanJudgeUp => FiveStarEntries.Any(e => e.IsOffBanner.HasValue);
+
+    /// <summary>
+    /// 是否展示「不歪率」。仅 50/50 池(角色活动/联动/忆旅/新旅)有意义。
+    /// <para>
+    /// 武器 UP 池是**必中 UP**(出金即目标),歪率恒为 0,展示出来只会误导
+    /// (实机:武器活动 3 个五星全是 UP,却显示"不歪率 0.0%")。
+    /// </para>
+    /// </summary>
+    public bool ShowOffBannerRate => CanJudgeUp && IsFiftyFifty;
 
     /// <summary>记录起始日期(YYYY-MM-dd)。</summary>
     public string StartDate { get; init; } = "";

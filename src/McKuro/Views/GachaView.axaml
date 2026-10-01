@@ -428,7 +428,8 @@
                                             </StackPanel>
                                         </Grid>
 
-                                        <!-- 数据格 2×2:垫抽 / 平均 / UP 数 / 不歪率 -->
+                                        <!-- 数据格 2×2:垫抽 / 平均 / UP 数 / 不歪率
+                                             (不歪率仅 50/50 池显示;武器 UP 池必中,歪率恒为 0 无意义) -->
                                         <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto"
                                               RowSpacing="14" ColumnSpacing="10" Margin="0,16,0,0">
                                             <StackPanel Grid.Row="0" Grid.Column="0" Spacing="1">
@@ -454,7 +455,7 @@
                                                 </StackPanel>
                                                 <TextBlock Text="{loc:Localize Key=Gacha.UpCount}" FontSize="11" Foreground="{DynamicResource SemiColorText3}" />
                                             </StackPanel>
-                                            <StackPanel Grid.Row="1" Grid.Column="1" Spacing="1" IsVisible="{Binding CanJudgeUp}">
+                                            <StackPanel Grid.Row="1" Grid.Column="1" Spacing="1" IsVisible="{Binding ShowOffBannerRate}">
                                                 <StackPanel Orientation="Horizontal" Spacing="3">
                                                     <TextBlock Text="{Binding OffBannerRate, StringFormat={}{0:P1}, TargetNullValue=—}"
                                                                FontSize="16" FontWeight="Bold" Foreground="#64B5F6" />

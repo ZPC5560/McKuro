@@ -180,6 +180,56 @@ public class GachaAnalysisServiceTests
     }
 
     [Fact]
+    public void Analyze_WeaponActivity_Hides_OffBannerRate_Because_Always_Up()
+    {
+        // 武器活动池必中 UP(出金即目标),歪率恒为 0,界面不应显示「不歪率」;
+        // 实机:武器活动 3 个五星全是 UP,却显示了"不歪率 0.0%"
+        var records = new List<GachaRecord>
+        {
+            R(2, 910, 5, "W-UP", "2024-01-01 10:00:00"),
+            R(2, 911, 5, "W-UP2", "2024-01-02 10:00:00"),
+        };
+        var upIds = new Dictionary<CardPoolType, HashSet<int>> { [CardPoolType.WeaponsActivity] = [910, 911] };
+
+        var pool = new GachaAnalysisService().Analyze("p1", records, upIds)[CardPoolType.WeaponsActivity];
+
+        Assert.NotNull(pool);
+        Assert.Equal(2, pool!.UpCount);
+        Assert.False(pool.IsFiftyFifty);   // 武器池不参与 50/50
+        Assert.False(pool.ShowOffBannerRate); // → 不展示「不歪率」
+    }
+
+    [Fact]
+    public void Analyze_RoleActivity_Shows_OffBannerRate()
+    {
+        // 角色活动池是 50/50,应展示「不歪率」
+        var upIds = new Dictionary<CardPoolType, HashSet<int>> { [CardPoolType.RoleActivity] = [900] };
+        var records = new List<GachaRecord>
+        {
+            R(1, 900, 5, "UP", "2024-01-01 10:00:00"),
+        };
+
+        var pool = new GachaAnalysisService().Analyze("p1", records, upIds)[CardPoolType.RoleActivity];
+
+        Assert.NotNull(pool);
+        Assert.True(pool!.IsFiftyFifty);
+        Assert.True(pool.ShowOffBannerRate);
+    }
+
+    [Fact]
+    public void Analyze_Resident_Pool_Shows_No_OffBannerRate()
+    {
+        // 常驻池无 UP 概念,同样不展示「不歪率」
+        var records = new List<GachaRecord> { R(3, 900, 5, "SSR", "2024-01-01 10:00:00") };
+
+        var pool = new GachaAnalysisService().Analyze("p1", records)[CardPoolType.RoleResident];
+
+        Assert.NotNull(pool);
+        Assert.False(pool!.CanJudgeUp);
+        Assert.False(pool.ShowOffBannerRate);
+    }
+
+    [Fact]
     public void Analyze_EmptyUpSet_NotJudged_AsOffBanner()
     {
         // 空集合(远程数据缺失兜底)时应全部"不判定",避免所有五星误判为歪

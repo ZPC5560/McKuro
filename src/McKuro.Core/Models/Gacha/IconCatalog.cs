@@ -1,9 +1,45 @@
 namespace McKuro.Core.Models.Gacha;
 
 /// <summary>角色/武器图标目录(ResourceId → mc.appfeng.com 图标文件名)。</summary>
-/// <remarks>数据来源:mc.appfeng.com 图鉴(与 Haiyu 一致);缺少的 ResourceId 返回空串。</remarks>
+/// <remarks>
+/// 数据来源:mc.appfeng.com 图鉴(与 Haiyu 一致);缺少的 ResourceId 返回空串。
+/// <para>
+/// <b>两级查找</b>:运行时远程目录(由 <c>GachaIconCatalog</c> 拉取 avatar.json/weapon.json 后经
+/// <see cref="ApplyRemoteCatalog"/> 注入)<b>优先</b>,未命中再回落到下面的静态字典。
+/// 静态字典只作<b>离线兜底</b>(首次启动且无网络时仍能显示已有图标),
+/// 因此游戏版本新增角色/武器<b>无需改代码</b>——这正是此前"抽到新角色没头像"的根因。
+/// </para>
+/// </remarks>
 public static class IconCatalog
 {
+    /// <summary>远程目录不可变快照(单次原子替换,读侧无锁)。</summary>
+    private sealed record RemoteSnapshot(
+        IReadOnlyDictionary<int, string> Roles,
+        IReadOnlyDictionary<int, string> Weapons);
+
+    private static volatile RemoteSnapshot? _remote;
+
+    /// <summary>
+    /// 注入远程图鉴目录(取自 mc.appfeng.com)。传空快照等价于清空,恢复纯静态兜底行为。
+    /// 线程安全:整体替换快照引用,已开始的查找要么看到旧快照要么看到新快照,不会读到半更新状态。
+    /// </summary>
+    public static void ApplyRemoteCatalog(
+        IReadOnlyDictionary<int, string>? roles,
+        IReadOnlyDictionary<int, string>? weapons)
+    {
+        _remote = (roles is null && weapons is null)
+            ? null
+            : new RemoteSnapshot(
+                roles ?? EmptyIcons,
+                weapons ?? EmptyIcons);
+    }
+
+    private static readonly IReadOnlyDictionary<int, string> EmptyIcons =
+        new Dictionary<int, string>();
+
+    /// <summary>当前是否已注入远程目录(供诊断/测试)。</summary>
+    public static bool HasRemoteCatalog => _remote is not null;
+
     private static readonly IReadOnlyDictionary<int, string> Roles = new Dictionary<int, string>
     {
         [1102] = "T_IconRoleHead256_7_UI", // 散华
@@ -25,6 +61,7 @@ public static class IconCatalog
         [1209] = "T_IconRoleHead256_61_UI", // 莫宁
         [1210] = "T_IconRoleHead256_53_UI", // 爱弥斯
         [1211] = "T_IconRoleHead256_64_UI", // 达妮娅
+        [1212] = "T_IconRoleHead256_74_UI", // 景燃
         [1301] = "T_IconRoleHead256_18_UI", // 卡卡罗
         [1302] = "T_IconRoleHead256_17_UI", // 吟霖
         [1303] = "T_IconRoleHead256_15_UI", // 渊武
@@ -35,6 +72,8 @@ public static class IconCatalog
         [1308] = "T_IconRoleHead256_69_UI", // 丽贝卡
         [1309] = "T_IconRoleHead256_4_UI", // 漂泊者·导电
         [1310] = "T_IconRoleHead256_5_UI", // 漂泊者·导电
+        [1311] = "T_IconRoleHead256_75_UI", // 心
+        [1312] = "T_IconRoleHead256_76_UI", // 锁暝
         [1402] = "T_IconRoleHead256_1_UI", // 秧秧
         [1403] = "T_IconRoleHead256_12_UI", // 秋水
         [1404] = "T_IconRoleHead256_11_UI", // 忌炎
@@ -46,6 +85,7 @@ public static class IconCatalog
         [1410] = "T_IconRoleHead256_48_UI", // 尤诺
         [1411] = "T_IconRoleHead256_56_UI", // 仇远
         [1412] = "T_IconRoleHead256_65_UI", // 西格莉卡
+        [1413] = "T_IconRoleHead256_73_UI", // 清宵
         [1501] = "T_IconRoleHead256_4_UI", // 漂泊者·衍射
         [1502] = "T_IconRoleHead256_5_UI", // 漂泊者·衍射
         [1503] = "T_IconRoleHead256_3_UI", // 维里奈
@@ -90,6 +130,7 @@ public static class IconCatalog
         [21010064] = "T_IconWeapon21010064_UI", // 东落
         [21010066] = "T_IconWeapon21010066_UI", // 宙算仪轨
         [21010074] = "T_IconWeapon21010074_UI", // 纹秋
+        [21010076] = "T_IconWeapon21010076_UI", // 千般渡
         [21010084] = "T_IconWeapon21010084_UI", // 凋亡频移
         [21010094] = "T_IconWeapon21010094_UI", // 容赦的沉思录
         [21010104] = "T_IconWeapon21010104_UI", // 金穹
@@ -119,6 +160,8 @@ public static class IconCatalog
         [21020094] = "T_IconWeapon21020094_UI", // 风流的寓言诗
         [21020096] = "T_IconWeapon21020096_UI", // 天之苍苍
         [21020104] = "T_IconWeapon21020104_UI", // 翼锋
+        [21020106] = "T_IconWeapon21020106_UI", // 云琅
+        [21020107] = "T_IconWeapon21020107_UI", // 沉冥
         [21030011] = "T_IconWeapon21030011_UI", // 教学佩枪
         [21030012] = "T_IconWeapon21030012_UI", // 原初佩枪·穿林
         [21030013] = "T_IconWeapon21030013_UI", // 暗夜佩枪·暗星
@@ -190,15 +233,35 @@ public static class IconCatalog
         [21050094] = "T_IconWeapon21050094_UI", // 虚饰的华尔兹
         [21050096] = "T_IconWeapon21050096_UI", // 栖霞饮露
         [21050104] = "T_IconWeapon21050104_UI", // 曜光
+        [21050116] = "T_IconWeapon21050116_UI", // 玉阙玄华
     };
 
-    /// <summary>角色头像 URL(未收录返回空串)。</summary>
-    public static string GetRoleIconUrl(int resourceId) =>
-        Roles.TryGetValue(resourceId, out var icon) ? $"https://mc.appfeng.com/ui/avatar/{icon}.png" : "";
+    /// <summary>角色头像 URL(未收录返回空串)。远程目录优先,静态字典兜底。</summary>
+    public static string GetRoleIconUrl(int resourceId)
+    {
+        var icon = Lookup(_remote?.Roles, Roles, resourceId);
+        return icon is null ? "" : $"https://mc.appfeng.com/ui/avatar/{icon}.png";
+    }
 
-    /// <summary>武器图标 URL(未收录返回空串)。</summary>
-    public static string GetWeaponIconUrl(int resourceId) =>
-        Weapons.TryGetValue(resourceId, out var icon) ? $"https://mc.appfeng.com/ui/weapon/{icon}.png" : "";
+    /// <summary>武器图标 URL(未收录返回空串)。远程目录优先,静态字典兜底。</summary>
+    public static string GetWeaponIconUrl(int resourceId)
+    {
+        var icon = Lookup(_remote?.Weapons, Weapons, resourceId);
+        return icon is null ? "" : $"https://mc.appfeng.com/ui/weapon/{icon}.png";
+    }
+
+    /// <summary>两级查找:远程快照优先,未命中回落静态兜底;都没有返回 null。</summary>
+    private static string? Lookup(
+        IReadOnlyDictionary<int, string>? remote,
+        IReadOnlyDictionary<int, string> fallback,
+        int resourceId)
+    {
+        if (remote is not null && remote.TryGetValue(resourceId, out var fromRemote))
+        {
+            return fromRemote;
+        }
+        return fallback.TryGetValue(resourceId, out var fromStatic) ? fromStatic : null;
+    }
 
     /// <summary>按抽卡记录类型返回图标 URL(角色→avatar,武器→weapon)。</summary>
     public static string GetIconUrl(GachaRecord record) =>

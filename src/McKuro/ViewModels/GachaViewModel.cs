@@ -163,6 +163,29 @@ public sealed partial class GachaViewModel : ViewModelBase
     {
         LoadExisting();
         _ = PreloadUpIdsAsync();
+        _ = PreloadIconCatalogAsync();
+    }
+
+    /// <summary>
+    /// 异步刷新图鉴图标目录(缓存过期时才真正联网)。完成后重算分析结果,
+    /// 让本次新增的角色/武器图标立即出现在五星列表与表格里(无需重启应用)。
+    /// </summary>
+    private async Task PreloadIconCatalogAsync()
+    {
+        try
+        {
+            await AppServices.GachaIcons.RefreshAsync();
+            // 目录更新后重建分析:FiveStarEntry/TabelRecords 的 IconUrl 是派生属性,
+            // 需重新生成条目才会用上新目录
+            if (_analysis is not null)
+            {
+                AnalyzeCurrentPlayer();
+            }
+        }
+        catch (Exception)
+        {
+            // 目录刷新失败不影响抽卡数据展示(静态字典兜底)
+        }
     }
 
     /// <summary>异步预取 UP/歪 判定配置(缓存,失败不影响主流程)。</summary>
@@ -248,6 +271,8 @@ public sealed partial class GachaViewModel : ViewModelBase
         {
             // 先刷新 UP/歪 判定配置:避免整段会话沿用构造时的旧缓存(如新卡池开启后旧数据把当期 UP 误判为歪)
             _upIds = await AppServices.UpPools.GetUpIdsAsync();
+            // 顺带刷新图鉴目录:版本更新后点同步即可补上新角色的头像(缓存 24h 内不会重复联网)
+            await AppServices.GachaIcons.RefreshAsync();
 
             // 双通道:优先云鸣潮(库街区)接口;失败或无登录则回退本地日志解密
             GachaSyncResult? result = null;
@@ -435,7 +460,9 @@ public sealed partial class GachaViewModel : ViewModelBase
                 [(LanguageService.Format("Gacha.OnBanner"), Math.Round((1 - rate) * 100, 1)), (LanguageService.Format("Gacha.OffBanner"), Math.Round(rate * 100, 1))],
                 [Color.Parse("#52C41A"), Color.Parse("#F53F3F")]));
 
-            GuaranteeHeader = LanguageService.Format("Gacha.PityHeader", pityPool.DisplayName, rate * 100);
+            // 歪率保留两位小数:取整在模型层完成(见 PoolStats.OffBannerPercent),
+            // 直接传 rate * 100 会把 double 全精度拼进文案(如 33.33333333333333%)。
+            GuaranteeHeader = pityPool.GuaranteeHeaderText;
         }
         else
         {
