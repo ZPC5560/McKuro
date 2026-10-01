@@ -77,24 +77,29 @@ if (canvas && hero && supportsGL()) {
   });
   scene.add(new THREE.Points(tideGeo, tideMat));
 
-  /* ---- resonance core: faceted crystal + two thin orbit rings ---- */
+  /* ---- resonance core: faceted crystal + two thin orbit rings ----
+     The hero copy is centred and fills the middle of the viewport, so the core is
+     parked to one side where there is guaranteed empty space. Its x is derived from
+     the aspect ratio in resize() to hold a constant screen fraction, because a fixed
+     world x would drift into the text on narrow viewports. */
   const core = new THREE.Group();
-  core.position.set(0, 0.55, 0);
+  const CORE_Y = -0.55;
+  core.position.set(0, CORE_Y, 0);
   const crystal = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(1.05, 0),
-    new THREE.MeshStandardMaterial({ color: 0xdfe9fb, metalness: 0.15, roughness: 0.18, flatShading: true, transparent: true, opacity: 0.94 })
+    new THREE.IcosahedronGeometry(0.62, 0),
+    new THREE.MeshStandardMaterial({ color: 0xe6eefc, metalness: 0.12, roughness: 0.26, flatShading: true, transparent: true, opacity: 0.78 })
   );
   const edges = new THREE.LineSegments(
     new THREE.EdgesGeometry(crystal.geometry),
-    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 })
+    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
   );
   crystal.add(edges);
   core.add(crystal);
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0x5a8dee, transparent: true, opacity: 0.55 });
-  const ringA = new THREE.Mesh(new THREE.TorusGeometry(1.75, 0.012, 8, 160), ringMat);
-  const ringB = new THREE.Mesh(new THREE.TorusGeometry(2.15, 0.008, 8, 160), ringMat.clone());
-  ringB.material.opacity = 0.32;
-  ringA.rotation.x = Math.PI * 0.42;
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0x5a8dee, transparent: true, opacity: 0.28 });
+  const ringA = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.009, 8, 160), ringMat);
+  const ringB = new THREE.Mesh(new THREE.TorusGeometry(1.3, 0.006, 8, 160), ringMat.clone());
+  ringB.material.opacity = 0.17;
+  ringA.rotation.x = Math.PI * 0.44;
   ringB.rotation.x = Math.PI * 0.58;
   ringB.rotation.y = 0.35;
   core.add(ringA, ringB);
@@ -108,16 +113,24 @@ if (canvas && hero && supportsGL()) {
   rim.position.set(-4, -1, -3);
   scene.add(rim);
 
-  /* ---- layout: core sits in the empty band above the headline on wide screens ---- */
+  /* ---- layout: keep the core in the empty margin beside the centred copy ---- */
   function resize() {
     const w = hero.clientWidth, h = hero.clientHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    // Narrow screens: the headline + composer fill the whole band the core would float in,
-    // so any part of it that shows reads as a glitch peeking out behind the card. Hide it.
-    core.visible = w >= 700;
-    core.scale.setScalar(w < 1100 ? 0.8 : 1);
+    // Below ~820px the copy occupies the full width, so there is no free margin to
+    // put the core in; showing it anywhere would overlap the text.
+    const wide = w >= 820;
+    core.visible = wide;
+    if (!wide) { return; }
+    // Hold the core at ~34% of the half-width beyond the text column, and scale it
+    // with the viewport so it never grows into the headline on small screens.
+    const visH = 2 * Math.tan((camera.fov * Math.PI) / 360) * camera.position.z;
+    const visW = visH * camera.aspect;
+    core.position.x = visW * 0.31;
+    core.position.y = CORE_Y;
+    core.scale.setScalar(Math.min(Math.max(visW / 22, 0.6), 1.15));
   }
   resize();
   window.addEventListener("resize", resize);
@@ -142,11 +155,11 @@ if (canvas && hero && supportsGL()) {
     tilt.y += (target.y - tilt.y) * 0.05;
     crystal.rotation.y = t * 0.25 + tilt.x * 0.5;
     crystal.rotation.x = 0.35 + tilt.y * 0.3;
-    core.position.y = 0.55 + Math.sin(t * 0.9) * 0.08;
+    core.position.y = CORE_Y + Math.sin(t * 0.9) * 0.06;
     ringA.rotation.z = t * 0.18;
     ringB.rotation.z = -t * 0.12;
     camera.position.x = tilt.x * 0.45;
-    camera.lookAt(0, 0.6, 0);
+    camera.lookAt(0, 0.1, 0);
     renderer.render(scene, camera);
   }
   function loop() { if (!running) { return; } frame(); raf = requestAnimationFrame(loop); }
