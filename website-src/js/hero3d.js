@@ -90,6 +90,7 @@ if (canvas && hero && supportsGL()) {
 
   let figureReady = false;
   let figBaseY = 0;
+  const FIG_YAW = -0.73;   // rad (~-42deg): turn her to face left, toward the copy
 
   new GLTFLoader().load("./models/xin-yuehu.glb", (gltf) => {
     const src = gltf.scene;
@@ -179,7 +180,10 @@ if (canvas && hero && supportsGL()) {
     tilt.y += (target.y - tilt.y) * 0.05;
     if (figureReady) {
       // shallow turntable: enough to read as 3D, never a distracting spin
-      figure.rotation.y = Math.sin(t * 0.28) * 0.24 + tilt.x * 0.09;
+      // She is authored facing the camera; turned to the left she looks in toward the
+      // copy rather than off the right edge. The sway is kept small so the pose stays
+      // readable as "facing left" instead of swinging back to front.
+      figure.rotation.y = FIG_YAW + Math.sin(t * 0.28) * 0.13 + tilt.x * 0.05;
       figure.position.y = figBaseY + Math.sin(t * 0.7) * 0.04;
     }
     camera.position.x = tilt.x * 0.4;
