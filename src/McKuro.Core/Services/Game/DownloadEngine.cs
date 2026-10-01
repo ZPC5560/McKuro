@@ -4,6 +4,19 @@ using Microsoft.Extensions.Logging;
 
 namespace McKuro.Core.Services.Game;
 
+/// <summary>一次进度上报所属的阶段(供 UI 决定显示什么、是否显示暂停)。</summary>
+public enum DownloadPhase
+{
+    /// <summary>非下载阶段(差分合成/解压/资源安装/迁移),只切文案不动进度条。</summary>
+    Stage,
+
+    /// <summary>本地文件校验阶段(BytesTotal==0),按文件数显示「正在校验本地文件 x/y…」。</summary>
+    Verify,
+
+    /// <summary>真正的下载阶段,显示百分比/速度/剩余时间。</summary>
+    Download,
+}
+
 /// <summary>下载进度(整体)。</summary>
 public sealed class DownloadProgress
 {
@@ -19,6 +32,27 @@ public sealed class DownloadProgress
     /// 非空时 UI 应显示该文本且不改动进度条百分比(此时字节字段无意义)。
     /// </summary>
     public string? StageText { get; init; }
+
+    /// <summary>
+    /// 当前阶段是否可暂停(默认 false)。只有真正的下载阶段才为 true:
+    /// 校验/差分合成(hpatchz 外部进程)/解压/资源安装等阶段不产生可暂停的字节读取,
+    /// 此时 UI 必须隐藏暂停按钮,否则暂停是空操作(且遗留的暂停门会让后续下载阶段无声卡死)。
+    /// 对齐上游 IProgressSetup.CanPause:InstallKrdiffGroupResource/InstallKrdiffResource/MoveFileResource
+    /// 均为 false,仅 DownloadAndVerifyResource/InstallKrZipResource 为 true。
+    /// </summary>
+    public bool CanPause { get; init; }
+
+    /// <summary>
+    /// 阶段分类(纯函数,UI 与测试共用同一套判定):
+    /// 有阶段文案 → <see cref="DownloadPhase.Stage"/>;
+    /// 无字节总量但有文件总数 → <see cref="DownloadPhase.Verify"/>(校验);
+    /// 其余 → <see cref="DownloadPhase.Download"/>。
+    /// </summary>
+    public DownloadPhase Phase => StageText is not null
+        ? DownloadPhase.Stage
+        : BytesTotal <= 0 && FileTotal > 0
+            ? DownloadPhase.Verify
+            : DownloadPhase.Download;
 
     public double Percent => BytesTotal > 0 ? Math.Clamp((double)BytesDownloaded / BytesTotal, 0, 1) : 0;
 }
@@ -118,6 +152,8 @@ public sealed class DownloadEngine
                     BytesDownloaded = Math.Min(downloadedBytes, totalBytes),
                     BytesTotal = totalBytes,
                     SpeedBps = speedMeter.BytesPerSecond,
+                    // 下载批次:字节读取受暂停门控制,是唯一可暂停的阶段
+                    CanPause = true,
                 };
             }
             progress.Report(update);
@@ -191,7 +227,16 @@ public sealed class DownloadEngine
             }, ct));
         }
 
-        await Task.WhenAll(tasks).ConfigureAwait(false);
+        try
+        {
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+        }
+        finally
+        {
+            // 批次结束即清除暂停门:批次内没有待读取的字节,残留的暂停态会污染后续阶段
+            // (新批次一进循环就在 WaitAsync 上静默阻塞,而那时按钮可能已不可见)。
+            _pauseToken.Resume();
+        }
         // 最后补一次最终进度报告
         ReportProgress(files.Count > 0 ? files[^1].Path : "", force: true);
         return (success, failures);

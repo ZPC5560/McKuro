@@ -282,6 +282,14 @@ public sealed class UpdateInstaller
             {
                 continue;
             }
+            // 预下载暂存与补丁临时目录都在游戏目录的工作区里(DiffData/ 及其下的 install_tmp/),
+            // 它们不在游戏清单内,但删除会丢掉已预载的几十 GB,因此与备份目录一样跳过。
+            // .McKuro_patch 是与之并列的分组差分临时目录,同样跳过。
+            if (relative.StartsWith(GamePathResolver.DiffDataDirName, StringComparison.OrdinalIgnoreCase)
+                || relative.StartsWith(GamePathResolver.PatchTempDirName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
             if (manifestPaths.Contains(relative))
             {
                 continue;

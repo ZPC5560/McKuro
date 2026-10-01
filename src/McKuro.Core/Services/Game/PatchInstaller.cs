@@ -122,7 +122,7 @@ public sealed class PatchInstaller
         CancellationToken ct)
     {
         // 与 Haiyu 一致:分组差分输出位于游戏盘,避免预载目录在另一盘时耗尽错误磁盘。
-        var tempRoot = Path.Combine(gameRootDir, ".McKuro_patch", Guid.NewGuid().ToString("N"));
+        var tempRoot = Path.Combine(gameRootDir, GamePathResolver.PatchTempDirName, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
