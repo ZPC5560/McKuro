@@ -1,112 +1,128 @@
 # McKuro · 鸣潮启动器
 
-基于 **.NET 10 + Avalonia 12 + Semi Design** 的《鸣潮》(Wuthering Waves)桌面启动器,支持原生 AOT 发布。当前版本 **1.3.1**。
+[![Release](https://img.shields.io/github/v/release/ZPC5560/McKuro?label=Release&color=blue)](https://github.com/ZPC5560/McKuro/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/ZPC5560/McKuro/build-and-test.yml?branch=main&label=CI)](https://github.com/ZPC5560/McKuro/actions/workflows/build-and-test.yml)
+![.NET](https://img.shields.io/badge/.NET-10-5C2D91) ![Avalonia](https://img.shields.io/badge/Avalonia-12.1-8B44AC) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## 功能
+[简体中文](README.md) · **[English](README.en.md)**
 
-| 模块 | 说明 |
+基于 **.NET 10 + Avalonia 12 + Semi Design** 的《鸣潮》(Wuthering Waves) 桌面启动器,Native AOT 编译,**所有数据只保存在本机**。
+
+**[官网](https://zpc5560.github.io/McKuro/)** · **[下载](https://github.com/ZPC5560/McKuro/releases/latest)** · **[更新日志](CHANGELOG.md)**
+
+## 功能总览
+
+| 页面 | 一句话说明 |
 | --- | --- |
-| 主页 | 欢迎页 + 角色资料卡(头像/昵称/角色 ID/等级/游玩天数/注册日期,**开服玩家徽章**)与每日数据网格(体力/结晶单质/活跃度/周本/终焉矩阵/冥歌海墟/千道门扉/周度游历/电台经验进度,体力与结晶单质带**恢复满倒计时**);本地 PC 启动器 SDK 与库街区双数据源,图标按需懒加载;**Live2D 模型展示**(Windows x64,叠加在壁纸上方、内容下层,视线跟随,设置页导入/预览/配置) |
-| 启动器 | 检查更新(版本数值比较)、**预下载**(不影响已安装文件,支持暂停/继续)、安装更新(全量/修复采用**边下载边更新流式安装**,文件级校验并行化,替换前自动备份,省一份暂存盘占用)、**修复游戏**(跳过校验文件)、**下载速度限制**(MB/s)、**启动参数**(DX11/DLSS/自定义参数/可选启动文件)、**DLSS/XeSS 版本检测**、打开游戏目录;选目录后自动识别加载;官方封面轮播 + 游戏公告(带封面)+ **背景视频封面**(可选,libmpv **GPU 渲染**(OpenGL+硬件解码,CPU 占用约为软件渲染的 1/6;GL 不可用自动回退软件渲染,无 native 库回退官方首帧图);可**自定义动态壁纸**:本地视频或**自动扫描 Wallpaper Engine 视频壁纸**含封面预览(自定义生效时自动隐藏官方版本诗句叠加,窗口最小化/游戏进行中自动挂起让出资源);**启动按钮三态(启动游戏/启动中/游戏中)+ 进程监控**;**启动后最小化位置可选任务栏/系统托盘**;**游戏结束后窗口状态可配**;主窗口纵横比跟随启动页视频,拖动全程锁比例 |
-| 系统材质外观 | 导航栏/内容背景跟随操作系统原生桌面材质:**Windows 11 Mica / Windows 10 Acrylic / macOS 毛玻璃·液态玻璃 / Linux 透明背景+应用染色**;主题切换(跟随系统/浅色/深色,即时生效);导航栏为**液态玻璃质感**,选中项用 Apple 液态玻璃**滑动胶囊**,顶部显示库街区**真实账号头像** |
-| 抽卡分析 | 解析 `Client.log` 解密 URL → 官方接口拉取记录;**双通道同步(云鸣潮接口优先,本地日志回退)**;按卡池统计保底/当前垫抽/小保底歪率/欧气评分/称号/双金/歪数/平均出货/出货率/天数;**逐条五星记录 UP/歪标注(常驻武器池等不可判定池不误标)**;**环形统计图**(下拉切换)+ **每日抽数平滑面积图(悬停查看日期/卡池/抽数)**;多账号切换与「全部账号」聚合分析;五星角色/武器真实头像图标;本地 SQLite 去重存储 |
-| 角色数据 | **库街区** API 或 **官方攻略站**双数据源拉取角色数据(等级/武器/技能/共鸣链/声骸/属性面板),网格卡片原生展示;图标磁盘持久化缓存(6 类,切换数据源不丢图);**库街区被极验风控时优先展示完整缓存**;也支持解析游戏本地缓存;Echo 评分 |
-| 签到 | 一键游戏签到(鸣潮全部角色)、签到奖励与签到统计、每日 8:00 自动签到;**多账号签到**(遍历全部库街区账号拉取全部角色,角色头像走本地缓存) |
-| 活动 | 官方活动甘特图(当前版本活动,过期剔除,活动图自动取主色);**时间轴均匀日期刻度**(任意滚动位置都有日期参照)、今日线/进度分界像素级对齐、默认滚动到今天居中,可整段回看历史 |
-| 消息通知 | **五类悬浮提醒**(除设置页外全局弹出,8 秒自动消失,可「前往」对应页/手动关闭):游戏签到未完成、活动临期(≤3 天)、账号登录失效(库街区/云鸣潮/攻略站)、周本收尾、每日活跃度;每类可在设置页**独立开关**;**按天去重并持久化**(同一天重启不重复打扰);启动后 15 秒首轮检查,签到类提醒会等自动签到跑完再判定,避免误报 |
-| 资讯 | 库街区 wiki 首页数据(Banner 轮播/官方资讯/热点)+ 游戏公告卡(带封面)+ 网页快捷入口(官方 wiki/地图、Gamekee/彩墨地图);轮播 B站官方多语言 PV 自动**播英文分P**(英文界面查分P接口选【英】,无英文分P回退第 1P);**英文界面快捷链接切全球官方源**(官网新闻/X/YouTube) |
-| 兑换码 | 远程拉取鸣潮兑换码清单(国服/国际服,有效在前),**卡片一键复制对应兑换码**(自动写入剪贴板并显示悬浮成功提示,3 秒关闭);**英文界面按官方译名术语表展示接口内容**(星声→Astrite 等,未知条目保留原文) |
+| 主页 | 账号资料卡(含开服玩家徽章)+ 每日数据网格(体力/结晶单质带恢复倒计时),双数据源,Live2D 展示(Windows x64) |
+| 启动器 | 检查更新、预下载、流式安装、修复、限速、启动参数、DLSS/XeSS 检测;libmpv GPU 背景视频与自定义动态壁纸;三态启动按钮 + 进程监控 |
+| 系统材质 | 导航栏/背景跟随原生桌面材质:Win11 Mica / Win10 Acrylic / macOS 毛玻璃·液态玻璃 / Linux 透明染色;液态玻璃导航 + 滑动胶囊 |
+| 抽卡分析 | 云鸣潮接口优先、本地日志回退的双通道同步;保底/歪率/欧气评分等逐池统计;环形图 + 每日抽数图;多账号聚合,SQLite 本地去重 |
+| 角色数据 | 库街区 / 官方攻略站双数据源的养成面板;图标磁盘持久缓存;Echo 评分 |
+| 签到 | 一键签到全部角色、每日 8:00 自动签到、多账号遍历 |
+| 活动 | 官方活动甘特图:过期剔除、均匀日期刻度、今日线像素级对齐、默认滚动到今天居中 |
+| 消息通知 | 五类悬浮提醒(签到/活动临期/登录失效/周本收尾/每日活跃度),独立开关、按天去重持久化 |
+| 资讯 | 库街区 wiki 首页 + 公告卡 + 网页快捷入口;多语言 PV 自动选英文分P;英文界面切全球官方源 |
+| 兑换码 | 远程清单(国服/国际服,有效在前),卡片一键复制 + 悬浮成功提示 |
 | 游玩统计 | 最近 7 天逐日游玩时长 + 7×24 时段热力格 |
-| 深塔海墟 | 三个页签:**逆境深塔 / 终焉矩阵 / 再生海域**,解析对齐 Java 版 WutheringWavesTool;**逆境深塔区域卡片稳定两列展示**;**终焉矩阵往期历史本地持久化**,每条记录带「起始 → 结束」时间区间与时间节点;进入页面自动刷新;**终焉矩阵按轮次展示每队分数**(每队独立积分/进度/角色/增益,并给出每轮合计,分数与头像垂直对齐);评级按库街区 6 级(SSS/SS/S/A/B/C)正确显示 |
-| 账号 | **全部接口账号登录的统一入口**:库街区多账号(短信+极验登录/切换/移除)、云鸣潮登录、官方攻略站评级登录,三张登录卡**堆叠展示**;库街区短信验证用**应用内极验窗口**(macOS=WKWebView / Windows=WebView2);**同一账号自动判定**(手机号比对,仅提醒不强制登出);各接口标签头带**登录状态点**(绿/橙/灰) |
-| 设置 | 游戏目录(自动识别加载)、服务器渠道、游戏修复·跳过校验文件管理、下载并发/限速、游戏启动参数、**启动后最小化位置(任务栏/托盘)**、**游戏结束后窗口状态**、**启动时打开的页面(主页/启动页)**、主题/背景视频封面(**视频来源可切换:官方宣传视频 / 自定义动态壁纸**——选择本地视频文件或指向 Wallpaper Engine 内容目录自动扫描,封面网格预览点选,设置页实时预览)、**应用自更新**(GitHub Release 检查/跳过版本,加速模板·IP 域前置·sha256 校验;**优先 zip 绿色包解压替换,exe 安装包静默自动更新**)、**界面语言 zh-Hans/en-US 全量切换**(711 key 双语资源覆盖全部页面与动态消息,重启生效) |
+| 深塔海墟 | 逆境深塔 / 终焉矩阵 / 再生海域;往期历史本地持久化(带起止区间),终焉矩阵按轮次展示每队分数 |
+| 账号 | 库街区多账号 / 云鸣潮 / 官方攻略站登录的统一入口;应用内极验窗口;同一账号自动判定 |
+| 设置 | 游戏目录自动识别、下载并发/限速、启动参数与最小化行为、背景视频来源、应用自更新、zh-Hans / en-US 全量切换 |
 
 应用图标:守岸人(Shorekeeper)官方图标(萌娘共享 CC-BY-NC-SA),多尺寸 ICO 内嵌 exe、窗口标题栏与系统托盘。
+
+## 功能亮点
+
+### 启动与游戏进程
+
+- **流式安装**:安装更新(全量/修复)采用「边下载边更新」,文件级校验并行化,替换前自动备份,省一份暂存盘占用;**修复游戏**可跳过校验文件。
+- **预下载**不影响已安装文件(支持暂停/继续),**下载速度限制**(MB/s)与并发可调。
+- **资源等级分级下载**:HD/SD/UHD 切换只按已安装资源计算差异包、仅下载缺失部分。
+- **启动参数**:DX11/DLSS 开关、自定义参数、可选启动文件;**DLSS/XeSS 版本检测**;一键打开游戏目录;选目录后自动识别加载。
+- **进程监控**:启动按钮三态(启动游戏/启动中/游戏中);启动后最小化位置可选任务栏/系统托盘;游戏结束后窗口状态可配。
+
+### 视觉与壁纸
+
+- **背景视频封面**:libmpv GPU 渲染(OpenGL + 硬件解码,CPU 占用约为软件渲染的 1/6);GL 不可用自动回退软件渲染,无 native 库回退官方首帧静态图。
+- **自定义动态壁纸**:本地视频,或自动扫描 Wallpaper Engine 视频壁纸(含封面预览、设置页实时预览);自定义生效时自动隐藏官方封面诗句叠加;窗口最小化/游戏进行中自动挂起让出资源。
+- 官方封面轮播 + 游戏公告(带封面);主窗口纵横比跟随启动页视频,拖动全程锁比例。
+
+### 系统集成
+
+- 导航栏/内容背景跟随操作系统原生材质:**Windows 11 Mica / Windows 10 Acrylic / macOS 毛玻璃·液态玻璃 / Linux 透明背景 + 应用染色**;主题切换(跟随系统/浅色/深色)即时生效。
+- 导航栏为液态玻璃质感,选中项使用 Apple 液态玻璃式**滑动胶囊**,顶部显示库街区真实账号头像。
+
+### 数据分析
+
+- **抽卡分析**:解析 `Client.log` 解密 URL → 官方接口拉取记录,**双通道同步**(云鸣潮接口优先、本地日志回退,两者都失败回退 SQLite 缓存展示)。按卡池统计保底/当前垫抽/小保底歪率/欧气评分/称号/双金/歪数/平均出货/出货率/天数;**逐条五星记录 UP/歪标注**(常驻武器池等不可判定池不误标);**环形统计图**(下拉切换卡池)+ **每日抽数平滑面积图**(悬停查看日期/卡池/抽数);多账号切换与「全部账号」聚合;五星角色/武器真实头像图标。
+- **角色数据**:库街区 API 或官方攻略站双数据源(等级/武器/技能/共鸣链/声骸/属性面板),网格卡片原生展示;图标磁盘持久化缓存(6 类,切换数据源不丢图);**库街区被极验风控时优先展示完整缓存**;支持解析游戏本地缓存;Echo 评分。
+- **深塔海墟**:三个页签逆境深塔 / 终焉矩阵 / 再生海域,解析对齐 Java 版 [WutheringWavesTool](https://github.com/leck995/WutheringWavesTool);逆境深塔区域卡片稳定两列;终焉矩阵往期历史本地持久化(每条带「起始 → 结束」区间与时间节点,起始日按赛季周期倒推),进入页面自动刷新;按轮次展示每队分数(每队独立积分/进度/角色/增益与每轮合计,分数与头像垂直对齐);评级按库街区 6 级(SSS/SS/S/A/B/C)正确显示。
+- **游玩统计**:最近 7 天逐日游玩时长 + 7×24 时段热力格。
+
+### 账号与通知
+
+- **账号页**是全部接口账号登录的统一入口:库街区多账号(短信 + 极验登录/切换/移除)、云鸣潮登录、官方攻略站评级登录,三张登录卡堆叠展示;短信验证使用**应用内极验窗口**(macOS = WKWebView / Windows = WebView2);多接口**同一账号自动判定**(手机号比对,仅提醒不强制登出);各接口标签头带登录状态点(绿/橙/灰)。
+- **五类悬浮提醒**(除设置页外全局弹出,8 秒自动消失,可「前往」对应页或手动关闭):游戏签到未完成、活动临期(≤3 天)、账号登录失效(库街区/云鸣潮/攻略站)、周本收尾、每日活跃度;每类可独立开关;**按天去重并持久化**(同一天重启不重复打扰);启动后 15 秒首轮检查,签到类提醒等自动签到跑完再判定,避免误报。
+
+### 签到 · 活动 · 资讯 · 兑换码
+
+- 一键游戏签到(鸣潮全部角色)、签到奖励与统计、每日 8:00 自动签到;**多账号签到**遍历全部库街区账号拉取全部角色(角色头像走本地缓存)。
+- 官方活动甘特图:当前版本活动、过期剔除、活动图自动取主色;时间轴**均匀日期刻度**(任意滚动位置都有日期参照),今日线/进度分界像素级对齐,默认滚动到今天居中,可整段回看历史。
+- 资讯页:库街区 wiki 首页数据(Banner 轮播/官方资讯/热点)+ 游戏公告卡(带封面)+ 网页快捷入口(官方 wiki/地图、Gamekee/彩墨地图);轮播 B站官方多语言 PV 自动**播英文分P**(英文界面查分P接口选【英】,无英文分P回退第 1P);英文界面快捷链接切全球官方源(官网新闻/X/YouTube)。
+- 兑换码:远程拉取鸣潮兑换码清单(国服/国际服,有效在前),**卡片一键复制**自动写入剪贴板并显示 3 秒悬浮成功提示;英文界面按官方译名术语表展示(星声→Astrite 等,未知条目保留原文)。
+
+### 多语言与自更新
+
+- 界面语言 **zh-Hans / en-US 全量切换**(787 key 双语资源覆盖全部页面与动态消息,重启生效)。
+- 应用内置 GitHub Release 自更新,通道回退 + 断点续传 + 完整性校验,详见[应用自更新](#应用自更新)。
 
 ## 环境要求
 
 - .NET SDK 10.0 (`dotnet --version` 应显示 10.x)
 - Windows 10/11 运行游戏与完整更新功能;macOS/Linux 提供 UI、主题材质、数据和视频首帧回退(游戏本体仅 Windows;Linux 视频优先使用系统 libmpv)
 
-## 项目结构
-
-```
-McKuro/
-├── McKuro.slnx                 # 解决方案
-├── src/McKuro/                 # Avalonia 桌面应用 (Semi 主题)
-│   ├── Views/                 # 主页 / 鸣潮(启动器) / 抽卡分析 / 角色数据 / 签到 / 活动 / 资讯 / 兑换码 / 游玩统计 / 深塔海墟 / 账号 / 设置
-│   ├── ViewModels/            # MVVM (CommunityToolkit.Mvvm)
-│   ├── Controls/              # AsyncImage / VideoBackgroundControl(libmpv) / TimeLineChart / SpeedTrendChart / RingProgress / LruCache / WebView2Control(Windows 极验) / WkWebViewControl(macOS 极验) / Live2DModelHost(Live2D 宿主)
-│   ├── Services/              # 手动 DI (AppServices) + 系统材质 / 游戏进程监控 / 极验 / 每日调度 / 多语言 / Live2D 运行时定位
-│   └── Assets/lang/           # zh-Hans / en-US 界面语言资源
-├── src/McKuro.Core/            # 与 UI 无关的核心库 (AOT 兼容,源生成 JSON)
-│   ├── Services/Gacha/        # 日志解密 / URL 提取 / 接口 / 分析 / 存储 / 云鸣潮双通道
-│   ├── Services/Game/         # 清单加载 / 断点下载 / 差分安装(hpatchz) / 更新 / 游玩时长
-│   ├── Services/Roles/        # 库街区 API / 官方攻略站 / 本地数据读取 / 缓存 / Echo 评分
-│   ├── Services/Kuro/         # 库街区登录 / 签到 / 每日任务
-│   ├── Services/CloudGame/    # 云鸣潮 SDK 登录 / 节点测速 / 启动排队
-│   ├── Services/Tower/        # 逆境深塔 / 终焉矩阵 / 再生海域
-│   ├── Services/Wiki/         # 库街区资讯首页 / 热点 / 公告
-│   ├── Services/              # CoreStrings 本地化网关(Core 引用应用层解析器,未注册回退中文)
-│   └── Infrastructure/        # SQLite (Microsoft.Data.Sqlite)
-└── tests/McKuro.Tests/         # xUnit 单元测试 (398 个用例)
-```
-
-## 常用命令
+## 快速开始
 
 ```bash
 dotnet restore                                    # 还原依赖
 dotnet build McKuro.slnx -c Release               # 构建(解决方案级请显式 -c Release)
 dotnet run --project src/McKuro                    # 运行(项目级构建默认 Release,见 Directory.Build.props)
 dotnet test McKuro.slnx -c Release                # 运行测试
-dotnet publish src/McKuro -c Release -r win-x64 --self-contained   # AOT 发布 (Windows 上执行)
-dotnet publish src/McKuro -c Release -r osx-arm64 --self-contained # macOS 本地验证 AOT
-dotnet publish src/McKuro -c Release -r linux-x64 --self-contained # Linux 本地验证 AOT/UI
+dotnet publish src/McKuro -c Release -r win-x64 --self-contained    # AOT 发布 (Windows 上执行)
+dotnet publish src/McKuro -c Release -r osx-arm64 --self-contained  # macOS 本地验证 AOT
+dotnet publish src/McKuro -c Release -r linux-x64 --self-contained  # Linux 本地验证 AOT/UI
 ```
 
 > **构建配置**:项目级构建(`dotnet run --project src/McKuro` 等)由 `Directory.Build.props` 默认 Release;解决方案级构建(`dotnet build`/`dotnet test` 不带项目路径)SDK 会默认注入 Debug,**请显式加 `-c Release`**(`McKuro.slnx` 已声明 `Release|AnyCPU` 映射)。
+>
+> **AOT 说明**:`PublishAot` 已启用。AOT 无法跨平台交叉编译,win-x64 必须在 Windows 上发布;osx-arm64 可在 macOS 本地验证。
 
-Windows 发布会按 RID 条件带上 `Endpne.LibMPV.Windows`(libmpv-2.dll),不要求用户另装 VLC。Linux 使用系统 `libmpv`;macOS 和 Linux 找不到可用媒体运行库时,启动器会保留官方静态首帧,不影响其他页面。
+Windows 发布会按 RID 条件带上 `Endpne.LibMPV.Windows`(libmpv-2.dll),不要求用户另装 VLC。Linux 使用系统 `libmpv`;macOS/Linux 找不到可用媒体运行库时,启动器会保留官方静态首帧,不影响其他页面。
 
-## 日志
+## 项目结构
 
-应用将运行日志写入日志目录(**Windows: exe 所在目录\logs;macOS/Linux: %AppData%\McKuro\logs**),**按类型分目录**(如 `SmsLogin`/`GeetVerifyService`/`GameUpdater`),目录内**按日期分文件**(`McKuro-yyyyMMdd.log`),跨天自动新建当日文件、旧文件保留。内容覆盖极验验证(本地服务端口/页面地址/回调提取结果)、短信验证码发送响应、更新与下载等关键流程,便于本地排查。设置页「打开日志目录」按钮可直达日志根目录。
-
-## 官网
-
-项目官网发布在 GitHub Pages:<https://zpc5560.github.io/McKuro/>
-
-- `website/` 是构建产物(直接可浏览),`website-src/` 是可维护的源文件。
-- 源文件按职责分片:`website-src/html/`、`css/`、`js/`,按文件名顺序拼接;图标放 `website-src/src/icons/`(Phosphor,MIT),字体源放 `website-src/font-src/`。
-- 重新构建:
-
-  ```bash
-  pip install fonttools brotli
-  python website-src/build.py
-  ```
-
-  构建会把中文字体裁剪到页面实际用到的字形(约 3.4 MB → 约 220 KB),并把所有图标内联成 SVG 雪碧图。页面不请求任何 CDN。
-
-- `.github/workflows/website.yml` 在 `website/` 或 `website-src/` 变更时重新构建并部署。它会比对构建结果与已提交产物,不一致就直接失败,避免线上跑的是过期副本。
-
-> 页面里的界面截图均为**网页重绘**,使用示例数据,不含任何真实账号信息。
-
-## 安装包
-
-`installer/setup.iss` 为 Inno Setup 脚本,由 GitHub Actions 的 `setup` job 在发布 tag(v*) 或手动触发时编译为 `McKuro-setup-<version>.exe`(中文/英文向导、桌面快捷方式、卸载)。
-
-**发布资产**(tag v* 触发 CI 全平台 NativeAOT 构建并附加到 GitHub Release):`McKuro-setup-<ver>.exe` / `McKuro-win-x64-<ver>.zip`(Windows)、`McKuro-osx-arm64-<ver>.zip` / `McKuro-osx-x64-<ver>.zip`(macOS,arm64 包内置 libmpv 视频开箱可用;未签名,首次右键→打开)、`McKuro-linux-x64-<ver>.tar.gz`(Linux,视频需系统 libmpv,缺失回退静态封面)。解压类资产 `chmod +x McKuro` 后运行。
-
-**应用自更新**:设置页检查 GitHub Release(默认仓库 `ZPC5560/McKuro`),**API→HTML 双通道检查**(匿名配额耗尽或部分网络不可达时自动回退,结果缓存 5 分钟),下载**断点续传**(.part + Range,卡死自动重试);发布方提供 sha256 摘要时下载后**完整性校验**(不符自动重下,未提供不阻断);**IP 域前置**(默认关)开启后检查与下载均绕过系统 DNS 直连 GitHub IP,**下载加速模板**支持 `{downloadUrl}` 占位;**优先下载 zip 绿色包**(解压替换安装目录并重启);exe 安装包走**静默自动更新**(`/VERYSILENT` + `/DIR` 锁定当前目录,目录可写时 `/CURRENTUSER` 免 UAC,安装完由监视脚本自动拉起新版),全程零向导。**启动后自动检查更新**(默认开,延迟 5 秒静默检查):发现新版可**自动下载安装并重启**(零点击,默认关)或弹窗询问(立即更新/稍后/跳过此版本);手动双击 setup.exe 时自动定位既有安装目录(应用启动自注册 `HKCU\Software\McKuro\InstallPath`,覆盖无卸载注册表项的 zip 便携版);支持跳过指定版本。
-
-**更新通道与网络韧性**(参考 [Haiyu](https://github.com/HaiyuGame/Haiyu) 的更新实现):检查更新按 **GitHub API → GitHub HTML 回退** 依次降级,API 匿名配额耗尽或 `api.github.com` 不可达时仍能更新;Releases 结果**缓存 5 分钟**(启动自动检查与手动点击不重复打满配额);可选 **下载加速模板**(含 `{downloadUrl}` 占位符,如 `https://gh-proxy.example/{downloadUrl}`)与 **GitHub IP 域前置**(默认关;开关即生效,绕过 DNS 污染直连内置 IP 表,单个 IP 独立 5 秒超时后自动换下一个)。下载链路在既有**断点续传 + 卡死重试**之上增加 **sha256 完整性校验**:发布方提供摘要(Release 正文或 `<资产名>.sha256` 资产)时校验下载产物,不符则丢弃并重下;未提供摘要时**不阻断**更新,设置页如实标注当前是否带校验。
-
-```bash
-# 本地编译安装包(需安装 Inno Setup 6)
-ISCC.exe installer\setup.iss /DMyAppVersion=1.2.0
 ```
-
-> **AOT 说明**:项目已启用 `PublishAot`。AOT 无法跨平台交叉编译,win-x64 必须在 Windows 上发布;osx-arm64 可在 macOS 本地验证。
+McKuro/
+├── McKuro.slnx                     # 解决方案
+├── src/McKuro/                     # Avalonia 桌面应用 (Semi 主题)
+│   ├── Views/                      # 主页 / 启动器 / 抽卡 / 角色 / 签到 / 活动 / 资讯 / 兑换码 / 游玩统计 / 深塔海墟 / 账号 / 设置
+│   ├── ViewModels/                 # MVVM (CommunityToolkit.Mvvm)
+│   ├── Controls/                   # AsyncImage / VideoBackgroundControl(libmpv) / 图表控件 / WebView2·WkWebView(极验) / Live2DModelHost
+│   ├── Services/                   # 手动 DI (AppServices) + 系统材质 / 游戏进程监控 / 每日调度 / 多语言 / Live2D 运行时定位
+│   └── Assets/lang/                # zh-Hans / en-US 界面语言资源 (787 key)
+├── src/McKuro.Core/                # 与 UI 无关的核心库 (AOT 兼容,源生成 JSON)
+│   ├── Services/Gacha/             # 日志解密 / URL 提取 / 接口 / 分析 / 存储 / 云鸣潮双通道
+│   ├── Services/Game/              # 清单加载 / 断点下载 / 差分安装(hpatchz) / 更新 / 游玩时长
+│   ├── Services/Roles/             # 库街区 API / 官方攻略站 / 本地数据读取 / 缓存 / Echo 评分
+│   ├── Services/Kuro/              # 库街区登录 / 签到 / 每日任务
+│   ├── Services/CloudGame/         # 云鸣潮 SDK 登录 / 节点测速 / 启动排队
+│   ├── Services/Tower/             # 逆境深塔 / 终焉矩阵 / 再生海域
+│   ├── Services/Wiki/              # 库街区资讯首页 / 热点 / 公告
+│   ├── Services/                   # Update(自更新) / Launcher / Notification / Redeem / Settings 等其余服务
+│   └── Infrastructure/             # SQLite (Microsoft.Data.Sqlite)
+├── src/ThirdParty/Sparkle.Live2DView/  # vendored Live2D 渲染控件 (MIT)
+└── tests/McKuro.Tests/             # xUnit 单元测试 (673 个用例)
+```
 
 ## 使用说明
 
@@ -145,7 +161,62 @@ macOS/Linux 暂不支持(渲染控件当前仅面向 Windows x64),设置页相�
 
 ### 界面语言
 
-设置页「界面语言」支持 **简体中文 / English**,重启后生效。双语资源覆盖全部页面文案、消息提示与各服务层状态(`CoreStrings` 网关:Core 层经应用注册的解析器取词,未注册(单测)时回退中文原文)。
+设置页「界面语言」支持 **简体中文 / English**,重启后生效。双语资源(787 key)覆盖全部页面文案、消息提示与各服务层状态(`CoreStrings` 网关:Core 层经应用注册的解析器取词,未注册(单测)时回退中文原文)。
+
+## 发布与安装包
+
+发布 tag(`v*`)触发 GitHub Actions 全平台 NativeAOT 构建,产物附加到 Release:
+
+| 资产 | 平台 | 说明 |
+| --- | --- | --- |
+| `McKuro-setup-<ver>.exe` / `McKuro-win-x64-<ver>.zip` | Windows | 安装包由 `installer/setup.iss`(Inno Setup)编译:中文/英文向导、桌面快捷方式、卸载 |
+| `McKuro-osx-arm64-<ver>.zip` / `McKuro-osx-x64-<ver>.zip` | macOS | arm64 包内置 libmpv,视频开箱可用;未签名,首次右键 → 打开 |
+| `McKuro-linux-x64-<ver>.tar.gz` | Linux | 视频需系统 libmpv,缺失回退静态封面 |
+
+解压类资产 `chmod +x McKuro` 后运行。本地编译安装包(需安装 Inno Setup 6):
+
+```bash
+ISCC.exe installer\setup.iss /DMyAppVersion=1.3.1
+```
+
+## 应用自更新
+
+设置页检查 GitHub Release(默认仓库 `ZPC5560/McKuro`),更新链路参考 [Haiyu](https://github.com/HaiyuGame/Haiyu) 的实现:
+
+- **检查回退**:GitHub API → GitHub HTML 双通道依次降级,匿名配额耗尽或 `api.github.com` 不可达时仍能更新;Releases 结果缓存 5 分钟(启动自动检查与手动点击不重复打满配额)。
+- **下载**:断点续传(`.part` + Range,卡死自动重试);发布方提供摘要(Release 正文或 `<资产名>.sha256` 资产)时进行 **sha256 完整性校验**,不符自动丢弃重下;未提供摘要时不阻断更新,设置页如实标注当前是否带校验。
+- **可选加速**:下载加速模板(含 `{downloadUrl}` 占位符,如 `https://gh-proxy.example/{downloadUrl}`);GitHub IP 域前置(默认关,开关即生效,绕过 DNS 污染直连内置 IP 表,单个 IP 独立 5 秒超时后自动换下一个)。
+- **安装**:优先下载 zip 绿色包(解压替换安装目录并重启);exe 安装包走静默更新(`/VERYSILENT` + `/DIR` 锁定当前目录,目录可写时 `/CURRENTUSER` 免 UAC,装完由监视脚本自动拉起新版),全程零向导。
+- **自动检查**:启动后延迟 5 秒静默检查(默认开);发现新版可自动下载安装并重启(零点击,默认关)或弹窗询问(立即更新/稍后/跳过此版本);支持跳过指定版本。手动双击 setup.exe 时自动定位既有安装目录(应用启动自注册 `HKCU\Software\McKuro\InstallPath`,覆盖无卸载注册表项的 zip 便携版)。
+
+## 测试与 CI
+
+- `tests/McKuro.Tests`:xUnit 单元测试 **673 个用例**(覆盖日志解密、抽卡分析、卡池统计、更新链路、通知、多语言等)。
+- `build-and-test.yml`:push/PR 在 Linux 构建 + 测试;发布 tag 或手动触发时进行全平台 AOT 构建并附加 Release 资产。
+- `website.yml`:`website/` 或 `website-src/` 变更时重新构建并部署官网。
+
+## 日志
+
+应用将运行日志写入日志目录(**Windows: exe 所在目录\logs;macOS/Linux: %AppData%\McKuro\logs**),按类型分目录(`SmsLogin`/`GeetVerifyService`/`GameUpdater` 等),目录内按日期分文件(`McKuro-yyyyMMdd.log`),跨天自动新建、旧文件保留。内容覆盖极验验证、短信验证码发送响应、更新与下载等关键流程,便于本地排查;设置页「打开日志目录」按钮可直达日志根目录。
+
+## 官网
+
+项目官网发布在 GitHub Pages:<https://zpc5560.github.io/McKuro/>
+
+- `website/` 是构建产物(直接可浏览),`website-src/` 是可维护的源文件。
+- 源文件按职责分片:`website-src/html/`、`css/`、`js/`,按文件名顺序拼接;图标放 `website-src/src/icons/`(Phosphor,MIT),字体源放 `website-src/font-src/`。
+- 重新构建:
+
+  ```bash
+  pip install fonttools brotli
+  python website-src/build.py
+  ```
+
+  构建会把中文字体裁剪到页面实际用到的字形(约 3.4 MB → 约 220 KB),并把所有图标内联成 SVG 雪碧图。页面不请求任何 CDN。
+
+- `.github/workflows/website.yml` 会比对构建结果与已提交产物,不一致就直接失败,避免线上跑的是过期副本。
+
+> 页面里的界面截图均为**网页重绘**,使用示例数据,不含任何真实账号信息。
 
 ## 隐私与数据
 
@@ -156,6 +227,19 @@ macOS/Linux 暂不支持(渲染控件当前仅面向 Windows x64),设置页相�
 
 本项目的部分功能与实现参考了以下开源项目,在此特别感谢:
 
-- [Haiyu](https://github.com/HaiyuGame/Haiyu) — 抽卡分析算法(保底/歪率/欧气评分)、卡池 UP 数据、启动器交互(进程监控/最小化位置/游戏结束窗口状态)
+- [Haiyu](https://github.com/HaiyuGame/Haiyu) — 抽卡分析算法(保底/歪率/欧气评分)、卡池 UP 数据、启动器交互(进程监控/最小化位置/游戏结束窗口状态)、更新通道回退设计
 - [WutheringWavesTool](https://github.com/leck995/WutheringWavesTool) — 日志解密、抽卡接口、本地数据解析、深塔/终焉矩阵/海墟解析
 - [Sparkle.Live2DView](https://github.com/Mozi216/Sparkle.Live2DView) — 首页 Live2D 模型渲染控件(Avalonia OpenGL,MIT),基于 [Live2DCSharpSDK](https://github.com/Coloryr/Live2DCSharpSDK)(C# Cubism SDK,MIT)
+
+## 许可证
+
+- 本项目源代码以 **[MIT License](LICENSE)** 授权(Copyright © 2026 ZPC5560)。
+- 第三方资产各自遵循其原始许可,不随 MIT 授权:
+  - 应用图标(守岸人 / Shorekeeper)为官方素材,依 **CC BY-NC-SA** 共享,仅限非商业用途。
+  - [Sparkle.Live2DView](https://github.com/Mozi216/Sparkle.Live2DView) 与 [Live2DCSharpSDK](https://github.com/Coloryr/Live2DCSharpSDK) 为 **MIT**;`Live2DCubismCore.dll` 遵循 **Live2D Open Software License**,需自行放置且不随安装包分发。
+  - 官网图标 Phosphor 为 **MIT**;`hpatchz` 差分组件遵循其上游许可。
+- `鸣潮` / `Wuthering Waves` 名称、游戏数据接口及相关内容权利归库洛游戏 / 库街区等权利人所有,本项目与其无关联(详见[免责声明](#免责声明))。
+
+## 免责声明
+
+McKuro 为社区驱动的开源项目,与库街区、鸣潮官方无任何关联,游戏名称、图标及数据接口相关权利归其权利人所有。本项目仅用于本地数据展示与游戏体验辅助。
