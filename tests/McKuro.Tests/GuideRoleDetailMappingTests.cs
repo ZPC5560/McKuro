@@ -84,7 +84,7 @@ public class GuideRoleDetailMappingTests
         {
             Items =
             [
-                new GuideResonanceItem { ResonanceSequence = 1, IsAcquired = true, Texts = [Zh("一链")] },
+                new GuideResonanceItem { ResonanceSequence = 1, IsAcquired = true, Texts = [Zh("一链")], PictureUrl = "http://img/chain1.png" },
                 new GuideResonanceItem { ResonanceSequence = 2, IsAcquired = false, Texts = [Zh("二链")] },
             ],
         },
@@ -139,11 +139,12 @@ public class GuideRoleDetailMappingTests
         Assert.Equal("http://img/attr1.png", detail.Attributes?[0].IconUrl);
         Assert.Equal("未达标", detail.Attributes?[1].AttributeType);
 
-        // 共鸣链:序号/名称/解锁
+        // 共鸣链:序号/名称/解锁/图标
         Assert.Equal(2, detail.Chains?.Count);
         Assert.Equal(1, detail.Chains?[0].ChainNum);
         Assert.Equal("一链", detail.Chains?[0].ChainName);
         Assert.True(detail.Chains?[0].IsUnlock);
+        Assert.Equal("http://img/chain1.png", detail.Chains?[0].IconUrl);
         Assert.False(detail.Chains?[1].IsUnlock);
 
         // 声骸:名称/图标/星级/套装
@@ -286,6 +287,66 @@ public class GuideRoleDetailMappingTests
         {
             listener.Stop();
         }
+    }
+
+    // ---------------- 官方推荐判定(角色详情页推荐区) ----------------
+
+    [Fact]
+    public void WeaponRecommendation_Maps_Status_Tiers()
+    {
+        // 实测 1504 灯灯:items 内 status=1 首选(时和岁稔)/2 备选(浩境粼光)/0 未收录(纹秋)
+        Assert.True(GuideAchievementService.IsRecommendedWeapon(new GuideWeaponItem { Status = 1 }));
+        Assert.True(GuideAchievementService.IsRecommendedWeapon(new GuideWeaponItem { Status = 2 }));
+        Assert.False(GuideAchievementService.IsRecommendedWeapon(new GuideWeaponItem { Status = 0 }));
+
+        Assert.Equal("推荐", GuideAchievementService.WeaponRecommendText(new GuideWeaponItem { Status = 1 }));
+        Assert.Equal("备选", GuideAchievementService.WeaponRecommendText(new GuideWeaponItem { Status = 2 }));
+        Assert.Equal("", GuideAchievementService.WeaponRecommendText(new GuideWeaponItem { Status = 0 }));
+    }
+
+    [Fact]
+    public void PhantomRecommendation_Matches_Main_Spare_Current()
+    {
+        var echo = new GuideEcho
+        {
+            Main = new GuideEchoBuild { EchoProps = new GuideEchoProps { Texts = [Zh("无常凶鹭")] } },
+            Spare = new GuideEchoBuild { EchoProps = new GuideEchoProps { Texts = [Zh("梦魇·云闪之鳞")] } },
+        };
+        // 主推荐/备选命中(名称归一化:去空白/间隔号)
+        Assert.True(GuideAchievementService.IsRecommendedPhantom("无常凶鹭", echo));
+        Assert.True(GuideAchievementService.IsRecommendedPhantom("梦魇·云闪之鳞", echo));
+        Assert.True(GuideAchievementService.IsRecommendedPhantom("无常 凶鹭", echo)); // 空白差异
+        // 未命中
+        Assert.False(GuideAchievementService.IsRecommendedPhantom("鸣钟之龟", echo));
+        Assert.False(GuideAchievementService.IsRecommendedPhantom("", echo));
+        Assert.False(GuideAchievementService.IsRecommendedPhantom("无常凶鹭", (GuideEcho?)null));
+    }
+
+    [Fact]
+    public void SkillLevel_Met_Compares_Recommend_And_Current()
+    {
+        static GuideSkillTarget Target(int rec, int cur) => new()
+        {
+            RecommendLevel = System.Text.Json.JsonSerializer.SerializeToElement(rec),
+            CurrentLevel = System.Text.Json.JsonSerializer.SerializeToElement(cur),
+        };
+
+        Assert.True(GuideAchievementService.IsSkillLevelMet(Target(8, 8)));   // 已达标
+        Assert.True(GuideAchievementService.IsSkillLevelMet(Target(8, 10)));  // 超过推荐
+        Assert.False(GuideAchievementService.IsSkillLevelMet(Target(8, 1)));  // 未达标
+        Assert.Null(GuideAchievementService.IsSkillLevelMet(Target(0, 5)));   // 攻略无推荐等级
+
+        Assert.Contains("Lv.8", GuideAchievementService.SkillRecommendText(Target(8, 1)));
+        Assert.Contains("无需升级", GuideAchievementService.SkillRecommendText(Target(0, 1)));
+    }
+
+    [Fact]
+    public void PlainRecommendText_Strips_Html()
+    {
+        Assert.Equal("共鸣链2提供无视20%防御", GuideAchievementService.PlainRecommendText("<p>共鸣链2提供无视20%防御</p>"));
+        Assert.Equal("A > B", GuideAchievementService.PlainRecommendText("<p>A &gt; B</p>"));
+        Assert.Equal("", GuideAchievementService.PlainRecommendText(null));
+        Assert.Equal("", GuideAchievementService.PlainRecommendText(""));
     }
 
     // ---------------- 基础设施(与 GuideAchievementServiceTests 一致) ----------------

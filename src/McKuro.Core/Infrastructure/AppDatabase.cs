@@ -102,6 +102,27 @@ public sealed class AppDatabase : IDisposable
                 update_time TEXT NOT NULL,
                 PRIMARY KEY (role_id, end_time)
             );
+
+            -- 攻略站(mcguide)数据缓存:按「攻略账号 + 库街区 cardRoleId」存攻略详情(含共鸣链图标/推荐/技能达标)。
+            -- 攻略内容变化慢,缓存后点角色不必每次重拉(降低请求量、消除等待)。
+            -- account_id 必须进主键:detail_json 里的 isAcquired/currentLevel 等达成度是 per-account 数据,
+            -- 只按 cardRoleId 定位会让换号后的用户命中上一个账号的快照(评审反馈)。
+            -- 时间戳按 payload 分列(list/detail/role_info 各一):共用一列时任一 payload 刷新会把整行"续期",
+            -- 另一 payload 即便已超期也被判新鲜(评审反馈)。
+            -- list_json 存该角色的攻略列表(切换攻略下拉用),detail_json 存当前选中攻略详情,
+            -- role_info_json 存 role/info(技能演示视频 5 个 + rolePlays 角色特点图标)。
+            CREATE TABLE IF NOT EXISTS guide_cache (
+                account_id TEXT NOT NULL,
+                card_role_id INTEGER NOT NULL,
+                list_json TEXT NOT NULL DEFAULT '',
+                detail_json TEXT NOT NULL DEFAULT '',
+                selected_id INTEGER NOT NULL DEFAULT 0,
+                list_update_time TEXT NOT NULL DEFAULT '',
+                detail_update_time TEXT NOT NULL DEFAULT '',
+                role_info_json TEXT NOT NULL DEFAULT '',
+                role_info_update_time TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (account_id, card_role_id)
+            );
             """;
         cmd.ExecuteNonQuery();
 
@@ -151,6 +172,30 @@ public sealed class AppDatabase : IDisposable
             c.Transaction = tx;
             c.CommandText = sql;
             c.ExecuteNonQuery();
+        }
+
+        // guide_cache 结构迁移:旧结构(单列主键 card_role_id + 共用 update_time)整表重建。
+        // 本表是纯缓存,DROP 丢弃旧行无数据损失(下次访问自动回源);
+        // 该分支只为开发机旧库服务(旧结构从未发布),比多代 ALTER 简单可靠(评审反馈)。
+        if (TableExists("guide_cache") && !HasColumn("guide_cache", "account_id"))
+        {
+            using var guideTx = _connection.BeginTransaction();
+            Run(guideTx, "DROP TABLE guide_cache");
+            Run(guideTx, """
+                CREATE TABLE guide_cache (
+                    account_id TEXT NOT NULL,
+                    card_role_id INTEGER NOT NULL,
+                    list_json TEXT NOT NULL DEFAULT '',
+                    detail_json TEXT NOT NULL DEFAULT '',
+                    selected_id INTEGER NOT NULL DEFAULT 0,
+                    list_update_time TEXT NOT NULL DEFAULT '',
+                    detail_update_time TEXT NOT NULL DEFAULT '',
+                    role_info_json TEXT NOT NULL DEFAULT '',
+                    role_info_update_time TEXT NOT NULL DEFAULT '',
+                    PRIMARY KEY (account_id, card_role_id)
+                )
+                """);
+            guideTx.Commit();
         }
 
         // 处理上次异常退出可能留下的 role_cache_old。新表已有数据时只清理旧副本,

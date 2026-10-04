@@ -23,10 +23,11 @@ public sealed class KujiequApiClient
 {
     public const string BaseUrl = "https://api.kurobbs.com";
 
-    // 端点(与 WutheringWavesTool ApiConfig 一致;refreshData 已被服务端停用,不再定义)
+    // 端点(与 WutheringWavesTool ApiConfig 一致)
     public const string RequestTokenUrl = BaseUrl + "/aki/roleBox/requestToken";
     public const string RoleDataUrl = BaseUrl + "/aki/roleBox/akiBox/roleData";
     public const string RoleDetailUrl = BaseUrl + "/aki/roleBox/akiBox/getRoleDetail";
+    public const string RefreshDataUrl = BaseUrl + "/aki/roleBox/akiBox/refreshData";
     public const string NewTowerUrl = BaseUrl + "/aki/roleBox/akiBox/newTowerDetail";
     public const string SlashUrl = BaseUrl + "/aki/roleBox/akiBox/slashDetail";
     public const string TowerUrl = BaseUrl + "/aki/roleBox/akiBox/towerDataDetail";
@@ -73,6 +74,9 @@ public sealed class KujiequApiClient
 
     /// <summary>getRoleDetail 端点。</summary>
     public string RoleDetailUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/akiBox/getRoleDetail";
+
+    /// <summary>refreshData 端点。</summary>
+    public string RefreshDataUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/akiBox/refreshData";
 
     /// <summary>newTowerDetail 端点。</summary>
     public string NewTowerUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/akiBox/newTowerDetail";
@@ -169,6 +173,72 @@ public sealed class KujiequApiClient
         }
         var access = JsonSerializer.Deserialize(dataStr, KujiequJsonContext.Default.KujiequAccessToken);
         return string.IsNullOrEmpty(access?.AccessToken) ? null : access.AccessToken;
+    }
+
+    /// <summary>
+    /// 触发库街区服务端刷新角色数据(refreshData 接口,对齐 Haiyu RefreshGamerDataAsync)。
+    /// <para>
+    /// <b>必须在 roleData/getRoleDetail 之前调用</b>:数据中心接口返回的是库街区服务端自己的缓存快照,
+    /// 不先触发刷新,同步/详情拿到的都是上次快照(用户实测:「同步之后角色详情数据还是旧的」)。
+    /// body 仅 3 字段(gameId/roleId/serverId,对齐 Haiyu;多字段会被拒)。
+    /// 2026-10 实测:数据中心头(含 b-at)+ 3 字段 body 返回 <c>{"code":200,"data":true}</c>——
+    /// 2026-08 「接口已停用(任意头体组合 10000)」的结论已过时,当时多半是头/参数组合不对。
+    /// </para>
+    /// </summary>
+    /// <param name="accessToken">B-At 令牌。</param>
+    /// <param name="deviceId">设备 ID(did 头)。</param>
+    /// <param name="roleId">玩家角色条目 RoleId(body roleId)。</param>
+    /// <param name="serverId">服务器 ID(来自 getGamer 条目,而非固定值)。</param>
+    /// <param name="gameId">游戏 ID(鸣潮=3)。</param>
+    /// <returns>服务端是否接受刷新请求(code 200 且 data 为 true)。</returns>
+    public async Task<bool> RefreshDataAsync(
+        string accessToken,
+        string deviceId,
+        string roleId,
+        string serverId,
+        string gameId = ParamGameId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken) || string.IsNullOrWhiteSpace(roleId))
+        {
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(serverId))
+        {
+            // serverId 缺失直接跳过(评审反馈):发出去注定被拒,还会在日志里与真实失败混淆
+            _logger.LogInformation("refreshData 跳过:serverId 缺失, roleId={RoleId}", roleId);
+            return false;
+        }
+        var headers = BuildWebHeader(accessToken, deviceId);
+        // body: 3 字段顺序对齐 Haiyu RefreshGamerDataAsync(gameId→roleId→serverId);值统一转义
+        var body = $"gameId={Uri.EscapeDataString(gameId)}&roleId={Uri.EscapeDataString(roleId)}&serverId={Uri.EscapeDataString(serverId)}";
+        try
+        {
+            var env = await SendEnvelopeAsync(RefreshDataUrlValue, headers, body, ct, throwOnError: false).ConfigureAwait(false);
+            if (env is { GeeTest: true })
+            {
+                _logger.LogWarning("refreshData 触发极验风控(geeTest:true): roleId={RoleId}", roleId);
+                return false;
+            }
+            var ok = env is { Code: 200 } e && e.Data is { ValueKind: JsonValueKind.True };
+            if (!ok)
+            {
+                _logger.LogWarning("refreshData 未成功: code={Code} msg={Msg} success={Success}",
+                    env?.Code, env?.Msg, env?.Success);
+            }
+            return ok;
+        }
+        catch (OperationCanceledException)
+        {
+            // 取消语义必须保留(评审反馈):吞掉 OCE 会让已取消的同步继续往下跑
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // 刷新失败不阻断同步:后续 roleData 仍返回服务端现有快照(只是可能旧)
+            _logger.LogWarning(ex, "refreshData 请求失败(不阻断同步): roleId={RoleId}", roleId);
+            return false;
+        }
     }
 
     /// <summary>
@@ -475,7 +545,7 @@ public sealed class KujiequApiClient
     /// <para>实测(2026-08):Origin/X-Requested-With 是风控钥匙——去掉任一即返回 {"geeTest":true}
     /// 触发极验;相反<b>绝不能</b>附加 token 头,服务端对带 token 的数据中心请求直接回
     /// code=10000「参数错误」(roleData/getRoleDetail 均实测复现)。
-    /// refreshData 接口已被服务端停用(任意头体组合 10000),勿再调用。</para></summary>
+    /// (2026-10 更正:refreshData 可用——数据中心头 + 仅 3 字段 body 实测 200,见 RefreshDataAsync。)</para></summary>
     private Dictionary<string, string> BuildWebHeader(string accessToken, string deviceId)
     {
         // Devcode:公网 IP + ", " + UA(对齐 Haiyu GetWebHeader)

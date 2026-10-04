@@ -255,4 +255,87 @@ public class GuideApiClientTests
             listener.Stop();
         }
     }
+
+    [Fact]
+    public async Task GetRoleInfoAsync_Parses_All_Skill_Videos_And_RolePlays()
+    {
+        // 回归:技能演示视频不在 introduction/info(那里只有 keynoteSkills 的 1 个),
+        // 而在 role/info 的 data.skills[].videoUrl —— 实测心的 5 个技能全有 mp4。
+        // 此前用 introduction/info 当数据源,导致"只有首个技能有视频、其余显示无视频"。
+        var (baseUrl, listener, _, tokens) = StartServer(new Dictionary<string, string>
+        {
+            ["/role/info"] =
+                """
+                {"code":200,"message":"ok","data":{
+                  "roleGbId":"1311","star":5,
+                  "texts":[{"language":"zh-Hans","name":"心","skillDisplay":"基础连招:同奏→延奏离场"}],
+                  "rolePlays":[
+                    {"gbId":"2","pictureUrl":"http://img/t1.png"},
+                    {"gbId":"39","pictureUrl":"http://img/t2.png"}
+                  ],
+                  "skills":[
+                    {"gbId":"1014-1311","pictureUrl":"http://img/s1.png","videoUrl":"http://v/1.mp4","skillType":{"texts":[{"language":"zh-Hans","name":"常态攻击"}]},"texts":[{"language":"zh-Hans","name":"万相生华","description":"普攻描述"}]},
+                    {"gbId":"1015-1311","pictureUrl":"http://img/s2.png","videoUrl":"http://v/2.mp4","skillType":{"texts":[{"language":"zh-Hans","name":"共鸣技能"}]},"texts":[{"language":"zh-Hans","name":"踏月归心"}]},
+                    {"gbId":"1020-1311","pictureUrl":"http://img/s3.png","videoUrl":"http://v/3.mp4","skillType":{"texts":[{"language":"zh-Hans","name":"共鸣回路"}]},"texts":[{"language":"zh-Hans","name":"万相流转,此心自明"}]},
+                    {"gbId":"1016-1311","pictureUrl":"http://img/s4.png","videoUrl":"http://v/4.mp4","skillType":{"texts":[{"language":"zh-Hans","name":"共鸣解放"}]},"texts":[{"language":"zh-Hans","name":"引枢作清辉"}]},
+                    {"gbId":"1019-1311","pictureUrl":"http://img/s5.png","videoUrl":"http://v/5.mp4","skillType":{"texts":[{"language":"zh-Hans","name":"变奏技能"}]},"texts":[{"language":"zh-Hans","name":"乘兴一顾"}]}
+                  ]
+                }}
+                """,
+        });
+        try
+        {
+            var api = CreateApi(baseUrl);
+            var data = await api.GetRoleInfoAsync(XToken, "1311");
+
+            Assert.NotNull(data);
+            Assert.Equal("心", data!.Name);
+            // 5 个技能全部带视频(核心契约:技能演示列表数据源)
+            Assert.Equal(5, data.Skills?.Count);
+            Assert.All(data.Skills!, s => Assert.True(s.HasVideo, $"{s.Name} 应有演示视频"));
+            Assert.Equal(5, data.Skills!.Count(s => s.HasVideo));
+            // 技能名/类型/图标/描述映射
+            Assert.Equal("万相生华", data.Skills![0].Name);
+            Assert.Equal("常态攻击", data.Skills[0].TypeName);
+            Assert.Equal("http://img/s1.png", data.Skills[0].PictureUrl);
+            Assert.Equal("普攻描述", data.Skills[0].Description);
+            // 评审反馈:逐项锁死 VideoUrl 字符串(此前只断 HasVideo 布尔,映射错位测不出来)
+            Assert.Equal("http://v/1.mp4", data.Skills[0].VideoUrl);
+            Assert.Equal("http://v/2.mp4", data.Skills[1].VideoUrl);
+            Assert.Equal("http://v/3.mp4", data.Skills[2].VideoUrl);
+            Assert.Equal("http://v/4.mp4", data.Skills[3].VideoUrl);
+            Assert.Equal("http://v/5.mp4", data.Skills[4].VideoUrl);
+            // 角色特点图标
+            Assert.Equal(2, data.RolePlays?.Count);
+            Assert.Equal("http://img/t2.png", data.RolePlays?[1].PictureUrl);
+            // 连招文本
+            Assert.Contains("延奏离场", data.Texts?[0].SkillDisplay);
+            // 请求带 x-token
+            Assert.Contains(XToken, tokens);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task GetRoleInfoAsync_Throws_On_Non200()
+    {
+        var (baseUrl, listener, _, _) = StartServer(new Dictionary<string, string>
+        {
+            ["/role/info"] = """{"code":500,"message":"server error","data":null}""",
+        });
+        try
+        {
+            var api = CreateApi(baseUrl);
+            var ex = await Assert.ThrowsAsync<GuideApiException>(
+                () => api.GetRoleInfoAsync(XToken, "1311"));
+            Assert.Contains("获取角色资料失败", ex.Message);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
 }

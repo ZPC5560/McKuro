@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using McKuro.Core.Infrastructure;
+using McKuro.Core.Models.CloudGame;
 using McKuro.Core.Models.Kuro;
 using McKuro.Core.Services.Game;
 using Microsoft.Extensions.Logging;
@@ -183,13 +184,19 @@ public sealed class AppSettings
 
     // ---------- 云鸣潮(云游戏)登录会话 ----------
 
-    /// <summary>云鸣潮登录数据 JSON(CloudGameLoginData 序列化,用于静默续会话拉取抽卡记录)。</summary>
+    /// <summary>已保存的云鸣潮账号列表(多账号;当前账号由 <see cref="CurrentCloudAccountId"/> 指定)。</summary>
+    public List<CloudAccount> CloudAccounts { get; set; } = [];
+
+    /// <summary>当前云鸣潮账号的稳定 Id(手机号可为空,不能作键)。</summary>
+    public string CurrentCloudAccountId { get; set; } = "";
+
+    /// <summary>云鸣潮登录数据 JSON(旧版单账号字段,加载时自动迁移到 <see cref="CloudAccounts"/>)。</summary>
     public string CloudLoginDataJson { get; set; } = "";
 
-    /// <summary>云鸣潮登录账号名(显示用)。</summary>
+    /// <summary>云鸣潮登录账号名(旧版单账号字段,迁移后不再使用)。</summary>
     public string CloudLoginName { get; set; } = "";
 
-    /// <summary>云鸣潮登录手机号(账号页登录表单复用与同账号判定用)。</summary>
+    /// <summary>云鸣潮登录手机号(旧版单账号字段,迁移后不再使用)。</summary>
     public string CloudLoginPhone { get; set; } = "";
 
     // ---------- 快捷键截图 ----------
@@ -397,30 +404,83 @@ public sealed class SettingsService : ISettingsService
     }
 
     /// <summary>
-    /// 旧配置升级:早期版本把资源等级写在自定义参数里手工填写(如 <c>-krqlv=uhd</c>)。
-    /// 升级后该参数由 <see cref="AppSettings.ResourceLevel"/> 统一管理,这里把它迁移到
-    /// 结构化设置中,避免用户升级后画质被静默改回默认 hd。
+    /// 旧配置升级:
+    /// 1) 早期版本把资源等级写在自定义参数里手工填写(如 <c>-krqlv=uhd</c>),迁移到
+    ///    结构化的 <see cref="AppSettings.ResourceLevel"/>,避免用户升级后画质被静默改回默认 hd;
+    /// 2) 云鸣潮早期只支持单账号(CloudLoginDataJson/Name/Phone),迁移为多账号列表,
+    ///    避免升级后已登录会话丢失。
     /// </summary>
     private static AppSettings Migrate(AppSettings settings)
     {
+        MigrateResourceLevel(settings);
+        MigrateCloudAccounts(settings);
+        return settings;
+    }
+
+    private static void MigrateResourceLevel(AppSettings settings)
+    {
         if (!string.IsNullOrWhiteSpace(settings.ResourceLevel))
         {
-            return settings;
+            return;
         }
 
         var stripped = LaunchArguments.StripResourceLevel(settings.StartGameArguments, out var level);
         if (level is null)
         {
-            return settings;
+            return;
         }
 
         settings.ResourceLevel = level;
         settings.StartGameArguments = stripped;
-        return settings;
+    }
+
+    /// <summary>
+    /// 云鸣潮单账号字段 → 多账号列表迁移。
+    /// <para>仅在"列表为空且有旧登录数据"时迁移并清空旧字段;列表已有数据时保留旧字段原样
+    /// (可能是降级到旧版后又写入的会话,无条件清空会把它静默丢掉 —— 评审反馈)。</para>
+    /// </summary>
+    private static void MigrateCloudAccounts(AppSettings settings)
+    {
+        if (settings.CloudAccounts.Count == 0 && !string.IsNullOrWhiteSpace(settings.CloudLoginDataJson))
+        {
+            var phone = settings.CloudLoginPhone ?? "";
+            var name = settings.CloudLoginName ?? "";
+            settings.CloudAccounts.Add(new CloudAccount
+            {
+                // 稳定 Id:手机号优先,空则账号名,再空则 GUID(旧数据可能两者皆缺)
+                Id = phone.Length > 0 ? phone : (name.Length > 0 ? name : System.Guid.NewGuid().ToString("N")),
+                Phone = phone,
+                Name = name,
+                LoginDataJson = settings.CloudLoginDataJson,
+            });
+            settings.CloudLoginDataJson = "";
+            settings.CloudLoginName = "";
+            settings.CloudLoginPhone = "";
+        }
+
+        // 补齐缺失 Id(手改 JSON / 早期版本条目)
+        foreach (var account in settings.CloudAccounts)
+        {
+            if (string.IsNullOrWhiteSpace(account.Id))
+            {
+                account.Id = account.Phone.Length > 0
+                    ? account.Phone
+                    : (account.Name.Length > 0 ? account.Name : System.Guid.NewGuid().ToString("N"));
+            }
+        }
+
+        // 当前指针失效(空/指向不存在的 Id)时回退第一个账号
+        if (string.IsNullOrWhiteSpace(settings.CurrentCloudAccountId)
+            || settings.CloudAccounts.TrueForAll(a => a.Id != settings.CurrentCloudAccountId))
+        {
+            settings.CurrentCloudAccountId = settings.CloudAccounts.FirstOrDefault()?.Id ?? "";
+        }
     }
 }
 
 [JsonSerializable(typeof(AppSettings))]
 [JsonSerializable(typeof(KuroAccount))]
 [JsonSerializable(typeof(List<KuroAccount>))]
+[JsonSerializable(typeof(CloudAccount))]
+[JsonSerializable(typeof(List<CloudAccount>))]
 public sealed partial class SettingsJsonContext : JsonSerializerContext;

@@ -343,11 +343,16 @@ public static class AppServices
         services.AddSingleton<GuideApiClient>(sp => new GuideApiClient(
             sp.GetRequiredService<HttpClient>(),
             logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<GuideApiClient>()));
+        // 攻略数据 SQLite 缓存(按 cardRoleId;点角色优先读缓存,未命中/过期才拉网络)
+        services.AddSingleton<GuideCacheService>(sp => new GuideCacheService(
+            sp.GetRequiredService<AppDatabase>(),
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger<GuideCacheService>()));
         services.AddSingleton<GuideAchievementService>(sp => new GuideAchievementService(
             sp.GetRequiredService<CloudGameService>(),
             sp.GetRequiredService<GuideApiClient>(),
             sp.GetRequiredService<ISettingsService>(),
-            logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<GuideAchievementService>()));
+            logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<GuideAchievementService>(),
+            cache: sp.GetRequiredService<GuideCacheService>()));
         services.AddSingleton<WikiClient>();
         services.AddSingleton<RedemptionCodeService>(sp => new RedemptionCodeService(
             http: null,

@@ -236,4 +236,21 @@ public class TowerModelTests
         Assert.Equal("SSS", TowerViewModel.RankTextOf(5));
         Assert.Equal(["C", "B", "A", "S", "SS", "SSS"], Enumerable.Range(0, 6).Select(TowerViewModel.RankTextOf));
     }
+
+    [Fact]
+    public void SlashRankColor_MapsTopGradesDistinctly()
+    {
+        // 海墟第 12 关「无尽湍渊」满档 SSS 原先落进默认分支显示灰色(用户反馈),
+        // 修复后 SSS=红、SS=橙,与 S 黄/A 蓝/B 绿/C 灰区分
+        Assert.Equal("#e33737", TowerViewModel.SlashRankColor("SSS"));
+        Assert.Equal("#e33737", TowerViewModel.SlashRankColor("sss")); // 大小写不敏感
+        Assert.Equal("#ff9800", TowerViewModel.SlashRankColor("SS"));
+        Assert.Equal("#f8f05c", TowerViewModel.SlashRankColor("S"));
+        Assert.Equal("#2196f3", TowerViewModel.SlashRankColor("A"));
+        Assert.Equal("#4caf50", TowerViewModel.SlashRankColor("B"));
+        Assert.Equal("#9e9e9e", TowerViewModel.SlashRankColor("C"));
+        Assert.Equal("#9e9e9e", TowerViewModel.SlashRankColor(null));
+        Assert.Equal("#9e9e9e", TowerViewModel.SlashRankColor(""));
+        Assert.Equal("#9e9e9e", TowerViewModel.SlashRankColor("?"));
+    }
 }

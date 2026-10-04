@@ -617,23 +617,25 @@ public sealed partial class TowerViewModel : ViewModelBase
         _ => "?",
     };
 
-    private static string RankToColor(int rank) => rank switch
-    {
-        0 => "#9e9e9e",
-        1 => "#4caf50",
-        2 => "#2196f3",
-        3 => "#f8f05c",
-        4 => "#f8f05c",
-        5 => "#f8f05c",
-        _ => "#9e9e9e",
-    };
+    /// <summary>数值档评级色:先转文字档,再走与 <see cref="SlashRankColor"/> 同一份档位→色值表
+    /// (评审反馈:此前 4/5 仍落 S 的黄色,同一页两套顶级档配色不一致)。</summary>
+    private static string RankToColor(int rank) => SlashRankColor(RankTextOf(rank));
 
-    /// <summary>海墟 rank 是字符串(S/A/B/C),直接展示(参照 WutheringWavesTool SlashChallenge.rank)。</summary>
+    /// <summary>
+    /// 海墟 rank 是字符串(S/A/B/C/SS/SSS),直接展示(参照 WutheringWavesTool SlashChallenge.rank)。
+    /// 第 12 关「无尽湍渊」满档为 SSS,SSS 红 / SS 橙突出顶级档;S/A/B/C 沿用原配色。
+    /// </summary>
     private static string SlashRankText(string? rank)
         => string.IsNullOrWhiteSpace(rank) ? "?" : rank;
 
-    private static string SlashRankColor(string? rank) => (rank ?? "").ToUpperInvariant() switch
+    /// <summary>
+    /// 海墟评级徽章底色(公开供单测):SSS 红 / SS 橙 / S 黄 / A 蓝 / B 绿 / C 与未知灰。
+    /// 第 12 关「无尽湍渊」满档为 SSS,红色突出顶级档。
+    /// </summary>
+    public static string SlashRankColor(string? rank) => (rank ?? "").ToUpperInvariant() switch
     {
+        "SSS" => "#e33737",   // 满档 SSS:红(参照角色页声骸 ACE 红档)
+        "SS" => "#ff9800",    // 次满档 SS:橙
         "S" => "#f8f05c",
         "A" => "#2196f3",
         "B" => "#4caf50",

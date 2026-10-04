@@ -11,22 +11,25 @@ namespace McKuro.Core.Services.Guide;
 /// mcguide 养成达成度服务:串联 SDK 登录 → guide 换 x-token → 选玩家 → 按角色拉达成度。
 /// <para>登录态(GuideToken / CUid / CName / PlayerId / ServerId)持久化到 <see cref="AppSettings"/>。</para>
 /// </summary>
-public sealed class GuideAchievementService
+public sealed partial class GuideAchievementService
 {
     private readonly CloudGameService _cloud;
     private readonly GuideApiClient _api;
     private readonly ISettingsService _settings;
+    private readonly GuideCacheService? _cache;
     private readonly ILogger<GuideAchievementService> _logger;
 
     public GuideAchievementService(
         CloudGameService cloud,
         GuideApiClient api,
         ISettingsService settings,
-        ILogger<GuideAchievementService>? logger = null)
+        ILogger<GuideAchievementService>? logger = null,
+        GuideCacheService? cache = null)
     {
         _cloud = cloud;
         _api = api;
         _settings = settings;
+        _cache = cache;
         _logger = logger ?? NullLogger<GuideAchievementService>.Instance;
     }
 
@@ -129,10 +132,13 @@ public sealed class GuideAchievementService
         }
     }
 
-    /// <summary>按库街区 cardRoleId 拉取官方养成达成度(取点赞最高的攻略)。</summary>
+    /// <summary>
+    /// 按库街区 cardRoleId 拉取官方养成达成度(取点赞最高的攻略)。
+    /// <para>走与详情页相同的缓存入口(评审反馈:旧实现直连 API 绕过缓存,
+    /// 角色选中时与按需拉取并发,同一 cardRoleId 重复发 list+info 请求)。</para>
+    /// </summary>
     public async Task<GuideIntroductionInfo?> GetAchievementAsync(string roleName, int cardRoleId, CancellationToken ct = default)
     {
-        // 优先:名称覆盖表(个别角色不一致时登记);默认:cardRoleId 直通 guide roleGbId
         var gbId = GuideRoleMap.TryGetRoleGbId(roleName) ?? GuideRoleMap.TryGetRoleGbId(cardRoleId);
         if (gbId is null)
         {
@@ -144,18 +150,265 @@ public sealed class GuideAchievementService
             return null;
         }
 
+        // 多攻略默认取点赞最高的一篇(GetIntroductionListAsync 已按点赞数降序)
+        var list = await GetIntroductionListAsync(roleName, cardRoleId, ct).ConfigureAwait(false);
+        var top = list.FirstOrDefault();
+        return top is null
+            ? null
+            : await GetAchievementByIdAsync(roleName, cardRoleId, top.Id, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 攻略缓存的账号维度键:CUid + 选中玩家(评审反馈:达成度是 per-account 数据,
+    /// 换攻略账号/换绑定玩家后不得命中上一账号的缓存快照)。
+    /// </summary>
+    private string GuideCacheAccountKey
+    {
+        get
+        {
+            var s = _settings.Current;
+            return $"{s.GuideCUid}|{s.GuidePlayerId}";
+        }
+    }
+
+    /// <summary>
+    /// 拉取某角色的全部攻略列表(点赞降序;切换攻略选择器数据源)。
+    /// <para>优先命中本地缓存(SQLite guide_cache);未命中或过期才走网络,成功后由本方法统一回写
+    /// (评审反馈:此前回写散落在各调用方,行为分叉)。</para>
+    /// </summary>
+    public async Task<List<GuideIntroductionItem>> GetIntroductionListAsync(string roleName, int cardRoleId, CancellationToken ct = default)
+    {
+        // 1. 缓存优先:24h 内的列表结果(含"确认无攻略"的空列表,负缓存)直接返回,点角色不必等网络
+        var cached = _cache?.TryGet(GuideCacheAccountKey, cardRoleId);
+        if (_cache?.IsListKnownFresh(cached) == true)
+        {
+            return [.. cached!.List];
+        }
+
+        var gbId = GuideRoleMap.TryGetRoleGbId(roleName) ?? GuideRoleMap.TryGetRoleGbId(cardRoleId);
+        if (gbId is null || string.IsNullOrWhiteSpace(_settings.Current.GuideToken))
+        {
+            return cached is { List.Count: > 0 } ? [.. cached.List] : [];
+        }
         try
         {
             var list = await _api.GetIntroductionListAsync(_settings.Current.GuideToken, gbId, ct).ConfigureAwait(false);
-            var top = list.FirstOrDefault();
-            return top is null ? null : await _api.GetIntroductionInfoAsync(_settings.Current.GuideToken, gbId, top.Id, ct).ConfigureAwait(false);
+            // 统一回写(仅列表列;不碰详情):下次进该角色秒开
+            _cache?.SaveList(GuideCacheAccountKey, cardRoleId, list, cached?.SelectedId ?? 0);
+            return list;
         }
         catch (GuideApiException ex) when (ex.Code == GuideApiException.SessionExpiredCode)
         {
-            // x-token 已失效:清除会话让账号页回到登录表单(保留手机号便于复用),提示重新登录
             ClearExpiredSession();
             throw new GuideApiException(CoreStrings.T("Core.Guide.SessionExpired", "mcguide 登录已过期,请到「账号」页的攻略站区块重新登录"), ex.Code);
         }
+        catch (Exception ex) when (ex is not OperationCanceledException && cached is { List.Count: > 0 })
+        {
+            // 网络失败但有旧缓存:用旧的,不让界面空着。取消必须 rethrow(评审反馈):
+            // 吞掉 OCE 会让"已切走/已取消"的请求继续渲染旧数据
+            _logger.LogWarning("攻略列表拉取失败,回退本地缓存: cardRoleId={Id}", cardRoleId);
+            return [.. cached.List];
+        }
+    }
+
+    /// <summary>
+    /// 按攻略 id 拉取详情(切换攻略时用;title/author 仅作展示,实际按 id 精确切换)。
+    /// <para>若与缓存里记录的选中攻略相同且详情缓存新鲜,直接返回缓存详情(含共鸣链图标);
+    /// 网络成功后由本方法统一回写详情列。</para>
+    /// </summary>
+    public async Task<GuideIntroductionInfo?> GetAchievementByIdAsync(string roleName, int cardRoleId, long introductionId, CancellationToken ct = default)
+    {
+        var cached = _cache?.TryGet(GuideCacheAccountKey, cardRoleId);
+        if (_cache?.IsDetailFresh(cached) == true && cached!.SelectedId == introductionId)
+        {
+            return cached.Detail;
+        }
+
+        var gbId = GuideRoleMap.TryGetRoleGbId(roleName) ?? GuideRoleMap.TryGetRoleGbId(cardRoleId);
+        if (gbId is null || string.IsNullOrWhiteSpace(_settings.Current.GuideToken))
+        {
+            return cached?.Detail;
+        }
+        try
+        {
+            var info = await _api.GetIntroductionInfoAsync(_settings.Current.GuideToken, gbId, introductionId, ct).ConfigureAwait(false);
+            if (info is not null)
+            {
+                // 统一回写(仅详情列;null 不覆盖旧详情由 SaveDetail 内部保证)
+                _cache?.SaveDetail(GuideCacheAccountKey, cardRoleId, info, introductionId);
+            }
+            return info;
+        }
+        catch (GuideApiException ex) when (ex.Code == GuideApiException.SessionExpiredCode)
+        {
+            ClearExpiredSession();
+            throw new GuideApiException(CoreStrings.T("Core.Guide.SessionExpired", "mcguide 登录已过期,请到「账号」页的攻略站区块重新登录"), ex.Code);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException && cached is { Detail: not null })
+        {
+            _logger.LogWarning("攻略详情拉取失败,回退本地缓存: cardRoleId={Id}", cardRoleId);
+            return cached.Detail;
+        }
+    }
+
+    /// <summary>
+    /// 拉取角色基础资料(role/info):技能演示视频(5 个)+ 角色特点图标。
+    /// <para>缓存策略同攻略详情(24h,独立时间列);网络失败时回退缓存,取消则 rethrow。</para>
+    /// </summary>
+    public async Task<GuideRoleInfoData?> GetRoleInfoDataAsync(string roleName, int cardRoleId, CancellationToken ct = default)
+    {
+        var cached = _cache?.TryGetRoleInfo(GuideCacheAccountKey, cardRoleId);
+        if (_cache?.IsRoleInfoFresh(cached) == true)
+        {
+            return cached!.Data;
+        }
+
+        var gbId = GuideRoleMap.TryGetRoleGbId(roleName) ?? GuideRoleMap.TryGetRoleGbId(cardRoleId);
+        if (gbId is null || string.IsNullOrWhiteSpace(_settings.Current.GuideToken))
+        {
+            return cached?.Data;
+        }
+        try
+        {
+            var data = await _api.GetRoleInfoAsync(_settings.Current.GuideToken, gbId, ct).ConfigureAwait(false);
+            if (data is not null)
+            {
+                _cache?.SaveRoleInfo(GuideCacheAccountKey, cardRoleId, data);
+            }
+            return data;
+        }
+        catch (GuideApiException ex) when (ex.Code == GuideApiException.SessionExpiredCode)
+        {
+            ClearExpiredSession();
+            throw new GuideApiException(CoreStrings.T("Core.Guide.SessionExpired", "mcguide 登录已过期,请到「账号」页的攻略站区块重新登录"), ex.Code);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // 取消必须 rethrow(评审反馈):吞掉 OCE 会让已切走的请求继续回退渲染旧数据
+            _logger.LogWarning("角色资料拉取失败,回退缓存: cardRoleId={Id}", cardRoleId);
+            return cached?.Data;
+        }
+    }
+
+    /// <summary>读取攻略缓存(供调用方判断是否有可用缓存)。</summary>
+    public GuideCacheEntry? TryGetCachedGuide(int cardRoleId) => _cache?.TryGet(GuideCacheAccountKey, cardRoleId);
+
+    /// <summary>判断攻略详情缓存是否仍新鲜(24h 内且有详情;无缓存服务时恒为 false)。</summary>
+    public bool IsGuideCacheFresh(GuideCacheEntry? entry) => _cache?.IsDetailFresh(entry) == true;
+
+    /// <summary>清理孤儿攻略缓存(换攻略账号/删角色后的残留;只保留当前账号 + 当前角色列表)。</summary>
+    public void PruneGuideCache(IReadOnlyCollection<int> keepCardRoleIds) => _cache?.PruneExcept(GuideCacheAccountKey, keepCardRoleIds);
+
+    // ==================== 官方推荐判定(角色详情页展示用) ====================
+
+    /// <summary>武器是否为攻略推荐档(status=1 首选 / 2 备选;items 数组内标记)。</summary>
+    public static bool IsRecommendedWeapon(GuideWeaponItem w) => w.Status is 1 or 2;
+
+    /// <summary>武器推荐档位文本(1=推荐,2=备选;非推荐返回空)。</summary>
+    public static string WeaponRecommendText(GuideWeaponItem w) => w.Status switch
+    {
+        1 => CoreStrings.T("Roles.Guide.WeaponPrimary", "推荐"),
+        2 => CoreStrings.T("Roles.Guide.WeaponAlternate", "备选"),
+        _ => "",
+    };
+
+    /// <summary>
+    /// 首位声骸是否为攻略推荐声骸:与推荐配装(echo.main/spare/current)的首件名称一致(归一化比较)。
+    /// mcguide 推荐配装的首件即官方推荐主声骸(如椿=无常凶鹭)。
+    /// </summary>
+    public static bool IsRecommendedPhantom(string? phantomName, GuideEcho? echo) => echo is not null && IsRecommendedPhantom(phantomName, [echo.Main, echo.Spare, echo.Current]);
+
+    /// <summary>推荐声骸比对核心:与任一推荐配装首件名称一致(归一化比较)。</summary>
+    public static bool IsRecommendedPhantom(string? phantomName, IReadOnlyList<GuideEchoBuild?> builds)
+    {
+        if (string.IsNullOrWhiteSpace(phantomName))
+        {
+            return false;
+        }
+        var norm = NormalizeName(phantomName);
+        foreach (var build in builds)
+        {
+            var top = build?.EchoProps?.Name;
+            if (!string.IsNullOrWhiteSpace(top) && NormalizeName(top) == norm)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// 共鸣链推荐标记:从攻略推荐描述里解析被推荐的链号(如「共鸣链2…共鸣链4…共鸣链6」→ [2,4,6])。
+    /// <para>支持写法(定死范围,避免过度匹配误报):「共鸣链N」N=1-6,允许全角数字与中间空白;
+    /// 其余写法("C2"/"2链" 等)不识别 —— 实测攻略站正文均为「共鸣链N」格式。</para>
+    /// 解析不到时返回空集合(不显示推荐标识)。
+    /// </summary>
+    public static IReadOnlyList<int> ParseRecommendedChains(string? recommendText)
+    {
+        var result = new List<int>();
+        if (string.IsNullOrWhiteSpace(recommendText))
+        {
+            return result;
+        }
+        var text = PlainRecommendText(recommendText);
+        foreach (System.Text.RegularExpressions.Match m in RecommendedChainPattern().Matches(text))
+        {
+            var digit = m.Groups[1].Value[0];
+            // 全角「１-６」归一到半角再取值
+            var n = digit is >= '１' and <= '９' ? digit - '１' + 1 : digit - '0';
+            if (n is >= 1 and <= 6 && !result.Contains(n))
+            {
+                result.Add(n);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>共鸣链推荐号(半角/全角 1-6;源生成正则,见 <see cref="HtmlTagPattern"/> 的 AOT 说明)。</summary>
+    [System.Text.RegularExpressions.GeneratedRegex("共鸣链\\s*([1-6１-６])")]
+    private static partial System.Text.RegularExpressions.Regex RecommendedChainPattern();
+
+    /// <summary>技能加点是否达标:当前等级 ≥ 推荐等级(recommendLevel 有值时)。</summary>
+    public static bool? IsSkillLevelMet(GuideSkillTarget t)
+    {
+        var rec = t.RecommendLevelValue;
+        if (rec <= 0)
+        {
+            return null; // 攻略未给推荐等级(如"可不点")
+        }
+        return t.CurrentLevelValue >= rec;
+    }
+
+    /// <summary>技能推荐等级文本(推荐 Lv.X;无推荐时返回"无需升级")。</summary>
+    public static string SkillRecommendText(GuideSkillTarget t)
+        => t.RecommendLevelValue > 0
+            ? CoreStrings.F("Roles.Guide.SkillRecommend", $"推荐 Lv.{t.RecommendLevelValue}", t.RecommendLevelValue)
+            : CoreStrings.T("Roles.Guide.SkillNoNeed", "无需升级");
+
+    /// <summary>
+    /// 声骸名称归一化:去空白/间隔符,并剥掉玩家侧的「梦魇」前缀
+    /// (攻略推荐写"云闪之鳞",玩家实际持有记录常为"梦魇·云闪之鳞",不剥前缀推荐徽标会静默不亮 —— 评审反馈)。
+    /// </summary>
+    private static string NormalizeName(string name)
+    {
+        var s = name.Replace(" ", "").Replace("·", "").Replace(":", "").Replace("：", "").Trim();
+        return s.StartsWith("梦魇", StringComparison.Ordinal) ? s[2..] : s;
+    }
+
+    /// <summary>HTML 标签剥除(仓库约定 [GeneratedRegex]:AOT 下运行时 Compiled 被忽略,源生成才免反射 —— 见 PlayTimeService 先例)。</summary>
+    [System.Text.RegularExpressions.GeneratedRegex("<[^>]+>")]
+    private static partial System.Text.RegularExpressions.Regex HtmlTagPattern();
+
+    /// <summary>取攻略推荐描述的纯文本(去 HTML 标签;无内容返回空)。</summary>
+    public static string PlainRecommendText(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return "";
+        }
+        // <p>/<br>/&gt; 等实体简单还原,标签全部剥除(推荐描述仅用于展示,不做富文本渲染)
+        var text = HtmlTagPattern().Replace(html, "");
+        return System.Net.WebUtility.HtmlDecode(text).Trim();
     }
 
     /// <summary>
@@ -264,7 +517,7 @@ public sealed class GuideAchievementService
             })
             .ToList();
 
-        // 4. 共鸣链:resonanceSequence → ChainNum,isAcquired → IsUnlock
+        // 4. 共鸣链:resonanceSequence → ChainNum,isAcquired → IsUnlock,pictureUrl → IconUrl
         var chains = (info.RoleResonance?.Items ?? [])
             .Select(c => new ChainInfo
             {
@@ -272,6 +525,7 @@ public sealed class GuideAchievementService
                 ChainName = c.Name ?? "",
                 IsUnlock = c.IsAcquired == true,
                 Description = c.Description ?? "",
+                IconUrl = c.PictureUrl ?? "",
             })
             .ToList();
 

@@ -41,7 +41,7 @@ public enum InterfaceLoginState
 
 /// <summary>
 /// 账号页:全部接口账号登录的统一入口。
-/// 包含:库街区多账号(短信+极验登录/切换/移除)、云鸣潮登录、mcguide 官方评级登录,
+/// 包含:库街区多账号(短信+极验登录/切换/移除)、云鸣潮多账号(短信登录/切换/移除)、mcguide 官方评级登录,
 /// 以及自动化的「同一账号」判定(任一接口登录成功/切换后自动复用手机号并给出判定,仅提醒不强制登出)。
 /// </summary>
 public sealed partial class AccountViewModel : ViewModelBase
@@ -57,6 +57,16 @@ public sealed partial class AccountViewModel : ViewModelBase
     private int _selectedAccountIndex = -1;
 
     public ObservableCollection<string> AccountOptions { get; } = [];
+
+    /// <summary>已保存的云鸣潮账号显示列表(与库街区同款多账号切换)。</summary>
+    public ObservableCollection<string> CloudAccountOptions { get; } = [];
+
+    /// <summary>云鸣潮下拉当前选中账号索引。</summary>
+    [ObservableProperty]
+    private int _selectedCloudAccountIndex = -1;
+
+    /// <summary>是否已保存云鸣潮账号(控制「当前账号」切换行显示;无账号时隐藏,避免出现空下拉)。</summary>
+    public bool HasCloudAccounts => CloudAccountOptions.Count > 0;
 
     /// <summary>是否存在当前库街区登录账号(控制「退出登录」按钮显示;未登录时隐藏避免空操作)。</summary>
     public bool HasKuroLogin => AppServices.KuroAccounts.Current is not null;
@@ -286,7 +296,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         var lastKuroMobile = AppServices.KuroAccounts.GetAccounts()
             .LastOrDefault(a => !string.IsNullOrEmpty(a.Mobile))?.Mobile ?? "";
         _mobileInput = lastKuroMobile;
-        _cloudMobile = string.IsNullOrWhiteSpace(s.CloudLoginPhone) ? lastKuroMobile : s.CloudLoginPhone;
+        _cloudMobile = string.IsNullOrWhiteSpace(AppServices.CloudGacha.SavedLoginPhone) ? lastKuroMobile : AppServices.CloudGacha.SavedLoginPhone;
         _guideMobile = string.IsNullOrWhiteSpace(s.GuidePhone) ? lastKuroMobile : s.GuidePhone;
 
         _guideStatusText = AppServices.Guide.HasToken
@@ -427,13 +437,55 @@ public sealed partial class AccountViewModel : ViewModelBase
 
     private void RefreshCloudState()
     {
+        // 重建云鸣潮账号下拉(与库街区同款:名 + 掩码手机号)
+        CloudAccountOptions.Clear();
+        var accounts = AppServices.CloudGacha.GetAccounts();
+        var currentIndex = -1;
+        for (var i = 0; i < accounts.Count; i++)
+        {
+            var account = accounts[i];
+            var masked = string.IsNullOrEmpty(account.Phone) ? "" : MaskMobile(account.Phone);
+            var name = string.IsNullOrWhiteSpace(account.Name)
+                ? (masked.Length > 0 ? masked : LanguageService.Format("Account.LoggedIn"))
+                : account.Name;
+            CloudAccountOptions.Add(masked.Length > 0 && !name.Contains(masked) ? $"{name} ({masked})" : name);
+            // 当前项按稳定 Id 匹配(手机号可能为空,不能作匹配键)
+            if (AppServices.CloudGacha.HasSavedLogin && account.Id == AppServices.CloudGacha.SavedLoginId)
+            {
+                currentIndex = i;
+            }
+        }
+        SelectedCloudAccountIndex = currentIndex;
         IsCloudLoggedIn = AppServices.CloudGacha.HasSavedLogin;
         CloudAccountText = IsCloudLoggedIn
             ? (string.IsNullOrWhiteSpace(AppServices.CloudGacha.SavedLoginName) ? LanguageService.Format("Account.LoggedIn") : AppServices.CloudGacha.SavedLoginName)
             : LanguageService.Format("Sign.NotLoggedIn");
         // 已保存登录先按绿点显示,会话校验失败再转橙点
         CloudLoginState = IsCloudLoggedIn ? InterfaceLoginState.Ok : InterfaceLoginState.NotLoggedIn;
+        OnPropertyChanged(nameof(HasCloudAccounts));
         RefreshSameAccountAuto();
+    }
+
+    /// <summary>下拉切换云鸣潮当前账号(按列表索引定位;抽卡同步/会话校验都随当前账号切换)。</summary>
+    partial void OnSelectedCloudAccountIndexChanged(int value)
+    {
+        if (!AppServices.CloudGacha.SwitchToIndex(value))
+        {
+            // 切换失败(索引越界/列表已变):必须回写下拉,否则 ComboBox 停在用户刚点的行,
+            // 显示与实际当前账号分叉(评审反馈)
+            RefreshCloudState();
+            return;
+        }
+        RefreshCloudState();
+        var accounts = AppServices.CloudGacha.GetAccounts();
+        if (value >= 0 && value < accounts.Count)
+        {
+            var account = accounts[value];
+            StatusText = LanguageService.Format("Account.Switched",
+                string.IsNullOrWhiteSpace(account.Name)
+                    ? (string.IsNullOrEmpty(account.Phone) ? account.Id : MaskMobile(account.Phone))
+                    : account.Name);
+        }
     }
 
     partial void OnSelectedAccountIndexChanged(int value)
@@ -479,7 +531,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         IsCloudLoginOpen = !IsCloudLoginOpen;
         if (IsCloudLoginOpen && string.IsNullOrEmpty(CloudMobile))
         {
-            var reused = AppServices.Settings.Current.CloudLoginPhone;
+            var reused = AppServices.CloudGacha.SavedLoginPhone;
             if (string.IsNullOrWhiteSpace(reused))
             {
                 reused = AppServices.KuroAccounts.GetAccounts()
@@ -1096,7 +1148,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             // 各接口登录态与手机号
             var kuro = AppServices.KuroAccounts.Current;
             var kuroPhone = kuro?.Mobile ?? "";
-            var cloudPhone = AppServices.Settings.Current.CloudLoginPhone;
+            var cloudPhone = AppServices.CloudGacha.SavedLoginPhone;
             var guidePhone = AppServices.Settings.Current.GuidePhone;
 
             // 已登录的接口

@@ -360,6 +360,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             tower.OnNavigatedTo();
         }
+        // 导航到角色页时按需拉取当前角色的攻略站数据(页面初始化选中的角色尚未有攻略数据时补拉)
+        if (item.ViewModel is RolesViewModel roles)
+        {
+            roles.OnNavigatedTo();
+        }
     }
 
     /// <summary>通过字符串 key 导航(供消息接收)。</summary>

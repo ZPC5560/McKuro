@@ -18,6 +18,28 @@ public sealed class CloudApiResponse<T>
     public long? Timestamp { get; set; }
 }
 
+/// <summary>
+/// 云鸣潮账号(登录态持久化,支持保存多个并切换当前账号)。
+/// 以登录手机号为唯一键;LoginDataJson 为 <see cref="CloudGameLoginData"/> 序列化结果,用于静默续会话。
+/// </summary>
+public sealed class CloudAccount
+{
+    /// <summary>
+    /// 稳定标识:手机号(有则用),否则账号名,再否则创建时生成的 GUID。
+    /// 切换/移除按 Id 定位 —— 手机号可能为空(旧版迁移条目)或重复,不能作唯一键。
+    /// </summary>
+    public string Id { get; set; } = "";
+
+    /// <summary>登录手机号(显示与同账号判定用;允许为空)。</summary>
+    public string Phone { get; set; } = "";
+
+    /// <summary>账号名(SDK 返回的 username,显示用)。</summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>云游戏登录数据 JSON(CloudGameLoginData 序列化)。</summary>
+    public string LoginDataJson { get; set; } = "";
+}
+
 /// <summary>云游戏画质档位。</summary>
 public enum CloudQualityType
 {

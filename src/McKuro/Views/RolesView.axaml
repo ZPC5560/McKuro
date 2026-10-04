@@ -26,6 +26,15 @@
         <vm:ThemeAdaptiveEmphasisBrushConverter x:Key="EmphasisBrush" />
         <vm:EchoRatingLevelBrushConverter x:Key="EchoRatingLevelBrush" />
         <vm:StringNotEmptyConverter x:Key="StringNotEmpty" />
+        <vm:RecommendStateBrushConverter x:Key="RecommendStateBrush" />
+        <vm:TitleEqualsToVisibleConverter x:Key="TitleEquals" />
+        <vm:SectionStatusBrushConverter x:Key="SectionStatusBrush" />
+        <vm:IsFalseConverter x:Key="IsFalse" />
+        <vm:StringIsEmptyConverter x:Key="StringIsEmpty" />
+        <vm:ColorTextToBrushConverter x:Key="ColorTextToBrush" />
+        <vm:ThemeIconBrushConverter x:Key="ThemeIconBrush" />
+        <vm:UnlockToTintConverter x:Key="UnlockToTint" />
+        <vm:UnlockToOpacityConverter x:Key="UnlockToOpacity" />
     </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,Auto,*">
@@ -45,17 +54,60 @@
                                Foreground="{DynamicResource SemiColorPrimary}" />
                 </StackPanel>
             </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <!-- 分享:自动截取「概览→声骸」区间长图 → 预览 + 复制到剪贴板(图标同攻略站分享按钮) -->
+                <Button x:Name="ShareButton"
+                        ToolTip.Tip="{loc:Localize Key=Roles.Share.Tip}"
+                        IsEnabled="{Binding HasRoles}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <ic:FluentIcon Icon="Share" IconVariant="Regular" IconSize="Size16"
+                                       VerticalAlignment="Center" />
+                        <TextBlock Text="{loc:Localize Key=Roles.Share.Title}" FontSize="13"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
                 <Button Content="{loc:Localize Key=Common.Sync}" Command="{Binding LoadFromKujiequCommand}"
                         IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
             </StackPanel>
         </Grid>
 
-        <!-- 筛选栏:属性 + 排序 -->
+        <!-- 筛选栏:属性(多选,带属性图标) + 排序 -->
         <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" Margin="20,0,20,6" ColumnSpacing="8">
-            <ComboBox Width="140"
-                      ItemsSource="{Binding AttributeFilters}"
-                      SelectedItem="{Binding SelectedAttributeFilter, Mode=TwoWay}" />
+            <!-- 属性多选下拉:Avalonia 无原生多选 ComboBox,用 Button + Flyout 承载复选框列表。
+                 选中"全部属性"时清空其他选择;选中任一具体属性时自动取消"全部属性"。 -->
+            <Button Width="150" HorizontalContentAlignment="Left" Padding="10,6">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="{Binding AttributeFilterSummary}" FontSize="13"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" MaxWidth="104" />
+                    <ic:FluentIcon Icon="ChevronDown" IconVariant="Regular" IconSize="Size12"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SemiColorText3}" />
+                </StackPanel>
+                <Button.Flyout>
+                    <Flyout Placement="BottomEdgeAlignedLeft">
+                        <ScrollViewer MaxHeight="320" MinWidth="180">
+                            <ItemsControl ItemsSource="{Binding AttributeFilterOptions}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AttributeFilterOption">
+                                        <CheckBox Margin="2,3" IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                                <!-- 属性图标(本地 Assets/attr/{id}.png) -->
+                                                <controls:AsyncImage ImageUrl="{Binding IconPath}"
+                                                                     IsVisible="{Binding IconPath, Converter={StaticResource StringNotEmpty}}"
+                                                                     Width="20" Height="20" Stretch="Uniform"
+                                                                     VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Name}" FontSize="13"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </CheckBox>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
             <ComboBox Grid.Column="1" Width="110"
                       ItemsSource="{Binding SortOptions}"
                       SelectedItem="{Binding SelectedSort, Mode=TwoWay}" />
@@ -136,7 +188,54 @@
             </ListBox>
 
             <!-- 角色详情 (布局参照 WutheringWavesTool OwnRoleDetailView) -->
-            <ScrollViewer Grid.Column="1">
+            <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="8">
+                <!-- 锚点导航:点击滚动定位到对应数据段(所有数据始终可见,不在分段里隐藏) -->
+                <ListBox x:Name="DetailNav" Grid.Row="0"
+                         ItemsSource="{Binding DetailSections}"
+                         SelectedIndex="{Binding SelectedDetailSection, Mode=TwoWay}"
+                         Background="Transparent" BorderThickness="0" Padding="0" Margin="0,0,0,2">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="8" />
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SectionNavItem">
+                            <StackPanel Orientation="Horizontal" Spacing="5" Margin="12,5" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="Bold"
+                                           VerticalAlignment="Center" />
+                                <!-- 达成度标识:完全达标(绿勾)/部分达标(橙勾);无数据不显示 -->
+                                <TextBlock Text="{Binding StatusText}" FontSize="12" FontWeight="Bold"
+                                           VerticalAlignment="Center"
+                                           IsVisible="{Binding HasStatus}"
+                                           Foreground="{Binding Status, Converter={StaticResource SectionStatusBrush}}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    <ListBox.Styles>
+                        <Style Selector="ListBoxItem">
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0" />
+                            <Setter Property="Background" Value="{DynamicResource SemiColorBg3}" />
+                            <Setter Property="CornerRadius" Value="8" />
+                            <Setter Property="MinHeight" Value="30" />
+                        </Style>
+                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                            <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
+                            <Setter Property="CornerRadius" Value="8" />
+                        </Style>
+                        <Style Selector="ListBoxItem:selected TextBlock">
+                            <Setter Property="Foreground" Value="White" />
+                        </Style>
+                    </ListBox.Styles>
+                </ListBox>
+
+                <!-- 详情:单一滚动容器,全部数据段纵向排列(导航仅做滚动定位) -->
+                <ScrollViewer x:Name="DetailScroll" Grid.Row="1">
+                <StackPanel x:Name="DetailContent" Spacing="14">
+
+                    <!-- ===== 0 概览 ===== -->
+                    <StackPanel x:Name="SecOverview">
                 <Border CornerRadius="12"
                         Background="{DynamicResource SemiColorBg2}"
                         Padding="20,12,16,16">
@@ -154,8 +253,9 @@
                                 <!-- 半透明遮罩:保证文字可读 -->
                                 <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.30" />
 
-                                <!-- 顶部:角色名 + 星级 + 属性图标 + 等级 -->
+                                <!-- 顶部:角色名 / 评级章 / 星级与基本信息 -->
                                 <StackPanel VerticalAlignment="Top" Margin="16" Spacing="6">
+                                    <!-- 第一行:角色名 + 星级 + 属性图标 -->
                                     <StackPanel Orientation="Horizontal" Spacing="10">
                                         <TextBlock Text="{Binding SelectedRole.RoleName}" FontSize="26"
                                                    FontWeight="Bold" Foreground="{DynamicResource SemiColorText2}">
@@ -167,13 +267,61 @@
                                         <TextBlock Text="{Binding SelectedRole.StarLevel, StringFormat={}{0}★}"
                                                    FontSize="16" Foreground="{Binding Converter={StaticResource EmphasisBrush}}"
                                                    VerticalAlignment="Bottom" FontWeight="Bold" />
-                                        <Border Background="{DynamicResource SemiColorBg1}" CornerRadius="4"
-                                                Padding="3" Opacity="0.9" VerticalAlignment="Center"
+                                        <!-- 属性图标(已放大,原 20 → 36) -->
+                                        <Border Background="{DynamicResource SemiColorBg1}" CornerRadius="6"
+                                                Padding="4" Opacity="0.92" VerticalAlignment="Center"
                                                 IsVisible="{Binding SelectedRole.Role.AttributeId, Converter={StaticResource GreaterThanZero}}">
                                             <controls:AsyncImage ImageUrl="{Binding SelectedRole.AttributeIconPath}"
-                                                                 Width="20" Height="20" Stretch="Uniform" />
+                                                                 Width="36" Height="36" Stretch="Uniform" />
                                         </Border>
                                     </StackPanel>
+                                    <!-- 第二行:总评级章(移到角色名下方;透明底 + 双层装饰环) -->
+                                    <StackPanel Orientation="Horizontal" Spacing="8"
+                                                IsVisible="{Binding HasGrade}">
+                                        <Grid Width="46" Height="46" VerticalAlignment="Center">
+                                            <!-- 外环(细,主色柔光) -->
+                                            <Ellipse Width="46" Height="46" StrokeThickness="1"
+                                                     Stroke="{Binding GradeBadgeBrush}" Opacity="0.45" />
+                                            <!-- 内环(粗,评级色) -->
+                                            <Ellipse Width="38" Height="38" StrokeThickness="2"
+                                                     Stroke="{Binding GradeBadgeBrush}" />
+                                            <!-- 评级文字(透明底) -->
+                                            <TextBlock Text="{Binding GuideAchievement.Grade}"
+                                                       FontSize="15" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       Foreground="{Binding GradeBadgeBrush}" />
+                                        </Grid>
+                                        <TextBlock Text="{loc:Localize Key=Roles.Guide.GradeLabel}" FontSize="12"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource SemiColorText3}" />
+                                    </StackPanel>
+                                    <!-- 第三行:角色特点图标(移到姓名下方;攻略站 role/info.rolePlays) -->
+                                    <ItemsControl ItemsSource="{Binding RoleTraits}"
+                                                  IsVisible="{Binding HasRoleTraits}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" Spacing="6" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <!-- 透明背景 + 外圈装饰环(与共鸣链星框风格统一;不再用实心底板) -->
+                                                <Grid Width="40" Height="40">
+                                                    <!-- 外圈:细亮环(装饰) -->
+                                                    <Ellipse Width="40" Height="40" StrokeThickness="1"
+                                                             Stroke="#8CFFFFFF" Opacity="0.75" />
+                                                    <!-- 内圈:金色细环(与链框金色呼应) -->
+                                                    <Ellipse Width="34" Height="34" StrokeThickness="1.2"
+                                                             Stroke="{Binding Converter={StaticResource EmphasisBrush}}" />
+                                                    <!-- 图标:透明底,直接浮在渐变背景上 -->
+                                                    <controls:AsyncImage ImageUrl="{Binding}"
+                                                                         Width="24" Height="24" Stretch="Uniform"
+                                                                         HorizontalAlignment="Center"
+                                                                         VerticalAlignment="Center" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                     <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
                                         <Run Text="Lv." /><Run Text="{Binding SelectedRole.Role.Level}" />
                                         <Run Text="{loc:Localize Key=Roles.Breach}" /><Run Text="{Binding SelectedRole.Role.Breach}" />
@@ -183,10 +331,10 @@
                                     </TextBlock>
                                 </StackPanel>
 
-                                <!-- 左中部:武器 + 技能(参照 WutheringWavesTool 中部 HBox) -->
+                                <!-- 左中部:武器(当前 + 官方推荐对比) + 技能(参照 WutheringWavesTool 中部 HBox) -->
                                 <StackPanel VerticalAlignment="Center" Margin="16,0,0,0"
                                             HorizontalAlignment="Left" Spacing="14">
-                                    <!-- 武器 -->
+                                    <!-- 武器:当前佩戴 + 推荐武器对比(登录攻略站后) -->
                                     <StackPanel Orientation="Horizontal" Spacing="10">
                                         <Border Width="56" Height="56" CornerRadius="8" ClipToBounds="True"
                                                 Background="{Binding SelectedRole.WeaponData.StarLevel, Converter={StaticResource WeaponStarBrush}}">
@@ -194,8 +342,17 @@
                                                                  Width="56" Height="56" Stretch="UniformToFill" />
                                         </Border>
                                         <StackPanel VerticalAlignment="Center" Spacing="2">
-                                            <TextBlock Text="{Binding SelectedRole.WeaponData.DisplayName}" FontSize="15"
-                                                       FontWeight="Bold" TextTrimming="CharacterEllipsis" MaxWidth="140" />
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="{Binding SelectedRole.WeaponData.DisplayName}" FontSize="15"
+                                                           FontWeight="Bold" TextTrimming="CharacterEllipsis" MaxWidth="140" />
+                                                <!-- 档位徽章:推荐(绿)/备选(橙)/有差距(橙) -->
+                                                <Border CornerRadius="5" Padding="6,1" VerticalAlignment="Center"
+                                                        Background="{Binding CurrentWeaponIsRecommended, Converter={StaticResource RecommendStateBrush}}"
+                                                        IsVisible="{Binding CurrentWeaponTierText, Converter={StaticResource StringNotEmpty}}">
+                                                    <TextBlock Text="{Binding CurrentWeaponTierText}" FontSize="10.5"
+                                                               FontWeight="Bold" Foreground="White" />
+                                                </Border>
+                                            </StackPanel>
                                             <TextBlock FontSize="12"
                                                        Foreground="{DynamicResource SemiColorText2}">
                                                 <Run Text="Lv." /><Run Text="{Binding SelectedRole.WeaponData.Level}" />
@@ -203,299 +360,874 @@
                                                 <Run Text="{loc:Localize Key=Roles.Refine}" /><Run Text="{Binding SelectedRole.WeaponData.Rank}" />
                                             </TextBlock>
                                         </StackPanel>
+                                        <!-- 官方推荐武器对比:仅在明确"未佩戴推荐武器"(false)时显示箭头+推荐图标
+                                             (已推荐 true 或 无攻略数据 null 都不显示,避免误显) -->
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                                                    IsVisible="{Binding CurrentWeaponIsRecommended,
+                                                    Converter={StaticResource IsFalse}}">
+                                            <ic:FluentIcon Icon="ArrowRight" IconVariant="Regular" IconSize="Size16"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource SemiColorText3}"
+                                                           IsVisible="{Binding RecommendedWeaponIcon,
+                                                           Converter={StaticResource StringNotEmpty}}" />
+                                            <Border Width="44" Height="44" CornerRadius="7" ClipToBounds="True"
+                                                    BorderThickness="1.5" BorderBrush="#22C55E"
+                                                    ToolTip.Tip="{Binding RecommendedWeaponName}"
+                                                    IsVisible="{Binding RecommendedWeaponIcon,
+                                                    Converter={StaticResource StringNotEmpty}}">
+                                                <controls:AsyncImage ImageUrl="{Binding RecommendedWeaponIcon}"
+                                                                     Width="44" Height="44" Stretch="UniformToFill" />
+                                            </Border>
+                                        </StackPanel>
                                     </StackPanel>
-                                    <!-- 技能等级横排 -->
-                                    <ItemsControl ItemsSource="{Binding SelectedRole.Skills}">
+                                    <!-- 角色特点图标已移到姓名下方(用户要求,原在武器下方) -->
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Border>
+                    </StackPanel>
+
+                    <!-- ===== 1 属性(折叠默认 7 项 + 达标明细) ===== -->
+                    <StackPanel x:Name="SecAttributes">
+                    <Border CornerRadius="12" Padding="14" Background="{DynamicResource SemiColorBg2}"
+                            IsVisible="{Binding SelectedRole.HasAttributes}">
+                        <StackPanel Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Localize Key=Roles.Attributes}" FontSize="13" FontWeight="Bold"
+                                           Foreground="{DynamicResource SemiColorText2}" />
+                                <!-- 攻略达标汇总(登录后):x/y 达标 -->
+                                <TextBlock FontSize="12" VerticalAlignment="Center"
+                                           IsVisible="{Binding HasGuideAchievement}"
+                                           Foreground="{DynamicResource SemiColorText2}">
+                                    <Run Text="{Binding GuideAchievement.RoleAttribute.FinishedCount}" />
+                                    <Run Text="/" /><Run Text="{Binding GuideAchievement.RoleAttribute.TotalCount}" />
+                                    <Run Text="{loc:Localize Key=Roles.AttrMet}" />
+                                </TextBlock>
+                            </StackPanel>
+                            <!-- 属性列表:每项直接在数值后显示官方达标状态/还差多少
+                                 (达标信息由 VM 的 AttributeItems 按属性名匹配攻略 roleAttribute 后给出;
+                                  下方不再重复一排"推荐/当前"明细 —— 用户要求就地显示) -->
+                            <ItemsControl ItemsSource="{Binding AttributeItems}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <!-- 等宽两列:留出达标信息空间 -->
+                                        <UniformGrid Columns="2" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RoleAttributeItem">
+                                        <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}"
+                                                Padding="12,9" Margin="0,0,10,10">
+                                            <!-- 两行布局:第一行「图标 + 属性名 + 当前值」,第二行「推荐值 + 达标/差值」。
+                                                 为什么拆两行:原先四项挤在一行时,单项最小宽度会超过
+                                                 UniformGrid 半宽单元格(约 366 DIP),内容溢出到右侧 →
+                                                 右列属性的数值被挤出图片边缘(用户反馈"宽度不完整")。
+                                                 拆行后第一行最小宽仅约 250 DIP,必然容纳得下。 -->
+                                            <StackPanel Spacing="5">
+                                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                                    <controls:AsyncImage Grid.Column="0" ImageUrl="{Binding IconUrl}"
+                                                                         IsVisible="{Binding IconUrl, Converter={StaticResource StringNotEmpty}}"
+                                                                         Width="26" Height="26" Stretch="Uniform"
+                                                                         VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1" FontSize="13"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource SemiColorText2}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Text="{Binding Name}" />
+                                                    <!-- 当前值(放大显示) -->
+                                                    <TextBlock Grid.Column="2" FontSize="18" FontWeight="Bold"
+                                                               VerticalAlignment="Center"
+                                                               Text="{Binding CurrentText}" />
+                                                </Grid>
+                                                <!-- 达标状态 + 还差多少(就地显示,独占一行避免挤压数值列) -->
+                                                <StackPanel Orientation="Horizontal" Spacing="8"
+                                                            HorizontalAlignment="Right"
+                                                            IsVisible="{Binding HasTarget}">
+                                                    <TextBlock FontSize="12"
+                                                               Foreground="{DynamicResource SemiColorText3}"
+                                                               VerticalAlignment="Center"
+                                                               Text="{Binding TargetText}" />
+                                                    <Border CornerRadius="5" Padding="7,1" VerticalAlignment="Center"
+                                                            Background="{Binding MetBrush}">
+                                                        <TextBlock Text="{Binding DeltaText}" FontSize="11"
+                                                                   FontWeight="Bold" Foreground="White" />
+                                                    </Border>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <!-- 达标明细已就地合并进上方每个属性项(不再重复一排"推荐/当前") -->
+                            <!-- 折叠展开按钮(属性 >7 项时显示) -->
+                            <Button Content="{Binding AttributesToggleText}"
+                                    Command="{Binding ToggleAttributesCommand}"
+                                    HorizontalAlignment="Left" Padding="14,4" FontSize="12"
+                                    IsVisible="{Binding HasMoreAttributes}" />
+                        </StackPanel>
+                    </Border>
+                    </StackPanel>
+
+                    <!-- ===== 2 技能(参考攻略站布局) =====
+                         布局要点:技能图标按攻略站"弧形错落"排布(常态攻击/共鸣技能/共鸣回路/
+                         共鸣解放/变奏技能为主节点,延奏技能/谐度破坏为下方小节点),
+                         点击任一图标即切换到该技能的演示视频(不再单独列一排演示图标)。 -->
+                    <StackPanel x:Name="SecSkills">
+                    <Border CornerRadius="12" Padding="14" Background="{DynamicResource SemiColorBg2}"
+                            IsVisible="{Binding SelectedRole.Skills.Count, Converter={StaticResource GreaterThanZero}}">
+                        <StackPanel Spacing="14">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <ic:FluentIcon Icon="Options" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Roles.Guide.SkillTitle}" FontSize="14" FontWeight="Bold"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Roles.Guide.SkillHint}" FontSize="11"
+                                           Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center"
+                                           IsVisible="{Binding HasGuideAchievement}" />
+                            </StackPanel>
+
+                            <!-- 技能节点:按攻略站的"拱形"相对位置排布(用固定尺寸 Canvas 精确定位,而非流式堆叠)
+                                 参考布局:共鸣技能/共鸣回路/共鸣解放 在拱顶(回路最高),
+                                 常态攻击(左)与变奏技能(右)明显更低更外扩,
+                                 延奏技能/谐度破坏 在底部中央作为小节点。 -->
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="18">
+                                <Canvas Grid.Column="0" Width="560" Height="230" VerticalAlignment="Top" ClipToBounds="True">
+                                    <!-- 圆环连接(复刻攻略站:软弧带 + 多条同心细线弧一起装饰)。
+                                         主弧带过五个节点圆心:圆心(270,330) 半径 291(由节点坐标反解),
+                                         被节点底板遮挡、节点间可见;外圈再补两条渐淡的细线弧作层次。
+                                         超出画布的部分由 ClipToBounds 裁掉。 -->
+                                    <Ellipse Canvas.Left="-85" Canvas.Top="-25" Width="710" Height="710"
+                                             Stroke="#40B49B73" StrokeThickness="1" />
+                                    <Ellipse Canvas.Left="-39" Canvas.Top="21" Width="618" Height="618"
+                                             Stroke="#66B49B73" StrokeThickness="1" />
+                                    <Ellipse Canvas.Left="-21" Canvas.Top="39" Width="582" Height="582"
+                                             Stroke="#9CB49B73" StrokeThickness="20" />
+                                    <!-- 主节点:弧形错落(Canvas 坐标固定,与攻略站相对位置一致) -->
+                                    <ItemsControl Canvas.Left="0" Canvas.Top="0"
+                                                  ItemsSource="{Binding PrimarySkillNodes}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
-                                                <StackPanel Orientation="Horizontal" Spacing="10" />
+                                                <Canvas Width="560" Height="230" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.Styles>
+                                            <!-- 按类型摆位:拱顶(回路/解放/技能)与两侧低位(常态/变奏) -->
+                                            <Style Selector="ContentPresenter:nth-child(1)">
+                                                <Setter Property="Canvas.Left" Value="10" />
+                                                <Setter Property="Canvas.Top" Value="96" />
+                                            </Style>
+                                            <Style Selector="ContentPresenter:nth-child(2)">
+                                                <Setter Property="Canvas.Left" Value="106" />
+                                                <Setter Property="Canvas.Top" Value="24" />
+                                            </Style>
+                                            <Style Selector="ContentPresenter:nth-child(3)">
+                                                <Setter Property="Canvas.Left" Value="222" />
+                                                <Setter Property="Canvas.Top" Value="0" />
+                                            </Style>
+                                            <Style Selector="ContentPresenter:nth-child(4)">
+                                                <Setter Property="Canvas.Left" Value="338" />
+                                                <Setter Property="Canvas.Top" Value="24" />
+                                            </Style>
+                                            <Style Selector="ContentPresenter:nth-child(5)">
+                                                <Setter Property="Canvas.Left" Value="442" />
+                                                <Setter Property="Canvas.Top" Value="96" />
+                                            </Style>
+                                        </ItemsControl.Styles>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:SkillCardItem">
+                                                <Button Padding="0" BorderThickness="0" Background="Transparent"
+                                                        Cursor="Hand"
+                                                        ToolTip.Tip="{Binding DisplayText}"
+                                                        Command="{Binding $parent[ItemsControl].((vm:RolesViewModel)DataContext).SelectSkillDemoByTypeCommand}"
+                                                        CommandParameter="{Binding TypeName}">
+                                                    <StackPanel Width="88" Spacing="3">
+                                                        <Grid HorizontalAlignment="Center">
+                                                            <!-- 节点圆环:中性面板色(不再用蓝色板),配主题着色的线稿图标
+                                                                 —— 浅色主题白盘黑标 / 暗色主题深盘白标(与共鸣链同法);
+                                                                 近不透明,恰好遮住身后的弧带。
+                                                                 环贴着图标:52 ≈ 图标 50 + 每边 1px,重叠约 2%(<1/10),
+                                                                 描边 0.8(官方即贴边发丝环;粗/大的环视觉过重 —— 用户反馈) -->
+                                                            <Ellipse Width="52" Height="52"
+                                                                     Stroke="{Binding BorderBrush}" StrokeThickness="0.8"
+                                                                     Fill="{DynamicResource McKuroCardFill}" />
+                                                            <!-- 选中该技能(演示中)时外圈高亮 -->
+                                                            <Ellipse Width="58" Height="58"
+                                                                     Stroke="{DynamicResource SemiColorPrimary}"
+                                                                     StrokeThickness="1.2" Opacity="0.9"
+                                                                     IsVisible="{Binding IsCurrentDemo}" />
+                                                            <controls:TintedAsyncImage ImageUrl="{Binding IconUrl}"
+                                                                                       Tint="ThemeForeground"
+                                                                                       Width="50" Height="50"
+                                                                                       HorizontalAlignment="Center"
+                                                                                       VerticalAlignment="Center" />
+                                                            <Border CornerRadius="8" Padding="6,1"
+                                                                    HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                                                    Margin="0,0,0,-7"
+                                                                    Background="{DynamicResource SemiColorBg1}"
+                                                                    BorderThickness="1"
+                                                                    BorderBrush="{Binding BorderBrush}">
+                                                                <TextBlock Text="{Binding LevelBadgeText}" FontSize="11.5"
+                                                                           FontWeight="Bold" />
+                                                            </Border>
+                                                        </Grid>
+                                                        <TextBlock Text="{Binding TypeName}" FontSize="12" FontWeight="Bold"
+                                                                   HorizontalAlignment="Center" TextAlignment="Center"
+                                                                   TextWrapping="Wrap" MaxWidth="88"
+                                                                   Foreground="{DynamicResource SemiColorText2}" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- 副节点:延奏技能 / 谐度破坏(底部中央,四角星装饰框)。
+                                         星框 52(约主节点圆的 76%,参考图比例),过大时会压过主节点的排布空间 -->
+                                    <ItemsControl Canvas.Left="196" Canvas.Top="138"
+                                                  ItemsSource="{Binding SecondarySkillNodes}"
+                                                  IsVisible="{Binding HasSecondarySkillNodes}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" Spacing="40" />
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="roles:SkillInfo">
-                                                <StackPanel Spacing="3" Width="52">
-                                                    <!-- 深色底板:技能贴图为白色系,浅色主题下必须压深才可见 -->
-                                                    <Border Width="44" Height="44" CornerRadius="8" ClipToBounds="True"
-                                                            BorderThickness="1" BorderBrush="#26FFFFFF">
-                                                        <Border.Background>
-                                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                                                <GradientStop Color="#FF33455C" Offset="0" />
-                                                                <GradientStop Color="#FF1C2836" Offset="1" />
-                                                            </LinearGradientBrush>
-                                                        </Border.Background>
-                                                        <controls:AsyncImage ImageUrl="{Binding Skill.IconUrl}" Width="44"
-                                                                             Height="44" Stretch="UniformToFill" />
-                                                    </Border>
-                                                    <TextBlock Text="{Binding SkillLevel, StringFormat=Lv.{0}}"
-                                                               FontSize="11" HorizontalAlignment="Center"
-                                                               FontWeight="Bold"
+                                            <DataTemplate x:DataType="vm:SkillCardItem">
+                                                <StackPanel Width="64" Spacing="3" HorizontalAlignment="Center">
+                                                    <Grid HorizontalAlignment="Center" Width="52" Height="52">
+                                                        <!-- 四角星装饰框(复用共鸣链星形 Path):外框细描边 + 内框半透明底,
+                                                             复刻攻略站小节点的星形外形;星心放主题着色线稿图标 -->
+                                                        <Path Stretch="Fill" Width="52" Height="52"
+                                                              Stroke="#9CB49B73" StrokeThickness="1.2" Opacity="0.85"
+                                                              Data="M 50,4 C 53,26 74,47 96,50 C 74,53 53,74 50,96 C 47,74 26,53 4,50 C 26,47 47,26 50,4 Z" />
+                                                        <Path Stretch="Fill" Width="40" Height="40"
+                                                              Stroke="#9CB49B73" StrokeThickness="1.5"
+                                                              Fill="#26FFFFFF"
+                                                              Data="M 50,4 C 53,26 74,47 96,50 C 74,53 53,74 50,96 C 47,74 26,53 4,50 C 26,47 47,26 50,4 Z" />
+                                                        <controls:TintedAsyncImage ImageUrl="{Binding IconUrl}"
+                                                                                   Tint="ThemeForeground"
+                                                                                   Width="28" Height="28"
+                                                                                   HorizontalAlignment="Center"
+                                                                                   VerticalAlignment="Center" />
+                                                    </Grid>
+                                                    <TextBlock Text="{Binding TypeName}" FontSize="11"
+                                                               HorizontalAlignment="Center" TextAlignment="Center"
+                                                               TextWrapping="Wrap" MaxWidth="64"
                                                                Foreground="{DynamicResource SemiColorText2}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Canvas>
+
+                                <!-- 右侧:加点建议(未达标项逐条列出) -->
+                                <StackPanel Grid.Column="1" Spacing="6" MinWidth="190" MaxWidth="260"
+                                            VerticalAlignment="Top"
+                                            IsVisible="{Binding HasSkillAdvice}">
+                                    <TextBlock Text="{loc:Localize Key=Roles.Guide.SkillAdviceTitle}" FontSize="12.5"
+                                               FontWeight="Bold" Foreground="{DynamicResource SemiColorText2}" />
+                                    <ItemsControl ItemsSource="{Binding SkillAdviceItems}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:SkillAdviceEntry">
+                                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,3">
+                                                    <TextBlock Text="✦" FontSize="11"
+                                                               Foreground="{DynamicResource SemiColorPrimary}"
+                                                               VerticalAlignment="Top" />
+                                                    <!-- 技能名强色 + 目标等级警示橙(与「橙=未达标」图例一致);
+                                                         本地化模板拆不出占位符时整句兜底 -->
+                                                    <TextBlock FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center"
+                                                               IsVisible="{Binding HasSegments}">
+                                                        <Run Text="{Binding Prefix}" Foreground="{DynamicResource SemiColorText2}" />
+                                                        <Run Text="{Binding Name}" FontWeight="Bold"
+                                                             Foreground="{DynamicResource SemiColorText1}" />
+                                                        <Run Text="{Binding Middle}" Foreground="{DynamicResource SemiColorText2}" />
+                                                        <Run Text="{Binding Level}" FontWeight="Bold"
+                                                             Foreground="{DynamicResource McKuroWarning}" />
+                                                        <Run Text="{Binding Suffix}" Foreground="{DynamicResource SemiColorText2}" />
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding Fallback}" FontSize="12" TextWrapping="Wrap"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource SemiColorText2}"
+                                                               IsVisible="{Binding !HasSegments}" />
                                                 </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
                                 </StackPanel>
                             </Grid>
-                        </Border>
 
-
-                        <Border CornerRadius="12" Padding="14"
-                                Background="{DynamicResource SemiColorBg3}"
-                                IsVisible="{Binding SelectedRole.HasAttributes}">
-                            <StackPanel Spacing="8">
-                                <TextBlock Text="{loc:Localize Key=Roles.Attributes}" FontSize="13" FontWeight="Bold"
-                                           Foreground="{DynamicResource SemiColorText2}" />
-                                <ItemsControl ItemsSource="{Binding SelectedRole.Attributes}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <!-- 等宽三列:所有属性卡同宽,数值列起点一致(此前 WrapPanel+MinWidth 导致错位) -->
-                                            <UniformGrid Columns="3" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="roles:RoleAttribute">
-                                            <!-- 每个属性项:图标 + 名称(定宽裁断) + 值;名称列固定宽度保证三列数值纵向对齐 -->
-                                            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}"
-                                                    Padding="10,8" Margin="0,0,10,10">
-                                                <Grid ColumnDefinitions="Auto,118,Auto" ColumnSpacing="8">
-                                                    <controls:AsyncImage Grid.Column="0" ImageUrl="{Binding IconUrl}"
-                                                                         IsVisible="{Binding IconUrl, Converter={StaticResource StringNotEmpty}}"
-                                                                         Width="26" Height="26" Stretch="Uniform" />
-                                                    <TextBlock Grid.Column="1" FontSize="13"
-                                                               VerticalAlignment="Center"
-                                                               Foreground="{DynamicResource SemiColorText2}"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               Text="{Binding AttributeName}" />
-                                                    <TextBlock Grid.Column="2" FontSize="14" FontWeight="Bold"
-                                                               VerticalAlignment="Center"
-                                                               Text="{Binding AttributeValue}" />
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- ④ 共鸣链进度条 卡片 -->
-                        <Border CornerRadius="12" Padding="14"
-                                Background="{DynamicResource SemiColorBg3}">
-                            <StackPanel Spacing="10">
-                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <ic:FluentIcon Icon="Link" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                                        <TextBlock Text="{loc:Localize Key=Roles.Chain}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                                    </StackPanel>
-                                    <TextBlock FontSize="13" FontWeight="Bold"
-                                               Foreground="{DynamicResource SemiColorPrimary}">
-                                        <Run Text="{Binding SelectedRole.UnlockedChainCount}" />
-                                        <Run Text="/" />
-                                        <Run Text="{Binding SelectedRole.ChainCount}" />
-                                    </TextBlock>
-                                    <!-- 6 链全解锁:显示称号 -->
-                                    <TextBlock Text="{Binding SelectedRole.FullChainTitle}"
-                                               FontSize="13" FontWeight="Bold"
-                                               Foreground="{Binding Converter={StaticResource EmphasisBrush}}"
-                                               IsVisible="{Binding SelectedRole.IsFullChain}"
-                                               TextTrimming="CharacterEllipsis" MaxWidth="220" />
+                            <!-- 加点顺序:推荐等级降序的图标链(参照攻略站底部"加点顺序"行) -->
+                            <StackPanel Spacing="8" IsVisible="{Binding HasSkillPriority}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="{loc:Localize Key=Roles.Guide.SkillPriority}" FontSize="12.5"
+                                               FontWeight="Bold" Foreground="{DynamicResource SemiColorText2}" />
+                                    <TextBlock Text="{loc:Localize Key=Roles.Guide.SkillPriorityHint}" FontSize="11"
+                                               Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
                                 </StackPanel>
-
-                                <!-- 分段进度条:每段对应一条链,已解锁点亮 -->
-                                <ItemsControl ItemsSource="{Binding SelectedRole.Chains}">
+                                <ItemsControl ItemsSource="{Binding SkillPriorityNodes}">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <UniformGrid Columns="{Binding SelectedRole.ChainCount}" ColumnSpacing="8" />
+                                            <StackPanel Orientation="Horizontal" Spacing="2" />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="roles:ChainInfo">
-                                            <StackPanel Spacing="4">
-                                                <Border Height="8" CornerRadius="4"
-                                                        Background="{Binding IsUnlock, Converter={StaticResource BoolToBrush}}" />
-                                                <TextBlock Text="{Binding ChainName}" FontSize="10"
-                                                           HorizontalAlignment="Center"
-                                                           Foreground="{DynamicResource SemiColorText3}"
-                                                           TextTrimming="CharacterEllipsis" MaxWidth="90" />
+                                        <DataTemplate x:DataType="vm:SkillCardItem">
+                                            <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                                                <StackPanel Width="60" Spacing="2">
+                                                    <!-- 中性圆盘 + 主题着色线稿图标(与技能节点同法:白盘黑标/深盘白标) -->
+                                                    <Border Width="36" Height="36" CornerRadius="18"
+                                                            HorizontalAlignment="Center"
+                                                            Background="{DynamicResource McKuroCardFill}"
+                                                            BorderThickness="1.2"
+                                                            BorderBrush="{DynamicResource SemiColorBorder}">
+                                                        <controls:TintedAsyncImage ImageUrl="{Binding IconUrl}"
+                                                                                   Tint="ThemeForeground"
+                                                                                   Width="24" Height="24" />
+                                                    </Border>
+                                                    <TextBlock Text="{Binding DisplayText}" FontSize="10.5"
+                                                               HorizontalAlignment="Center" TextAlignment="Center"
+                                                               TextWrapping="Wrap" MaxWidth="60"
+                                                               Foreground="{DynamicResource SemiColorText2}" />
+                                                </StackPanel>
+                                                <ic:FluentIcon Icon="ChevronRight" IconVariant="Regular" IconSize="Size16"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource SemiColorText3}"
+                                                               IsVisible="{Binding !IsLast}" />
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </StackPanel>
-                        </Border>
-<!-- ③ mcguide 官方养成达成度(仅登录后显示;登录入口在账号页) -->
-                        <Border CornerRadius="12" Padding="14"
-                                Background="{DynamicResource SemiColorBg3}"
-                                IsVisible="{Binding GuideLoggedIn}">
-                            <StackPanel Spacing="10">
-                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <ic:FluentIcon Icon="ChatBubblesQuestion" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
-                                        <TextBlock Text="{loc:Localize Key=Roles.GuideAchievement}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                                    </StackPanel>
-                                    <TextBlock Text="{Binding GuideStatusText}" FontSize="12"
-                                               Foreground="{DynamicResource SemiColorText2}"
-                                               VerticalAlignment="Center" />
-                                </StackPanel>
 
-                                <!-- 已登录且拉到数据:达成度展示 -->
-                                <StackPanel Spacing="10" IsVisible="{Binding HasGuideAchievement}">
-                                    <StackPanel Orientation="Horizontal" Spacing="12">
-                                        <!-- grade 大徽章 -->
-                                        <Border CornerRadius="10" Padding="14,8" Background="#1a1a1a">
-                                            <TextBlock Text="{Binding GuideAchievement.Grade}" FontSize="28"
-                                                       FontWeight="Bold" Foreground="#f8f05c"
-                                                       VerticalAlignment="Center" />
-                                        </Border>
-                                        <!-- 概览:属性/共鸣链/声骸达标 -->
-                                        <StackPanel Spacing="4" VerticalAlignment="Center">
-                                            <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
-                                                <Run Text="{loc:Localize Key=Roles.AttrMet}" />
-                                                <Run Text="{Binding GuideAchievement.RoleAttribute.FinishedCount}" />
-                                                <Run Text="/" />
-                                                <Run Text="{Binding GuideAchievement.RoleAttribute.TotalCount}" />
-                                            </TextBlock>
-                                            <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
-                                                <Run Text="{loc:Localize Key=Roles.ChainShort}" />
-                                                <Run Text="{Binding GuideAchievement.RoleResonance.AcquiredCount}" />
-                                                <Run Text="/" />
-                                                <Run Text="{Binding GuideAchievement.RoleResonance.TotalCount}" />
-                                            </TextBlock>
-                                            <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}">
-                                                <Run Text="{loc:Localize Key=Roles.EchoShort}" />
-                                                <Run Text="{Binding GuideAchievement.Echo.IsFinished, Converter={StaticResource NullableBoolToText}}" />
-                                            </TextBlock>
+                            <!-- 技能演示 + 基础连招:视频左,右侧显示当前技能名/说明与基础连招 -->
+                            <Border x:Name="SkillDemoSection" CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="12"
+                                    IsVisible="{Binding HasSkillDemo}">
+                                <StackPanel Spacing="10">
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <ic:FluentIcon Icon="Video" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
+                                        <TextBlock Text="{loc:Localize Key=Roles.Guide.SkillDemo}" FontSize="13"
+                                                   FontWeight="Bold" VerticalAlignment="Center" />
+                                        <!-- 当前演示技能(同步显示 logo 对应的攻击技能名) -->
+                                        <TextBlock Text="{Binding SelectedSkillDemo.DisplayText}" FontSize="12"
+                                                   FontWeight="Bold"
+                                                   Foreground="{DynamicResource SemiColorPrimary}"
+                                                   VerticalAlignment="Center"
+                                                   IsVisible="{Binding SelectedSkillDemo, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                    </StackPanel>
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                                        <!-- 左:演示视频。控件层默认隐藏,鼠标悬停时才显示(可点击暂停/重播);
+                                             播放中不遮挡画面(用户要求"播放自动隐藏,悬停显示控件") -->
+                                        <StackPanel Grid.Column="0" Spacing="8" Width="360">
+                                            <Border x:Name="SkillDemoHost" CornerRadius="8" Height="200" ClipToBounds="True"
+                                                    Background="{DynamicResource McKuroIconPlate}">
+                                                <Grid>
+                                                    <controls:VideoBackgroundControl
+                                                        x:Name="SkillDemoVideo"
+                                                        VideoUrl="{Binding CurrentSkillDemoVideo}"
+                                                        IsVideoEnabled="True"
+                                                        IsMuted="True"
+                                                        ShouldLoop="False"
+                                                        SyncWindowAspect="False" />
+                                                    <!-- 控件层:默认透明不可点,指针进入视频区后由 code-behind 显示 -->
+                                                    <Grid x:Name="SkillDemoOverlay" Opacity="0" IsHitTestVisible="False">
+                                                        <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                CornerRadius="20" Width="40" Height="40"
+                                                                Background="#99000000"
+                                                                IsVisible="{Binding CurrentSkillDemoVideo,
+                                                                Converter={StaticResource StringNotEmpty}}">
+                                                            <!-- 播放中=暂停双竖线;暂停/结束=播放三角。由 code-behind 同步 IsPlaying -->
+                                                            <Panel>
+                                                                <TextBlock x:Name="DemoPauseIcon" Text="❚❚" FontSize="14" Foreground="White"
+                                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                <TextBlock x:Name="DemoPlayIcon" Text="▶" FontSize="16" Foreground="White"
+                                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                           IsVisible="False" />
+                                                            </Panel>
+                                                        </Border>
+                                                        <!-- 点击任意位置切换播放/暂停(已播完时点击为从头重播)。
+                                                             ToolTip 文案随播放状态切换,由 code-behind 动态设置。 -->
+                                                        <Button x:Name="SkillDemoReplayButton"
+                                                                HorizontalAlignment="Stretch"
+                                                                VerticalAlignment="Stretch"
+                                                                Background="Transparent"
+                                                                BorderThickness="0"
+                                                                Padding="0"
+                                                                Cursor="Hand"
+                                                                IsVisible="{Binding CurrentSkillDemoVideo,
+                                                                Converter={StaticResource StringNotEmpty}}" />
+                                                    </Grid>
+                                                    <!-- 无视频提示(常显,覆盖在视频区) -->
+                                                    <TextBlock Text="{loc:Localize Key=Roles.Guide.DemoNoVideo}"
+                                                               FontSize="12" HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="White" Opacity="0.85"
+                                                               IsVisible="{Binding CurrentSkillDemoVideo,
+                                                               Converter={StaticResource StringIsEmpty}}" />
+                                                </Grid>
+                                            </Border>
+                                            <!-- 演示不再单列图标:由上方技能节点点击切换(见 PrimarySkillNodes 的 Command) -->
                                         </StackPanel>
-                                    </StackPanel>
 
-                                    <!-- 属性达标明细 -->
-                                    <ItemsControl ItemsSource="{Binding GuideAchievement.RoleAttribute.Items}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <WrapPanel />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="guide:GuideAttributeItem">
-                                                <Border CornerRadius="6" Background="{DynamicResource SemiColorBg1}"
-                                                        Padding="8,4" Margin="0,0,8,8">
-                                                    <StackPanel Spacing="2">
-                                                        <TextBlock FontSize="12" FontWeight="Bold">
-                                                            <Run Text="{Binding Name}" />
-                                                            <Run Text="{Binding IsFinished, StringFormat=' {0}'}"
-                                                                 Foreground="{Binding IsFinished, Converter={StaticResource BoolToOkBrush}}" />
-                                                        </TextBlock>
-                                                        <TextBlock FontSize="11"
-                                                                   Foreground="{DynamicResource SemiColorText2}">
-                                                            <Run Text="{loc:Localize Key=Roles.Recommend}" /><Run Text="{Binding RecommendAmount}" />
-                                                            <Run Text="{loc:Localize Key=Roles.Current}" /><Run Text="{Binding CurrentAmount}" />
+                                        <!-- 右:当前技能名 + 技能说明 + 基础连招 -->
+                                        <StackPanel Grid.Column="1" Spacing="8">
+                                            <!-- 当前演示技能名(与左侧技能节点联动) -->
+                                            <TextBlock Text="{Binding SelectedSkillDemo.TypeName}" FontSize="13"
+                                                       FontWeight="Bold"
+                                                       Foreground="{DynamicResource SemiColorPrimary}"
+                                                       IsVisible="{Binding SelectedSkillDemo, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            <!-- 技能说明 -->
+                                            <TextBlock Text="{Binding SelectedSkillDemo.Description}" FontSize="11.5"
+                                                       TextWrapping="Wrap" MaxHeight="110"
+                                                       Foreground="{DynamicResource SemiColorText2}"
+                                                       IsVisible="{Binding SelectedSkillDemo.Description, Converter={StaticResource StringNotEmpty}}" />
+                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.ComboLabel}" FontSize="12.5"
+                                                       FontWeight="Bold" Foreground="{DynamicResource SemiColorText2}"
+                                                       Margin="0,4,0,0" />
+                                            <TextBlock Text="{Binding ComboText}" FontSize="12" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource SemiColorText1}"
+                                                       IsVisible="{Binding ComboText, Converter={StaticResource StringNotEmpty}}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                    </StackPanel>
+
+                    <!-- ===== 3 共鸣链(图标 + 推荐链标识) ===== -->
+                    <StackPanel x:Name="SecChains">
+                    <Border CornerRadius="12" Padding="14" Background="{DynamicResource SemiColorBg2}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <ic:FluentIcon Icon="Link" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Roles.Chain}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock FontSize="13" FontWeight="Bold"
+                                           Foreground="{DynamicResource SemiColorPrimary}">
+                                    <Run Text="{Binding SelectedRole.UnlockedChainCount}" />
+                                    <Run Text="/" />
+                                    <Run Text="{Binding SelectedRole.ChainCount}" />
+                                </TextBlock>
+                                <!-- 6 链全解锁:显示称号 -->
+                                <TextBlock Text="{Binding SelectedRole.FullChainTitle}"
+                                           FontSize="13" FontWeight="Bold"
+                                           Foreground="{Binding Converter={StaticResource EmphasisBrush}}"
+                                           IsVisible="{Binding SelectedRole.IsFullChain}"
+                                           TextTrimming="CharacterEllipsis" MaxWidth="220" />
+                            </StackPanel>
+
+                            <!-- 分段进度条:每段对应一条链,已解锁点亮;链名上方加图标 + 推荐链标识 -->
+                            <ItemsControl ItemsSource="{Binding SelectedRole.Chains}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="{Binding SelectedRole.ChainCount}" ColumnSpacing="8" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="roles:ChainInfo">
+                                        <StackPanel Spacing="4">
+                                            <!-- 链图标:四角星形装饰框 + 中间图标(参照攻略站链节点外形)。
+                                                 星形 Path 控制点内收 → 中心留白足够,图标完整不裁切;
+                                                 图标用 TintedAsyncImage 着成「浅色主题黑 / 暗色主题白」
+                                                 (实测 guide 链图标是白色线稿,原样显示在浅色主题上不可见);
+                                                 星框内部改用半透明底(不再用实心深底),让着色图标清晰浮于其上。 -->
+                                            <Grid HorizontalAlignment="Center" Width="84" Height="84">
+                                                <!-- 外层星形描边(细) -->
+                                                <Path Stretch="Fill" Width="84" Height="84"
+                                                      Stroke="{Binding ChainFrameColor, Converter={StaticResource ColorTextToBrush}}"
+                                                      StrokeThickness="1.2"
+                                                      Opacity="0.7"
+                                                      Data="M 50,4 C 53,26 74,47 96,50 C 74,53 53,74 50,96 C 47,74 26,53 4,50 C 26,47 47,26 50,4 Z" />
+                                                <!-- 内层星形(粗描边 + 半透明底) -->
+                                                <Path Stretch="Fill" Width="66" Height="66"
+                                                      Stroke="{Binding ChainFrameColor, Converter={StaticResource ColorTextToBrush}}"
+                                                      StrokeThickness="1.8"
+                                                      Fill="#26FFFFFF"
+                                                      Data="M 50,4 C 53,26 74,47 96,50 C 74,53 53,74 50,96 C 47,74 26,53 4,50 C 26,47 47,26 50,4 Z" />
+                                                <!-- 链图标:着色显示。
+                                                     尺寸收在星形中心留白内:图标缩小到 30px(不裁切,仅缩小),完整收进内星框凹弧以内,
+                                                     斜向装饰不再压到四角星边框(用户反馈:不裁切,直接缩小)。
+                                                     着色模式随解锁状态切换:已解锁 ThemeForeground(醒目)、
+                                                     未解锁 ThemeMuted(次级灰) —— 不再只靠 Opacity 压暗,
+                                                     否则黑色图标会被淡到看不出颜色(误以为"没着色")。 -->
+                                                <Border Width="30" Height="30"
+                                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                        IsVisible="{Binding IconUrl, Converter={StaticResource StringNotEmpty}}">
+                                                    <controls:TintedAsyncImage ImageUrl="{Binding IconUrl}"
+                                                                               Tint="{Binding IsUnlock, Converter={StaticResource UnlockToTint}}"
+                                                                               Width="30" Height="30"
+                                                                               HorizontalAlignment="Center"
+                                                                               VerticalAlignment="Center"
+                                                                               Opacity="{Binding IsUnlock, Converter={StaticResource UnlockToOpacity}}" />
+                                                </Border>
+                                                <!-- 攻略推荐标识 -->
+                                                <Border CornerRadius="4" Padding="4,0"
+                                                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                        Margin="0,-2,-4,0"
+                                                        Background="#22C55E"
+                                                        IsVisible="{Binding IsRecommended}">
+                                                    <TextBlock Text="{loc:Localize Key=Roles.Guide.RecommendedBadge}"
+                                                               FontSize="9.5" FontWeight="Bold" Foreground="White" />
+                                                </Border>
+                                            </Grid>
+                                            <Border Height="8" CornerRadius="4"
+                                                    Background="{Binding IsUnlock, Converter={StaticResource BoolToBrush}}" />
+                                            <TextBlock Text="{Binding ChainName}" FontSize="10"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{DynamicResource SemiColorText3}"
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="90" />
+                                            <TextBlock Text="{Binding Description}" FontSize="9.5"
+                                                       HorizontalAlignment="Center" TextAlignment="Center"
+                                                       TextWrapping="Wrap" MaxWidth="110" MaxHeight="48"
+                                                       Foreground="{DynamicResource SemiColorText3}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       IsVisible="{Binding Description, Converter={StaticResource StringNotEmpty}}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- 共鸣链推荐:只在被推荐的链上打标识(见上方链项的 RecommendedChain);
+                                 不再展示攻略的具体推荐原因文字(用户要求精简) -->
+                        </StackPanel>
+                    </Border>
+                    </StackPanel>
+                    <!-- 达成度卡片已移除:各指标已分散到对应数据卡片(属性/技能/共鸣链/武器/声骸) -->
+
+                    <!-- ===== 4 声骸(首位/套装推荐标识;排在攻略推荐之前) ===== -->
+                    <StackPanel x:Name="SecEchoes">
+                    <StackPanel Spacing="6" IsVisible="{Binding SelectedRole.HasPhantoms}">
+                        <!-- 首位声骸推荐结论(登录后) -->
+                        <ItemsControl ItemsSource="{Binding GuideRecommendations}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:GuideRecommendItem">
+                                    <Border CornerRadius="8" Background="{DynamicResource SemiColorBg3}" Padding="10,7" Margin="0,0,0,6"
+                                            IsVisible="{Binding Title, Converter={StaticResource TitleEquals}, ConverterParameter={loc:Localize Key=Roles.Guide.PhantomTitle}}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="Bold"
+                                                       Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Detail}" FontSize="12"
+                                                       Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center"
+                                                       TextWrapping="Wrap" />
+                                            <Border CornerRadius="5" Padding="6,1" VerticalAlignment="Center"
+                                                    Background="{Binding StateMet, Converter={StaticResource RecommendStateBrush}}"
+                                                    IsVisible="{Binding HasState}">
+                                                <TextBlock Text="{Binding State}" FontSize="10.5" FontWeight="Bold" Foreground="White" />
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <ItemsControl ItemsSource="{Binding SelectedRole.PhantomData.Phantoms}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="roles:EchoInfo">
+                                    <Border CornerRadius="8" Background="{DynamicResource SemiColorBg2}"
+                                            Padding="14" Margin="0,0,12,12" Width="320">
+                                        <StackPanel Spacing="8">
+                                            <!-- 头部:品质底色图标 + 名字/套装/等级 -->
+                                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                                <Border Width="64" Height="64" CornerRadius="8"
+                                                        ClipToBounds="True"
+                                                        Background="{Binding Quality, Converter={StaticResource PhantomQualityBrush}}">
+                                                    <controls:AsyncImage ImageUrl="{Binding IconUrl}"
+                                                                         Width="64" Height="64"
+                                                                         Stretch="UniformToFill" />
+                                                </Border>
+                                                <StackPanel Spacing="3" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Text="{Binding PhantomName}" FontSize="16"
+                                                                   FontWeight="Bold"
+                                                                   TextTrimming="CharacterEllipsis" MaxWidth="150" />
+                                                        <!-- 攻略推荐声骸标识(仅 4C 判定) -->
+                                                        <Border CornerRadius="5" Padding="6,1" VerticalAlignment="Center"
+                                                                Background="#22C55E"
+                                                                IsVisible="{Binding IsRecommendedPhantom}">
+                                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.RecommendedBadge}" FontSize="10.5"
+                                                                       FontWeight="Bold" Foreground="White" />
+                                                        </Border>
+                                                    </StackPanel>
+                                                    <!-- 词条评级徽章 -->
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <TextBlock FontSize="13" FontWeight="Bold"
+                                                                   Foreground="{Binding PhantomStatus, Converter={StaticResource EchoRatingLevelBrush}}">
+                                                            <Run Text="{loc:Localize Key=Roles.StatsPrefix}" /><Run Text="{Binding PhantomRatingText}" />
                                                         </TextBlock>
                                                     </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <controls:AsyncImage ImageUrl="{Binding FetterDetail.IconUrl}"
+                                                                             Width="16" Height="16" Stretch="Uniform" />
+                                                        <TextBlock Text="{Binding FetterName}" FontSize="13"
+                                                                   Foreground="{DynamicResource SemiColorText2}" />
+                                                        <!-- 攻略推荐套装标识 -->
+                                                        <Border CornerRadius="5" Padding="6,1" VerticalAlignment="Center"
+                                                                Background="#22C55E"
+                                                                IsVisible="{Binding IsRecommendedSet}">
+                                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.RecommendedBadge}" FontSize="10.5"
+                                                                       FontWeight="Bold" Foreground="White" />
+                                                        </Border>
+                                                    </StackPanel>
+                                                    <TextBlock FontSize="13"
+                                                               Foreground="{DynamicResource SemiColorText2}">
+                                                        <Run Text="Lv." /><Run Text="{Binding Level}" />
+                                                        <Run Text="{loc:Localize Key=Roles.Quality}" /><Run Text="{Binding Quality}" />
+                                                        <Run Text=" · " /><Run Text="{Binding Cost}" />
+                                                        <Run Text="{loc:Localize Key=Roles.CostSuffix}" />
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- 主词条 -->
+                                            <ItemsControl ItemsSource="{Binding MainProps}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="roles:EchoProp">
+                                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                            <TextBlock Grid.Column="0" FontSize="16"
+                                                                       FontWeight="Bold"
+                                                                       Text="{Binding AttributeName}" />
+                                                            <TextBlock Grid.Column="1" FontSize="16"
+                                                                       FontWeight="Bold"
+                                                                       HorizontalAlignment="Right"
+                                                                       Foreground="{DynamicResource SemiColorPrimary}"
+                                                                       Text="{Binding AttributeValue}" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <!-- 副词条(有效词条鲜艳色/其余灰;见 PropLevelBrushConverter) -->
+                                            <ItemsControl ItemsSource="{Binding SubProps}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="roles:EchoProp">
+                                                        <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+                                                            <Border Grid.Column="0" Width="6" Height="16" CornerRadius="3"
+                                                                    VerticalAlignment="Center"
+                                                                    Background="{Binding EffectiveLevel, Converter={StaticResource PropLevelBrush}}" />
+                                                            <TextBlock Grid.Column="1" FontSize="15"
+                                                                       FontWeight="Bold"
+                                                                       Foreground="{Binding EffectiveLevel, Converter={StaticResource PropTextBrush}}"
+                                                                       Text="{Binding AttributeName}" />
+                                                            <TextBlock Grid.Column="3" FontSize="15"
+                                                                       FontWeight="Bold"
+                                                                       Foreground="{Binding EffectiveLevel, Converter={StaticResource PropTextBrush}}"
+                                                                       Text="{Binding AttributeValue}" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    </StackPanel>
+
+                    <!-- ===== 5 官方推荐(攻略切换 + 建议列表) ===== -->
+                    <StackPanel x:Name="SecRecommend">
+                    <StackPanel Spacing="12">
+                        <!-- 攻略切换:标题+作者下拉(≥1 篇时显示) -->
+                        <Border CornerRadius="12" Padding="14" Background="{DynamicResource SemiColorBg2}"
+                                IsVisible="{Binding HasGuideOptions}">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <ic:FluentIcon Icon="BookStar" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Roles.Guide.RecommendTitle}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding GuideSourceText}" FontSize="11"
+                                           Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" MaxWidth="280" />
+                                <ComboBox MinWidth="260" MaxWidth="380"
+                                          ItemsSource="{Binding GuideOptions}"
+                                          SelectedItem="{Binding SelectedGuideOption, Mode=TwoWay}"
+                                          DisplayMemberBinding="{Binding DisplayText, Mode=OneWay}"
+                                          ToolTip.Tip="{loc:Localize Key=Roles.Guide.SwitchTip}"
+                                          HorizontalAlignment="Right" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 装备/特色建议列表已移除(用户要求):武器在「概览」卡、首位声骸在「声骸」卡、
+                             基础连招在「技能演示」卡里都已各自呈现,此处再列一遍属重复。 -->
+                    </StackPanel>
+                    </StackPanel>
+
+
+                    <!-- ===== 6 队友推荐(页面最后;攻略站 teammate)===== -->
+                    <StackPanel x:Name="SecTeammates">
+                            <!-- 队友推荐(攻略站 teammate:主推队友 + 推荐武器/声骸/套装/词条 + 备选队友;
+                                 「未拥有」取接口 isAcquired,主推与备选各自标注) -->
+                            <Border CornerRadius="12" Padding="14" Background="{DynamicResource SemiColorBg2}"
+                                    IsVisible="{Binding HasTeammates}">
+                                <StackPanel Spacing="10">
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <ic:FluentIcon Icon="PeopleTeam" IconVariant="Regular" IconSize="Size16" VerticalAlignment="Center" />
+                                        <TextBlock Text="{loc:Localize Key=Roles.Guide.TeammateTitle}" FontSize="14"
+                                                   FontWeight="Bold" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <ItemsControl ItemsSource="{Binding Teammates}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:TeammateGroupItem">
+                                                <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}"
+                                                        Padding="14" Margin="0,0,0,10">
+                                                    <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="16">
+                                                        <!-- 主推队友:头像 + 名字 + 未拥有标记 -->
+                                                        <StackPanel Grid.Column="0" Spacing="4" Width="108">
+                                                            <Grid HorizontalAlignment="Center">
+                                                                <Border Width="72" Height="72" CornerRadius="10"
+                                                                        ClipToBounds="True"
+                                                                        Background="{DynamicResource McKuroIconPlate}">
+                                                                    <controls:AsyncImage ImageUrl="{Binding MainIconUrl}"
+                                                                                         Width="72" Height="72"
+                                                                                         Stretch="UniformToFill" />
+                                                                </Border>
+                                                                <!-- 未拥有角标 -->
+                                                                <Border CornerRadius="5" Padding="6,2"
+                                                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                        Background="#B0000000"
+                                                                        IsVisible="{Binding MainNotOwned}">
+                                                                    <TextBlock Text="{loc:Localize Key=Roles.Guide.NotOwned}"
+                                                                               FontSize="11" FontWeight="Bold" Foreground="White" />
+                                                                </Border>
+                                                            </Grid>
+                                                            <TextBlock Text="{Binding MainName}" FontSize="13" FontWeight="Bold"
+                                                                       HorizontalAlignment="Center"
+                                                                       TextTrimming="CharacterEllipsis" MaxWidth="108" />
+                                                            <TextBlock Text="{Binding MainStar, StringFormat={}{0}★}"
+                                                                       FontSize="11" HorizontalAlignment="Center"
+                                                                       Foreground="{Binding Converter={StaticResource EmphasisBrush}}" />
+                                                        </StackPanel>
+    
+                                                        <!-- 推荐武器(该组攻略未给武器时整块隐藏) -->
+                                                        <StackPanel Grid.Column="1" Spacing="4" Width="80"
+                                                                    IsVisible="{Binding HasWeapon}">
+                                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.WeaponTitle}" FontSize="11"
+                                                                       HorizontalAlignment="Center"
+                                                                       Foreground="{DynamicResource SemiColorText3}" />
+                                                            <Border Width="52" Height="52" CornerRadius="8" ClipToBounds="True"
+                                                                    HorizontalAlignment="Center"
+                                                                    Background="{DynamicResource McKuroIconPlate}">
+                                                                <controls:AsyncImage ImageUrl="{Binding WeaponIconUrl}"
+                                                                                     Width="52" Height="52" Stretch="UniformToFill" />
+                                                            </Border>
+                                                            <TextBlock Text="{Binding WeaponName}" FontSize="11"
+                                                                       HorizontalAlignment="Center" TextAlignment="Center"
+                                                                       TextWrapping="Wrap" MaxWidth="80"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                            <!-- 该推荐武器未拥有 -->
+                                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.NotOwned}" FontSize="10"
+                                                                       HorizontalAlignment="Center"
+                                                                       Foreground="#E8A33D"
+                                                                       IsVisible="{Binding WeaponNotOwned}" />
+                                                        </StackPanel>
+    
+                                                        <!-- 推荐声骸 + 套装(该组攻略未给声骸时整块隐藏) -->
+                                                        <StackPanel Grid.Column="2" Spacing="4" Width="92"
+                                                                    IsVisible="{Binding HasEcho}">
+                                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.PhantomTitle}" FontSize="11"
+                                                                       HorizontalAlignment="Center"
+                                                                       Foreground="{DynamicResource SemiColorText3}" />
+                                                            <Border Width="52" Height="52" CornerRadius="8" ClipToBounds="True"
+                                                                    HorizontalAlignment="Center"
+                                                                    Background="{DynamicResource McKuroIconPlate}">
+                                                                <controls:AsyncImage ImageUrl="{Binding EchoIconUrl}"
+                                                                                     Width="52" Height="52" Stretch="UniformToFill" />
+                                                            </Border>
+                                                            <TextBlock Text="{Binding EchoName}" FontSize="11"
+                                                                       HorizontalAlignment="Center" TextAlignment="Center"
+                                                                       TextWrapping="Wrap" MaxWidth="92"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Text="{Binding SetName}" FontSize="10.5"
+                                                                       HorizontalAlignment="Center" TextAlignment="Center"
+                                                                       TextWrapping="Wrap" MaxWidth="92"
+                                                                       Foreground="{DynamicResource SemiColorText3}"
+                                                                       IsVisible="{Binding SetName, Converter={StaticResource StringNotEmpty}}" />
+                                                        </StackPanel>
+
+                                                        <!-- 该组无配装数据时的说明(避免空白一片) -->
+                                                        <TextBlock Grid.Column="1" Grid.ColumnSpan="2"
+                                                                   Text="{loc:Localize Key=Roles.Guide.NoBuildForTeammate}"
+                                                                   FontSize="11"
+                                                                   VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource SemiColorText3}"
+                                                                   IsVisible="{Binding HasNoBuild}" />
+    
+                                                        <!-- 词条列表(点数 + 属性名) -->
+                                                        <StackPanel Grid.Column="3" Spacing="3" IsVisible="{Binding HasProps}">
+                                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.PropsTitle}" FontSize="11"
+                                                                       Foreground="{DynamicResource SemiColorText3}" />
+                                                            <ItemsControl ItemsSource="{Binding Props}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:DataType="vm:TeammatePropItem">
+                                                                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,1">
+                                                                            <Border CornerRadius="4" Padding="5,0" MinWidth="20"
+                                                                                    Background="{DynamicResource McKuroIconPlate}">
+                                                                                <TextBlock Text="{Binding Cost}" FontSize="10.5"
+                                                                                           FontWeight="Bold" Foreground="White"
+                                                                                           HorizontalAlignment="Center" />
+                                                                            </Border>
+                                                                            <TextBlock Text="{Binding Name}" FontSize="12"
+                                                                                       VerticalAlignment="Center" />
+                                                                        </StackPanel>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+    
+                                                        <!-- 备选队友(各自标注未拥有) -->
+                                                        <StackPanel Grid.Column="4" Spacing="4" Width="88"
+                                                                    IsVisible="{Binding HasSpares}">
+                                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.SparesTitle}" FontSize="11"
+                                                                       HorizontalAlignment="Center"
+                                                                       Foreground="{DynamicResource SemiColorText3}" />
+                                                            <ItemsControl ItemsSource="{Binding Spares}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <StackPanel Orientation="Horizontal" Spacing="6" />
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:DataType="vm:TeammateRefItem">
+                                                                        <StackPanel Spacing="2" Width="40">
+                                                                            <Grid>
+                                                                                <Border Width="40" Height="40" CornerRadius="8"
+                                                                                        ClipToBounds="True"
+                                                                                        Background="{DynamicResource McKuroIconPlate}">
+                                                                                    <controls:AsyncImage ImageUrl="{Binding IconUrl}"
+                                                                                                         Width="40" Height="40"
+                                                                                                         Stretch="UniformToFill" />
+                                                                                </Border>
+                                                                                <Border CornerRadius="4" Padding="4,1"
+                                                                                        HorizontalAlignment="Center"
+                                                                                        VerticalAlignment="Center"
+                                                                                        Background="#B0000000"
+                                                                                        IsVisible="{Binding NotOwned}">
+                                                                                    <TextBlock Text="{loc:Localize Key=Roles.Guide.NotOwned}"
+                                                                                               FontSize="9.5" FontWeight="Bold" Foreground="White" />
+                                                                                </Border>
+                                                                            </Grid>
+                                                                            <TextBlock Text="{Binding Name}" FontSize="10"
+                                                                                       HorizontalAlignment="Center"
+                                                                                       TextTrimming="CharacterEllipsis" MaxWidth="40" />
+                                                                        </StackPanel>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </Grid>
                                                 </Border>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
                                 </StackPanel>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- ④ 声骸 (WutheringWavesTool Phantom 风格) -->
-                        <StackPanel Spacing="6" IsVisible="{Binding SelectedRole.HasPhantoms}">
-                            <TextBlock Text="{loc:Localize Key=Roles.Echoes}" FontSize="13" FontWeight="Bold"
-                                       Foreground="{DynamicResource SemiColorText2}" />
-                            <ItemsControl ItemsSource="{Binding SelectedRole.PhantomData.Phantoms}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="roles:EchoInfo">
-                                        <Border CornerRadius="8" Background="{DynamicResource SemiColorBg3}"
-                                                Padding="14" Margin="0,0,12,12" Width="320">
-                                            <StackPanel Spacing="8">
-                                                <!-- 头部:品质底色图标 + 名字/套装/等级(参照 WutheringWavesTool main-prop icon) -->
-                                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                                    <Border Width="64" Height="64" CornerRadius="8"
-                                                            ClipToBounds="True"
-                                                            Background="{Binding Quality, Converter={StaticResource PhantomQualityBrush}}">
-                                                        <controls:AsyncImage ImageUrl="{Binding IconUrl}"
-                                                                             Width="64" Height="64"
-                                                                             Stretch="UniformToFill" />
-                                                    </Border>
-                                                    <StackPanel Spacing="3" VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding PhantomName}" FontSize="16"
-                                                                   FontWeight="Bold"
-                                                                   TextTrimming="CharacterEllipsis" MaxWidth="190" />
-                                                        <!-- 词条评级徽章(参照 WutheringWavesTool PhantomItem top:ACE红/SSS黄/S紫/N灰) -->
-                                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                                            <TextBlock FontSize="13" FontWeight="Bold"
-                                                                       Foreground="{Binding PhantomStatus, Converter={StaticResource EchoRatingLevelBrush}}">
-                                                                <Run Text="{loc:Localize Key=Roles.StatsPrefix}" /><Run Text="{Binding PhantomRatingText}" />
-                                                            </TextBlock>
-                                                        </StackPanel>
-                                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                                            <controls:AsyncImage ImageUrl="{Binding FetterDetail.IconUrl}"
-                                                                                 Width="16" Height="16" Stretch="Uniform" />
-                                                            <TextBlock Text="{Binding FetterName}" FontSize="13"
-                                                                       Foreground="{DynamicResource SemiColorText2}" />
-                                                        </StackPanel>
-                                                        <TextBlock FontSize="13"
-                                                                   Foreground="{DynamicResource SemiColorText2}">
-                                                            <Run Text="Lv." /><Run Text="{Binding Level}" />
-                                                            <Run Text="{loc:Localize Key=Roles.Quality}" /><Run Text="{Binding Quality}" />
-                                                            <Run Text=" · " /><Run Text="{Binding Cost}" />
-                                                            <Run Text="{loc:Localize Key=Roles.CostSuffix}" />
-                                                        </TextBlock>
-                                                    </StackPanel>
-                                                </StackPanel>
-
-                                                <!-- 主词条(参照 WutheringWavesTool main-prop1/2,字体 15+ bold) -->
-                                                <ItemsControl ItemsSource="{Binding MainProps}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="roles:EchoProp">
-                                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                                                                <TextBlock Grid.Column="0" FontSize="16"
-                                                                           FontWeight="Bold"
-                                                                           Text="{Binding AttributeName}" />
-                                                                <TextBlock Grid.Column="1" FontSize="16"
-                                                                           FontWeight="Bold"
-                                                                           HorizontalAlignment="Right"
-                                                                           Foreground="{DynamicResource SemiColorPrimary}"
-                                                                           Text="{Binding AttributeValue}" />
-                                                            </Grid>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-
-                                                <!-- 副词条(参照 WutheringWavesTool sub-prop1/2:有效词条色条+文字高亮,字体 14 bold) -->
-                                                <ItemsControl ItemsSource="{Binding SubProps}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="roles:EchoProp">
-                                                            <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
-                                                                <Border Grid.Column="0" Width="6" Height="16" CornerRadius="3"
-                                                                        VerticalAlignment="Center"
-                                                                        Background="{Binding EffectiveLevel, Converter={StaticResource PropLevelBrush}}" />
-                                                                <TextBlock Grid.Column="1" FontSize="15"
-                                                                           FontWeight="Bold"
-                                                                           Foreground="{Binding EffectiveLevel, Converter={StaticResource PropTextBrush}}"
-                                                                           Text="{Binding AttributeName}" />
-                                                                <TextBlock Grid.Column="3" FontSize="15"
-                                                                           FontWeight="Bold"
-                                                                           Foreground="{Binding EffectiveLevel, Converter={StaticResource PropTextBrush}}"
-                                                                           Text="{Binding AttributeValue}" />
-                                                            </Grid>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
+                            </Border>
                     </StackPanel>
-                </Border>
-            </ScrollViewer>
+                </StackPanel>
+                </ScrollViewer>
+            </Grid>
         </Grid>
 
         <!-- 空状态 -->

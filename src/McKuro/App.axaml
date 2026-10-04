@@ -57,6 +57,8 @@
                     <SolidColorBrush x:Key="SemiColorText3" Color="#66FFFFFF" />
                     <SolidColorBrush x:Key="SemiColorPrimary" Color="#5A8DEE" />
                     <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#78A2F1" />
+                    <!-- 图标底板(技能/共鸣链等白色线稿图标需深底才可见);暗色主题用深板岩蓝 -->
+                    <SolidColorBrush x:Key="McKuroIconPlate" Color="#FF33445E" />
                     <!-- 数值输入框面(深色主题):比卡片面更暗 + 可见描边,与卡片拉开层级 -->
                     <SolidColorBrush x:Key="McKuroInputFill" Color="#CC0B1223" />
                     <SolidColorBrush x:Key="McKuroInputStroke" Color="#4DFFFFFF" />
@@ -105,6 +107,10 @@
                     <SolidColorBrush x:Key="SemiColorText3" Color="#66000000" />
                     <SolidColorBrush x:Key="SemiColorPrimary" Color="#5A8DEE" />
                     <SolidColorBrush x:Key="SemiColorPrimaryHover" Color="#4F7CD1" />
+                    <!-- 图标底板(技能/共鸣链等白色线稿图标需深底才可见):
+                         亮色主题用中等板岩蓝而非近黑——原 #33455C→#1C2836 渐变在浅色卡片上过重(用户反馈)。
+                         白描线在中板岩蓝上对比度足够,同时不再"压一块黑"。 -->
+                    <SolidColorBrush x:Key="McKuroIconPlate" Color="#FF6B85B8" />
                     <!-- 数值输入框面(亮色主题):设置页卡片接近纯白,填纯白会"看不见框",
                          故用淡灰底 + 清晰描边,读数与可编辑性都一目了然 -->
                     <SolidColorBrush x:Key="McKuroInputFill" Color="#FFF2F5F9" />

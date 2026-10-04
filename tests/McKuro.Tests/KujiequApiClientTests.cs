@@ -372,4 +372,125 @@ public class KujiequApiClientTests
             listener.Stop();
         }
     }
+
+    [Fact]
+    public async Task RefreshDataAsync_Sends_ThreeFieldBody_And_Returns_True_On_200()
+    {
+        // 2026-10 实测:refreshData 用数据中心头 + 仅 3 字段 body(gameId/roleId/serverId)
+        // 返回 {"code":200,"data":true};body 含 channelId/countryCode 等多字段会被服务端拒绝。
+        var (baseUrl, listener, bodies) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/refreshData"] =
+                """{"code":200,"msg":"请求成功","data":true,"success":true}""",
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var ok = await client.RefreshDataAsync("at-1", DeviceId, RoleId, "server-abc");
+            Assert.True(ok);
+            var body = Assert.Single(bodies);
+            Assert.Contains("gameId=" + KujiequApiClient.ParamGameId, body);
+            Assert.Contains("roleId=" + RoleId, body);
+            Assert.Contains("serverId=server-abc", body);
+            // 3 字段 body:不应包含数据中心其他字段
+            Assert.DoesNotContain("channelId=", body);
+            Assert.DoesNotContain("countryCode=", body);
+            Assert.DoesNotContain("id=", body);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task RefreshDataAsync_Returns_False_On_Non200_Or_GeeTest()
+    {
+        var (baseUrl, listener, _) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/refreshData"] =
+                """{"code":10900,"msg":"角色查询失败，请重新选择角色","data":null,"success":false}""",
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var ok = await client.RefreshDataAsync("at-1", DeviceId, RoleId, "server-abc");
+            Assert.False(ok);
+
+            // 空 accessToken 在发请求前短路返回 false
+            var ok2 = await client.RefreshDataAsync("", DeviceId, RoleId, "server-abc");
+            Assert.False(ok2);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task RefreshDataAsync_Returns_False_On_GeeTest_Response()
+    {
+        // 评审反馈:旧用例名含 GeeTest 但从未走到 geeTest 分支(mock 只回 10900,
+        // 第二次调用空 token 在发请求前就短路)。这里返回真实 geeTest:true 响应。
+        var (baseUrl, listener, bodies) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/refreshData"] =
+                """{"code":200,"msg":"","data":null,"success":true,"geeTest":true}""",
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var ok = await client.RefreshDataAsync("at-1", DeviceId, RoleId, "server-abc");
+            Assert.False(ok);
+            Assert.Single(bodies); // 确实发出了请求并命中 geeTest 分支
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task RefreshDataAsync_Skips_Request_When_ServerId_Missing()
+    {
+        // 评审反馈:serverId 缺失不应发出"注定被拒"的请求
+        var (baseUrl, listener, bodies) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/refreshData"] =
+                """{"code":200,"msg":"","data":true,"success":true}""",
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            Assert.False(await client.RefreshDataAsync("at-1", DeviceId, RoleId, ""));
+            Assert.Empty(bodies);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task RefreshDataAsync_Rethrows_On_Cancellation()
+    {
+        // 评审反馈:取消语义不得被"失败不阻断"的 catch-all 吞掉
+        var (baseUrl, listener, _) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/refreshData"] =
+                """{"code":200,"msg":"","data":true,"success":true}""",
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => client.RefreshDataAsync("at-1", DeviceId, RoleId, "server-abc", ct: cts.Token));
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
 }

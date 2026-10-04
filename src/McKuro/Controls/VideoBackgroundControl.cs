@@ -129,6 +129,167 @@ public sealed class VideoBackgroundControl : Grid
     public static readonly StyledProperty<bool> IsMutedProperty =
         AvaloniaProperty.Register<VideoBackgroundControl, bool>(nameof(IsMuted), defaultValue: true);
 
+    /// <summary>
+    /// 是否循环播放(默认 true,背景封面视频需要)。
+    /// 技能演示等"播完即停"场景设 false:播完停在末帧,用户可点击重播。
+    /// </summary>
+    public static readonly StyledProperty<bool> ShouldLoopProperty =
+        AvaloniaProperty.Register<VideoBackgroundControl, bool>(nameof(ShouldLoop), defaultValue: true);
+
+    /// <summary>是否循环播放(默认 true;false 时播完自动暂停)。</summary>
+    public bool ShouldLoop
+    {
+        get => GetValue(ShouldLoopProperty);
+        set => SetValue(ShouldLoopProperty, value);
+    }
+
+    /// <summary>
+    /// 是否正在播放(供 UI 绑定播放/暂停按钮图标)。
+    /// <para>播放中 = 已开始且未暂停;播完(ShouldLoop=false)后为 false。
+    /// 挂起(最小化/游戏运行中)时也视为非播放中。</para>
+    /// </summary>
+    public static readonly StyledProperty<bool> IsPlayingProperty =
+        AvaloniaProperty.Register<VideoBackgroundControl, bool>(nameof(IsPlaying));
+
+    /// <summary>是否正在播放(UI 可绑定:切换播放/暂停按钮外观)。</summary>
+    public bool IsPlaying
+    {
+        get => GetValue(IsPlayingProperty);
+        private set => SetValue(IsPlayingProperty, value);
+    }
+
+    /// <summary>用户是否已手动暂停(与播放结束/挂起区分,决定 TogglePause 的下一步动作)。</summary>
+    private volatile bool _userPaused;
+
+    /// <summary>是否已播放到结尾(ShouldLoop=false 时;此时 TogglePause 语义为"重播")。</summary>
+    private volatile bool _reachedEnd;
+
+    /// <summary>播放结束(ShouldLoop=false 且播到末帧)时触发,供 UI 把按钮切回"播放"态。</summary>
+    public event EventHandler? PlaybackEnded;
+
+    /// <summary>
+    /// 播放/暂停切换:播放中 → 暂停;暂停中 → 继续;已播完 → 从头重播。
+    /// 无视频/未初始化时为空操作。
+    /// </summary>
+    public void TogglePause()
+    {
+        lock (_sync)
+        {
+            if (_mpv is null)
+            {
+                return;
+            }
+            try
+            {
+                if (_reachedEnd)
+                {
+                    // 已播完:此时"继续"没有意义(停在末帧),语义降级为从头重播
+                    _reachedEnd = false;
+                    _userPaused = false;
+                    _mpv.SetProperty("time-pos", 0d);
+                    // 挂起优先(与 Resume/恢复分支同策略):挂起中重播也不真正解除暂停
+                    _mpv.SetPropertyFlag("pause", _suspended);
+                    IsPlaying = !_suspended;
+                    return;
+                }
+                if (_userPaused)
+                {
+                    _userPaused = false;
+                    // 挂起优先:挂起中不真正恢复解码(避免与省电策略打架)
+                    _mpv.SetPropertyFlag("pause", _suspended);
+                    IsPlaying = !_suspended;
+                }
+                else
+                {
+                    _userPaused = true;
+                    _mpv.SetPropertyFlag("pause", true);
+                    IsPlaying = false;
+                }
+            }
+            catch (Exception)
+            {
+                // 播放器状态异常时忽略:不影响其余功能
+            }
+        }
+    }
+
+    /// <summary>显式暂停(无视频/未初始化时为空操作)。</summary>
+    public void Pause()
+    {
+        lock (_sync)
+        {
+            if (_mpv is null || _userPaused)
+            {
+                return;
+            }
+            try
+            {
+                _userPaused = true;
+                _mpv.SetPropertyFlag("pause", true);
+                IsPlaying = false;
+            }
+            catch (Exception)
+            {
+                // 忽略
+            }
+        }
+    }
+
+    /// <summary>显式继续播放(挂起中不真正恢复;已播完则从头重播)。</summary>
+    public void Resume()
+    {
+        lock (_sync)
+        {
+            if (_mpv is null)
+            {
+                return;
+            }
+            try
+            {
+                if (_reachedEnd)
+                {
+                    _reachedEnd = false;
+                    _mpv.SetProperty("time-pos", 0d);
+                }
+                _userPaused = false;
+                _mpv.SetPropertyFlag("pause", _suspended);
+                IsPlaying = !_suspended;
+            }
+            catch (Exception)
+            {
+                // 忽略
+            }
+        }
+    }
+
+    /// <summary>
+    /// 从头重播当前视频(技能演示"手动触发再次播放")。
+    /// 无视频/未初始化时为空操作。
+    /// </summary>
+    public void Replay()
+    {
+        lock (_sync)
+        {
+            if (_mpv is null)
+            {
+                return;
+            }
+            try
+            {
+                // 回到起点并解除暂停(播完自动暂停后需要显式恢复);挂起中保持挂起策略
+                _reachedEnd = false;
+                _userPaused = false;
+                _mpv.SetProperty("time-pos", 0d);
+                _mpv.SetPropertyFlag("pause", _suspended);
+                IsPlaying = !_suspended;
+            }
+            catch (Exception)
+            {
+                // 播放器状态异常时忽略:不影响其余功能
+            }
+        }
+    }
+
     /// <summary>是否把视频分辨率同步给宿主窗口比例(启动页全屏背景用 true;
     /// 设置页小尺寸预览用 false,避免预览视频把窗口比例改掉)。默认 true。</summary>
     public static readonly StyledProperty<bool> SyncWindowAspectProperty =
@@ -253,7 +414,30 @@ public sealed class VideoBackgroundControl : Grid
         else if (_attached)
         {
             TryStartVideo();
+            // 首次加载兜底重试:此刻可能刚挂载、GL 上下文/解码器尚未就绪,
+            // TryStartVideo 会静默失败且此后不再触发 —— 表现为"首次不播放,切走再切回才正常"。
+            // 延后一拍重试一次:若已成功播放则重试是幂等的(会 Dispose 后重启同一 URL)。
+            ScheduleStartRetry();
         }
+    }
+
+    /// <summary>首次启动兜底重试(仅当仍未出首帧时执行一次)。</summary>
+    private void ScheduleStartRetry()
+    {
+        var gen = Generation;
+        DispatcherTimer.RunOnce(() =>
+        {
+            // 已出首帧 / 已切走 / 已销毁 / 会话已建起 → 不需要重试。
+            // "会话已建起(_mpv 非空)但首帧未到"多半是网络视频还在整段下载(首帧前需先完成下载):
+            // 此时重试会 Dispose 掉健康的下载会话重头再来(双倍带宽、首帧更晚 —— 评审反馈),必须跳过;
+            // 真正需要重试的是"刚挂载 GL 未就绪、TryStartVideo 静默失败(_mpv 为 null)"的场景。
+            if (Stale(gen) || _firstFrameShown || _mpv is not null || !_attached || string.IsNullOrWhiteSpace(VideoUrl))
+            {
+                return;
+            }
+            Debug.WriteLine("[libmpv] 首帧未出现,执行一次启动重试");
+            TryStartVideo();
+        }, TimeSpan.FromMilliseconds(700));
     }
 
     private void OnAttached(object? sender, VisualTreeAttachmentEventArgs e)
@@ -322,10 +506,18 @@ public sealed class VideoBackgroundControl : Grid
 
     private void TryStartVideo()
     {
+        // 先自增 generation 再销毁旧会话:旧 mpv 在 Dispose 中(同步或异步)触发的
+        // EndFile/Stop 回调进来时 Stale(旧 gen) 必然成立,不会污染新会话状态。
+        // (此前顺序相反:DisposePlayer 与自增之间回调可穿过 _disposed=false + 旧 gen 的窗口)
+        _imageGeneration = Interlocked.Increment(ref _imageGeneration);
         DisposePlayer();
         _disposed = false;
-        _imageGeneration = Interlocked.Increment(ref _imageGeneration);
         var gen = Generation; // 本会话代号:所有异步回调以此判断是否已过期(见 Stale)
+        // 新会话复位播放状态标志:否则"暂停旧视频 → 切换新视频"时,新视频自动播放
+        // 但首帧逻辑因 _userPaused 残留 true 而不置 IsPlaying → 播放中显示暂停图标、
+        // 控件层常驻(用户反馈"播放中控件仍显示"的另一入口)。
+        _userPaused = false;
+        _reachedEnd = false;
 
         if (!IsVideoEnabled || string.IsNullOrWhiteSpace(VideoUrl))
         {
@@ -358,15 +550,35 @@ public sealed class VideoBackgroundControl : Grid
 
         try
         {
-            _mpv = new BackgroundMpvContext();
+            _mpv = new BackgroundMpvContext(ShouldLoop);
             ApplyMuteIfConfigured(_mpv);
 
-            // 错误/失败 → 回退静态图(EndFile 的 Error reason,含加载/网络/解码失败)
+            // 播放结束 / 错误 → 回退静态图或标记结束态
             _mpv.EndFile += (_, e) =>
             {
                 if (e.Reason == MpvEndFileReason.Error)
                 {
                     ShowFallback(gen);
+                    return;
+                }
+                // 正常播完(EndOfFile/Stop):ShouldLoop=false 时停在末帧,置结束态并通知 UI。
+                // 必须 Stale(gen) 守卫:切换视频时旧会话 Dispose 会触发 Stop 回调,
+                // 不判过期就会把"刚开播的新视频"打成未播放(播放中误显暂停图标/控件层,
+                // 与角色页演示控件层误判同源);循环视频(ShouldLoop=true)的 Stop/EOF
+                // 不是"播完",同样不得上报结束态。状态字段一并挪进 UI 回调内判定后再写。
+                if (e.Reason is MpvEndFileReason.EndOfFile or MpvEndFileReason.Stop && !ShouldLoop)
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (Stale(gen))
+                        {
+                            return;
+                        }
+                        _reachedEnd = true;
+                        _userPaused = false;
+                        IsPlaying = false;
+                        PlaybackEnded?.Invoke(this, EventArgs.Empty);
+                    }, DispatcherPriority.Background);
                 }
             };
             // 可选诊断日志
@@ -511,6 +723,15 @@ public sealed class VideoBackgroundControl : Grid
             if (_glRenderer is not null)
             {
                 _glRenderer.Opacity = 1;
+            }
+            // GL 路径的"真的开始播放"信号 —— 与软件路径的首帧处理保持一致。
+            // 不设置的话,自动播放时 IsPlaying 一直为 false,UI 侧(技能演示的控件层显隐、
+            // 播放/暂停按钮图标)会误判为"未播放",表现为播放中控件仍然显示。
+            _reachedEnd = false;
+            _firstFrameShown = true;
+            if (!_userPaused && !_suspended)
+            {
+                IsPlaying = true;
             }
             if (_mpv is not null)
             {
@@ -1085,6 +1306,15 @@ public sealed class VideoBackgroundControl : Grid
                 {
                     _videoImage.Opacity = 1;
                 }
+                // 首帧到达 = 真的开始播放了。必须在这里把 IsPlaying 置真:
+                // automatic 播放(未经过 Replay/TogglePause)此前从不设置该状态,
+                // 于是 UI 侧(技能演示的控件层显隐、播放/暂停图标)会一直误判为"未播放",
+                // 表现为"自动播放时播放控件仍然显示"。
+                _reachedEnd = false;
+                if (!_userPaused && !_suspended)
+                {
+                    IsPlaying = true;
+                }
             }
 
             // 位图在渲染线程重建,Source 绑定只能在 UI 线程更新
@@ -1303,6 +1533,11 @@ public sealed class VideoBackgroundControl : Grid
     /// </summary>
     private sealed class BackgroundMpvContext : MpvContext
     {
+        private readonly bool _loop;
+
+        /// <summary>构造。<paramref name="loop"/> = false 时播完停在末帧(技能演示等)。</summary>
+        public BackgroundMpvContext(bool loop = true) => _loop = loop;
+
         protected override void OnPreInitialize()
         {
             // 渲染 API 要求 vo=libmpv 在 initialize 前设置
@@ -1312,7 +1547,8 @@ public sealed class VideoBackgroundControl : Grid
             // Windows d3d11va / Linux vaapi-nvdec;失败自动回退软件解码。
             // GL 渲染路径下解码帧留在 GPU 侧直接互操作;软件渲染路径下 mpv 自动降级软解。
             SetOptionString("hwdec", "auto-safe");
-            SetOptionString("loop-file", "inf");
+            // 循环:背景封面视频需要 (inf);技能演示设 no —— 播完停在末帧等用户重播
+            SetOptionString("loop-file", _loop ? "inf" : "no");
             SetOptionString("volume", "0");
             // 网络缓冲:CDN 视频首次缓冲耗尽后卡住"只动了一下",增大 demuxer 缓冲
             SetOptionString("demuxer-max-bytes", "50M");

@@ -32,6 +32,8 @@ public sealed class RoleDataLoadResult
 /// <para>同步链拆分(2026-08 优化):<see cref="LoadRoleListAsync"/> 只拉角色列表(roleData),
 /// <see cref="LoadRoleDetailAsync"/> 在用户点击具体角色时单发 getRoleDetail——
 /// 页面加载时不再批量串行拉全量详情(高频接口易触发极验风控,且列表页无需全部详情)。</para>
+/// <para>刷新链(2026-10 修复):列表同步先调 refreshData 让库街区服务端回游戏服务器重拉最新数据——
+/// 数据中心接口返回的是服务端缓存快照,不刷新则同步/详情都是旧数据。</para>
 /// </summary>
 public sealed class RoleDataService : IRoleDataService
 {
@@ -134,16 +136,29 @@ public sealed class RoleDataService : IRoleDataService
             }
             _accessToken = accessToken;
 
-            // 3. 角色列表(roleData):仅基础列表,不做 getRoleDetail 批量请求
-            //    (refreshData 已被服务端停用,不再调用;详情按用户点击角色时单独拉取)
+            // 3. 触发服务端刷新(refreshData):数据中心接口(roleData/getRoleDetail)返回的是
+            //    库街区服务端自己的缓存快照,不先刷新拿到的都是上次快照
+            //    (用户实测:同步之后角色详情数据还是旧的)。
+            //    2026-10 实测接口可用(3 字段 body + B-At 头 → 200/data:true);
+            //    失败仅告警不阻断,继续用现有快照(旧数据好过没数据)。
+            //    返回值记录日志(评审反馈):便于区分"刷新成功/极验被拦/参数缺失跳过"与真实失败
+            var refreshed = await _api.RefreshDataAsync(
+                accessToken, deviceId, roleId, item.ServerId ?? "", ct: ct).ConfigureAwait(false);
+            if (!refreshed)
+            {
+                _logger.LogInformation("refreshData 未生效,本次列表沿用服务端现有快照: roleId={RoleId}", roleId);
+            }
+
+            // 4. 角色列表(roleData):仅基础列表,不做 getRoleDetail 批量请求
+            //    (详情按用户点击角色时单独拉取)
             var list = await _api.GetRoleDataAsync(
                 accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
 
-            // 4. 列表项合并本地缓存中已同步过的完整详情(按 cardRoleId 匹配):
+            // 5. 列表项合并本地缓存中已同步过的完整详情(按 cardRoleId 匹配):
             //    上次同步/已点击查看过的角色详情区在页面加载后即有数据,未命中的由点击时按需拉取
             MergeCachedDetails(list, _userId, roleId);
 
-            // 5. 把合并后的整份列表写回缓存:旧实现只在单角色详情拉取成功时回写,列表同步本身不落盘,
+            // 6. 把合并后的整份列表写回缓存:旧实现只在单角色详情拉取成功时回写,列表同步本身不落盘,
             //    导致「同步拿到的新角色关掉页面就没了、重开又退回上次缓存里那几个」。
             //    合并写回会按 cardRoleId 保留缓存中已有的详情区块,不会丢上次的完整数据。
             MergeListIntoCachedRoles(_userId, roleId, list);

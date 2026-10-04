@@ -26,8 +26,8 @@
                 <!-- 判定徽标(自动;悬停查看完整判定结果) -->
                 <Grid Grid.Column="1" VerticalAlignment="Center"
                       ToolTip.Tip="{Binding SameAccountStatus}">
-                    <!-- 同一账号(强调色) -->
-                    <Border CornerRadius="8" Padding="10,4" Background="#D9481F" IsVisible="{Binding SameAccountIsSame}">
+                    <!-- 同一账号(绿色=正常) -->
+                    <Border CornerRadius="8" Padding="10,4" Background="#22C55E" IsVisible="{Binding SameAccountIsSame}">
                         <TextBlock Text="{Binding SameAccountStatus}" FontSize="12" Foreground="White"
                                    MaxWidth="320" TextTrimming="CharacterEllipsis" />
                     </Border>
@@ -145,12 +145,22 @@
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding CloudAccountText}" FontSize="12" Margin="0,0,4,0"
                                                Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center" />
-                                    <Button Content="{loc:Localize Key=Account.LoginBtn}" Classes="primary" Command="{Binding ToggleCloudLoginCommand}"
-                                            IsVisible="{Binding !IsCloudLoggedIn}" />
+                                    <!-- 与库街区卡片同款:「添加账号」始终可见(已登录时用于再次登录/换号),
+                                         退出登录单独按钮(仅移除当前账号) -->
+                                    <Button Content="{loc:Localize Key=Account.KuroLoginBtn}" Classes="primary" Command="{Binding ToggleCloudLoginCommand}" />
                                     <Button Content="{loc:Localize Key=Account.Logout}" Command="{Binding CloudLogoutCommand}"
                                             IsVisible="{Binding IsCloudLoggedIn}" />
                                 </StackPanel>
                             </Grid>
+
+                            <!-- 多账号切换(无已保存账号时隐藏,避免出现空下拉) -->
+                            <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding HasCloudAccounts}">
+                                <TextBlock Text="{loc:Localize Key=Account.Current}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
+                                <ComboBox Width="320"
+                                          ItemsSource="{Binding CloudAccountOptions}"
+                                          SelectedIndex="{Binding SelectedCloudAccountIndex, Mode=TwoWay}"
+                                          ToolTip.Tip="{loc:Localize Key=Account.CloudSwitchTip}" />
+                            </StackPanel>
 
                             <!-- 登录表单(标签 + 两列字段;可折叠,未登录时自动展开) -->
                             <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="20,18"
@@ -209,8 +219,9 @@
                                     <TextBlock Text="{Binding GuideStatusText}" FontSize="12" Margin="0,0,4,0" MaxWidth="260"
                                                Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center"
                                                TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
-                                    <Button Content="{loc:Localize Key=Account.LoginBtn}" Classes="primary" Command="{Binding ToggleGuideLoginCommand}"
-                                            IsVisible="{Binding !GuideLoggedIn}" />
+                                    <!-- 与库街区卡片同款:「添加账号」始终可见(已登录时用于再次登录/换号),
+                                         退出登录单独按钮 -->
+                                    <Button Content="{loc:Localize Key=Account.KuroLoginBtn}" Classes="primary" Command="{Binding ToggleGuideLoginCommand}" />
                                     <Button Content="{loc:Localize Key=Account.Logout}" Command="{Binding GuideLogoutCommand}"
                                             IsVisible="{Binding GuideLoggedIn}" />
                                 </StackPanel>

@@ -70,16 +70,30 @@ public sealed class GuideIntroductionItem
     [JsonPropertyName("texts")] public List<GuideTextItem>? Texts { get; set; }
 }
 
-/// <summary>攻略项内嵌角色引用。</summary>
+/// <summary>攻略项内嵌角色引用(teammate.items[*].main / .spares[*];实测两者字段完全同构)。</summary>
 public sealed class GuideRoleRef
 {
     [JsonPropertyName("roleGbId")] public string? RoleGbId { get; set; }
     [JsonPropertyName("cardPictureUrl")] public string? CardPictureUrl { get; set; }
+    /// <summary>角色立绘 URL(实测 teammate main/spares 有;list/role 无)。</summary>
+    [JsonPropertyName("illustrationPictureUrl")] public string? IllustrationPictureUrl { get; set; }
     [JsonPropertyName("star")] public int Star { get; set; }
     [JsonPropertyName("texts")] public List<GuideTextItem>? Texts { get; set; }
+    /// <summary>是否已拥有(★「未拥有」判定:false=未拥有;实测 teammate main/spares 有该字段)。</summary>
+    [JsonPropertyName("isAcquired")] public bool? IsAcquired { get; set; }
+    /// <summary>属性(实测 teammate main 有 element;用于配队区属性图标)。</summary>
+    [JsonPropertyName("element")] public GuideElement? Element { get; set; }
+    /// <summary>玩法/操作演示列表(实测 teammate main 有 rolePlays)。</summary>
+    [JsonPropertyName("rolePlays")] public List<GuideRolePlay>? RolePlays { get; set; }
 
     /// <summary>角色名(zh-Hans)。</summary>
     public string? Name => Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.Name;
+
+    /// <summary>基础连招/技能展示文本(zh-Hans;实测 teammate main 有,如「基础连招:普通攻击*5 → 延奏离场」)。</summary>
+    public string? SkillDisplay => Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.SkillDisplay;
+
+    /// <summary>未拥有(isAcquired == false);字段缺失(null)时不判为未拥有。</summary>
+    [JsonIgnore] public bool IsNotOwned => IsAcquired == false;
 }
 
 /// <summary>多语言文本项。</summary>
@@ -88,9 +102,15 @@ public sealed class GuideTextItem
     [JsonPropertyName("language")] public string? Language { get; set; }
     [JsonPropertyName("name")] public string? Name { get; set; }
     [JsonPropertyName("introductionName")] public string? IntroductionName { get; set; }
+    /// <summary>攻略作者(如「轩儿Xuaner」;baseTexts/list texts 有)。</summary>
+    [JsonPropertyName("introductionSource")] public string? IntroductionSource { get; set; }
     [JsonPropertyName("recommendDescription")] public string? RecommendDescription { get; set; }
     [JsonPropertyName("description")] public string? Description { get; set; }
     [JsonPropertyName("skillDisplay")] public string? SkillDisplay { get; set; }
+    /// <summary>武器效果名(如「承天之祐」;仅武器 texts 有)。</summary>
+    [JsonPropertyName("effectName")] public string? EffectName { get; set; }
+    /// <summary>武器效果描述(仅武器 texts 有)。</summary>
+    [JsonPropertyName("effectDescription")] public string? EffectDescription { get; set; }
 }
 
 /// <summary>攻略详情(introduction/info)顶层。</summary>
@@ -98,12 +118,14 @@ public sealed class GuideIntroductionInfo
 {
     [JsonPropertyName("id")] public long Id { get; set; }
     [JsonPropertyName("role")] public GuideRoleInfo? Role { get; set; }
+    /// <summary>攻略标题/作者等顶层文本(baseTexts)。</summary>
+    [JsonPropertyName("baseTexts")] public List<GuideBaseTextItem>? BaseTexts { get; set; }
     [JsonPropertyName("roleAttribute")] public GuideRoleAttribute? RoleAttribute { get; set; }
     [JsonPropertyName("echo")] public GuideEcho? Echo { get; set; }
     [JsonPropertyName("echoTexts")] public List<GuideTextItem>? EchoTexts { get; set; }
     [JsonPropertyName("roleSkill")] public GuideRoleSkill? RoleSkill { get; set; }
     [JsonPropertyName("roleResonance")] public GuideRoleResonance? RoleResonance { get; set; }
-    [JsonPropertyName("roleResonanceTexts")] public List<GuideTextItem>? RoleResonanceTexts { get; set; }
+    [JsonPropertyName("roleResonanceTexts")] public List<GuideResonanceRecommendation>? RoleResonanceTexts { get; set; }
     [JsonPropertyName("weapon")] public GuideWeapon? Weapon { get; set; }
     [JsonPropertyName("weaponTexts")] public List<GuideTextItem>? WeaponTexts { get; set; }
     [JsonPropertyName("grade")] public string? Grade { get; set; }
@@ -117,15 +139,65 @@ public sealed class GuideRoleInfo
     [JsonPropertyName("star")] public int Star { get; set; }
     [JsonPropertyName("texts")] public List<GuideTextItem>? Texts { get; set; }
     [JsonPropertyName("element")] public GuideElement? Element { get; set; }
+    /// <summary>玩法/操作演示列表(含图标;与技能演示同源展示)。</summary>
+    [JsonPropertyName("rolePlays")] public List<GuideRolePlay>? RolePlays { get; set; }
 
     public string? Name => Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.Name;
     public string? SkillDisplay => Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.SkillDisplay;
+}
+
+/// <summary>玩法演示项(rolePlays):图标 + 可选的第二图标。</summary>
+public sealed class GuideRolePlay
+{
+    [JsonPropertyName("gbId")] public string? GbId { get; set; }
+    [JsonPropertyName("pictureUrl")] public string? PictureUrl { get; set; }
+    [JsonPropertyName("secondPictureUrl")] public string? SecondPictureUrl { get; set; }
+}
+
+/// <summary>
+/// 角色基础资料(role/info 的 data):技能演示视频 + 角色特点图标。
+/// <para>
+/// 技能演示视频只在本接口(<c>skills[].videoUrl</c>,实测 5 个技能全有 mp4);
+/// introduction/info 只带 keynoteSkills 的 1 个视频,不足以撑起演示列表。
+/// </para>
+/// </summary>
+public sealed class GuideRoleInfoData
+{
+    [JsonPropertyName("roleGbId")] public string? RoleGbId { get; set; }
+    [JsonPropertyName("cardPictureUrl")] public string? CardPictureUrl { get; set; }
+    [JsonPropertyName("star")] public int Star { get; set; }
+    [JsonPropertyName("texts")] public List<GuideTextItem>? Texts { get; set; }
+    /// <summary>角色特点图标(概览卡横排展示)。</summary>
+    [JsonPropertyName("rolePlays")] public List<GuideRolePlay>? RolePlays { get; set; }
+    /// <summary>技能列表(含演示视频 videoUrl)。</summary>
+    [JsonPropertyName("skills")] public List<GuideRoleSkillVideo>? Skills { get; set; }
+
+    /// <summary>角色名。</summary>
+    public string? Name => Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.Name;
+}
+
+/// <summary>role/info 的技能项(含演示视频)。</summary>
+public sealed class GuideRoleSkillVideo
+{
+    [JsonPropertyName("gbId")] public string? GbId { get; set; }
+    [JsonPropertyName("pictureUrl")] public string? PictureUrl { get; set; }
+    /// <summary>技能演示视频(mp4)。</summary>
+    [JsonPropertyName("videoUrl")] public string? VideoUrl { get; set; }
+    [JsonPropertyName("skillType")] public GuideSkillType? SkillType { get; set; }
+    [JsonPropertyName("texts")] public List<GuideTextItem>? Texts { get; set; }
+
+    public string? Name => Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.Name;
+    public string? TypeName => SkillType?.Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.Name;
+    public string? Description => Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.Description;
+    public bool HasVideo => !string.IsNullOrWhiteSpace(VideoUrl);
 }
 
 public sealed class GuideElement
 {
     [JsonPropertyName("gbId")] public string? GbId { get; set; }
     [JsonPropertyName("pictureUrl")] public string? PictureUrl { get; set; }
+    /// <summary>第二图标(实测 teammate main.element 有 secondPictureUrl)。</summary>
+    [JsonPropertyName("secondPictureUrl")] public string? SecondPictureUrl { get; set; }
 }
 
 /// <summary>角色属性达标(roleAttribute)。</summary>
@@ -210,6 +282,10 @@ public sealed class GuideRoleSkill
     [JsonPropertyName("addPointTarget")] public List<GuideSkillTarget>? AddPointTarget { get; set; }
     /// <summary>固定技能列表(含图标 pictureUrl,用于角色详情页技能展示)。</summary>
     [JsonPropertyName("fixedSkills")] public List<GuideFixedSkill>? FixedSkills { get; set; }
+    /// <summary>核心技能(含演示视频 videoUrl;实测 1504 延奏技能有 mp4)。</summary>
+    [JsonPropertyName("keynoteSkill")] public GuideFixedSkill? KeynoteSkill { get; set; }
+    /// <summary>核心技能列表(含演示视频 videoUrl)。</summary>
+    [JsonPropertyName("keynoteSkills")] public List<GuideFixedSkill>? KeynoteSkills { get; set; }
     [JsonPropertyName("isFinished")] public bool? IsFinished { get; set; }
 }
 
@@ -256,16 +332,20 @@ public sealed class GuideSkillType
     [JsonPropertyName("texts")] public List<GuideTextItem>? Texts { get; set; }
 }
 
-/// <summary>固定技能(roleSkill.fixedSkills):角色详情页展示用,含图标。</summary>
+/// <summary>固定技能(roleSkill.fixedSkills / keynoteSkills):角色详情页展示用,含图标与演示视频。</summary>
 public sealed class GuideFixedSkill
 {
     [JsonPropertyName("gbId")] public string? GbId { get; set; }
     [JsonPropertyName("pictureUrl")] public string? PictureUrl { get; set; }
+    /// <summary>技能演示视频(mp4;攻略站 guide-res 域名,可内嵌播放)。</summary>
+    [JsonPropertyName("videoUrl")] public string? VideoUrl { get; set; }
     [JsonPropertyName("skillType")] public GuideSkillType? SkillType { get; set; }
     [JsonPropertyName("texts")] public List<GuideTextItem>? Texts { get; set; }
 
     public string? Name => Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.Name;
     public string? TypeName => SkillType?.Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.Name;
+    public string? Description => Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.Description;
+    public bool HasVideo => !string.IsNullOrWhiteSpace(VideoUrl);
 }
 
 /// <summary>共鸣链(roleResonance)。</summary>
@@ -281,12 +361,31 @@ public sealed class GuideRoleResonance
 
 public sealed class GuideResonanceItem
 {
+    [JsonPropertyName("gbId")] public string? GbId { get; set; }
+    /// <summary>共鸣链图标(guide-res 域名;实测 1504 六链均有图)。</summary>
+    [JsonPropertyName("pictureUrl")] public string? PictureUrl { get; set; }
     [JsonPropertyName("resonanceSequence")] public int ResonanceSequence { get; set; }
     [JsonPropertyName("texts")] public List<GuideTextItem>? Texts { get; set; }
     [JsonPropertyName("isAcquired")] public bool? IsAcquired { get; set; }
 
     public string? Name => Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.Name;
     public string? Description => Texts?.FirstOrDefault(t => t.Language == "zh-Hans")?.Description;
+}
+
+/// <summary>共鸣链推荐项:攻略推荐的链数与说明(roleResonanceTexts)。</summary>
+public sealed class GuideResonanceRecommendation
+{
+    [JsonPropertyName("language")] public string? Language { get; set; }
+    /// <summary>攻略推荐描述(如「共鸣链2…共鸣链4…共鸣链6是副C最重要的」)。</summary>
+    [JsonPropertyName("recommendDescription")] public string? RecommendDescription { get; set; }
+}
+
+/// <summary>baseTexts 顶层:攻略标题/作者(实测 introduction/info 顶层 baseTexts 数组,字段与 GuideTextItem 同构)。</summary>
+public sealed class GuideBaseTextItem
+{
+    [JsonPropertyName("language")] public string? Language { get; set; }
+    [JsonPropertyName("introductionName")] public string? IntroductionName { get; set; }
+    [JsonPropertyName("introductionSource")] public string? IntroductionSource { get; set; }
 }
 
 /// <summary>武器(weapon)。</summary>
@@ -300,8 +399,9 @@ public sealed class GuideWeapon
 public sealed class GuideWeaponItem
 {
     [JsonPropertyName("gbId")] public string? GbId { get; set; }
-    [JsonPropertyName("star")] public int Star { get; set; }
     [JsonPropertyName("pictureUrl")] public string? PictureUrl { get; set; }
+    [JsonPropertyName("star")] public int Star { get; set; }
+    /// <summary>推荐位:实测 1=首选(推荐武器),2=备选(items 数组内;无该字段时为 0)。</summary>
     [JsonPropertyName("status")] public int Status { get; set; }
     [JsonPropertyName("isAcquired")] public bool? IsAcquired { get; set; }
     [JsonPropertyName("isFinished")] public bool? IsFinished { get; set; }
@@ -318,10 +418,25 @@ public sealed class GuideTeammate
     [JsonPropertyName("items")] public List<GuideTeammateItem>? Items { get; set; }
 }
 
+/// <summary>
+/// 配队推荐项(teammate.items[*])。
+/// <para>实测 1311 的 items[0] 有 7 个字段:main / spares / weapon / echoProps /
+/// echoSetEffect2 / echoSetEffect5 / echoAttributes(此前只映射了 main/spares)。</para>
+/// </summary>
 public sealed class GuideTeammateItem
 {
     [JsonPropertyName("main")] public GuideRoleRef? Main { get; set; }
     [JsonPropertyName("spares")] public List<GuideRoleRef>? Spares { get; set; }
+    /// <summary>推荐武器(与 weapon.current 同构)。</summary>
+    [JsonPropertyName("weapon")] public GuideWeaponItem? Weapon { get; set; }
+    /// <summary>推荐声骸主词条(4C)。</summary>
+    [JsonPropertyName("echoProps")] public GuideEchoProps? EchoProps { get; set; }
+    /// <summary>2 件套声骸效果。</summary>
+    [JsonPropertyName("echoSetEffect2")] public GuideEchoSetEffect? EchoSetEffect2 { get; set; }
+    /// <summary>5 件套声骸效果(实测可能为 null)。</summary>
+    [JsonPropertyName("echoSetEffect5")] public GuideEchoSetEffect? EchoSetEffect5 { get; set; }
+    /// <summary>声骸词条(每项含 cost + attribute)。</summary>
+    [JsonPropertyName("echoAttributes")] public List<GuideEchoAttribute>? EchoAttributes { get; set; }
 }
 
 [JsonSerializable(typeof(GuideEnvelope<GuideLoginToken>))]
@@ -339,8 +454,17 @@ public sealed class GuideTeammateItem
 [JsonSerializable(typeof(GuideIntroductionItem))]
 [JsonSerializable(typeof(List<GuideIntroductionItem>))]
 [JsonSerializable(typeof(GuideIntroductionInfo))]
+[JsonSerializable(typeof(GuideBaseTextItem))]
+[JsonSerializable(typeof(GuideResonanceRecommendation))]
+[JsonSerializable(typeof(List<GuideResonanceRecommendation>))]
 [JsonSerializable(typeof(GuideRoleRef))]
 [JsonSerializable(typeof(GuideRoleInfo))]
+[JsonSerializable(typeof(GuideRoleInfoData))]
+[JsonSerializable(typeof(GuideEnvelope<GuideRoleInfoData>))]
+[JsonSerializable(typeof(GuideRoleSkillVideo))]
+[JsonSerializable(typeof(List<GuideRoleSkillVideo>))]
+[JsonSerializable(typeof(GuideRolePlay))]
+[JsonSerializable(typeof(List<GuideRolePlay>))]
 [JsonSerializable(typeof(GuideTextItem))]
 [JsonSerializable(typeof(GuideFixedSkill))]
 [JsonSerializable(typeof(List<GuideFixedSkill>))]

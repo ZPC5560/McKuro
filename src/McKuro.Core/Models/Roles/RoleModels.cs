@@ -63,19 +63,95 @@ public sealed class SkillBase
     [JsonPropertyName("iconUrl")] public string IconUrl { get; set; } = "";
 }
 
-/// <summary>共鸣链(命座,对齐 Haiyu getRoleDetail.chainList)。</summary>
-public sealed class ChainInfo
+/// <summary>
+/// 共鸣链(命座,对齐 Haiyu getRoleDetail.chainList)。
+/// <para>
+/// 实现 <see cref="INotifyPropertyChanged"/>:库街区 chainList 无图标,
+/// 攻略数据到达后按链序号回填 <see cref="IconUrl"/>(见 RolesViewModel.MergeGuideChains);
+/// 不通知则 UI 已经渲染过该链,后补的图标不会显示(用户反馈"共鸣链还是没有显示图标")。
+/// </para>
+/// </summary>
+public sealed class ChainInfo : INotifyPropertyChanged
 {
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private string _iconUrl = "";
+
     [JsonPropertyName("order")] public int ChainNum { get; set; }
     [JsonPropertyName("name")] public string ChainName { get; set; } = "";
-    [JsonPropertyName("unlocked")] public bool IsUnlock { get; set; }
-    [JsonPropertyName("iconUrl")] public string IconUrl { get; set; } = "";
+
+    private bool _isUnlock;
+
+    /// <summary>
+    /// 是否已解锁(变更时通知 UI,并连带通知 <see cref="ChainFrameColor"/>;
+    /// 评审反馈:此前为无通知 auto-property,回填解锁态后星框色会停在旧值)。
+    /// </summary>
+    [JsonPropertyName("unlocked")]
+    public bool IsUnlock
+    {
+        get => _isUnlock;
+        set
+        {
+            if (_isUnlock == value)
+            {
+                return;
+            }
+            _isUnlock = value;
+            var args = new PropertyChangedEventArgs(nameof(IsUnlock));
+            PropertyChanged?.Invoke(this, args);
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ChainFrameColor)));
+        }
+    }
+
+    /// <summary>链图标(库街区无,由攻略 pictureUrl 回填;变更时通知 UI)。</summary>
+    [JsonPropertyName("iconUrl")]
+    public string IconUrl
+    {
+        get => _iconUrl;
+        set
+        {
+            if (string.Equals(_iconUrl, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+            _iconUrl = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IconUrl)));
+        }
+    }
+
     [JsonPropertyName("description")] public string Description { get; set; } = "";
+
+    private bool _isRecommended;
+    /// <summary>是否为攻略推荐的共鸣链(由攻略 roleResonanceTexts 解析链号后回填;变更时通知 UI)。</summary>
+    [JsonIgnore]
+    public bool IsRecommended
+    {
+        get => _isRecommended;
+        set
+        {
+            if (_isRecommended == value)
+            {
+                return;
+            }
+            _isRecommended = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRecommended)));
+        }
+    }
+
+    /// <summary>
+    /// 四角星形装饰边框的描边色(十六进制)。
+    /// <para>已解锁 = 金色(呼应攻略站装饰框);未解锁 = 中性灰,与图标置灰一致。
+    /// Core 层不引用 Avalonia,故返回色值字符串,由 UI 转换器转画刷。</para>
+    /// </summary>
+    [JsonIgnore]
+    public string ChainFrameColor => IsUnlock ? "#B08D3F" : "#9E9E9E";
 }
 
 /// <summary>声骸(Phantom,鸣潮的"圣遗物",对齐 WutheringWavesTool Phantom)。</summary>
-public sealed class EchoInfo
+public sealed class EchoInfo : INotifyPropertyChanged
 {
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     [JsonPropertyName("level")] public int Level { get; set; }
     [JsonPropertyName("cost")] public int Cost { get; set; }
     [JsonPropertyName("quality")] public int Quality { get; set; }
@@ -118,6 +194,43 @@ public sealed class EchoInfo
     [JsonIgnore]
     private McKuro.Core.Services.Roles.EchoRating Rate
         => _rateCache ??= McKuro.Core.Services.Roles.EchoRatingService.RateEcho(this);
+
+    // ---- 攻略站推荐标识(VM 在攻略加载后回填;不入 JSON/缓存,每次反序列化后由 VM 重新计算) ----
+
+    private bool _isRecommendedPhantom;
+    private bool _isRecommendedSet;
+
+    /// <summary>是否为攻略站推荐声骸(仅 4C 且与推荐配装首件一致;变更时通知 UI)。</summary>
+    [JsonIgnore]
+    public bool IsRecommendedPhantom
+    {
+        get => _isRecommendedPhantom;
+        set
+        {
+            if (_isRecommendedPhantom == value)
+            {
+                return;
+            }
+            _isRecommendedPhantom = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRecommendedPhantom)));
+        }
+    }
+
+    /// <summary>其套装是否为攻略站推荐套装(变更时通知 UI)。</summary>
+    [JsonIgnore]
+    public bool IsRecommendedSet
+    {
+        get => _isRecommendedSet;
+        set
+        {
+            if (_isRecommendedSet == value)
+            {
+                return;
+            }
+            _isRecommendedSet = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRecommendedSet)));
+        }
+    }
 }
 
 /// <summary>声骸套装效果(fetterDetail)。</summary>

@@ -120,6 +120,28 @@ public sealed class GuideApiClient
         throw new GuideApiException($"获取攻略详情失败: {env?.Message ?? $"code={env?.Code}"}", env?.Code);
     }
 
+    /// <summary>
+    /// 角色基础资料(role/info):技能演示视频 + 角色特点图标。
+    /// <para>
+    /// 技能演示视频不在 introduction/info 里(那里只有 keynoteSkills 的 1 个),
+    /// 而在本接口的 <c>data.skills[].videoUrl</c>(实测心的 5 个技能各有 mp4);
+    /// <c>data.rolePlays[].pictureUrl</c> 是角色特点 logo(概览卡横排展示)。
+    /// </para>
+    /// </summary>
+    public async Task<GuideRoleInfoData?> GetRoleInfoAsync(string xToken, string roleGbId, CancellationToken ct = default)
+    {
+        var path = $"/role/info?roleGbId={roleGbId}&_t={Timestamp()}";
+        var json = await GetAsync(path, xToken, ct).ConfigureAwait(false);
+        var env = DeserializeEnvelope(json, path, GuideJsonContext.Default.GuideEnvelopeGuideRoleInfoData);
+        // Code=200 但 data 为 null 也按失败处理(评审反馈):
+        // 否则调用方无法区分"接口无数据"与"失败",既不落缓存也无从提示
+        if (env is { Code: 200, Data: not null })
+        {
+            return env.Data;
+        }
+        throw new GuideApiException($"获取角色资料失败: {env?.Message ?? $"code={env?.Code}"}", env?.Code);
+    }
+
     /// <summary>反序列化信封;失败时抛出带原始 JSON 的异常(便于定位椿/珂莱塔这类特殊响应)。</summary>
     private static T DeserializeEnvelope<T>(string json, string path, JsonTypeInfo<T> typeInfo)
     {

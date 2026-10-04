@@ -142,19 +142,21 @@ public class RatingBrushConverterTests
     }
 
     [Fact]
-    public void PropLevel_3_Returns_DarkYellow_In_Light()
+    public void PropLevel_3_Returns_Vivid_Amber_In_Light()
     {
+        // 2026-10 调整:有效词条(level3)改为更鲜艳的高饱和琥珀(#E08A00)
         var c = new PropLevelBrushConverter();
         var brush = Assert.IsType<SolidColorBrush>(c.Convert(3, typeof(IBrush), null, CultureInfo.InvariantCulture));
-        Assert.Equal(Color.Parse("#a88400"), brush.Color);
+        Assert.Equal(Color.Parse("#E08A00"), brush.Color);
     }
 
     [Fact]
     public void PropLevel_0_Returns_Gray()
     {
+        // 2026-10 调整:无效词条灰提亮为 #B0B0B0(浅色主题)/#666666(深色主题)
         var c = new PropLevelBrushConverter();
         var brush = Assert.IsType<SolidColorBrush>(c.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture));
-        Assert.Equal(Color.Parse("#9e9e9e"), brush.Color);
+        Assert.Equal(Color.Parse("#B0B0B0"), brush.Color);
     }
 
     [Fact]
@@ -169,16 +171,20 @@ public class RatingBrushConverterTests
     }
 
     [Fact]
-    public void PropLevel_Valid_Levels_Differ_From_Invalid_Gray()
+    public void PropLevel_Only_Level3_Is_Valid_Others_Gray()
     {
-        // 有效词条(level2/3)必须与无效词条(level0/1)的灰色明显不同
+        // 2026-10 规则调整(用户要求):只有 level3(暴击/暴击伤害/攻击百分比)算有效词条,
+        // level2/1/0 一律灰 —— 此前 level2 用青色,使「共鸣效率/伤害加成」看起来同样有效。
         var c = new PropLevelBrushConverter();
-        var invalidGray = Assert.IsType<SolidColorBrush>(c.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var gray = Assert.IsType<SolidColorBrush>(c.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var lv1 = Assert.IsType<SolidColorBrush>(c.Convert(1, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         var lv2 = Assert.IsType<SolidColorBrush>(c.Convert(2, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         var lv3 = Assert.IsType<SolidColorBrush>(c.Convert(3, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
-        Assert.NotEqual(invalidGray, lv2);
-        Assert.NotEqual(invalidGray, lv3);
-        Assert.NotEqual(lv2, lv3);
+        // level2/1 与 level0 同为灰(无效)
+        Assert.Equal(gray, lv1);
+        Assert.Equal(gray, lv2);
+        // level3 = 有效,必须明显区别于灰
+        Assert.NotEqual(gray, lv3);
     }
 
     [Fact]
@@ -193,10 +199,10 @@ public class RatingBrushConverterTests
     [Fact]
     public void PropText_Matches_PropLevel_Bar_For_Valid_Levels()
     {
-        // 有效词条(level2/3)装饰条与同档文字必须完全同色,避免"条一个色、字另一个色"
+        // 有效词条(仅 level3)装饰条与文字必须完全同色,避免"条一个色、字另一个色"
         var bars = new PropLevelBrushConverter();
         var texts = new PropTextBrushConverter();
-        foreach (var level in new[] { 2, 3 })
+        foreach (var level in new[] { 3 })
         {
             var bar = Assert.IsType<SolidColorBrush>(bars.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture));
             var text = Assert.IsType<SolidColorBrush>(texts.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture));
@@ -207,11 +213,11 @@ public class RatingBrushConverterTests
     [Fact]
     public void PropText_And_Bar_Are_Both_Gray_For_Invalid_Levels()
     {
-        // 无效词条(level0/1):装饰条与文字各自取灰(明度略有差异以便文字可读),
-        // 但都必须是「灰」——即三通道相近、且明显区别于有效词条的青/金。
+        // 无效词条(level0/1/2):装饰条与文字各自取灰(明度略有差异以便文字可读),
+        // 但都必须是「灰」——即三通道相近、且明显区别于有效词条的亮色。
         var bars = new PropLevelBrushConverter();
         var texts = new PropTextBrushConverter();
-        foreach (var level in new[] { 0, 1 })
+        foreach (var level in new[] { 0, 1, 2 })
         {
             var bar = Assert.IsType<SolidColorBrush>(bars.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
             var text = Assert.IsType<SolidColorBrush>(texts.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
@@ -221,12 +227,16 @@ public class RatingBrushConverterTests
                     $"invalid level {level} should be neutral gray, got {c}");
             }
         }
-        // 同档位下条与字一致(level1 走同一个兜底分支)
+        // 同档位下条与字一致(level0/1/2 走同一个兜底分支)
         var b1 = Assert.IsType<SolidColorBrush>(bars.Convert(1, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var b2 = Assert.IsType<SolidColorBrush>(bars.Convert(2, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         var b0 = Assert.IsType<SolidColorBrush>(bars.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         var t1 = Assert.IsType<SolidColorBrush>(texts.Convert(1, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var t2 = Assert.IsType<SolidColorBrush>(texts.Convert(2, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         var t0 = Assert.IsType<SolidColorBrush>(texts.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         Assert.Equal(b0, b1);
+        Assert.Equal(b0, b2);
         Assert.Equal(t0, t1);
+        Assert.Equal(t0, t2);
     }
 }
