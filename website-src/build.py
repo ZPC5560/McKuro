@@ -6,6 +6,8 @@ Layout (all paths relative to this file, so a fresh clone works):
   js/*          copied as-is to <repo>/website/
   assets/       fonts + icons live in <repo>/website/; only the generated
                 font subsets and the sprite are rewritten here
+  ../CHANGELOG.md  rendered into the <!--CHANGELOG--> placeholder, so the
+                site's release notes and the GitHub Release body stay one source
 
 Icon SVGs come from src/icons (Phosphor, MIT). Font sources come from
 font-src/ and are subset to exactly the glyphs the page renders.
@@ -26,6 +28,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)                    # .../McKuro
 OUT = os.path.join(REPO, "website")
 ICONS = os.path.join(HERE, "src", "icons")
+
+# share the CHANGELOG parser with tools/changelog.py (single contract, one impl)
+sys.path.insert(0, os.path.join(REPO, "tools"))
+import changelog as cl  # noqa: E402
 
 # CJK + latin ranges the subsets declare (browsers pick a face by unicode-range)
 CJK = "U+2000-206F,U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+FF00-FFEF"
@@ -66,6 +72,22 @@ def sprite():
             "<defs>" + "".join(out) + "</defs></svg>")
 
 
+def changelog_section():
+    """Render the repo CHANGELOG.md into the release-notes section markup.
+
+    Verified before anything is written: if the file is missing or its newest
+    version cannot be parsed, the build stops rather than shipping an empty log.
+    """
+    path = os.path.join(REPO, "CHANGELOG.md")
+    if not os.path.isfile(path):
+        raise SystemExit(f"missing {path} (the site renders its changelog from it)")
+    text = read(path)
+    errs = cl.check(text)
+    if errs:
+        raise SystemExit("CHANGELOG.md failed validation:\n  " + "\n  ".join(errs))
+    return cl.to_html(text, open_recent=2)
+
+
 def subset(py, src, dst, chars):
     """Subset one font to `chars`; raises if fontTools is unavailable."""
     tmp = os.path.join(HERE, ".charset.tmp")
@@ -93,6 +115,9 @@ def main():
     args = ap.parse_args()
 
     html = concat("html", ".html").replace("<!--SPRITE-->", sprite())
+    if "<!--CHANGELOG-->" not in html:
+        raise SystemExit("html partials must keep the <!--CHANGELOG--> placeholder")
+    html = html.replace("<!--CHANGELOG-->", changelog_section())
     css = concat("css", ".css")
     js_names = sorted(n for n in os.listdir(os.path.join(HERE, "js")) if n.endswith(".js"))
     js = "".join(read(os.path.join(HERE, "js", n)) for n in js_names)

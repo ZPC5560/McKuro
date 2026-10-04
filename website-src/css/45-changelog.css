@@ -1,0 +1,57 @@
+/* ---------- CHANGELOG: one timeline entry per release ---------- */
+.changelog { display: grid; gap: 14px; }
+
+.cl {
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  overflow: clip;
+}
+.cl > summary {
+  display: flex; align-items: baseline; gap: 14px;
+  padding: 16px 20px;
+  cursor: pointer; list-style: none;
+  transition: background .2s var(--ease);
+}
+.cl > summary::-webkit-details-marker { display: none; }
+.cl > summary:hover { background: rgba(90, 141, 238, .06); }
+.cl[open] > summary { border-bottom: 1px solid var(--line); }
+.cl__ver {
+  font-size: 17px; font-weight: 500; color: var(--accent-ink);
+  letter-spacing: -.01em;
+}
+.cl__date { margin-left: auto; font-size: 12.5px; color: var(--ink-3); }
+.cl > summary::after {
+  content: ""; order: 3; width: 9px; height: 9px; margin-left: 4px; align-self: center;
+  border-right: 2px solid var(--ink-3); border-bottom: 2px solid var(--ink-3);
+  transform: rotate(45deg); transition: transform .2s var(--ease);
+}
+.cl[open] > summary::after { transform: rotate(225deg); }
+
+.cl__body { padding: 10px 20px 18px; }
+.cl__group {
+  display: flex; align-items: center; gap: 8px;
+  margin: 14px 0 6px;
+  font-size: 13px; font-weight: 600; letter-spacing: .04em; color: var(--ink-2);
+}
+.cl__group::before {
+  content: ""; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.cl__list { display: grid; gap: 7px; }
+.cl__list li { position: relative; padding-left: 18px; color: var(--ink-2); font-size: 15px; text-wrap: pretty; }
+.cl__list li::before { content: ""; position: absolute; left: 4px; top: .62em; width: 5px; height: 5px; border-radius: 50%; background: var(--line-2); }
+.cl__list b { color: var(--ink); }
+.cl__list code {
+  font: 500 13.5px/1.5 var(--mono);
+  padding: 1px 6px; border-radius: 6px;
+  background: rgba(27, 36, 51, .06); color: var(--ink);
+}
+.cl__list a { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
+.cl__foot { margin-top: 28px; text-align: center; color: var(--ink-2); font-size: 14.5px; }
+.cl__link { color: var(--accent-ink); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cl > summary, .cl > summary::after { transition: none; }
+}

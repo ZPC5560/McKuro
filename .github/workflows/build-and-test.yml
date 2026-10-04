@@ -70,6 +70,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # tag 发布第一步:Release 正文取自 CHANGELOG.md(与官网更新日志同源),
+      # 后续各 job 的 gh release upload 因此必然有目标 Release
+      - name: Sync release notes from CHANGELOG.md
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: ./.github/actions/sync-release-notes
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
@@ -136,6 +142,10 @@ jobs:
           restore-keys: |
             nuget-osx-${{ matrix.rid }}-
 
+      # 幂等保证 Release 存在且正文=CHANGELOG.md 小节(matrix 并发下 create||edit 结果一致)
+      - name: Sync release notes from CHANGELOG.md
+        uses: ./.github/actions/sync-release-notes
+
       - name: Publish (AOT, self-contained)
         run: dotnet publish src/McKuro/McKuro.csproj -c Release -r ${{ matrix.rid }} --self-contained -p:PublishAot=true
 
@@ -195,6 +205,10 @@ jobs:
           restore-keys: |
             nuget-linux-
 
+      # 幂等保证 Release 存在且正文=CHANGELOG.md 小节
+      - name: Sync release notes from CHANGELOG.md
+        uses: ./.github/actions/sync-release-notes
+
       - name: Publish (AOT, self-contained)
         run: dotnet publish src/McKuro/McKuro.csproj -c Release -r linux-x64 --self-contained -p:PublishAot=true
 
@@ -234,6 +248,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # 幂等保证 Release 存在且正文=CHANGELOG.md 小节(installer attach 前)
+      - name: Sync release notes from CHANGELOG.md
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: ./.github/actions/sync-release-notes
 
       # 复用 publish-win 的 AOT 产物,不再重复 10 分钟链接构建;
       # 落到 setup.iss 的 MyAppPublishDir 默认路径

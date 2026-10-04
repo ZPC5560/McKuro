@@ -11,6 +11,8 @@ on:
     paths:
       - "website-src/**"
       - "website/**"
+      - "CHANGELOG.md"          # the changelog section is rendered from it
+      - "tools/changelog.py"    # shared parser contract
       - ".github/workflows/website.yml"
   workflow_dispatch:
 

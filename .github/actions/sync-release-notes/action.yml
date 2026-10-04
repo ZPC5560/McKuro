@@ -1,0 +1,30 @@
+name: Sync release notes from CHANGELOG.md
+description: >
+  Creates (or edits) the GitHub Release for the current tag with this version's
+  section of CHANGELOG.md as the body — the repo changelog, the website
+  changelog section and the Release notes stay one single source.
+  Safe to run from several parallel publish jobs: create is idempotent via
+  `create || edit`, and every job writes the exact same notes.
+
+runs:
+  using: composite
+  steps:
+    - name: Extract section and push to Release
+      shell: bash
+      env:
+        # action_bundler_token 与 github.token 为同一 JWT;用该别名以免凭据掩码规则误替换字面量
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ github.ref_name }}
+      run: |
+        set -euo pipefail
+        ver="${TAG#v}"
+        notes="$(mktemp)"
+        trap 'rm -f "$notes"' EXIT
+        if ! python3 tools/changelog.py extract "$ver" -o "$notes"; then
+          echo "::error::CHANGELOG.md has no section for ${ver} — write the changelog entry before pushing the tag."
+          exit 1
+        fi
+        # release exists → edit; otherwise create (title convention: McKuro vX.Y.Z)
+        gh release create "$TAG" --title "McKuro $TAG" --notes-file "$notes" --verify-tag 2>/dev/null \
+          || gh release edit "$TAG" --notes-file "$notes"
+        echo "release notes for $TAG synced from CHANGELOG.md ($(wc -l < "$notes") lines)"
