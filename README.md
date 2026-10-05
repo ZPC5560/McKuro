@@ -73,7 +73,7 @@
 
 ### 多语言与自更新
 
-- 界面语言 **zh-Hans / en-US 全量切换**(841 key 双语资源覆盖全部页面与动态消息,重启生效)。
+- 界面语言 **zh-Hans / en-US 全量切换**(873 key 双语资源覆盖全部页面与动态消息,重启生效)。
 - 应用内置 GitHub Release 自更新,通道回退 + 断点续传 + 完整性校验,详见[应用自更新](#应用自更新)。
 
 ## 环境要求
@@ -109,7 +109,7 @@ McKuro/
 │   ├── ViewModels/                 # MVVM (CommunityToolkit.Mvvm)
 │   ├── Controls/                   # AsyncImage / VideoBackgroundControl(libmpv) / 图表控件 / WebView2·WkWebView(极验) / Live2DModelHost
 │   ├── Services/                   # 手动 DI (AppServices) + 系统材质 / 游戏进程监控 / 每日调度 / 多语言 / Live2D 运行时定位
-│   └── Assets/lang/                # zh-Hans / en-US 界面语言资源 (841 key)
+│   └── Assets/lang/                # zh-Hans / en-US 界面语言资源 (873 key)
 ├── src/McKuro.Core/                # 与 UI 无关的核心库 (AOT 兼容,源生成 JSON)
 │   ├── Services/Gacha/             # 日志解密 / URL 提取 / 接口 / 分析 / 存储 / 云鸣潮双通道
 │   ├── Services/Game/              # 清单加载 / 断点下载 / 差分安装(hpatchz) / 更新 / 游玩时长
@@ -121,7 +121,7 @@ McKuro/
 │   ├── Services/                   # Update(自更新) / Launcher / Notification / Redeem / Settings 等其余服务
 │   └── Infrastructure/             # SQLite (Microsoft.Data.Sqlite)
 ├── src/ThirdParty/Sparkle.Live2DView/  # vendored Live2D 渲染控件 (MIT)
-└── tests/McKuro.Tests/             # xUnit 单元测试 (768 个用例)
+└── tests/McKuro.Tests/             # xUnit 单元测试 (902 个用例)
 ```
 
 ## 使用说明
@@ -161,7 +161,7 @@ macOS/Linux 暂不支持(渲染控件当前仅面向 Windows x64),设置页相�
 
 ### 界面语言
 
-设置页「界面语言」支持 **简体中文 / English**,重启后生效。双语资源(841 key)覆盖全部页面文案、消息提示与各服务层状态(`CoreStrings` 网关:Core 层经应用注册的解析器取词,未注册(单测)时回退中文原文)。
+设置页「界面语言」支持 **简体中文 / English**,重启后生效。双语资源(873 key)覆盖全部页面文案、消息提示与各服务层状态(`CoreStrings` 网关:Core 层经应用注册的解析器取词,未注册(单测)时回退中文原文)。
 
 ## 发布与安装包
 
@@ -176,7 +176,7 @@ macOS/Linux 暂不支持(渲染控件当前仅面向 Windows x64),设置页相�
 解压类资产 `chmod +x McKuro` 后运行。本地编译安装包(需安装 Inno Setup 6):
 
 ```bash
-ISCC.exe installer\setup.iss /DMyAppVersion=1.3.2
+ISCC.exe installer\setup.iss /DMyAppVersion=1.3.3
 ```
 
 ## 应用自更新
@@ -191,7 +191,7 @@ ISCC.exe installer\setup.iss /DMyAppVersion=1.3.2
 
 ## 测试与 CI
 
-- `tests/McKuro.Tests`:xUnit 单元测试 **768 个用例**(覆盖日志解密、抽卡分析、卡池统计、更新链路、通知、多语言等)。
+- `tests/McKuro.Tests`:xUnit 单元测试 **902 个用例**(覆盖日志解密、抽卡分析、卡池统计、更新链路、通知、多语言等)。
 - `build-and-test.yml`:push/PR 在 Linux 构建 + 测试;发布 tag 或手动触发时进行全平台 AOT 构建并附加 Release 资产。
 - `website.yml`:`website/` 或 `website-src/` 变更时重新构建并部署官网。
 

@@ -77,6 +77,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     // ---------- 悬浮提醒通知(除设置页外全局显示) ----------
 
+    /// <summary>
+    /// 按缓存键取已落盘的导航栏头像路径;键为空或无缓存返回 null。
+    /// <para>
+    /// 键的构造统一走 <see cref="IconDiskCacheService.AvatarCacheKey"/> —— 与写入侧
+    /// (HomeViewModel.ResolveAvatarAsync)共用同一规则,避免读写键再次漂移导致永久命中不了。
+    /// </para>
+    /// </summary>
+    private static string? CachedAvatarFor(string? key)
+        => string.IsNullOrWhiteSpace(key)
+            ? null
+            : AppServices.IconCache.GetCachedIconPath("avatar", IconDiskCacheService.AvatarCacheKey(key, null));
+
     /// <summary>同时堆叠的提醒卡片上限(超出挤掉最旧的)。</summary>
     private const int MaxReminderCards = 3;
 
@@ -176,15 +188,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         _messenger = messenger;
 
-        // 启动即用磁盘缓存头像占位(主页每次刷新都会把头像落盘到 icon_cache/avatar,按 userId)
-        var navAccount = AppServices.KuroAccounts.Current;
-        if (navAccount is not null && !string.IsNullOrEmpty(navAccount.UserId))
+        // 启动即用磁盘缓存头像占位。主页把头像落盘到 icon_cache/avatar,键 = <b>游戏角色 UID</b>
+        // (头像属于角色:一个库街区账号可有多个角色,按账号缓存会在切角色时串头像 —— 见 HomeViewModel.ResolveAvatarAsync)。
+        // 这里必须用同一个键,否则启动占位永远命中不了、离线时导航栏只能停在默认头像。
+        // 旧版本曾按库街区 userId 落盘,故失败时再兜一次旧键,让升级用户的既有缓存仍可用。
+        var navAvatar = CachedAvatarFor(AppServices.Settings.Current.RoleId)
+            ?? CachedAvatarFor(AppServices.KuroAccounts.Current?.UserId);
+        if (navAvatar is not null)
         {
-            var cached = AppServices.IconCache.GetCachedIconPath("avatar", IconDiskCacheService.Safe(navAccount.UserId));
-            if (cached is not null)
-            {
-                NavAvatarPath = cached;
-            }
+            NavAvatarPath = navAvatar;
         }
 
         // 主页解析出新头像(下载落盘)后即时切换

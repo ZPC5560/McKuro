@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using McKuro.Core.Infrastructure;
 using McKuro.Core.Models.Game;
 using McKuro.Core.Services.Settings;
@@ -297,6 +298,94 @@ public sealed class GameUpdater : IGameUpdater
         }
         parts = list.ToArray();
         return true;
+    }
+
+    /// <summary>版本号形态("3.7.0"/"3.7.0.1"),用于从补丁清单路径里挑出版本号。</summary>
+    private static readonly Regex VersionInPathRegex = new(@"\d+(?:\.\d+)+", RegexOptions.Compiled);
+
+    /// <summary>
+    /// 从服务端补丁清单提取历史版本号,新→旧排序。
+    /// <para>
+    /// 对齐 Haiyu <c>SelectGameFolderViewModelV2.Loaded</c>:路径里通常带两个版本号(源版本与目标版本),
+    /// 取第 2 个匹配作为该补丁的目标版本。
+    /// </para>
+    /// <para>
+    /// <b>必须先去重再取第 2 个</b>(Haiyu 的 <c>matches.Select(x =&gt; x.Value).Distinct()</c>):
+    /// 真实路径形如 <c>.../3.7.0/&lt;hash&gt;/resource/10003/3.7.0/1.0.0/indexFile.json</c> ——
+    /// 游戏版本号出现<b>两次</b>,不去重时 <c>[1]</c> 取到的永远是那两个相同的游戏版本
+    /// (全部 48 条都得到 "3.7.0"),去重后只剩一个,下拉因此只显示当前版本一个候选。
+    /// </para>
+    /// <para>
+    /// 优先用清单里的一等字段 <see cref="KuroPatchConfig.Version"/>(实测与路径推导结果 48/48 一致);
+    /// 该字段缺失时才回退到路径解析。只保留 <see cref="TryParseVersion"/> 认可的纯数字 1~4 段值,避免脏路径污染下拉。
+    /// </para>
+    /// </summary>
+    internal static IReadOnlyList<string> ExtractHistoricalVersions(KuroUpdateData? update)
+    {
+        var configs = update?.Config?.PatchConfig;
+        if (configs is null || configs.Count == 0)
+        {
+            return [];
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var versions = new List<string>();
+        foreach (var config in configs)
+        {
+            var candidate = ResolvePatchVersion(config);
+            if (candidate is null || !TryParseVersion(candidate, out _) || !seen.Add(candidate))
+            {
+                continue;
+            }
+            versions.Add(candidate);
+        }
+
+        versions.Sort(static (x, y) => CompareVersionStrings(y, x));   // 新版本在前
+        return versions;
+    }
+
+    /// <summary>解析单条补丁配置的目标版本:一等字段优先,缺失时回退路径解析;取不到返回 null。</summary>
+    private static string? ResolvePatchVersion(KuroPatchConfig? config)
+    {
+        if (config is null)
+        {
+            return null;
+        }
+        var declared = config.Version?.Trim();
+        if (!string.IsNullOrEmpty(declared))
+        {
+            return declared;
+        }
+        if (string.IsNullOrWhiteSpace(config.IndexFile))
+        {
+            return null;
+        }
+        // 关键:先去重(游戏版本在路径里重复出现),再取第 2 个作为补丁目标版本
+        var distinct = VersionInPathRegex.Matches(config.IndexFile)
+            .Select(m => m.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return distinct.Count > 1 ? distinct[1] : null;
+    }
+
+    /// <summary>按数值段比较两个版本号(段数补齐,缺失按 0);两者都非法时回退字符串比较。</summary>
+    private static int CompareVersionStrings(string a, string b)
+    {
+        if (TryParseVersion(a, out var pa) && TryParseVersion(b, out var pb))
+        {
+            var len = Math.Max(pa.Length, pb.Length);
+            for (var i = 0; i < len; i++)
+            {
+                var av = i < pa.Length ? pa[i] : 0;
+                var bv = i < pb.Length ? pb[i] : 0;
+                if (av != bv)
+                {
+                    return av.CompareTo(bv);
+                }
+            }
+            return 0;
+        }
+        return string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>预下载:按官方补丁清单下载差异文件到暂存目录,不触碰游戏目录、不做全量 MD5 校验。</summary>
@@ -1479,6 +1568,81 @@ public sealed class GameUpdater : IGameUpdater
             _logger.LogWarning(ex, "读取已安装版本失败,视为未安装: {Path}", marker);
             return null;
         }
+    }
+
+    /// <inheritdoc/>
+    public bool TrySetInstalledVersion(string version)
+    {
+        var trimmed = version?.Trim() ?? "";
+        // 与检查更新同一套版本语法(纯数字 1~4 段),防止把乱填的值写进缓存后永远判不出更新
+        if (trimmed.Length == 0 || !TryParseVersion(trimmed, out _))
+        {
+            return false;
+        }
+        var root = _paths.GameRootDir;
+        if (string.IsNullOrEmpty(root))
+        {
+            return false;
+        }
+        WriteInstalledVersion(root, trimmed);
+        _logger.LogInformation("用户手动指定本地游戏版本: {Version}(跳过文件校验)", trimmed);
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<string>> GetKnownVersionsAsync(GameServerType serverType, CancellationToken ct = default)
+    {
+        var list = new List<string>();
+        void Add(string? v)
+        {
+            var t = v?.Trim() ?? "";
+            // 只收 TryParseVersion 认可的形态(纯数字 1~4 段):下拉是<b>不可编辑</b>的,
+            // 一旦混入服务端给出的异常版本串(如带后缀的 hotfix 标记),用户选中它只会得到
+            // 「版本号格式无效」而无法完成操作 —— 宁可不出现在列表里。
+            // 与 TrySetInstalledVersion 的校验保持一致,保证"能选中的一定能写入"。
+            if (t.Length > 0 && TryParseVersion(t, out _) && !list.Any(x => x.Equals(t, StringComparison.OrdinalIgnoreCase)))
+            {
+                list.Add(t);
+            }
+        }
+
+        // 服务端当前版本 + 补丁清单里的历史版本 + 本地记录(网络失败静默降级,只给本地候选)。
+        //
+        // 有意<b>不</b>收预载(predownload)版本:它是"未来版本",还没装进游戏目录;
+        // 而这个下拉的语义是「指定本地<b>已装</b>版本」(写进 installed 记录)。
+        // 若把它当已装版本写下去,CheckUpdate 的 IsVersionOlder(installed, manifest.Version)
+        // 会得到 false → 界面报「已是最新」并隐藏更新入口,而磁盘上其实还是旧版本
+        // (且服务端正式发布该版本后依然判 false,要等用户重新选一次版本才能恢复)。
+        try
+        {
+            var load = await _loader.LoadKuroAsync(_indexUrlProvider(serverType), preDownload: false, ct).ConfigureAwait(false);
+            if (load.Success && load.Manifest is not null)
+            {
+                Add(load.Manifest.Version);
+                // 历史版本:下拉要能直接选到「游戏实际装的是哪个老版本」(对齐 Haiyu 版本列表)
+                foreach (var historical in ExtractHistoricalVersions(load.DefaultData))
+                {
+                    Add(historical);
+                }
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "获取版本候选失败,仅返回本地记录");
+        }
+
+        var root = _paths.GameRootDir;
+        if (!string.IsNullOrEmpty(root))
+        {
+            Add(ReadInstalledVersion(root));
+        }
+
+        // 统一按新→旧排序:<see cref="Views.VersionCandidateList"/> 的契约是"候选原样保留",
+        // 而本地记录是最后一个追加进来的(可能比服务端历史版本更旧,也可能更新),
+        // 不排序就会出现"本地记录夹在中间"的乱序观感。
+        list.Sort(static (x, y) => CompareVersionStrings(y, x));
+        return list;
     }
 
     private void WriteInstalledVersion(string gameRoot, string version)

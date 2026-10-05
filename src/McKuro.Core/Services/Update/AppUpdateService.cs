@@ -39,6 +39,12 @@ public sealed class AppUpdateService
     /// </summary>
     internal Func<IWebProxy?, HttpClient>? FrontingClientFactory { get; set; }
 
+    /// <summary>
+    /// 失败重试之间的退避等待(<c>attempt * 2</c> 秒)。单元测试注入"不等待"以跳过真实 sleep ——
+    /// 4 次尝试的退避合计 12 秒,曾占满整个测试套件的墙钟时间。
+    /// </summary>
+    internal Func<TimeSpan, CancellationToken, Task> RetryDelay { get; set; } = Task.Delay;
+
     /// <summary>Releases 结果缓存(对齐 Haiyu 的 5 分钟 <c>_cacheInfo</c>):避免启动自动检查 +
     /// 用户手动点击在短时间内重复打满匿名 API 配额(60 次/小时/IP)。</summary>
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
@@ -438,7 +444,7 @@ public sealed class AppUpdateService
                     {
                         return null;
                     }
-                    await Task.Delay(TimeSpan.FromSeconds(attempt * 2), CancellationToken.None).ConfigureAwait(false);
+                    await RetryDelay(TimeSpan.FromSeconds(attempt * 2), CancellationToken.None).ConfigureAwait(false);
                 }
             }
         }

@@ -4,7 +4,9 @@ using Avalonia.Layout;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
+using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Services;
+using McKuro.ViewModels;
 
 namespace McKuro.Views;
 
@@ -92,7 +94,7 @@ public sealed class SharePreviewWindow : Window
         };
     }
 
-    /// <summary>复制图片到系统剪贴板(失败时静默,用户仍可另存为 PNG)。</summary>
+    /// <summary>复制图片到系统剪贴板(成功/失败都给悬浮提示;失败时仍可另存为 PNG)。</summary>
     private async Task CopyAsync()
     {
         try
@@ -100,6 +102,7 @@ public sealed class SharePreviewWindow : Window
             var clipboard = Clipboard;
             if (clipboard is null)
             {
+                Notify(LanguageService.Get("Roles.Share.CopyFailed"));
                 return;
             }
             // 交给剪贴板的是克隆:它的释放时机(立即序列化 or 惰性读取后释放)不受本窗控制,
@@ -110,12 +113,18 @@ public sealed class SharePreviewWindow : Window
             transfer.Add(Avalonia.Input.DataTransferItem.Create(
                 Avalonia.Input.DataFormat.Bitmap, payload));
             await clipboard.SetDataAsync(transfer);
+            Notify(LanguageService.Get("Roles.Share.Copied"));
         }
         catch (Exception)
         {
-            // 剪贴板不可用时静默
+            // 剪贴板不可用(被其它进程占用等):如实告知,引导改用另存为
+            Notify(LanguageService.Get("Roles.Share.CopyFailed"));
         }
     }
+
+    /// <summary>向主界面发一条悬浮提示(与项目其它页同一通道)。</summary>
+    private static void Notify(string message)
+        => WeakReferenceMessenger.Default.Send(new ShowToastMessage(message));
 
     /// <summary>
     /// 位图深拷贝(Bgra8888 画布 + <see cref="Bitmap.CopyPixels(ILockedFramebuffer)"/>,
@@ -169,11 +178,13 @@ public sealed class SharePreviewWindow : Window
 #pragma warning disable CS0618
             _image.Save(stream);
 #pragma warning restore CS0618
+            Notify(LanguageService.Get("Roles.Share.Saved"));
         }
         catch (Exception ex)
         {
-            // 静默失败但留诊断痕迹(stderr 是项目既定非用户可见通道)
+            // 保存失败如实提示用户(此前静默,用户会以为已保存成功)
             System.Console.Error.WriteLine($"[share] 保存 PNG 失败: {ex.Message}");
+            Notify(LanguageService.Get("Roles.Share.SaveFailed"));
         }
     }
 }

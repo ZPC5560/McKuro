@@ -75,6 +75,11 @@
                                                Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <!-- 当前账号:显示「游戏角色昵称 · 游戏角色 UID」(与首页账号卡片、抽卡页 player_id 同口径) -->
+                                    <TextBlock Text="{Binding KuroAccountDisplay}" FontSize="12" Margin="0,0,4,0" MaxWidth="260"
+                                               Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center"
+                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding HasKuroLogin}" />
                                     <Button Content="{loc:Localize Key=Account.KuroLoginBtn}" Classes="primary" Command="{Binding ToggleKuroLoginCommand}" />
                                     <Button Content="{loc:Localize Key=Account.Logout}" Command="{Binding LogoutCommand}" IsVisible="{Binding HasKuroLogin}" />
                                 </StackPanel>
@@ -143,8 +148,9 @@
                                                Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding CloudAccountText}" FontSize="12" Margin="0,0,4,0"
-                                               Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding CloudAccountDisplay}" FontSize="12" Margin="0,0,4,0" MaxWidth="260"
+                                               Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center"
+                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
                                     <!-- 与库街区卡片同款:「添加账号」始终可见(已登录时用于再次登录/换号),
                                          退出登录单独按钮(仅移除当前账号) -->
                                     <Button Content="{loc:Localize Key=Account.KuroLoginBtn}" Classes="primary" Command="{Binding ToggleCloudLoginCommand}" />
@@ -216,9 +222,18 @@
                                                Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <!-- 已登录:显示账号身份「游戏角色昵称 · 游戏角色 UID」(与首页账号卡片、抽卡页 player_id 同口径);
+                                         未登录/登录中/失败:显示登录态详情(原因、进度)。
+                                         已登录时把登录态/校验详情放进悬停提示,避免错误原因不可见 -->
+                                    <TextBlock Text="{Binding GuideAccountDisplay}" FontSize="12" Margin="0,0,4,0" MaxWidth="260"
+                                               Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center"
+                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding GuideStatusText}"
+                                               IsVisible="{Binding GuideLoggedIn}" />
                                     <TextBlock Text="{Binding GuideStatusText}" FontSize="12" Margin="0,0,4,0" MaxWidth="260"
                                                Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center"
-                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding !GuideLoggedIn}" />
                                     <!-- 与库街区卡片同款:「添加账号」始终可见(已登录时用于再次登录/换号),
                                          退出登录单独按钮 -->
                                     <Button Content="{loc:Localize Key=Account.KuroLoginBtn}" Classes="primary" Command="{Binding ToggleGuideLoginCommand}" />

@@ -12,19 +12,8 @@
              x:Class="McKuro.Views.LauncherView"
              x:DataType="vm:LauncherViewModel">
     <UserControl.Styles>
-        <!-- 操作区胶囊按钮:常态弱玻璃,悬停强玻璃 + 强调描边(修正悬停/常态观感颠倒) -->
-        <Style Selector="Button.opBtn">
-            <Setter Property="Background" Value="{DynamicResource McKuroGlassFill}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource McKuroGlassStroke}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="14" />
-            <Setter Property="Padding" Value="12,5" />
-            <Setter Property="Foreground" Value="{DynamicResource McKuroTextOnWallpaper}" />
-        </Style>
-        <Style Selector="Button.opBtn:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource McKuroGlassFillStrong}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccentHover}" />
-        </Style>
+        <!-- (原「操作区胶囊按钮 opBtn」样式已删除:它唯一的用户——游戏功能菜单按键——
+             已并入全站共享的 Button.mcChrome(定义在 App.axaml),留着就是死代码) -->
         <!-- 横幅关闭按钮:常态弱深色底,悬停加深(修正悬停/常态观感颠倒) -->
         <Style Selector="Button.bannerClose">
             <Setter Property="Background" Value="#33000000" />
@@ -33,17 +22,39 @@
         <Style Selector="Button.bannerClose:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#99000000" />
         </Style>
-        <!-- 资源等级卡片(对齐官方启动器:深色圆角块,悬停提亮,选中项描边强调) -->
+        <!-- 资源等级切换按键直接用全站共享的 Button.mcChrome(定义在 App.axaml),
+             与主页昵称旁的账号切换按键外观完全一致;这里只补自己的圆角与内边距。 -->
+        <!-- 资源等级卡片:与账号切换弹窗的列表项同一套语言 ——
+             常态用主题令牌半透明底(不再硬编码白色 #33FFFFFF,亮色主题下会发灰脏),
+             当前等级(选中项)用主题强调色淡染底 + 强调色描边,一眼可辨。 -->
         <Style Selector="Button.levelCard">
-            <Setter Property="Background" Value="#33FFFFFF" />
-            <Setter Property="BorderBrush" Value="#26FFFFFF" />
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFill}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroSwitchChipStroke}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="10" />
             <Setter Property="Padding" Value="12,8" />
         </Style>
         <Style Selector="Button.levelCard:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#4DFFFFFF" />
-            <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccent}" />
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
+        </Style>
+        <Style Selector="Button.levelCard.selected">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipSelectedFill}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroSwitchChipSelectedStroke}" />
+            <Setter Property="BorderThickness" Value="1.5" />
+        </Style>
+        <!-- 选中项悬停时保持强调色底,避免"一悬停就把选中高亮冲掉" -->
+        <Style Selector="Button.levelCard.selected:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipSelectedFill}" />
+        </Style>
+        <Style Selector="Button.levelCard.selected TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource McKuroSwitchChipSelectedText}" />
+        </Style>
+        <Style Selector="Button.levelCard.selected TextBlock.dim">
+            <Setter Property="Foreground" Value="{DynamicResource McKuroSwitchChipSelectedText}" />
+            <Setter Property="Opacity" Value="0.78" />
+        </Style>
+        <Style Selector="Button.levelCard.selected ic|FluentIcon">
+            <Setter Property="Foreground" Value="{DynamicResource McKuroSwitchChipSelectedText}" />
         </Style>
         <Style Selector="Button.levelCard:pointerover">
             <Setter Property="Opacity" Value="1" />
@@ -61,8 +72,9 @@
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Foreground" Value="{DynamicResource McKuroTextOnWallpaper}" />
         </Style>
+        <!-- 菜单项悬停:用与资源等级卡片同族的令牌(原硬编码 #33FFFFFF 在亮色主题下会糊成一块白) -->
         <Style Selector="Button.menuItem:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#33FFFFFF" />
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
         </Style>
         <Style Selector="Button.menuItem:pointerover">
             <Setter Property="Opacity" Value="1" />
@@ -160,42 +172,48 @@
                          外层 Grid 无列定义 → 菜单面板是纯覆盖层:它再宽也不会改变按钮的布局尺寸
                          (曾与按钮同处一个 Auto 列,面板 MinWidth 把该列撑宽导致按钮拉伸、图标位移)。 -->
                     <Grid Margin="0,6,0,0">
+                        <!-- 游戏功能菜单按键:与资源分级、账号切换同一套(mcChrome 透明底 + 半透明图标)。
+                             它同样<b>直接压在视频上、没有自己的面板底</b>,所以前景用不随主题翻转的
+                             McKuroTextOnVideo + 反向投影阴影,否则亮色主题下暗场景里会看不见。 -->
                         <Button HorizontalAlignment="Left" VerticalAlignment="Top"
-                                Classes="opBtn" Padding="10,8"
+                                Classes="mcChrome" Padding="10,8"
+                                Foreground="{DynamicResource McKuroTextOnVideo}"
                                 Command="{Binding ToggleGameMenuCommand}">
                             <ic:FluentIcon Icon="LineHorizontal3" IconVariant="Regular" IconSize="Size20"
-                                           Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                           controls:VideoTextChrome.Shadow="True"
+                                           Foreground="{DynamicResource McKuroTextOnVideo}" />
                         </Button>
 
-                        <!-- 功能菜单(点击左侧按钮展开;绝对覆盖在按钮下方,不参与按钮测量) -->
+                        <!-- 功能菜单(点击左侧按钮展开;绝对覆盖在按钮下方,不参与按钮测量)。
+                             材质用全站共享的 Border.mcPanel —— 与右下角资源等级展开面板、
+                             账号/版本弹窗同一份面色描边,不再各自重述背景导致观感不一致。 -->
                         <Border ZIndex="20"
+                                Classes="mcPanel"
                                 Margin="0,52,0,0"
                                 MinWidth="176"
                                 HorizontalAlignment="Left" VerticalAlignment="Top"
-                                CornerRadius="12" ClipToBounds="True"
                                 IsVisible="{Binding IsGameMenuOpen}">
-                            <Grid>
-                                <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.92" CornerRadius="12" />
-                                <Border Background="{DynamicResource SemiColorBg2}" Opacity="0.85"
-                                        Padding="6" CornerRadius="12">
-                                    <StackPanel Spacing="2">
-                                        <Button Classes="menuItem" Command="{Binding CheckGameUpdateCommand}">
-                                            <TextBlock Text="{loc:Localize Key=Launcher.Menu.CheckUpdate}" FontSize="12" />
-                                        </Button>
-                                        <Button Classes="menuItem" Command="{Binding RepairGameFromMenuCommand}"
-                                                IsEnabled="{Binding IsInstalled}">
-                                            <TextBlock Text="{loc:Localize Key=Launcher.Menu.Repair}" FontSize="12" />
-                                        </Button>
-                                        <Button Classes="menuItem" Command="{Binding CreateDesktopShortcutCommand}">
-                                            <TextBlock Text="{loc:Localize Key=Launcher.Menu.CreateShortcut}" FontSize="12" />
-                                        </Button>
-                                        <Button Classes="menuItem" Command="{Binding ForceExitGameCommand}"
-                                                IsEnabled="{Binding CanForceExitGame}">
-                                            <TextBlock Text="{loc:Localize Key=Launcher.Menu.ForceExit}" FontSize="12" />
-                                        </Button>
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
+                            <StackPanel Spacing="2" Margin="6">
+                                <Button Classes="menuItem" Command="{Binding CheckGameUpdateCommand}">
+                                    <TextBlock Text="{loc:Localize Key=Launcher.Menu.CheckUpdate}" FontSize="12" />
+                                </Button>
+                                <!-- 外部渠道(官方启动器)更新后版本记录滞后:手动指定本地实际版本 -->
+                                <Button Classes="menuItem" Command="{Binding SelectVersionCommand}"
+                                        IsEnabled="{Binding IsInstalled}">
+                                    <TextBlock Text="{loc:Localize Key=Launcher.Menu.SelectVersion}" FontSize="12" />
+                                </Button>
+                                <Button Classes="menuItem" Command="{Binding RepairGameFromMenuCommand}"
+                                        IsEnabled="{Binding IsInstalled}">
+                                    <TextBlock Text="{loc:Localize Key=Launcher.Menu.Repair}" FontSize="12" />
+                                </Button>
+                                <Button Classes="menuItem" Command="{Binding CreateDesktopShortcutCommand}">
+                                    <TextBlock Text="{loc:Localize Key=Launcher.Menu.CreateShortcut}" FontSize="12" />
+                                </Button>
+                                <Button Classes="menuItem" Command="{Binding ForceExitGameCommand}"
+                                        IsEnabled="{Binding CanForceExitGame}">
+                                    <TextBlock Text="{loc:Localize Key=Launcher.Menu.ForceExit}" FontSize="12" />
+                                </Button>
+                            </StackPanel>
                         </Border>
                     </Grid>
                 </StackPanel>
@@ -239,13 +257,17 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        <!-- 轮播图关闭按键:同样直接压在图片/视频上,与资源分级按键同一套处理
+                             (恒定浅色 + 反向投影阴影),否则亮色主题下暗场景里会看不见。
+                             阴影只加在图标上:加在 Button 上会把它那块自带深色底一并推进离屏渲染,白费一层。 -->
                         <Button Classes="bannerClose" Padding="6,2" FontSize="11"
                                 HorizontalAlignment="Right" VerticalAlignment="Top"
                                 Margin="0,6,6,0"
-                                Foreground="{DynamicResource McKuroTextOnWallpaper}"
+                                Foreground="{DynamicResource McKuroTextOnVideo}"
                                 Command="{Binding ToggleSlideShowCommand}">
                             <ic:FluentIcon Icon="Dismiss" IconVariant="Regular" IconSize="Size16"
-                                           Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                           controls:VideoTextChrome.Shadow="True"
+                                           Foreground="{DynamicResource McKuroTextOnVideo}" />
                         </Button>
                     </Grid>
                 </Border>
@@ -314,89 +336,98 @@
                 </Border>
 
                 <!-- 资源等级卡片列表(对齐官方启动器:默认收起,点「高清 ▾」小按钮后向上弹出)
-                     与进度卡互斥(下载/切换期间整体隐藏),避免同列两块面板叠在一起。 -->
+                     与进度卡互斥(下载/切换期间整体隐藏),避免同列两块面板叠在一起。
+                     材质用全站共享的 Border.mcPanel,与左上角功能菜单/账号/版本弹窗同一份面色描边。 -->
                 <Border Grid.Column="2"
+                        Classes="mcPanel"
                         MinWidth="240"
                         HorizontalAlignment="Right" VerticalAlignment="Bottom"
                         Margin="0,0,0,128"
-                        CornerRadius="12" ClipToBounds="True"
                         IsVisible="{Binding ShowResourceLevelPanel}">
-                    <Grid>
-                        <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.9" CornerRadius="12" />
-                        <Border Background="{DynamicResource SemiColorBg2}"
-                                Opacity="0.8"
-                                Padding="14"
-                                CornerRadius="12">
-                            <StackPanel Spacing="8" MaxWidth="300">
-                                <StackPanel Spacing="2">
-                                    <TextBlock Text="{loc:Localize Key=Launcher.LevelPanelTitle}" FontSize="14"
-                                               FontWeight="Bold"
-                                               Foreground="{DynamicResource McKuroTextOnWallpaper}" />
-                                    <TextBlock Text="{loc:Localize Key=Launcher.LevelPanelHint}" FontSize="10"
-                                               TextWrapping="Wrap"
-                                               Foreground="{DynamicResource SemiColorText2}" />
-                                </StackPanel>
-                                <ItemsControl ItemsSource="{Binding ResourceLevelItems}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:ResourceLevelItem">
-                                            <Button Classes="levelCard"
-                                                    Command="{Binding $parent[ItemsControl].((vm:LauncherViewModel)DataContext).SelectResourceLevelCommand}"
-                                                    CommandParameter="{Binding}"
-                                                    IsEnabled="{Binding $parent[ItemsControl].((vm:LauncherViewModel)DataContext).ResourceLevelEnabled}"
-                                                    HorizontalAlignment="Stretch"
-                                                    HorizontalContentAlignment="Stretch"
-                                                    Margin="0,3">
-                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                                                    <StackPanel Grid.Column="0" Spacing="2">
-                                                        <TextBlock Text="{Binding DisplayName}" FontSize="13"
-                                                                   FontWeight="Bold"
-                                                                   Foreground="{DynamicResource McKuroTextOnWallpaper}" />
-                                                        <TextBlock Text="{Binding SizeText}" FontSize="11"
-                                                                   Foreground="{DynamicResource SemiColorText2}" />
-                                                        <StackPanel Orientation="Horizontal" Spacing="4"
-                                                                    IsVisible="{Binding ShowInstalledBadge}">
-                                                            <ic:FluentIcon Icon="CheckmarkCircle" IconVariant="Filled"
-                                                                           IconSize="Size12"
-                                                                           Foreground="{DynamicResource SemiColorPrimary}"
-                                                                           VerticalAlignment="Center" />
-                                                            <TextBlock Text="{loc:Localize Key=Launcher.LevelInstalledBadge}"
-                                                                       FontSize="10"
-                                                                       Foreground="{DynamicResource SemiColorText2}"
-                                                                       VerticalAlignment="Center" />
-                                                        </StackPanel>
-                                                    </StackPanel>
-                                                    <ic:FluentIcon Grid.Column="1" Icon="Checkmark" IconVariant="Regular"
-                                                                   IconSize="Size16"
-                                                                   VerticalAlignment="Center"
-                                                                   Foreground="{DynamicResource McKuroTextOnWallpaper}"
-                                                                   IsVisible="{Binding IsCurrent}" />
-                                                </Grid>
-                                            </Button>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </Border>
-                    </Grid>
+                    <StackPanel Spacing="8" MaxWidth="300" Margin="14">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="{loc:Localize Key=Launcher.LevelPanelTitle}" FontSize="14"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                            <TextBlock Text="{loc:Localize Key=Launcher.LevelPanelHint}" FontSize="10"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource SemiColorText2}" />
+                        </StackPanel>
+                        <ItemsControl ItemsSource="{Binding ResourceLevelItems}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ResourceLevelItem">
+                                    <!-- Classes.selected 绑当前等级:与账号切换弹窗同一套强调色选中表达 -->
+                                    <Button Classes="levelCard"
+                                            Classes.selected="{Binding IsCurrent}"
+                                            Command="{Binding $parent[ItemsControl].((vm:LauncherViewModel)DataContext).SelectResourceLevelCommand}"
+                                            CommandParameter="{Binding}"
+                                            IsEnabled="{Binding $parent[ItemsControl].((vm:LauncherViewModel)DataContext).ResourceLevelEnabled}"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Stretch"
+                                            Margin="0,3">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                            <StackPanel Grid.Column="0" Spacing="2">
+                                                <TextBlock Text="{Binding DisplayName}" FontSize="13"
+                                                           FontWeight="Bold"
+                                                           Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                                <TextBlock Classes="dim" Text="{Binding SizeText}" FontSize="11"
+                                                           Foreground="{DynamicResource SemiColorText2}" />
+                                                <StackPanel Orientation="Horizontal" Spacing="4"
+                                                            IsVisible="{Binding ShowInstalledBadge}">
+                                                    <ic:FluentIcon Icon="CheckmarkCircle" IconVariant="Filled"
+                                                                   IconSize="Size12"
+                                                                   Foreground="{DynamicResource SemiColorPrimary}"
+                                                                   VerticalAlignment="Center" />
+                                                    <TextBlock Classes="dim"
+                                                               Text="{loc:Localize Key=Launcher.LevelInstalledBadge}"
+                                                               FontSize="10"
+                                                               Foreground="{DynamicResource SemiColorText2}"
+                                                               VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                            <ic:FluentIcon Grid.Column="1" Icon="Checkmark" IconVariant="Regular"
+                                                           IconSize="Size16"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource McKuroTextOnWallpaper}"
+                                                           IsVisible="{Binding IsCurrent}" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </Border>
 
                 <!-- 启动/安装大按钮(从底部排列,底边与轮播图/进度卡对齐,无背景) -->
                 <StackPanel Grid.Column="2" Width="220"
                             HorizontalAlignment="Right" VerticalAlignment="Bottom" Spacing="10"
                             Margin="0,0,0,8">
-                    <!-- 资源等级小按钮(对齐官方启动器:仅显示当前等级,点击才展开卡片列表) -->
-                    <Button Classes="opBtn"
+                    <!-- 资源等级小按钮(对齐官方启动器:仅显示当前等级,点击才展开卡片列表)
+                         箭头随展开状态翻转,让"这是可展开的选择器"一眼可读。
+                         前景用 McKuroTextOnVideo(不随主题翻转)+ 容器级反向投影阴影:
+                         这个按键直接压在官方视频上,亮色主题下若跟主题取深色字,
+                         遇到暗场景就彻底看不见(2026-10 用户反馈)。 -->
+                    <Button Classes="mcChrome"
                             HorizontalAlignment="Right"
-                            Padding="10,4"
+                            CornerRadius="14" Padding="10,4"
+                            Foreground="{DynamicResource McKuroTextOnVideo}"
                             Command="{Binding ToggleResourceLevelPickerCommand}"
                             IsVisible="{Binding ShowResourceLevelPill}">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
+                        <StackPanel Orientation="Horizontal" Spacing="6"
+                                    controls:VideoTextChrome.Shadow="True">
                             <TextBlock Text="{Binding CurrentResourceLevelText}" FontSize="12"
                                        VerticalAlignment="Center"
-                                       Foreground="{DynamicResource McKuroTextOnWallpaper}" />
-                            <ic:FluentIcon Icon="ChevronUp" IconVariant="Regular" IconSize="Size12"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                       Foreground="{DynamicResource McKuroTextOnVideo}" />
+                            <Panel Width="12" Height="12" VerticalAlignment="Center">
+                                <ic:FluentIcon Icon="ChevronUp" IconVariant="Regular" IconSize="Size12"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               IsVisible="{Binding ShowResourceLevelPanel}"
+                                               Foreground="{DynamicResource McKuroTextOnVideo}" />
+                                <ic:FluentIcon Icon="ChevronDown" IconVariant="Regular" IconSize="Size12"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               IsVisible="{Binding !ShowResourceLevelPanel}"
+                                               Foreground="{DynamicResource McKuroTextOnVideo}" />
+                            </Panel>
                         </StackPanel>
                     </Button>
                     <Button Height="56"

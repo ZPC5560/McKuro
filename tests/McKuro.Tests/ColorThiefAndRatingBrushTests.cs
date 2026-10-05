@@ -171,20 +171,24 @@ public class RatingBrushConverterTests
     }
 
     [Fact]
-    public void PropLevel_Only_Level3_Is_Valid_Others_Gray()
+    public void PropLevel_ThreeTiers_CoreValidInvalid()
     {
-        // 2026-10 规则调整(用户要求):只有 level3(暴击/暴击伤害/攻击百分比)算有效词条,
-        // level2/1/0 一律灰 —— 此前 level2 用青色,使「共鸣效率/伤害加成」看起来同样有效。
+        // 现行三档规则(见 PropLevelBrushConverter 注释):
+        // level3 = 核心有效(亮色);level2 = 官方 getRoleDetail valid 判定的有效词条(青);
+        // level1/0 = 官方无效或无官方数据的非核心词条 → 灰。
+        // 演进:2026-10 曾把 level2 降灰(当时只有通用权重表,无法按角色区分是否有效),
+        // 实测接口自带按角色的 valid 字段后恢复青档。
         var c = new PropLevelBrushConverter();
         var gray = Assert.IsType<SolidColorBrush>(c.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         var lv1 = Assert.IsType<SolidColorBrush>(c.Convert(1, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         var lv2 = Assert.IsType<SolidColorBrush>(c.Convert(2, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         var lv3 = Assert.IsType<SolidColorBrush>(c.Convert(3, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
-        // level2/1 与 level0 同为灰(无效)
+        // level1 与 level0 同为灰(无效)
         Assert.Equal(gray, lv1);
-        Assert.Equal(gray, lv2);
-        // level3 = 有效,必须明显区别于灰
+        // level2/3 都是"有效",必须区别于灰,且两档彼此可辨
+        Assert.NotEqual(gray, lv2);
         Assert.NotEqual(gray, lv3);
+        Assert.NotEqual(lv2, lv3);
     }
 
     [Fact]
@@ -213,11 +217,11 @@ public class RatingBrushConverterTests
     [Fact]
     public void PropText_And_Bar_Are_Both_Gray_For_Invalid_Levels()
     {
-        // 无效词条(level0/1/2):装饰条与文字各自取灰(明度略有差异以便文字可读),
-        // 但都必须是「灰」——即三通道相近、且明显区别于有效词条的亮色。
+        // 无效词条(level0/1):装饰条与文字各自取灰(明度略有差异以便文字可读),
+        // 但都必须是「灰」——即三通道相近、且明显区别于有效词条(level2 青 / level3 亮)。
         var bars = new PropLevelBrushConverter();
         var texts = new PropTextBrushConverter();
-        foreach (var level in new[] { 0, 1, 2 })
+        foreach (var level in new[] { 0, 1 })
         {
             var bar = Assert.IsType<SolidColorBrush>(bars.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
             var text = Assert.IsType<SolidColorBrush>(texts.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
@@ -227,16 +231,20 @@ public class RatingBrushConverterTests
                     $"invalid level {level} should be neutral gray, got {c}");
             }
         }
-        // 同档位下条与字一致(level0/1/2 走同一个兜底分支)
-        var b1 = Assert.IsType<SolidColorBrush>(bars.Convert(1, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
-        var b2 = Assert.IsType<SolidColorBrush>(bars.Convert(2, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        // 有效档位(level2/3)在「条」与「字」上必须同色,避免"条一个色、字另一个色";
+        // 灰档文字色单独调深(#9A9A9A vs 条 #B0B0B0)以保证白底可读,不参与同色断言。
+        foreach (var level in new[] { 2, 3 })
+        {
+            var bar = Assert.IsType<SolidColorBrush>(bars.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture));
+            var text = Assert.IsType<SolidColorBrush>(texts.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture));
+            Assert.Equal(bar.Color, text.Color);
+        }
+        // 同一转换器内,两个无效档位必须走同一个兜底色
         var b0 = Assert.IsType<SolidColorBrush>(bars.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
-        var t1 = Assert.IsType<SolidColorBrush>(texts.Convert(1, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
-        var t2 = Assert.IsType<SolidColorBrush>(texts.Convert(2, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var b1 = Assert.IsType<SolidColorBrush>(bars.Convert(1, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         var t0 = Assert.IsType<SolidColorBrush>(texts.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var t1 = Assert.IsType<SolidColorBrush>(texts.Convert(1, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         Assert.Equal(b0, b1);
-        Assert.Equal(b0, b2);
         Assert.Equal(t0, t1);
-        Assert.Equal(t0, t2);
     }
 }

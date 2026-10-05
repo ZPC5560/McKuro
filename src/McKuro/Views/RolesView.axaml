@@ -896,7 +896,22 @@
 
                     <!-- ===== 4 声骸(首位/套装推荐标识;排在攻略推荐之前) ===== -->
                     <StackPanel x:Name="SecEchoes">
-                    <StackPanel Spacing="6" IsVisible="{Binding SelectedRole.HasPhantoms}">
+                    <StackPanel Spacing="6" IsVisible="{Binding SelectedRole.HasEchoRating}">
+                        <!-- 总评分/评级(5 件均值;权重来源见 EchoRatingService) -->
+                        <Border CornerRadius="8" Background="{DynamicResource SemiColorBg3}" Padding="12,8"
+                                IsVisible="{Binding SelectedRole.HasEchoTotal}">
+                            <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
+                                <TextBlock Text="{loc:Localize Key=Roles.EchoTotal}" FontSize="13" FontWeight="Bold" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource SemiColorText2}" />
+                                <TextBlock FontSize="19" FontWeight="Bold" VerticalAlignment="Center"
+                                           Foreground="{Binding SelectedRole.EchoTotalLevel, Converter={StaticResource EchoRatingLevelBrush}}"
+                                           Text="{Binding SelectedRole.EchoTotalScoreText}" />
+                                <TextBlock FontSize="14" FontWeight="Bold" VerticalAlignment="Center"
+                                           Foreground="{Binding SelectedRole.EchoTotalLevel, Converter={StaticResource EchoRatingLevelBrush}}"
+                                           Text="{Binding SelectedRole.EchoTotalGrade}" />
+                            </StackPanel>
+                        </Border>
+
                         <!-- 首位声骸推荐结论(登录后) -->
                         <ItemsControl ItemsSource="{Binding GuideRecommendations}">
                             <ItemsControl.ItemTemplate>
@@ -953,12 +968,15 @@
                                                                        FontWeight="Bold" Foreground="White" />
                                                         </Border>
                                                     </StackPanel>
-                                                    <!-- 词条评级徽章 -->
+                                                    <!-- 词条评级徽章 + 独立评分 -->
                                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                                         <TextBlock FontSize="13" FontWeight="Bold"
                                                                    Foreground="{Binding PhantomStatus, Converter={StaticResource EchoRatingLevelBrush}}">
                                                             <Run Text="{loc:Localize Key=Roles.StatsPrefix}" /><Run Text="{Binding PhantomRatingText}" />
                                                         </TextBlock>
+                                                        <TextBlock FontSize="13" FontWeight="Bold"
+                                                                   Foreground="{Binding PhantomStatus, Converter={StaticResource EchoRatingLevelBrush}}"
+                                                                   Text="{Binding ScoreText}" />
                                                     </StackPanel>
                                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                                         <controls:AsyncImage ImageUrl="{Binding FetterDetail.IconUrl}"

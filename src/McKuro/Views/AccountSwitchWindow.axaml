@@ -1,0 +1,147 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ic="using:FluentIcons.Avalonia"
+        xmlns:vm="using:McKuro.ViewModels"
+        xmlns:loc="clr-namespace:McKuro.Services"
+        mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="380"
+        x:Class="McKuro.Views.AccountSwitchWindow"
+        x:DataType="vm:AccountSwitchSelection"
+        Title="{loc:Localize Key=Home.AccountPickTitle}"
+        Width="440" SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Background="Transparent"
+        WindowStartupLocation="CenterOwner">
+  <!-- 首页「今日数据」账号切换(参考 Haiyu 的本地账号卡片弹窗):
+       窗口透明,列表项是极淡的半透明卡片;选中项用「主题强调色」淡染底 + 强调色描边
+       (与 Haiyu 的蓝框选中一致),不再用整块反色硬底 —— 大块纯黑/纯白在面板上很刺眼。
+       文案克制:标题 + 账号列表 + 确定,无长段说明。 -->
+  <Window.Styles>
+    <Style Selector="Button.chip">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="8" />
+    </Style>
+    <Style Selector="Button.chip:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
+    </Style>
+    <Style Selector="Button.confirm">
+      <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="26,9" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+
+    <!-- 账号卡片:常态近乎透明;选中项强调色淡染 + 强调色描边 -->
+    <Style Selector="Border.acctCard">
+      <Setter Property="Margin" Value="0,0,0,8" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="12,10" />
+      <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFill}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource McKuroSwitchChipStroke}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Border.acctCard:pointerover">
+      <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
+    </Style>
+    <Style Selector="Border.acctCard.selected">
+      <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipSelectedFill}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource McKuroSwitchChipSelectedStroke}" />
+      <Setter Property="BorderThickness" Value="1.5" />
+    </Style>
+    <Style Selector="Border.acctCard TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorText0}" />
+    </Style>
+    <Style Selector="Border.acctCard.selected TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource McKuroSwitchChipSelectedText}" />
+    </Style>
+    <Style Selector="Border.acctCard TextBlock.sub">
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style Selector="Border.acctCard.selected TextBlock.sub">
+      <Setter Property="Foreground" Value="{DynamicResource McKuroSwitchChipSelectedText}" />
+      <Setter Property="Opacity" Value="0.8" />
+    </Style>
+  </Window.Styles>
+
+  <!-- 面板材质用全站共享的 Border.mcPanel(与启动页功能菜单、资源等级展开面板完全一致);
+       这里只覆盖弹窗自己的内边距、圆角与窗口外边距 -->
+  <Border Classes="mcPanel" Padding="20" CornerRadius="14" Margin="8">
+    <StackPanel Spacing="14">
+      <!-- 标题行:标题 + 刷新。
+           关闭走窗口标题栏(与 VersionSelectWindow 一致),此处不再放重复的关闭键。 -->
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="{loc:Localize Key=Home.AccountPickTitle}" FontSize="16" FontWeight="Bold"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource SemiColorText0}" />
+        <!-- 重新检测本地启动器账号(游戏里换号后无需重启即可刷新列表);刷新中禁用避免并发枚举 -->
+        <Button Grid.Column="1" x:Name="RefreshButton" Classes="chip" Padding="7,5"
+                IsEnabled="{Binding !IsRefreshing}"
+                ToolTip.Tip="{loc:Localize Key=Home.AccountRefresh}">
+          <ic:FluentIcon Icon="ArrowClockwise" IconVariant="Regular" IconSize="Size16"
+                         Foreground="{DynamicResource SemiColorText1}" />
+        </Button>
+      </Grid>
+
+      <!-- 刷新结果反馈:成功/无变化用次要色,未检测到用警示色(此前刷新完全静默,用户不知道成没成) -->
+      <TextBlock Text="{Binding RefreshStatus}" FontSize="12" Margin="0,-4,0,0"
+                 Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap"
+                 IsVisible="{Binding ShowRefreshOk}" />
+      <TextBlock Text="{Binding RefreshStatus}" FontSize="12" Margin="0,-4,0,0"
+                 Foreground="#F59E0B" TextWrapping="Wrap"
+                 IsVisible="{Binding ShowRefreshFailed}" />
+
+      <!-- 空态提示(没有可切换的本地账号时) -->
+      <TextBlock x:Name="EmptyText" Text="{loc:Localize Key=Home.AccountEmpty}"
+                 FontSize="12.5" TextWrapping="Wrap" LineHeight="19"
+                 IsVisible="False"
+                 Foreground="{DynamicResource SemiColorText2}" />
+
+      <!-- 账号卡片列表 -->
+      <ScrollViewer MaxHeight="330" VerticalScrollBarVisibility="Auto">
+        <ItemsControl ItemsSource="{Binding Options}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:HomeAccountOption">
+              <Border Classes="acctCard"
+                      Classes.selected="{Binding IsSelected}"
+                      PointerPressed="OnItemPressed">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <StackPanel Spacing="3">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <!-- 主行:China - 库街区UID - 游戏角色昵称(昵称由库街区角色接口异步补全) -->
+                      <TextBlock Text="{Binding Display}" FontSize="13.5" FontWeight="Bold"
+                                 TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                      <TextBlock Text="{loc:Localize Key=Home.AccountCurrent}" FontSize="11"
+                                 Classes="sub" VerticalAlignment="Center"
+                                 IsVisible="{Binding IsSelected}" />
+                    </StackPanel>
+                    <!-- 第二行小字:游戏 UID(拿不到时不显示,不编造) -->
+                    <TextBlock Text="{Binding RoleIdText}" Classes="sub"
+                               IsVisible="{Binding HasRoleId}" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Classes="chip" Padding="7,5"
+                          VerticalAlignment="Center"
+                          IsVisible="{Binding HasRoleId}"
+                          Click="OnCopyRoleId"
+                          ToolTip.Tip="{loc:Localize Key=Common.Copy}">
+                    <ic:FluentIcon Icon="Copy" IconVariant="Regular" IconSize="Size16"
+                                   Foreground="{DynamicResource SemiColorText1}" />
+                  </Button>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <Button x:Name="ConfirmButton" Classes="confirm" MinWidth="120"
+              HorizontalAlignment="Center"
+              Content="{loc:Localize Key=Common.Confirm}" />
+    </StackPanel>
+  </Border>
+</Window>

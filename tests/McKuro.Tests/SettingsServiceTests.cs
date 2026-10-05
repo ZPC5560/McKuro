@@ -139,7 +139,8 @@ public class RoleDetailModelTests
     {
         var d = new RoleDetail();
         Assert.Equal("未知角色", d.RoleName);
-        Assert.False(d.HasPhantoms);
+        Assert.False(d.HasEchoRating);
+        Assert.False(d.HasEchoTotal);
         Assert.False(d.HasAttributes);
     }
 
@@ -165,5 +166,75 @@ public class RoleDetailModelTests
         var bad = new RoleDataLoadResult { Source = RoleDataSource.None };
         Assert.True(ok.IsSuccess);
         Assert.False(bad.IsSuccess);
+    }
+
+    /// <summary>
+    /// 回归(用户反馈「角色数据页面下面角色详情的声骸列表缺失声骸总评」):
+    /// 声骸总评必须是<b>惰性可算</b>的 —— 从缓存反序列化/赋 PhantomData 后直接绑定就要有值,
+    /// 不允许依赖"先调用一次 <see cref="RoleDetail.RefreshEchoRating"/> 才会出现"。
+    /// <para>
+    /// 旧实现把总评存成由 <c>RefreshEchoRating()</c> 赋值的字段,而该方法只挂在
+    /// 「在线详情合并 / 攻略填充 / Wiki 权重回填」三条路径上;纯缓存加载与
+    /// "详情已完整 → 跳过在线刷新"都不经过它们 ⇒ <c>HasEchoTotal</c> 恒为 false,
+    /// 声骸区整段可见但总评行消失。本测试不看任何刷新调用,只断言直接读即为有值。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RoleDetail_EchoTotal_Is_Lazy_Without_Explicit_Refresh()
+    {
+        var d = new RoleDetail
+        {
+            PhantomData = new PhantomData
+            {
+                Phantoms =
+                [
+                    new EchoInfo
+                    {
+                        SubProps =
+                        [
+                            new EchoProp { AttributeName = "暴击", AttributeValue = "10.5%" },
+                            new EchoProp { AttributeName = "暴击伤害", AttributeValue = "21%" },
+                            new EchoProp { AttributeName = "攻击", AttributeValue = "60" },
+                            new EchoProp { AttributeName = "生命", AttributeValue = "580" },
+                            new EchoProp { AttributeName = "防御", AttributeValue = "70" },
+                        ],
+                    },
+                ],
+            },
+        };
+
+        // 关键:全程不调用 RefreshEchoRating / 任何合并逻辑
+        Assert.True(d.HasEchoRating);
+        Assert.True(d.HasEchoTotal);
+        Assert.Equal(60.0, d.EchoTotalScore);
+        Assert.Equal("完美毕业", d.EchoTotalGrade);
+        Assert.Equal(EchoRatingLevel.Ace, d.EchoTotalLevel);
+    }
+
+    /// <summary>RefreshEchoRating 仍要能在 Wiki 权重回填后失效并重算(改权重 ⇒ 分数变化)。</summary>
+    [Fact]
+    public void RoleDetail_RefreshEchoRating_Recomputes_After_Weight_Backfill()
+    {
+        var echo = new EchoInfo
+        {
+            SubProps =
+            [
+                new EchoProp { AttributeName = "暴击", AttributeValue = "10.5%" },
+                new EchoProp { AttributeName = "防御", AttributeValue = "35" },
+            ],
+        };
+        var d = new RoleDetail { PhantomData = new PhantomData { Phantoms = [echo] } };
+
+        // 通用权重兜底:暴击(3→2.0,满) + 防御(1→0.5,半档 35/70) = 2.25 → 22.5 分
+        Assert.Equal(22.5, d.EchoTotalScore);
+
+        // 回填 Wiki 权重:暴击降为 1.0、防御升为 2.0 → 1.0 + 1.0 = 2.0 → 20.0 分
+        echo.PriorityWeights = new Dictionary<string, double>(StringComparer.Ordinal)
+        {
+            ["暴击"] = 1.0,
+            ["防御"] = 2.0,
+        };
+        d.RefreshEchoRating();
+        Assert.Equal(20.0, d.EchoTotalScore);
     }
 }

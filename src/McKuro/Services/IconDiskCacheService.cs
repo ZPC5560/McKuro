@@ -32,6 +32,21 @@ public sealed class IconDiskCacheService
     public const string CategoryAvatar = "avatar";
 
     /// <summary>
+    /// 玩家头像的缓存键(<b>唯一权威来源</b>)。
+    /// <para>
+    /// 头像属于"游戏角色"而不是"库街区账号":一个账号可以有多个角色,按账号缓存会在切换角色时串头像,
+    /// 故键取<b>游戏角色 UID</b>;拿不到角色 UID 时退化为头像 URL 的文件名。
+    /// </para>
+    /// <para>
+    /// 必须由读、写两侧共用:写入侧(<c>HomeViewModel.ResolveAvatarAsync</c>)与读取侧
+    /// (同文件的预填 + <c>MainWindowViewModel</c> 的启动占位)只要有<em>一处</em>用了别的键,
+    /// 缓存就会永久命中不了 —— 曾因写入改 roleId、读取仍按 userId 而使导航栏头像启动占位失效。
+    /// </para>
+    /// </summary>
+    public static string AvatarCacheKey(string? roleId, string? urlOrFallback)
+        => Safe(!string.IsNullOrEmpty(roleId) ? roleId : (urlOrFallback ?? ""));
+
+    /// <summary>
     /// 单图标下载的硬上限(字节,10MB):图标 PNG 远小于此值,超过即视为异常/恶意响应。
     /// 必须在下载阶段用流式读取拦住 —— 白图/解码守卫(<see cref="LooksLikeBlankOrWhite"/>)
     /// 要等全量字节到手才生效,拦不住「超大响应先把内存吃满」这一路。

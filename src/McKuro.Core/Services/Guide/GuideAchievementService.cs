@@ -368,15 +368,24 @@ public sealed partial class GuideAchievementService
     [System.Text.RegularExpressions.GeneratedRegex("共鸣链\\s*([1-6１-６])")]
     private static partial System.Text.RegularExpressions.Regex RecommendedChainPattern();
 
-    /// <summary>技能加点是否达标:当前等级 ≥ 推荐等级(recommendLevel 有值时)。</summary>
-    public static bool? IsSkillLevelMet(GuideSkillTarget t)
+    /// <summary>
+    /// 技能加点是否达标:当前等级 ≥ 推荐等级(recommendLevel 有值时)。
+    /// <para>
+    /// <paramref name="liveCurrentLevel"/> = <b>库街区 getRoleDetail 的实时技能等级</b>,达标判定优先用它。
+    /// 攻略接口的 currentLevel 是服务端快照,且会被本地缓存 24h —— 玩家在游戏里点完技能后它可能长期滞后,
+    /// 于是"已经点满"的技能仍被建议提升(用户反馈:技能加点已经达标还显示需要提升)。
+    /// 库街区详情是权威实时值(同页技能弧线徽章本来就显示它),两者不一致时以实时为准。
+    /// </para>
+    /// <para>传 null(详情未加载/该技能未匹配到)时回退攻略快照,与旧行为一致。</para>
+    /// </summary>
+    public static bool? IsSkillLevelMet(GuideSkillTarget t, int? liveCurrentLevel = null)
     {
         var rec = t.RecommendLevelValue;
         if (rec <= 0)
         {
             return null; // 攻略未给推荐等级(如"可不点")
         }
-        return t.CurrentLevelValue >= rec;
+        return (liveCurrentLevel ?? t.CurrentLevelValue) >= rec;
     }
 
     /// <summary>技能推荐等级文本(推荐 Lv.X;无推荐时返回"无需升级")。</summary>

@@ -1,0 +1,123 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ic="using:FluentIcons.Avalonia"
+        xmlns:loc="clr-namespace:McKuro.Services"
+        mc:Ignorable="d" d:DesignWidth="460" d:DesignHeight="280"
+        x:Class="McKuro.Views.VersionSelectWindow"
+        Title="{loc:Localize Key=Launcher.VersionSelect.Title}"
+        Width="460" SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Background="Transparent"
+        WindowStartupLocation="CenterOwner">
+  <!-- 手动指定本地游戏版本(对齐 Haiyu「选择版本/跳过校验」):
+       官方启动器等外部渠道更新游戏后,McKuro 的版本记录滞后 → 界面显示旧版本且误报「有更新」。
+       跳过校验 = 只写版本记录;进入校验 = 写记录后按服务端清单核对并补齐文件(复用修复流程)。
+       材质:窗口整体透明(Background=Transparent + TransparencyLevelHint,由 code-behind 按系统材质设置),
+       只有内容面板与下拉项是半透明面;选中项用主题反色底(见 McKuroSwitchChipSelected* 令牌)。
+       注意:不要用 ExperimentalAcrylicBorder(Avalonia 12.1.2 会抛未处理 NRE 致进程终止)。 -->
+  <Window.Styles>
+    <Style Selector="Button.dlgCancel">
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="18,8" />
+    </Style>
+    <Style Selector="Button.dlgVerify">
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="18,8" />
+    </Style>
+    <Style Selector="Button.dlgConfirm">
+      <Setter Property="Foreground" Value="#52C41A" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="18,8" />
+    </Style>
+
+    <!-- 「重新拉取」按钮:半透明切换风格按键 -->
+    <Style Selector="Button.chip">
+      <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFill}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource McKuroSwitchChipStroke}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+    </Style>
+    <Style Selector="Button.chip:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
+    </Style>
+
+    <!-- 下拉候选项:常态半透明;选中/悬停用主题反色底(暗色主题浅面深字,亮色主题深面浅字) -->
+    <Style Selector="ComboBoxItem">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="10,7" />
+      <Setter Property="Margin" Value="3,1" />
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorText1}" />
+    </Style>
+    <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
+    </Style>
+    <Style Selector="ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipSelectedFill}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource McKuroSwitchChipSelectedText}" />
+    </Style>
+    <Style Selector="ComboBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipSelectedFill}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource McKuroSwitchChipSelectedText}" />
+    </Style>
+  </Window.Styles>
+
+  <!-- 面板材质用全站共享的 Border.mcPanel(与启动页功能菜单、资源等级展开面板、账号弹窗完全一致);
+       这里只覆盖弹窗自己的内边距、圆角与窗口外边距 -->
+  <Border Classes="mcPanel" Padding="22" CornerRadius="14" Margin="8">
+    <StackPanel Spacing="14">
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <Border Width="36" Height="36" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+          <ic:FluentIcon Icon="ArrowDownload" IconVariant="Regular" IconSize="Size20"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Foreground="{DynamicResource SemiColorPrimary}" />
+        </Border>
+        <TextBlock x:Name="TitleText" FontSize="16" FontWeight="Bold"
+                   Text="{loc:Localize Key=Launcher.VersionSelect.Title}"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource SemiColorText0}" />
+      </StackPanel>
+
+      <!-- 精简为一行提示条(对齐 Haiyu 的「可选择本地版本跳过校验」绿条),不再堆说明文案 -->
+      <Border CornerRadius="8" Padding="12,9" Background="#331E7A2E">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <ic:FluentIcon Icon="CheckmarkCircle" IconVariant="Filled" IconSize="Size16"
+                         VerticalAlignment="Center" Foreground="#52C41A" />
+          <TextBlock Text="{loc:Localize Key=Launcher.VersionSelect.Hint}" FontSize="12.5"
+                     VerticalAlignment="Center" TextWrapping="Wrap"
+                     Foreground="{DynamicResource SemiColorText1}" />
+        </StackPanel>
+      </Border>
+
+      <StackPanel Spacing="6">
+        <TextBlock x:Name="LabelText" FontSize="11"
+                   Text="{loc:Localize Key=Launcher.VersionSelect.Label}"
+                   Foreground="{DynamicResource SemiColorText2}" />
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+          <!-- 不可编辑:只允许从候选里选,避免框内出现光标、也防止手输脏值绕过校验。
+               当前本地记录不在候选时会由 code-behind 补进列表并选中(见 VersionCandidateList)。 -->
+          <ComboBox x:Name="VersionBox" FontSize="13"
+                    HorizontalAlignment="Stretch" />
+          <Button Grid.Column="1" x:Name="ReloadButton" Padding="9,7"
+                  CornerRadius="8"
+                  ToolTip.Tip="{loc:Localize Key=Launcher.VersionSelect.Reload}">
+            <ic:FluentIcon Icon="ArrowClockwise" IconVariant="Regular" IconSize="Size16" />
+          </Button>
+        </Grid>
+      </StackPanel>
+
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+        <Button x:Name="CancelButton" MinWidth="72" Classes="dlgCancel"
+                Content="{loc:Localize Key=Launcher.VersionSelect.Cancel}" />
+        <Button x:Name="VerifyButton" MinWidth="96" Classes="dlgVerify"
+                Content="{loc:Localize Key=Launcher.VersionSelect.Verify}" />
+        <Button x:Name="SkipButton" MinWidth="150" Classes="dlgConfirm"
+                Content="{loc:Localize Key=Launcher.VersionSelect.SkipVerify}" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>

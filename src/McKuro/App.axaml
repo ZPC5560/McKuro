@@ -1,12 +1,52 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:semi="https://irihi.tech/semi"
+             xmlns:ic="using:FluentIcons.Avalonia"
              x:Class="McKuro.App"
              RequestedThemeVariant="Default">
     <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
 
     <Application.Styles>
         <semi:SemiTheme Locale="zh-CN" />
+
+        <!-- 全站统一的「透明底图标按键」(主页昵称旁的账号切换 / 启动页右下角的资源分级切换 /
+             启动页左上角的游戏功能菜单):按键底完全透明,只有按键上的图标呈半透明;
+             悬停才浮出一点玻璃底作为可点反馈。
+             尺寸/圆角/内边距由使用处自己设(局部属性优先于本样式),外观一处改全站生效。
+             前景色<b>也</b>由使用处自己设:压在自有玻璃底上的用主题令牌(McKuroTextOnWallpaper),
+             直接压在视频上的用不随主题翻转的 McKuroTextOnVideo + VideoTextChrome 反向投影阴影。 -->
+        <Style Selector="Button.mcChrome">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource McKuroTextOnWallpaper}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.15" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.mcChrome:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
+        </Style>
+        <Style Selector="Button.mcChrome ic|FluentIcon">
+            <Setter Property="Opacity" Value="0.72" />
+        </Style>
+        <Style Selector="Button.mcChrome:pointerover ic|FluentIcon">
+            <Setter Property="Opacity" Value="0.95" />
+        </Style>
+
+        <!-- 全站统一的「浮层面板」材质:启动页功能菜单、资源等级展开面板、账号切换弹窗、
+             版本选择弹窗共用同一份面色 + 描边 + 圆角。
+             之前每个面板各自重述一遍背景(两层不透明叠加 / 单层 DialogSurface / SemiColorBg2…),
+             于是"展开后的材质"彼此不一致(2026-10 用户反馈) —— 收敛成一处,以后改一处全站同步。
+             个别面板要更大的圆角或外边距,用局部属性覆盖即可(局部优先于样式)。 -->
+        <Style Selector="Border.mcPanel">
+            <Setter Property="Background" Value="{DynamicResource McKuroDialogSurface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroSwitchChipStroke}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
     </Application.Styles>
 
     <!--
@@ -72,6 +112,19 @@
                     <SolidColorBrush x:Key="McKuroInfoTint" Color="#241677FF" />
                     <SolidColorBrush x:Key="McKuroWarning" Color="#FFC53D" />
                     <SolidColorBrush x:Key="McKuroWarningTint" Color="#29FA8C16" />
+                    <!-- 账号/版本切换按键与列表项:
+                         按键本身透明底(仅悬停给一点反馈),列表项用极淡的中性面;
+                         选中项用「主题强调色」淡染底 + 强调色描边 + 高对比文字(对齐 Haiyu 的蓝框选中),
+                         不再用整块反色硬底——纯黑/纯白大块在浅色面板上非常刺眼。 -->
+                    <SolidColorBrush x:Key="McKuroSwitchChipFill" Color="#1AFFFFFF" />
+                    <SolidColorBrush x:Key="McKuroSwitchChipFillHover" Color="#33FFFFFF" />
+                    <SolidColorBrush x:Key="McKuroSwitchChipStroke" Color="#2AFFFFFF" />
+                    <SolidColorBrush x:Key="McKuroSwitchChipSelectedFill" Color="#3D5A8DEE" />
+                    <SolidColorBrush x:Key="McKuroSwitchChipSelectedStroke" Color="#B48FB8F0" />
+                    <SolidColorBrush x:Key="McKuroSwitchChipSelectedText" Color="#F5F8FF" />
+                    <!-- 弹窗面板面色:比 McKuroGlassFillStrong 更透一档(70%),让系统材质透出来,
+                         同时保证列表文字仍有一层稳定底,不会直接压在壁纸/Live2D 上 -->
+                    <SolidColorBrush x:Key="McKuroDialogSurface" Color="#B3141D32" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="McKuroAccent" Color="#5A8DEE" />
@@ -125,8 +178,25 @@
                     <SolidColorBrush x:Key="McKuroInfoTint" Color="#1A1677FF" />
                     <SolidColorBrush x:Key="McKuroWarning" Color="#D48806" />
                     <SolidColorBrush x:Key="McKuroWarningTint" Color="#1AFA8C16" />
+                    <!-- 账号/版本切换按键:亮色主题下的同族令牌(理由见暗色主题同类注释) -->
+                    <SolidColorBrush x:Key="McKuroSwitchChipFill" Color="#0D000000" />
+                    <SolidColorBrush x:Key="McKuroSwitchChipFillHover" Color="#1F000000" />
+                    <SolidColorBrush x:Key="McKuroSwitchChipStroke" Color="#1A000000" />
+                    <SolidColorBrush x:Key="McKuroSwitchChipSelectedFill" Color="#261677FF" />
+                    <SolidColorBrush x:Key="McKuroSwitchChipSelectedStroke" Color="#CC1677FF" />
+                    <SolidColorBrush x:Key="McKuroSwitchChipSelectedText" Color="#0F2B5B" />
+                    <!-- 弹窗面板面色:理由见暗色主题同名令牌(亮色主题用 78% 白) -->
+                    <SolidColorBrush x:Key="McKuroDialogSurface" Color="#C7FFFFFF" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
+
+            <!--
+              以下令牌<b>故意放在 ThemeDictionaries 之外</b>:它们描述的是「压在视频/壁纸上」这个物理场景,
+              与用户在设置里选的明暗主题无关。亮色主题下启动页视频照样可能是暗场景,
+              若前景跟着主题翻成深色,就会"黑字压黑视频"完全看不见(2026-10 用户反馈)。
+              配合 chrome:VideoTextChrome.Shadow 的反向投影阴影,浅色字在亮背景上同样可读。
+            -->
+            <SolidColorBrush x:Key="McKuroTextOnVideo" Color="#F5F8FF" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

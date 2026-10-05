@@ -12,6 +12,13 @@ public class UpdateEnhancementTests
 {
     private static string Hex(char c) => new(c, 64);
 
+    /// <summary>
+    /// 构造不带重试退避的服务:失败重试的 2s/4s/6s sleep 合计 12 秒,曾占满整个套件的墙钟时间。
+    /// 生产行为不变(默认仍是 <see cref="Task.Delay"/>),只让测试立即重试。
+    /// </summary>
+    private static AppUpdateService NewService(HttpClient http)
+        => new(http) { RetryDelay = (_, _) => Task.CompletedTask };
+
     // ---------- UpdateChecksum.ParseSha256 ----------
 
     [Fact]
@@ -270,18 +277,29 @@ public class UpdateEnhancementTests
     [Fact]
     public async Task CheckAsync_EmptyRepo_ReturnsNull_AndDoesNotCache()
     {
-        var service = new AppUpdateService(new HttpClient());
+        var service = NewService(new HttpClient());
         Assert.Null(await service.CheckAsync(""));
         Assert.Null(await service.CheckAsync("   "));
         // 空仓库不应污染缓存
         service.InvalidateCache();
     }
 
+    /// <summary>
+    /// 每个请求都抛 <see cref="HttpRequestException"/>(DNS 失败/不可达)的假 handler。
+    /// 让"仓库不可达"用例离线可测:此前它真打 api.github.com + github.com,
+    /// 在网络受限的 CI/本机要等 5s 以上超时,且结果依赖外网可用性。
+    /// </summary>
+    private sealed class UnreachableHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+            => throw new HttpRequestException("simulated unreachable host");
+    }
+
     [Fact]
     public async Task CheckAsync_UnreachableRepo_CachesNullResult()
     {
-        // /releases/latest 与 HTML 通道对无效仓库都无结果 → 返回 null(不抛异常)
-        var service = new AppUpdateService(new HttpClient { Timeout = TimeSpan.FromSeconds(5) });
+        // /releases/latest 与 HTML 通道都不可达 → 返回 null(不抛异常,且不污染缓存)
+        var service = NewService(new HttpClient(new UnreachableHandler()));
         service.InvalidateCache();
         var result = await service.CheckAsync(
             "mckuro-nonexistent-owner-xyz/mckuro-nonexistent-repo-xyz",
@@ -358,7 +376,7 @@ public class UpdateEnhancementTests
         var destDir = Path.Combine(Path.GetTempPath(), "mckuro-csum-ok-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var service = new AppUpdateService(new HttpClient());
+            var service = NewService(new HttpClient());
             var path = await service.DownloadAsync(prefix + "McKuro-win-x64.zip", destDir, expectedSha256: sha);
             Assert.NotNull(path);
             Assert.Equal(payload.Length, new FileInfo(path!).Length);
@@ -381,7 +399,7 @@ public class UpdateEnhancementTests
         var destDir = Path.Combine(Path.GetTempPath(), "mckuro-csum-bad-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var service = new AppUpdateService(new HttpClient());
+            var service = NewService(new HttpClient());
             var path = await service.DownloadAsync(
                 prefix + "McKuro-win-x64.zip", destDir, expectedSha256: Hex('0'));
             Assert.Null(path);
@@ -404,7 +422,7 @@ public class UpdateEnhancementTests
         var destDir = Path.Combine(Path.GetTempPath(), "mckuro-csum-none-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var service = new AppUpdateService(new HttpClient());
+            var service = NewService(new HttpClient());
             var path = await service.DownloadAsync(prefix + "McKuro-win-x64.zip", destDir);
             Assert.NotNull(path);
             Assert.Equal(payload.Length, new FileInfo(path!).Length);

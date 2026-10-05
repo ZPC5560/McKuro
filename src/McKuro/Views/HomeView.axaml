@@ -105,7 +105,7 @@
                             <!-- 资料卡:头像/昵称/等级/开服玩家徽章/游玩天数 -->
                             <Border CornerRadius="16" Background="{DynamicResource McKuroGlassFill}"
                                     BorderBrush="{DynamicResource McKuroGlassStroke}" BorderThickness="1"
-                                    Padding="16,12" IsVisible="{Binding HasProfile}">
+                                    Padding="16,12" IsVisible="{Binding ShowProfileCard}">
                                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
                                     <!-- 头像(圆形裁切;加载失败时露出底层占位图标) -->
                                     <Grid Grid.Column="0" Width="56" Height="56" VerticalAlignment="Center">
@@ -118,12 +118,30 @@
                                             <controls:AsyncImage ImageUrl="{Binding AvatarUrl}" Stretch="UniformToFill" />
                                         </Border>
                                     </Grid>
-                                    <!-- 昵称 + 等级/开服玩家徽章(昵称靠左) -->
+                                    <!-- 昵称 + 账号切换按键(对齐官方启动器:昵称旁小切换钮)+ 等级/开服玩家徽章 -->
                                     <StackPanel Grid.Column="1" Spacing="7" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding RoleNameText}" FontSize="16" FontWeight="Bold"
-                                                   Foreground="{DynamicResource McKuroTextOnWallpaper}"
-                                                   TextTrimming="CharacterEllipsis" MaxWidth="220"
-                                                   HorizontalAlignment="Left" />
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{Binding RoleNameText}" FontSize="16" FontWeight="Bold"
+                                                       Foreground="{DynamicResource McKuroTextOnWallpaper}"
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="200"
+                                                       VerticalAlignment="Center" />
+                                            <!-- 切换今日数据所属的本地库街区账号(弹窗选择;仅多账号时出现)。
+                                                 外观用全站共享的 Button.mcChrome(透明底 + 半透明图标),
+                                                 与启动页的资源分级切换、游戏功能菜单按键完全一致。
+                                                 本处压在资料卡的玻璃底上,故前景仍随主题取色 -->
+                                            <Button x:Name="SwitchAccountButton"
+                                                    Classes="mcChrome"
+                                                    IsVisible="{Binding HasHomeAccountChoice}"
+                                                    Width="22" Height="22" Padding="0"
+                                                    CornerRadius="6"
+                                                    VerticalAlignment="Center"
+                                                    Click="OnSwitchAccountClick"
+                                                    ToolTip.Tip="{loc:Localize Key=Home.AccountPick}">
+                                                <ic:FluentIcon Icon="ArrowSwap" IconVariant="Regular" IconSize="Size16"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                            </Button>
+                                        </StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                             <Border CornerRadius="9" Background="{DynamicResource McKuroGlassFillStrong}"
                                                     Padding="8,2" IsVisible="{Binding LevelText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
@@ -151,9 +169,8 @@
                                 </Grid>
                             </Border>
 
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="{loc:Localize Key=Home.TodayStats}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource McKuroTextOnWallpaper}" />
-                            </StackPanel>
+                            <TextBlock Text="{loc:Localize Key=Home.TodayStats}" FontSize="17" FontWeight="Bold"
+                                       Foreground="{DynamicResource McKuroTextOnWallpaper}" />
                             <ItemsControl ItemsSource="{Binding DailyItems}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>

@@ -340,6 +340,47 @@ public class GuideRoleDetailMappingTests
         Assert.Contains("无需升级", GuideAchievementService.SkillRecommendText(Target(0, 1)));
     }
 
+    /// <summary>
+    /// 回归(用户反馈「技能加点已经达标还显示需要提升」):
+    /// 攻略接口的 currentLevel 是<b>服务端快照</b>(且被本地缓存 24h),玩家点完技能后长期滞后;
+    /// 库街区实时等级才是权威值。传入 liveCurrentLevel 时必须覆盖快照。
+    /// <para>
+    /// 用例取真实数据(角色「心」cardRoleId=1311,2026-10-05 实测):
+    /// 常态攻击 推荐8 / 攻略快照6 / 库街区实时10 —— 旧实现据此误报「建议提升至 8 级」,
+    /// 而页面上的技能弧线徽章同时显示 10/8(自相矛盾)。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SkillLevel_Met_Prefers_Live_Level_Over_Stale_Guide_Snapshot()
+    {
+        static GuideSkillTarget Target(int rec, int snapshotCur) => new()
+        {
+            RecommendLevel = System.Text.Json.JsonSerializer.SerializeToElement(rec),
+            CurrentLevel = System.Text.Json.JsonSerializer.SerializeToElement(snapshotCur),
+        };
+
+        // 快照 6 < 推荐 8 ⇒ 旧行为误报未达标
+        Assert.False(GuideAchievementService.IsSkillLevelMet(Target(8, 6)));
+        // 实时 10 ≥ 推荐 8 ⇒ 已达标,不得再提示提升
+        Assert.True(GuideAchievementService.IsSkillLevelMet(Target(8, 6), liveCurrentLevel: 10));
+
+        // 共鸣回路:快照 9 < 推荐 10,实时 10 ⇒ 已达标
+        Assert.False(GuideAchievementService.IsSkillLevelMet(Target(10, 9)));
+        Assert.True(GuideAchievementService.IsSkillLevelMet(Target(10, 9), liveCurrentLevel: 10));
+
+        // 共鸣解放:快照 6 < 推荐 10,实时 10 ⇒ 已达标
+        Assert.True(GuideAchievementService.IsSkillLevelMet(Target(10, 6), liveCurrentLevel: 10));
+
+        // 变奏技能:实时 6 < 推荐 10 ⇒ 真的未达标,提示必须保留(不能矫枉过正把提示清空)
+        Assert.False(GuideAchievementService.IsSkillLevelMet(Target(10, 6), liveCurrentLevel: 6));
+
+        // 实时值缺失(null)→ 回退快照,与旧行为一致
+        Assert.False(GuideAchievementService.IsSkillLevelMet(Target(8, 6), liveCurrentLevel: null));
+
+        // 推荐等级缺失时仍返回 null(与实时值无关)
+        Assert.Null(GuideAchievementService.IsSkillLevelMet(Target(0, 6), liveCurrentLevel: 10));
+    }
+
     [Fact]
     public void PlainRecommendText_Strips_Html()
     {

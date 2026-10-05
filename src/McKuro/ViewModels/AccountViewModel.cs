@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
@@ -11,6 +12,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Core.Models.Kuro;
 using McKuro.Core.Services.Gacha;
 using McKuro.Core.Services.Kuro;
+using McKuro.Core.Services.User;
 using McKuro.Services;
 using McKuro.Views;
 using Microsoft.Extensions.Logging;
@@ -58,8 +60,64 @@ public sealed partial class AccountViewModel : ViewModelBase
 
     public ObservableCollection<string> AccountOptions { get; } = [];
 
+    /// <summary>AccountOptions 每行对应的库街区 UserId(顺序一一对应;显示文案改版后不能再靠 Contains 反查)。</summary>
+    private readonly List<string> _accountOptionKeys = [];
+
     /// <summary>已保存的云鸣潮账号显示列表(与库街区同款多账号切换)。</summary>
     public ObservableCollection<string> CloudAccountOptions { get; } = [];
+
+    // ---- 接口账号 → 游戏角色显示口径(昵称 · 游戏角色 UID) ----
+    // 本地官方启动器凭证枚举出的角色;账号页三张卡片都按手机号/账号名/库街区 UID 在其中匹配,
+    // 显示游戏昵称 + 游戏角色 UID(与首页「今日数据」账号卡片、抽卡页 player_id 同一口径)。
+    private List<LocalLauncherPlayer> _localPlayers = [];
+
+    /// <summary>是否已经拿到本地角色列表(未拿到前不重写显示文案,避免闪烁成接口 ID)。</summary>
+    private bool _localPlayersLoaded;
+
+    /// <summary>
+    /// 库街区卡片显示的「当前账号」文案:能匹配到本地游戏角色时为「游戏昵称 · 游戏角色 UID」。
+    /// <para>与首页「今日数据」账号卡片、抽卡页显示的 player_id 同一口径;
+    /// 匹配不到时退回接口账号文案,不编造游戏角色 ID。</para>
+    /// </summary>
+    public string KuroAccountDisplay => CurrentKuroAccountDisplay();
+
+    /// <summary>云鸣潮卡片显示的「当前账号」文案(同上口径)。</summary>
+    public string CloudAccountDisplay => CurrentCloudAccountDisplay();
+
+    /// <summary>mcguide 卡片显示的「当前账号」文案(同上口径)。</summary>
+    public string GuideAccountDisplay => CurrentGuideAccountDisplay();
+
+    /// <summary>
+    /// 库街区「当前账号」显示文案 = 下拉当前项(已是游戏角色身份;未登录返回未登录文案)。
+    /// </summary>
+    private string CurrentKuroAccountDisplay()
+        => AppServices.KuroAccounts.Current is null ? LanguageService.Format("Sign.NotLoggedIn") : AccountText;
+
+    /// <summary>云鸣潮「当前账号」显示文案 = 云鸣潮账号下拉当前项(已是游戏角色身份)。</summary>
+    private string CurrentCloudAccountDisplay()
+        => IsCloudLoggedIn
+            ? CloudAccountOptions.ElementAtOrDefault(SelectedCloudAccountIndex)
+                ?? (string.IsNullOrWhiteSpace(CloudAccountText) ? LanguageService.Format("Account.LoggedIn") : CloudAccountText)
+            : LanguageService.Format("Sign.NotLoggedIn");
+
+    /// <summary>
+    /// mcguide「当前账号」显示文案:已登录且能匹配到本地游戏角色时为「游戏昵称 · 游戏角色 UID」,
+    /// 否则退回接口账号名(不编造游戏角色 ID)。
+    /// </summary>
+    private string CurrentGuideAccountDisplay()
+    {
+        var s = AppServices.Settings.Current;
+        if (!AppServices.Guide.HasToken)
+        {
+            return LanguageService.Format("Account.GuideNotLoggedIn");
+        }
+        return ResolveGameRole(phone: s.GuidePhone, userName: s.GuideCName, kuroUid: s.GuideCUid,
+                // mcguide 明确记录了选定玩家(GuidePlayerId):同一手机号下有多个本地角色时按它选中正确的那个
+                preferredRoleId: s.GuidePlayerId > 0 ? s.GuidePlayerId.ToString(CultureInfo.InvariantCulture) : null)
+            is { } role
+            ? LocalGameAccountLabel.Format(role.RoleName, role.RoleId)
+            : LanguageService.Format("Account.GuideLoggedIn", s.GuideCName);
+    }
 
     /// <summary>云鸣潮下拉当前选中账号索引。</summary>
     [ObservableProperty]
@@ -310,14 +368,22 @@ public sealed partial class AccountViewModel : ViewModelBase
         // mcguide 已保存登录先按绿点显示,会话校验失败再转橙点
         _guideLoginState = AppServices.Guide.HasToken ? InterfaceLoginState.Ok : InterfaceLoginState.NotLoggedIn;
 
+        // 各接口账号统一显示「游戏角色昵称 · 游戏角色 UID」(与首页账号卡片、抽卡页 player_id 同口径):
+        // 构造时先用接口账号文案兜底,本地角色枚举完成后异步改写(见 RefreshGameRoleLabelsAsync)
+
         // 自动进行同一账号判定
         RefreshSameAccountAuto();
         SelectInitialLoginCard();
+        _ = RefreshGameRoleLabelsAsync();
     }
 
-    /// <summary>导航到账号页时调用:并行校验三个接口的登录态是否过期。</summary>
+    /// <summary>导航到账号页时调用:并行校验三个接口的登录态是否过期,并补一次本地角色枚举(首次失败可重试)。</summary>
     public void OnNavigatedTo()
     {
+        if (!_localPlayersLoaded)
+        {
+            _ = RefreshGameRoleLabelsAsync();
+        }
         if (_sessionValidating)
         {
             return;
@@ -404,11 +470,13 @@ public sealed partial class AccountViewModel : ViewModelBase
             GuideLoginState = InterfaceLoginState.NotLoggedIn;
             IsGuideLoginOpen = true;
             OnPropertyChanged(nameof(GuideLoggedIn));
+            OnPropertyChanged(nameof(GuideAccountDisplay));
             RefreshSameAccountAuto();
         }
         else if (valid == true)
         {
             GuideLoginState = InterfaceLoginState.Ok;
+            OnPropertyChanged(nameof(GuideAccountDisplay));
         }
         // valid == null(未登录/校验失败)不改状态,避免误报
     }
@@ -416,20 +484,98 @@ public sealed partial class AccountViewModel : ViewModelBase
     private void RefreshAccounts()
     {
         AccountOptions.Clear();
+        _accountOptionKeys.Clear();
         foreach (var account in AppServices.KuroAccounts.GetAccounts())
         {
-            var name = string.IsNullOrEmpty(account.Nickname) ? account.UserId : account.Nickname;
-            var mobileSuffix = string.IsNullOrEmpty(account.Mobile) ? "" : $" · {MaskMobile(account.Mobile)}";
-            AccountOptions.Add($"{name} (ID: {account.UserId}{mobileSuffix})");
+            // 显示口径与首页「今日数据」账号卡片、抽卡页 player_id 一致:游戏角色昵称 · 游戏角色 UID。
+            // 匹配不到本地角色时退回「库街区账号名 · 掩码手机号」(不编造游戏角色 ID)。
+            // 同一库街区账号下有多个角色时,优先当前应用正在使用的角色(设置里的 RoleId)。
+            var gameRole = ResolveGameRole(account.Mobile, userName: null, kuroUid: account.UserId,
+                preferredRoleId: PreferredKuroRoleId(account));
+            AccountOptions.Add(gameRole is not null
+                ? LocalGameAccountLabel.Format(gameRole.RoleName, gameRole.RoleId)
+                : FallbackAccountOptionText(account));
+            _accountOptionKeys.Add(account.UserId);
         }
         var current = AppServices.KuroAccounts.Current;
-        AccountText = current is null ? LanguageService.Format("Sign.NotLoggedIn") : AccountOptions.FirstOrDefault(o => o.Contains(current.UserId)) ?? LanguageService.Format("Sign.NotLoggedIn");
-        SelectedAccountIndex = current is null ? -1 : Math.Max(0, AccountOptions.ToList().FindIndex(o => o.Contains(current.UserId)));
+        AccountText = current is null
+            ? LanguageService.Format("Sign.NotLoggedIn")
+            : AccountOptions.ElementAtOrDefault(IndexByKey(_accountOptionKeys, current.UserId)) ?? LanguageService.Format("Sign.NotLoggedIn");
+        SelectedAccountIndex = current is null ? -1 : IndexByKey(_accountOptionKeys, current.UserId);
         // 已保存登录先按绿点显示,会话校验失败再转橙点
         KuroLoginState = current is null ? InterfaceLoginState.NotLoggedIn : InterfaceLoginState.Ok;
         OnPropertyChanged(nameof(HasKuroLogin));
         OnPropertyChanged(nameof(HasKuroAccounts));
+        OnPropertyChanged(nameof(KuroAccountDisplay));
         RefreshSameAccountAuto();
+    }
+
+    /// <summary>按键列表定位下标(找不到返回 -1)。</summary>
+    private static int IndexByKey(List<string> keys, string key)
+    {
+        var index = keys.FindIndex(k => string.Equals(k, key, StringComparison.Ordinal));
+        return index;
+    }
+
+    /// <summary>
+    /// 库街区卡片的角色偏好:当前库街区账号<b>就是</b>应用正在使用的账号时,
+    /// 用设置里的 RoleId(角色数据页/首页正在展示的那个角色)选中正确角色;
+    /// 其他账号没有已知的角色偏好,返回 null 由匹配逻辑取第一个。
+    /// </summary>
+    private static string? PreferredKuroRoleId(KuroAccount account)
+        => AppServices.KuroAccounts.Current?.UserId == account.UserId && !string.IsNullOrWhiteSpace(AppServices.Settings.Current.RoleId)
+            ? AppServices.Settings.Current.RoleId
+            : null;
+
+    /// <summary>
+    /// 匹配不到本地游戏角色时库街区账号的回退显示文案:
+    /// 「昵称(或库街区 UID)· 掩码手机号」;手机号为空时省略尾段。
+    /// </summary>
+    private static string FallbackAccountOptionText(KuroAccount account)
+    {
+        var name = string.IsNullOrEmpty(account.Nickname) ? account.UserId : account.Nickname;
+        return string.IsNullOrEmpty(account.Mobile) ? name : $"{name}{LocalGameAccountLabel.Separator}{MaskMobile(account.Mobile)}";
+    }
+
+    /// <summary>
+    /// 把接口账号映射到本地启动器凭证里的游戏角色(按手机号 → 账号名 → 库街区 UID)。
+    /// 本地列表尚未枚举完时返回 null,调用方退回接口自己的文案。
+    /// </summary>
+    private LocalLauncherPlayer? ResolveGameRole(string? phone, string? userName, string? kuroUid, string? preferredRoleId = null)
+        => _localPlayersLoaded
+            ? LocalGameAccountLabel.Match(_localPlayers, phone, userName, kuroUid, preferredRoleId)
+            : null;
+
+    /// <summary>
+    /// 枚举本地启动器凭证对应的游戏角色并重建三张卡片的显示文案。
+    /// 网络/未装启动器失败时静默保持接口文案(不阻塞页面,也不显示空行)。
+    /// </summary>
+    private async Task RefreshGameRoleLabelsAsync()
+    {
+        try
+        {
+            _localPlayers = await AppServices.LocalDaily.GetLocalPlayersCachedAsync().ConfigureAwait(true);
+            _localPlayersLoaded = _localPlayers.Count > 0;
+        }
+        catch (Exception ex)
+        {
+            _loginLog?.LogWarning(ex, "枚举本地启动器角色失败,账号页保留接口账号文案");
+            _localPlayersLoaded = false;
+        }
+        RefreshAccounts();
+        RefreshCloudState();
+        NotifyAccountDisplaysChanged();
+    }
+
+    /// <summary>
+    /// 登录/切换账号后强制重新枚举本地角色再改写文案:
+    /// 新登录的账号可能对应本地启动器里另一个游戏角色,沿用上一次的缓存会显示成上一个号的昵称。
+    /// </summary>
+    private void InvalidateLocalPlayersAndReload()
+    {
+        AppServices.LocalDaily.InvalidateLocalPlayersCache();
+        _localPlayersLoaded = false;
+        _ = RefreshGameRoleLabelsAsync();
     }
 
     private static string MaskMobile(string mobile)
@@ -437,18 +583,20 @@ public sealed partial class AccountViewModel : ViewModelBase
 
     private void RefreshCloudState()
     {
-        // 重建云鸣潮账号下拉(与库街区同款:名 + 掩码手机号)
+        // 重建云鸣潮账号下拉:显示游戏角色身份(昵称 · 游戏角色 UID),与库街区卡片同一口径
         CloudAccountOptions.Clear();
         var accounts = AppServices.CloudGacha.GetAccounts();
         var currentIndex = -1;
         for (var i = 0; i < accounts.Count; i++)
         {
             var account = accounts[i];
-            var masked = string.IsNullOrEmpty(account.Phone) ? "" : MaskMobile(account.Phone);
-            var name = string.IsNullOrWhiteSpace(account.Name)
-                ? (masked.Length > 0 ? masked : LanguageService.Format("Account.LoggedIn"))
-                : account.Name;
-            CloudAccountOptions.Add(masked.Length > 0 && !name.Contains(masked) ? $"{name} ({masked})" : name);
+            var gameRole = ResolveGameRole(phone: account.Phone, userName: account.Name, kuroUid: null);
+            var text = gameRole is not null
+                ? LocalGameAccountLabel.Format(gameRole.RoleName, gameRole.RoleId)
+                : (string.IsNullOrWhiteSpace(account.Name)
+                    ? (string.IsNullOrEmpty(account.Phone) ? account.Id : MaskMobile(account.Phone))
+                    : account.Name);
+            CloudAccountOptions.Add(text);
             // 当前项按稳定 Id 匹配(手机号可能为空,不能作匹配键)
             if (AppServices.CloudGacha.HasSavedLogin && account.Id == AppServices.CloudGacha.SavedLoginId)
             {
@@ -458,12 +606,21 @@ public sealed partial class AccountViewModel : ViewModelBase
         SelectedCloudAccountIndex = currentIndex;
         IsCloudLoggedIn = AppServices.CloudGacha.HasSavedLogin;
         CloudAccountText = IsCloudLoggedIn
-            ? (string.IsNullOrWhiteSpace(AppServices.CloudGacha.SavedLoginName) ? LanguageService.Format("Account.LoggedIn") : AppServices.CloudGacha.SavedLoginName)
+            ? CloudAccountOptions.ElementAtOrDefault(currentIndex) ?? LanguageService.Format("Account.LoggedIn")
             : LanguageService.Format("Sign.NotLoggedIn");
         // 已保存登录先按绿点显示,会话校验失败再转橙点
         CloudLoginState = IsCloudLoggedIn ? InterfaceLoginState.Ok : InterfaceLoginState.NotLoggedIn;
         OnPropertyChanged(nameof(HasCloudAccounts));
+        OnPropertyChanged(nameof(CloudAccountDisplay));
         RefreshSameAccountAuto();
+    }
+
+    /// <summary>三张卡片的账号身份文案都依赖本地角色列表,重枚举后统一通知刷新。</summary>
+    private void NotifyAccountDisplaysChanged()
+    {
+        OnPropertyChanged(nameof(KuroAccountDisplay));
+        OnPropertyChanged(nameof(CloudAccountDisplay));
+        OnPropertyChanged(nameof(GuideAccountDisplay));
     }
 
     /// <summary>下拉切换云鸣潮当前账号(按列表索引定位;抽卡同步/会话校验都随当前账号切换)。</summary>
@@ -477,14 +634,10 @@ public sealed partial class AccountViewModel : ViewModelBase
             return;
         }
         RefreshCloudState();
-        var accounts = AppServices.CloudGacha.GetAccounts();
-        if (value >= 0 && value < accounts.Count)
+        if (value >= 0 && value < CloudAccountOptions.Count)
         {
-            var account = accounts[value];
-            StatusText = LanguageService.Format("Account.Switched",
-                string.IsNullOrWhiteSpace(account.Name)
-                    ? (string.IsNullOrEmpty(account.Phone) ? account.Id : MaskMobile(account.Phone))
-                    : account.Name);
+            // 提示里也用游戏角色身份(与列表项同源),而不是接口账号名
+            StatusText = LanguageService.Format("Account.Switched", CloudAccountOptions[value]);
         }
     }
 
@@ -804,6 +957,9 @@ public sealed partial class AccountViewModel : ViewModelBase
             // 一个接口账号登录成功 → 其他接口账号复用该手机号
             ReusePhoneAcrossLogins(mobile, source: "kuro");
 
+            // 新账号可能对应本地启动器里另一个游戏角色:清缓存重枚举,显示游戏昵称 · 游戏角色 UID
+            InvalidateLocalPlayersAndReload();
+
             // 同步首个角色 ID 并通知角色数据页
             await SyncFirstRoleAsync(account);
 
@@ -932,6 +1088,8 @@ public sealed partial class AccountViewModel : ViewModelBase
 
                 // 一个接口账号登录成功 → 其他接口账号复用该手机号
                 ReusePhoneAcrossLogins(CloudMobile.Trim(), source: "cloud");
+                // 新账号可能对应本地启动器里另一个游戏角色:清缓存重枚举
+                InvalidateLocalPlayersAndReload();
             }
             else
             {
@@ -1049,6 +1207,8 @@ public sealed partial class AccountViewModel : ViewModelBase
 
                 // 一个接口账号登录成功 → 其他接口账号复用该手机号
                 ReusePhoneAcrossLogins(mobile, source: "guide");
+                // 新账号可能对应本地启动器里另一个游戏角色:清缓存重枚举,再按游戏角色身份显示
+                InvalidateLocalPlayersAndReload();
                 RefreshSameAccountAuto();
             }
         }
@@ -1081,6 +1241,7 @@ public sealed partial class AccountViewModel : ViewModelBase
         GuideLoginState = InterfaceLoginState.NotLoggedIn;
         GuideStatusText = LanguageService.Format("Account.GuideNotLoggedIn");
         StatusText = LanguageService.Format("Account.GuideLoggedOut");
+        OnPropertyChanged(nameof(GuideAccountDisplay));
         RefreshSameAccountAuto();
         // 退出后重新展开登录表单,便于再次登录
         IsGuideLoginOpen = true;

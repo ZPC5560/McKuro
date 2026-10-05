@@ -39,4 +39,23 @@ public interface IGameUpdater
 
     /// <summary>本地 DLSS/XeSS 图形组件版本(对齐 Haiyu GetLocalDLSSAsync)。</summary>
     IReadOnlyList<LocalFileVersion> GetLocalGraphicsComponentVersions();
+
+    /// <summary>
+    /// 手动指定本地已装版本(场景:用官方启动器等外部渠道更新后,本地版本记录滞后)。
+    /// 只写版本记录、不触碰任何游戏文件(即「跳过校验」);格式非法或未设置游戏目录返回 false。
+    /// </summary>
+    bool TrySetInstalledVersion(string version);
+
+    /// <summary>
+    /// 「指定本地已装版本」下拉的候选:服务端当前版本 + 补丁清单里的历史版本 + 本地记录(去重,新→旧排序)。
+    /// <para>
+    /// 有意<b>不含</b>预载(predownload)版本 —— 那是尚未安装的未来版本,而调用方会把它写进
+    /// <see cref="TrySetInstalledVersion"/>;写下去会让"检查更新"误判为已是最新。
+    /// </para>
+    /// <para>
+    /// 网络失败时静默降级为只返回本地记录。<b>注意</b>:取消时会抛
+    /// <see cref="OperationCanceledException"/>(调用方传了 token 时),不吞掉。
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<string>> GetKnownVersionsAsync(GameServerType serverType, CancellationToken ct = default);
 }

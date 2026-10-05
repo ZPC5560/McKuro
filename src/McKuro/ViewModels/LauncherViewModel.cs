@@ -904,6 +904,65 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// 手动指定本地游戏版本(对齐 Haiyu「选择版本/跳过校验」):游戏被官方启动器等外部渠道
+    /// 更新后,本地版本记录滞后 → 界面显示旧版本且误报「有更新」。跳过校验=只写版本记录;
+    /// 进入校验=写记录后按服务端清单核对补齐(复用修复流程,其收尾会自动重跑检查更新)。
+    /// 注意:不设 IsBusy —— 内部复用的 CheckUpdate/Repair 命令都有 IsBusy 自守卫,会互相吞掉。
+    /// </summary>
+    [RelayCommand]
+    private async Task SelectVersionAsync()
+    {
+        if (!NativeGameManagementSupported)
+        {
+            StatusText = PlatformGameNotice;
+            return;
+        }
+        if (!AppServices.Paths.IsGameInstalled)
+        {
+            return;
+        }
+
+        try
+        {
+            var owner = (Avalonia.Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+            // 预选"当前本地记录"。_lastCheck 可能为 null(首次检查还没跑完/上次检查失败),
+            // 这时直接问 Core 要权威的 InstalledVersion,而不是放任下拉落到列表第一项
+            // (= 服务端最新版):用户随手点「选定版本」就会把磁盘上根本没有的版本写成已装版本。
+            // 注意不能从 GameVersionText 反推 —— 未装/未知时那里放的是本地化文案(如「已安装」),不是版本号。
+            var installed = _lastCheck?.InstalledVersion
+                ?? (await AppServices.GameUpdater.CheckUpdateAsync(ServerType)).InstalledVersion;
+            var (version, verify) = await McKuro.Views.VersionSelectWindow.ShowAsync(
+                owner,
+                () => AppServices.GameUpdater.GetKnownVersionsAsync(ServerType),
+                installed);
+            if (version is null)
+            {
+                return;
+            }
+            if (!AppServices.GameUpdater.TrySetInstalledVersion(version))
+            {
+                StatusText = LanguageService.Format("Launcher.VersionSetInvalid");
+                return;
+            }
+            GameVersionText = $"v{version}";
+            if (verify)
+            {
+                await RepairGameAsync();
+            }
+            else
+            {
+                StatusText = LanguageService.Format("Launcher.VersionSetOk", version);
+                await CheckUpdateAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText = LanguageService.Format("Launcher.CheckFailedWith", ex.Message);
+        }
+    }
+
     [RelayCommand]
     private void Launch()
     {

@@ -106,6 +106,54 @@ public class IconDiskCacheServiceTests : IDisposable
         Assert.Null(service.GetCachedIconPath(IconDiskCacheService.CategoryWeapon, "千古洑流"));
     }
 
+    /// <summary>
+    /// 回归(评审:头像缓存键读写不一致 → 导航栏启动占位永久命中不了):
+    /// <see cref="IconDiskCacheService.AvatarCacheKey"/> 是头像键的唯一来源,读、写两侧共用。
+    /// 本测试做<b>真实往返</b>:用写入侧键落盘,再用读取侧(同一 helper)查得到 ——
+    /// 只要哪天有人只改一侧的键构造规则,这里就会红。
+    /// </summary>
+    [Fact]
+    public async Task AvatarCacheKey_ReadAndWrite_Agree_RoundTrip()
+    {
+        const string roleId = "103242935";
+        const string url = "https://img.kurobbs.com/head.png";
+        var downloader = new FakeDownloader(new Dictionary<string, byte[]> { [url] = Png("avatar") });
+        var service = new IconDiskCacheService(_dir, downloader.Download);
+
+        // 写入侧(HomeViewModel.ResolveAvatarAsync 的写法)
+        var writeKey = IconDiskCacheService.AvatarCacheKey(roleId, url);
+        await service.CacheUrlAsync(IconDiskCacheService.CategoryAvatar, writeKey, url);
+
+        // 读取侧(HomeViewModel 预填 / MainWindowViewModel 启动占位 的写法)
+        var readKey = IconDiskCacheService.AvatarCacheKey(roleId, null);
+        var path = service.GetCachedIconPath(IconDiskCacheService.CategoryAvatar, readKey);
+
+        Assert.NotNull(path);
+        Assert.True(File.Exists(path));
+    }
+
+    /// <summary>
+    /// 头像键必须落在<b>游戏角色 UID</b> 上(而非库街区账号):一个账号可有多个角色,
+    /// 按账号缓存会在切换角色时串头像 —— 这正是写入侧从 userId 改为 roleId 的原因。
+    /// </summary>
+    [Fact]
+    public void AvatarCacheKey_PrefersRoleId_AndFallsBackToUrl()
+    {
+        Assert.Equal("103242935", IconDiskCacheService.AvatarCacheKey("103242935", "https://x/head.png"));
+
+        // 拿不到角色 UID → 退化为 URL(并经 Safe 清洗非法字符)
+        var fromUrl = IconDiskCacheService.AvatarCacheKey(null, "https://x/head.png");
+        Assert.False(string.IsNullOrWhiteSpace(fromUrl));
+        foreach (var c in fromUrl)
+        {
+            Assert.False(Path.GetInvalidFileNameChars().Contains(c));
+        }
+
+        // 空 roleId 与 null 同义;两者都空时得到空串(调用方据此跳过)
+        Assert.Equal(fromUrl, IconDiskCacheService.AvatarCacheKey("", "https://x/head.png"));
+        Assert.Equal("", IconDiskCacheService.AvatarCacheKey(null, null));
+    }
+
     [Fact]
     public async Task CacheRoleIconsAsync_Stores_All_Categories_And_Persists_Index()
     {

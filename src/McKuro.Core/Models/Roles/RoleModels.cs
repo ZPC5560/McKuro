@@ -172,13 +172,17 @@ public sealed class EchoInfo : INotifyPropertyChanged
     /// <summary>套装名(fetterDetail.name)。</summary>
     public string FetterName => FetterDetail?.Name ?? "";
 
-    /// <summary>词条结构评级文本(词条:ACE/SSS/SS/S/N)。</summary>
+    /// <summary>词条评级文本(<b>英文档位</b> ACE/SSS/SS/S/N;与总评的中文毕业术语不同,见 GraduationTextOf)。</summary>
     [JsonIgnore]
     public string PhantomRatingText => Rate.PhantomText;
 
-    /// <summary>词条数值评级文本(数值:ACE/SSS/SS/S/N)。</summary>
+    /// <summary>数值评级文本(与词条评级同源;保留以兼容绑定)。</summary>
     [JsonIgnore]
     public string PropRatingText => Rate.PropText;
+
+    /// <summary>独立评分文本(如「62.0分」,一位小数对齐参考工具;权重回填时随评级一起刷新)。</summary>
+    [JsonIgnore]
+    public string ScoreText => Services.CoreStrings.F("Roles.EchoScoreFmt", "{0:0.0}分", Rate.Score);
 
     /// <summary>词条结构评级等级(供评级徽章按等级配色)。</summary>
     [JsonIgnore]
@@ -188,12 +192,39 @@ public sealed class EchoInfo : INotifyPropertyChanged
     [JsonIgnore]
     public McKuro.Core.Services.Roles.EchoRatingLevel PropStatus => Rate.PropStatus;
 
-    /// <summary>惰性缓存的评级结果(避免多次触发 RateEcho)。</summary>
+    /// <summary>惰性缓存的评级结果(避免多次触发 RateEcho;权重表回填时清缓存)。</summary>
     [JsonIgnore]
     private McKuro.Core.Services.Roles.EchoRating? _rateCache;
     [JsonIgnore]
     private McKuro.Core.Services.Roles.EchoRating Rate
-        => _rateCache ??= McKuro.Core.Services.Roles.EchoRatingService.RateEcho(this);
+        => _rateCache ??= McKuro.Core.Services.Roles.EchoRatingService.RateEcho(this, PriorityWeights);
+
+    /// <summary>
+    /// Wiki「声骸词条」优先级权重(每角色,来自攻略站 Wiki 角色攻略;见 WikiGuideService)。
+    /// <para>VM 在角色数据装载后异步拉取回填;变更时清评级缓存并通知 UI(联名角色/无攻略为 null,回退官方 valid/通用权重)。</para>
+    /// </summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, double>? PriorityWeights
+    {
+        get => _priorityWeights;
+        set
+        {
+            if (ReferenceEquals(_priorityWeights, value))
+            {
+                return;
+            }
+            _priorityWeights = value;
+            _rateCache = null;
+            var args = new PropertyChangedEventArgs(nameof(PriorityWeights));
+            PropertyChanged?.Invoke(this, args);
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PhantomRatingText)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PhantomStatus)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PropRatingText)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PropStatus)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ScoreText)));
+        }
+    }
+    [JsonIgnore] private IReadOnlyDictionary<string, double>? _priorityWeights;
 
     // ---- 攻略站推荐标识(VM 在攻略加载后回填;不入 JSON/缓存,每次反序列化后由 VM 重新计算) ----
 
@@ -248,14 +279,40 @@ public sealed class EchoProp
     [JsonPropertyName("attributeName")] public string AttributeName { get; set; } = "";
     [JsonPropertyName("attributeValue")] public string AttributeValue { get; set; } = "";
     [JsonPropertyName("iconUrl")] public string IconUrl { get; set; } = "";
-    /// <summary>词条重要程度(0/1/2/3,副词条色条;库街区接口不返回此字段,用权重表计算)。</summary>
+    /// <summary>
+    /// 词条重要程度(0/1/2/3):<b>库街区 getRoleDetail 不返回此字段</b>(恒为 0),
+    /// 保留以兼容同结构的其他数据源;有效判定用 <see cref="Valid"/>。
+    /// </summary>
     [JsonPropertyName("level")] public int Level { get; set; }
 
-    /// <summary>按通用权重表计算的有效词条重要度(0-3;优先用接口 Level,否则按属性名权重)。</summary>
+    /// <summary>
+    /// 官方词条有效性(getRoleDetail mainProps/subProps[].valid,按角色区分)。
+    /// <para>实测(2026-10,丽贝卡):暴击/暴击伤害/攻击%/共鸣效率/普攻伤害加成 = true,
+    /// 生命%/防御/重击伤害加成 = false —— 以接口为准,不再依赖本地权重表猜。
+    /// null = 数据源未给出(旧缓存/其他源),退回权重表。</para>
+    /// </summary>
+    [JsonPropertyName("valid")] public bool? Valid { get; set; }
+
+    /// <summary>
+    /// 有效词条重要度(0-3,副词条色条/文字着色):
+    /// 官方 valid=false → 0(灰,无效);valid=true → 核心(暴击/暴伤/攻击%)= 3,
+    /// 其余官方认可的有效词条 = 2(青,含权重表未收录的伤害加成类);
+    /// 无官方判定 → 旧规则(核心 3,其余 1 —— 2026-10 用户反馈:无官方数据时只亮核心)。
+    /// </summary>
     [JsonIgnore]
-    public int EffectiveLevel => Level > 0
-        ? Level
-        : McKuro.Core.Services.Roles.EchoRatingService.GetPropLevel(AttributeName, AttributeValue);
+    public int EffectiveLevel
+    {
+        get
+        {
+            var core = McKuro.Core.Services.Roles.EchoRatingService.GetPropLevel(AttributeName, AttributeValue) >= 3;
+            return Valid switch
+            {
+                false => 0,
+                true => core ? 3 : 2,
+                null => Level > 0 ? Level : (core ? 3 : 1),
+            };
+        }
+    }
 }
 
 /// <summary>声骸属性(equipPhantomList[].phantomProp)。</summary>
@@ -290,6 +347,9 @@ public sealed class RoleDetail : INotifyPropertyChanged
     /// </summary>
     public void NotifyDetailChanged()
     {
+        // 总评失效 + 通知放在批次最前:先丢弃旧缓存,后续 PhantomData 等通知触发重新取值时
+        // 拿到的就是本次合并后的新结果(取值本身由 EchoTotal 惰性完成,见其说明)。
+        RefreshEchoRating();
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Role)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Level)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(WeaponData)));
@@ -306,10 +366,8 @@ public sealed class RoleDetail : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UnlockedChainCount)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsFullChain)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(FullChainTitle)));
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasPhantoms)));
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasAttributes)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasEchoRating)));
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EchoRatingText)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasAttributes)));
     }
 
     [JsonPropertyName("role")] public RoleInfo? Role { get; set; }
@@ -347,31 +405,79 @@ public sealed class RoleDetail : INotifyPropertyChanged
     /// <summary>列表卡片等级文本。</summary>
     public string LevelText => $"Lv.{Role?.Level ?? 0}";
 
-    /// <summary>声骸评级(词条结构/数值/总分/达成度);无声骸时返回空。仅供详情页展示用。</summary>
-    [JsonIgnore]
-    public string EchoRatingText
-    {
-        get
-        {
-            var phantoms = PhantomData?.Phantoms;
-            if (phantoms is null || phantoms.Count == 0)
-            {
-                return "";
-            }
-            var rating = McKuro.Core.Services.Roles.EchoRatingService.RateRole(phantoms);
-            return $"声骸评级 {rating.LevelText} · 达成度 {rating.AchievementPercent}% ({rating.TotalScore}/{rating.MaxScore})";
-        }
-    }
-
     /// <summary>是否有声骸评级(用于 UI 可见性)。</summary>
     [JsonIgnore]
     public bool HasEchoRating => PhantomData?.Phantoms is { Count: > 0 };
 
-    /// <summary>是否有声骸数据。</summary>
-    public bool HasPhantoms => PhantomData?.Phantoms is { Count: > 0 };
-
     /// <summary>是否有属性面板数据。</summary>
     public bool HasAttributes => Attributes is { Count: > 0 };
+
+    /// <summary>声骸总评分(5 件得分之和 0-500;惰性计算,见 <see cref="EchoTotal"/>)。</summary>
+    [JsonIgnore]
+    public double? EchoTotalScore => EchoTotal?.TotalScore;
+
+    /// <summary>声骸总评级文本(未毕业/小毕业/毕业/完美毕业)。</summary>
+    [JsonIgnore]
+    public string EchoTotalGrade => EchoTotal?.LevelText ?? "";
+
+    /// <summary>声骸总评分文本(如「186.8 分」;模板随语言,见 Roles.EchoTotalScoreFmt)。</summary>
+    [JsonIgnore]
+    public string EchoTotalScoreText => EchoTotal is { } r
+        ? Services.CoreStrings.F("Roles.EchoTotalScoreFmt", "{0:0.0} 分", r.TotalScore)
+        : "";
+
+    /// <summary>声骸总评级等级(供徽章/文字配色)。</summary>
+    [JsonIgnore]
+    public McKuro.Core.Services.Roles.EchoRatingLevel EchoTotalLevel
+        => EchoTotal?.Level ?? McKuro.Core.Services.Roles.EchoRatingLevel.None;
+
+    /// <summary>是否已算出声骸总评分(有声骸即成立)。</summary>
+    [JsonIgnore]
+    public bool HasEchoTotal => EchoTotal is not null;
+
+    /// <summary>
+    /// 惰性缓存的声骸总评(无需任何"先调用一次刷新"的前置条件 —— 见下方 <see cref="EchoTotal"/> 说明)。
+    /// </summary>
+    [JsonIgnore]
+    private McKuro.Core.Services.Roles.RoleEchoRating? _echoTotal;
+
+    /// <summary>
+    /// 声骸总评(惰性计算 + 缓存)。
+    /// <para>
+    /// <b>为什么是计算属性而不是"由 RefreshEchoRating 写入的状态"</b>:总评此前只在
+    /// <see cref="RefreshEchoRating"/> 里赋值,而该方法只在「在线详情合并 / 攻略填充 / Wiki 权重回填」
+    /// 三条路径上被调用 —— 纯缓存加载(构造函数 LoadFromLocal → 选中角色)与"详情已完整即跳过在线刷新"
+    /// 都不经过它们,于是 <c>HasEchoTotal</c> 恒为 false,声骸区整段在但<b>总评行不显示</b>
+    /// (用户反馈:角色详情的声骸列表缺失声骸总评)。改成惰性计算后,任何入口只要有声骸数据就一定有值;
+    /// 与单件声骸的 <see cref="EchoInfo.Rate"/>、<see cref="HasEchoRating"/> 保持同一模式。
+    /// </para>
+    /// </summary>
+    [JsonIgnore]
+    private McKuro.Core.Services.Roles.RoleEchoRating? EchoTotal
+    {
+        get
+        {
+            if (_echoTotal is null && PhantomData?.Phantoms is { Count: > 0 } phantoms)
+            {
+                _echoTotal = McKuro.Core.Services.Roles.EchoRatingService.RateRole(phantoms);
+            }
+            return _echoTotal;
+        }
+    }
+
+    /// <summary>
+    /// 丢弃缓存的总评并通知 UI 重算(5 件均值;声骸数据合并、Wiki 权重回填后调用)。
+    /// <para>只负责"失效 + 通知";取值仍由 <see cref="EchoTotal"/> 惰性完成。</para>
+    /// </summary>
+    public void RefreshEchoRating()
+    {
+        _echoTotal = null;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EchoTotalScore)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EchoTotalScoreText)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EchoTotalGrade)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EchoTotalLevel)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasEchoTotal)));
+    }
 
     /// <summary>
     /// 详情区块是否完整(武器/技能/属性面板齐全)。

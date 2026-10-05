@@ -16,39 +16,54 @@ public enum EchoRatingLevel
 /// <summary>单个声骸的评级结果。</summary>
 public sealed class EchoRating
 {
-    /// <summary>词条结构评级(有效词条数量/权重结构)。</summary>
+    /// <summary>词条评级(综合副词条有效性与数值,WuWaTools 评分法)。</summary>
     public EchoRatingLevel PhantomStatus { get; init; }
-    /// <summary>词条数值评级(词条数值相对满值的达成)。</summary>
+    /// <summary>数值评级(与词条评级同源;保留字段以兼容既有绑定)。</summary>
     public EchoRatingLevel PropStatus { get; init; }
-    /// <summary>本声骸得分(2-10 = 词条结构 1-5 + 数值 1-5)。</summary>
-    public int Score { get; init; }
+    /// <summary>本声骸得分(0-100,wuwa.uk 评分法;展示一位小数)。</summary>
+    public double Score { get; init; }
 
-    /// <summary>评级文本(如 ACE/SSS/SS/S/N)。</summary>
+    /// <summary>评级文本(英文:ACE/SSS/SS/S/N;总评的毕业等级用 GraduationTextOf)。</summary>
     public string PhantomText => EchoRatingService.LevelTextOf(PhantomStatus);
     public string PropText => EchoRatingService.LevelTextOf(PropStatus);
 }
 
-/// <summary>角色声骸总评级(5 件声骸得分汇总 + 养成达成度)。</summary>
+/// <summary>角色声骸总评级(5 件声骸得分之和 + 养成达成度)。</summary>
 public sealed class RoleEchoRating
 {
-    public int TotalScore { get; init; }
-    public int MaxScore { get; init; }
+    /// <summary>总评分(5 件得分之和,0-500;对齐鸣潮工坊的"声骸评分"口径)。</summary>
+    public double TotalScore { get; init; }
+    /// <summary>满分(500 = 单件满分 100 × 5)。</summary>
+    public double MaxScore { get; init; }
     public EchoRatingLevel Level { get; init; }
-    /// <summary>养成毕业达成度(0-100%,总分/满分)。</summary>
+    /// <summary>养成毕业达成度(0-100;= 单件均分,已是百分比数值,不再除以 100)。</summary>
     public int AchievementPercent { get; init; }
     public IReadOnlyList<EchoRating> Echoes { get; init; } = [];
-    public string LevelText => EchoRatingService.LevelTextOf(Level);
+    /// <summary>总评的毕业等级文本(未毕业/小毕业/毕业/完美毕业)。</summary>
+    public string LevelText => EchoRatingService.GraduationTextOf(Level);
 }
 
 /// <summary>
-/// 声骸词条评级服务。
-/// <para>算法对齐 WutheringWavesTool <c>OwnRoleDetailViewModel</c> 的
-/// <c>scorePhantomStatus</c> / <c>scorePropStatus</c> / <c>scoreToStatus</c>,
-/// 词条权重用通用权重表(未引入每角色社区权重 JSON)。</para>
+/// 声骸词条评级服务(wuwa.uk 评分法,<see href="https://wuwa.uk/zh/articles/echo-substat-math"/>)。
+/// <para>
+/// 每条副词条有效值 = (Roll值 ÷ 该词条满值) × 权重;总分 = 有效值之和 ÷ (5 × 首位权重 2.0) × 100。
+/// 权重来源优先级:① 攻略站 Wiki「声骸词条」优先级(每角色,<see cref="WikiGuideService"/>,
+/// 如「暴击=暴击伤害＞攻击&gt;共鸣技能&gt;共鸣效率」按组序赋权 2.0/1.0/0.75/0.5…);
+/// ② 官方 valid(getRoleDetail mainProps/subProps[].valid,核心 2.0 / 其他 1.0);
+/// ③ 通用权重表(3/2/1 → 2.0/1.0/0.5)。
+/// </para>
+/// <para>
+/// 等级档位(<b>按单件均分</b>判定,非 5 件总分;阈值见 <see cref="ScoreToStatus"/>):
+/// ≥60 → ACE(完美毕业)、≥40 → SSS(毕业)、≥20 → SS(小毕业)、&lt;20 → S(未毕业);
+/// 满分 100 = 5 条词条全部为首位权重且 Roll 满。联名/无攻略角色回退 ②③ 权重来源。
+/// </para>
 /// </summary>
 public static class EchoRatingService
 {
-    /// <summary>通用词条权重(0-3):越核心权重越高(暴击/暴伤/攻击% = 3)。</summary>
+    /// <summary>
+    /// 通用词条权重(0-3):<b>仅作兜底</b>(Wiki 优先级与官方 valid 均缺失时),
+    /// 换算权重:3 → 2.0,2 → 1.0,1 → 0.5。
+    /// </summary>
     private static readonly IReadOnlyDictionary<string, int> PropWeights = new Dictionary<string, int>(StringComparer.Ordinal)
     {
         ["暴击伤害"] = 3,
@@ -60,13 +75,14 @@ public static class EchoRatingService
         ["重击伤害加成"] = 2,
         ["共鸣技能伤害加成"] = 2,
         ["共鸣解放伤害加成"] = 2,
+        ["谐度破坏伤害加成"] = 2,
         ["攻击"] = 2,
         ["防御百分比"] = 1,
         ["生命"] = 1,
         ["防御"] = 1,
     };
 
-    /// <summary>各属性满值(百分比词条用;对齐 WutheringWavesTool propMaxValueMap)。</summary>
+    /// <summary>各属性满值(挡位表来源:wuwa.uk echo-substat-math —— 百分比词条 8 挡,固定攻击 4 挡 30/40/50/60 满 60,固定防御 4 挡 40/50/60/70 满 70)。</summary>
     private static readonly IReadOnlyDictionary<string, double> PropMaxValue = new Dictionary<string, double>(StringComparer.Ordinal)
     {
         ["暴击伤害"] = 21.0,
@@ -75,16 +91,17 @@ public static class EchoRatingService
         ["攻击百分比"] = 11.6,
         ["生命"] = 580.0,
         ["生命百分比"] = 11.6,
-        ["防御"] = 60.0,
+        ["防御"] = 70.0,
         ["防御百分比"] = 14.7,
         ["共鸣效率"] = 12.4,
         ["普攻伤害加成"] = 11.6,
         ["重击伤害加成"] = 11.6,
         ["共鸣技能伤害加成"] = 11.6,
         ["共鸣解放伤害加成"] = 11.6,
+        ["谐度破坏伤害加成"] = 11.6,
     };
 
-    /// <summary>词条重要度(0-3):按通用权重表计算,供装饰条/高亮使用。</summary>
+    /// <summary>词条重要度(0-3,通用权重表兜底;供装饰条/高亮使用,有效判定见 EchoProp.EffectiveLevel)。</summary>
     public static int GetPropLevel(string attributeName, string? attributeValue)
     {
         if (string.IsNullOrWhiteSpace(attributeName))
@@ -95,12 +112,11 @@ public static class EchoRatingService
         return PropWeights.TryGetValue(name, out var w) ? w : 0;
     }
 
-    /// <summary>评级一个声骸。</summary>
-    public static EchoRating RateEcho(EchoInfo echo)
+    /// <summary>评级一个声骸(权重来源见类注释;priorityWeights = Wiki「声骸词条」解析结果,可为 null)。</summary>
+    public static EchoRating RateEcho(EchoInfo echo, IReadOnlyDictionary<string, double>? priorityWeights)
     {
         var subs = echo.SubProps ?? [];
-        int level3 = 0, level2 = 0, level1 = 0;
-        double subCount = 0.0;
+        double sum = 0.0;
         foreach (var sub in subs)
         {
             if (string.IsNullOrEmpty(sub.AttributeName))
@@ -109,54 +125,91 @@ public static class EchoRatingService
             }
             // 属性名规范化:攻击/生命/防御 且值含 % → 视为百分比词条
             var name = NormalizePropName(sub.AttributeName, sub.AttributeValue);
-            int level = PropWeights.TryGetValue(name, out var w) ? w : 0;
-            double value = ParseValue(sub.AttributeValue);
-            double max = PropMaxValue.TryGetValue(name, out var m) ? m : 0;
+            var max = PropMaxValue.TryGetValue(name, out var m) ? m : 0;
             if (max <= 0)
             {
                 continue;
             }
-            double percent = value / max;
-            if (level == 3)
+            var value = ParseValue(sub.AttributeValue);
+            // 权重来源(优先级从高到低):
+            // ① 攻略站 Wiki「声骸词条」优先级(每角色;联名/无攻略为 null)
+            // ② 官方 valid(getRoleDetail mainProps/subProps[],按角色区分):false = 0,true = 核心 2.0 / 其他 1.0
+            // ③ 通用权重表:3 → 2.0,2 → 1.0,1 → 0.5
+            double weight;
+            if (priorityWeights is { } pw)
             {
-                level3++;
-                subCount += percent;
+                weight = pw.TryGetValue(name, out var w) ? w : 0.3;
             }
-            else if (level == 2)
+            else if (sub.Valid is { } officialValid)
             {
-                level2++;
-                subCount += percent;
+                weight = TierToWeight(officialValid
+                    ? Math.Max(2, PropWeights.TryGetValue(name, out var t) ? t : 0)
+                    : 0);
             }
-            else if (level == 1)
+            else
             {
-                level1++;
-                subCount += percent;
+                weight = TierToWeight(PropWeights.TryGetValue(name, out var t) ? t : 0);
             }
+            if (weight <= 0)
+            {
+                continue;
+            }
+            sum += value / max * weight;
         }
-
-        var phantom = ScorePhantomStatus(level3, level2, level1);
-        var prop = ScorePropStatus(level3, level1, subCount);
+        // 归一:5 条全部为首位词条满 Roll = 理论满分(5 × 2.0;现实中全有效完美声骸约 75-85 分)
+        var score = sum / 10.0 * 100.0;
+        if (score > 100)
+        {
+            score = 100;
+        }
+        var status = ScoreToStatus(score);
         return new EchoRating
         {
-            PhantomStatus = phantom,
-            PropStatus = prop,
-            Score = ScoreValue(phantom) + ScoreValue(prop),
+            PhantomStatus = status,
+            PropStatus = status,
+            Score = Math.Round(score, 1),
         };
     }
 
-    /// <summary>评级角色的全部声骸,给出总分与养成达成度。</summary>
+    /// <summary>评分档 → 权重(wuwa.uk 权重域:核心 2.0 / 有效 1.0 / 低价值 0.5)。</summary>
+    private static double TierToWeight(int tier) => tier switch
+    {
+        >= 3 => 2.0,
+        2 => 1.0,
+        1 => 0.5,
+        _ => 0.0,
+    };
+
+    /// <summary>
+    /// 单件评分(0-100)→ 毕业等级。
+    /// <para>
+    /// 阈值:≥60 → <see cref="EchoRatingLevel.Ace"/>(完美毕业)、≥40 → <see cref="EchoRatingLevel.SSS"/>(毕业)、
+    /// ≥20 → <see cref="EchoRatingLevel.SS"/>(小毕业)、其余 → <see cref="EchoRatingLevel.S"/>(未毕业)。
+    /// 注意这里的字母是<b>阈值档</b>,与 <see cref="EchoRatingLevel"/> 的枚举名(SSS/SS/S)不是同一套命名,勿混用。
+    /// </para>
+    /// </summary>
+    private static EchoRatingLevel ScoreToStatus(double score)
+    {
+        if (score >= 60) return EchoRatingLevel.Ace;
+        if (score >= 40) return EchoRatingLevel.SSS;
+        if (score >= 20) return EchoRatingLevel.SS;
+        return EchoRatingLevel.S;
+    }
+
+    /// <summary>评级角色的全部声骸:总评分 = 5 件得分之和(0-500),等级按单件均分判定。</summary>
     public static RoleEchoRating RateRole(IEnumerable<EchoInfo> echoes)
     {
         var list = echoes.Where(e => e is not null).ToList();
-        var ratings = list.Select(RateEcho).ToList();
-        int total = ratings.Sum(r => r.Score);
-        const int max = 50; // 5 声骸 × (结构 5 + 数值 5)
-        var level = ScoreToStatus(total);
-        int percent = total * 100 / max;
+        var ratings = list.Select(e => RateEcho(e, e.PriorityWeights)).ToList();
+        var sum = ratings.Sum(r => r.Score);
+        var mean = ratings.Count > 0 ? sum / ratings.Count : 0.0;
+        const double max = 500.0;
+        var level = ScoreToStatus(mean);
+        int percent = (int)(mean);
         if (percent > 100) percent = 100;
         return new RoleEchoRating
         {
-            TotalScore = total,
+            TotalScore = Math.Round(sum, 1),
             MaxScore = max,
             Level = level,
             AchievementPercent = percent,
@@ -164,48 +217,7 @@ public static class EchoRatingService
         };
     }
 
-    // ---- 评分算法(对齐 WutheringWavesTool) ----
-
-    private static EchoRatingLevel ScorePhantomStatus(int level3, int level2, int level1)
-    {
-        int sum = level2 + level1;
-        if (level3 == 2 && sum == 3) return EchoRatingLevel.Ace;      // 2 三权 + 3 低权 = 完美
-        if (level3 == 2 && sum == 2) return EchoRatingLevel.SSS;
-        if (level3 == 2 && sum == 1 || level3 == 1 && sum == 3) return EchoRatingLevel.SS;
-        if (level3 == 2 || level3 == 1 && sum >= 2) return EchoRatingLevel.S;
-        return EchoRatingLevel.N;
-    }
-
-    private static EchoRatingLevel ScorePropStatus(int level3, int level1, double subCount)
-    {
-        if (level3 == 2 && subCount > 3.5) return EchoRatingLevel.Ace;
-        if (level3 == 2 && subCount > 2.8) return EchoRatingLevel.SSS;
-        if (level3 == 2 && subCount > 2.1 || level3 == 1 && subCount > 2.4) return EchoRatingLevel.SS;
-        if (level3 == 1 && subCount > 1.6 || level3 == 2 && subCount > 1.2) return EchoRatingLevel.S;
-        return EchoRatingLevel.N;
-    }
-
-    private static EchoRatingLevel ScoreToStatus(int score)
-    {
-        if (score == 50) return EchoRatingLevel.Ace;
-        if (score >= 35) return EchoRatingLevel.SSS;
-        if (score >= 25) return EchoRatingLevel.SS;
-        if (score >= 18) return EchoRatingLevel.S;
-        return EchoRatingLevel.N;
-    }
-
-    private static int ScoreValue(EchoRatingLevel level) => level switch
-    {
-        EchoRatingLevel.Ace => 5,
-        EchoRatingLevel.SSS => 4,
-        EchoRatingLevel.SS => 3,
-        EchoRatingLevel.S => 2,
-        _ => 1,
-    };
-
-    private static string LevelText(EchoRatingLevel level) => LevelTextOf(level);
-
-    /// <summary>评级 → 文本。</summary>
+    /// <summary>评级 → 文本(英文:ACE/SSS/SS/S/N;单条声骸徽章用)。</summary>
     public static string LevelTextOf(EchoRatingLevel level) => level switch
     {
         EchoRatingLevel.Ace => "ACE",
@@ -214,6 +226,23 @@ public static class EchoRatingService
         EchoRatingLevel.S => "S",
         EchoRatingLevel.N => "N",
         _ => "-",
+    };
+
+    /// <summary>
+    /// 评级 → 毕业等级文本(未毕业/小毕业/毕业/完美毕业;总评行用,用户定案)。
+    /// <para>
+    /// 经 <see cref="CoreStrings.T"/> 走本地化(应用层注册 Resolver 后按当前语言取值);
+    /// fallback 保持中文原文,使未初始化语言服务的单元测试仍得到稳定结果。
+    /// </para>
+    /// </summary>
+    public static string GraduationTextOf(EchoRatingLevel level) => level switch
+    {
+        EchoRatingLevel.Ace => CoreStrings.T("Roles.EchoGrade.Ace", "完美毕业"),
+        EchoRatingLevel.SSS => CoreStrings.T("Roles.EchoGrade.SSS", "毕业"),
+        EchoRatingLevel.SS => CoreStrings.T("Roles.EchoGrade.SS", "小毕业"),
+        EchoRatingLevel.S => CoreStrings.T("Roles.EchoGrade.S", "未毕业"),
+        EchoRatingLevel.N => CoreStrings.T("Roles.EchoGrade.S", "未毕业"),
+        _ => CoreStrings.T("Roles.EchoGrade.S", "未毕业"),
     };
 
     /// <summary>攻击/生命/防御 且值含 % 时视为百分比词条(对齐 WutheringWavesTool)。</summary>

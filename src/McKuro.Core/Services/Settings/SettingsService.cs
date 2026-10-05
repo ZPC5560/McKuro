@@ -124,6 +124,14 @@ public sealed class AppSettings
     /// <summary>当前账号 UserId。</summary>
     public string CurrentKuroUserId { get; set; } = "";
 
+    /// <summary>
+    /// 首页「今日数据」绑定的<b>本地启动器登录凭证</b>(对齐 Haiyu 的 LasterSelectLocalUser):
+    /// 空 = 自动(取本地凭证里第一个能拉通的角色);非空 = "库街区UID|游戏角色UID" 复合键,
+    /// 固定用该凭证的 oauthCode 走 PC 启动器 SDK 拉这个角色的数据。
+    /// 该角色已不在本地凭证里(登出/换绑)时自动回退「自动」模式。
+    /// </summary>
+    public string HomeBoundAccountId { get; set; } = "";
+
     /// <summary>稳定设备 ID(首次生成持久化,库街区 did 头需跨启动不变,否则触发极验风控)。</summary>
     public string StableDeviceId { get; set; } = "";
 

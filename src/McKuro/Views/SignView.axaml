@@ -7,6 +7,7 @@
              xmlns:controls="using:McKuro.Controls"
              xmlns:ic="using:FluentIcons.Avalonia"
              xmlns:loc="clr-namespace:McKuro.Services"
+             xmlns:conv="using:Avalonia.Data.Converters"
              mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="700"
              x:Class="McKuro.Views.SignView"
              x:DataType="vm:SignViewModel">
@@ -31,9 +32,12 @@
                 </StackPanel>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <!-- 账号信息(登录/切号/登出后经 RolesRefreshRequestedMessage 自动刷新) -->
+                <!-- 账号信息:显示「游戏角色昵称 · 游戏角色 UID」(与账号页/首页账号卡片、抽卡页 player_id 同口径)。
+                     多账号时逐个列出,限宽省略,完整内容见悬停提示 -->
                 <TextBlock Text="{Binding AccountText}" FontSize="13" FontWeight="Bold"
-                           VerticalAlignment="Center"
+                           VerticalAlignment="Center" MaxWidth="420"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding AccountTooltipText}"
                            IsVisible="{Binding IsLoggedIn}" />
                 <Button Content="{loc:Localize Key=Common.RefreshRoles}" Command="{Binding RefreshRolesCommand}"
                         FontSize="12" Padding="8,2"
@@ -193,6 +197,10 @@
                                         <Run Text="{Binding ServerName}" />
                                         <Run Text=" · Lv." /><Run Text="{Binding Level}" />
                                     </TextBlock>
+                                    <!-- 多账号时该角色属于哪个账号(游戏角色身份;单账号为空不显示) -->
+                                    <TextBlock Text="{Binding AccountLabel}" FontSize="11"
+                                               Foreground="{DynamicResource SemiColorText3}"
+                                               IsVisible="{Binding AccountLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                 </StackPanel>
                                 <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="13"
                                            Foreground="{DynamicResource SemiColorText2}"

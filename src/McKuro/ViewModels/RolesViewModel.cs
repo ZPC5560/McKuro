@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Threading;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -324,11 +325,57 @@ public sealed partial class RolesViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// 库街区实时技能等级索引(技能类型名 / 技能名 → 等级)。
+    /// <para>
+    /// 攻略接口 addPointTarget 自带 currentLevel,但它是<b>服务端快照</b>且被本地缓存 24h,
+    /// 玩家在游戏里点完技能后长期滞后 ⇒ "已达标仍提示提升"(用户反馈)。
+    /// 库街区 getRoleDetail 的 skillList.level 是权威实时值,故达标判定一律以它为准。
+    /// </para>
+    /// </summary>
+    private static Dictionary<string, int> BuildLiveSkillLevels(RoleDetail? role)
+    {
+        var map = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var s in role?.Skills ?? [])
+        {
+            if (s.Skill is not { } sk)
+            {
+                continue;
+            }
+            if (!string.IsNullOrWhiteSpace(sk.Type))
+            {
+                map[sk.Type] = s.SkillLevel;
+            }
+            if (!string.IsNullOrWhiteSpace(sk.SkillName))
+            {
+                map[sk.SkillName] = s.SkillLevel;
+            }
+        }
+        return map;
+    }
+
+    /// <summary>取攻略目标对应的库街区实时等级(按技能类型名,回退技能名);未匹配返回 null(回退攻略快照)。</summary>
+    private static int? LiveLevelOf(GuideSkillTarget? target, IReadOnlyDictionary<string, int> live)
+    {
+        if (target is null)
+        {
+            return null;
+        }
+        foreach (var key in new[] { target.TypeName, target.Name })
+        {
+            if (!string.IsNullOrWhiteSpace(key) && live.TryGetValue(key, out var level))
+            {
+                return level;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
     /// 按攻略数据刷新导航标识:
     /// 属性 / 技能 / 共鸣链 按"逐项达标比例"(全达标=完全,部分=部分);
     /// 武器 / 声骸 按攻略 isFinished(完全达标)/ 有推荐但未达标(部分)。
     /// </summary>
-    private void UpdateSectionStatuses(GuideIntroductionInfo? info)
+    private void UpdateSectionStatuses(RoleDetail? role, GuideIntroductionInfo? info)
     {
         ClearSectionStatuses();
         if (info is null)
@@ -344,10 +391,11 @@ public sealed partial class RolesViewModel : ViewModelBase
                 : attr.FinishedCount > 0 ? SectionStatus.Partial : SectionStatus.None);
         }
 
-        // 技能:逐项达标(addPointTarget 推荐等级)
+        // 技能:逐项达标(addPointTarget 推荐等级;当前等级取库街区实时值)
+        var liveLevels = BuildLiveSkillLevels(role);
         var targets = info.RoleSkill?.AddPointTarget ?? [];
-        var metCount = targets.Count(t => GuideAchievementService.IsSkillLevelMet(t) == true);
-        var judged = targets.Count(t => GuideAchievementService.IsSkillLevelMet(t) is not null);
+        var metCount = targets.Count(t => GuideAchievementService.IsSkillLevelMet(t, LiveLevelOf(t, liveLevels)) == true);
+        var judged = targets.Count(t => GuideAchievementService.IsSkillLevelMet(t, LiveLevelOf(t, liveLevels)) is not null);
         if (judged > 0)
         {
             SetStatus(2, metCount >= judged ? SectionStatus.Complete
@@ -640,6 +688,10 @@ public sealed partial class RolesViewModel : ViewModelBase
         // 技能卡/属性折叠随角色重置:技能卡先用本地已加载的详情立即构建(异步数据到达后再刷新)
         if (value is not null)
         {
+            // 声骸 Wiki 词条权重回填也要覆盖"纯缓存加载"的角色:
+            // 详情已完整时 LoadRoleDetailFromKujiequAsync 会直接返回(不合并 ⇒ 不触发回填),
+            // 那样评级只能退回官方 valid/通用权重,与攻略站口径不符。按角色名缓存,重复调用无额外开销。
+            QueueEchoWeightsLoad(value);
             BuildSkillCards(value, null);
             // 加点顺序节点也要立即清空:否则新角色攻略数据到达前,页面残留上一个角色的"加点顺序"
             SkillPriorityNodes.Clear();
@@ -1002,7 +1054,7 @@ public sealed partial class RolesViewModel : ViewModelBase
         BuildGuideRecommendations(role, info);
         BuildTeammates(info);
         // 导航项达成度标识(完全达标/部分达标)
-        UpdateSectionStatuses(info);
+        UpdateSectionStatuses(role, info);
 
         if (info is null)
         {
@@ -1077,8 +1129,10 @@ public sealed partial class RolesViewModel : ViewModelBase
         }
 
         // 加点建议(未达标项逐条「建议提升至 N 级」;结构化条目,技能名/等级单独着色):
-        // 本地化模板按 {0}/{1} 占位符拆三段,句子结构仍随语言走
+        // 本地化模板按 {0}/{1} 占位符拆三段,句子结构仍随语言走。
+        // 达标判定用库街区实时技能等级(攻略快照 currentLevel 会滞后 ⇒ 已点满仍报"建议提升")。
         SkillAdviceItems.Clear();
+        var liveLevels = BuildLiveSkillLevels(role);
         var adviceFmt = LanguageService.Get("Roles.Guide.SkillAdvice");
         var p0 = adviceFmt.IndexOf("{0}", StringComparison.Ordinal);
         var p1 = adviceFmt.IndexOf("{1}", StringComparison.Ordinal);
@@ -1089,7 +1143,8 @@ public sealed partial class RolesViewModel : ViewModelBase
         {
             var name = t.TypeName ?? t.Name ?? "";
             var rec = t.RecommendLevelValue;
-            if (rec > 0 && t.CurrentLevelValue < rec && !string.IsNullOrWhiteSpace(name))
+            var current = LiveLevelOf(t, liveLevels) ?? t.CurrentLevelValue;
+            if (rec > 0 && current < rec && !string.IsNullOrWhiteSpace(name))
             {
                 SkillAdviceItems.Add(new SkillAdviceEntry
                 {
@@ -1200,7 +1255,9 @@ public sealed partial class RolesViewModel : ViewModelBase
             // 类型名对不上时按技能名兜底匹配
             target ??= (targets ?? []).FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.Ordinal));
 
-            var met = target is null ? null : GuideAchievementService.IsSkillLevelMet(target);
+            // 本技能当前等级就是库街区实时值;达标判定与 "当前/推荐" 文本都以它为准
+            // (攻略快照会滞后,否则徽章数字与旁边的提升建议自相矛盾)。
+            var met = target is null ? null : GuideAchievementService.IsSkillLevelMet(target, skill.SkillLevel);
             var item = new SkillCardItem
             {
                 Name = string.IsNullOrWhiteSpace(name) ? typeName : name,
@@ -1513,6 +1570,39 @@ public sealed partial class RolesViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// 角色详情合并后异步回填 Wiki「声骸词条」权重(每角色;联名角色/无攻略回退官方 valid/通用权重)。
+    /// <para>fire-and-forget:结果按角色名缓存,回填走 UI 线程(INPC 通知刷新评级徽章)。</para>
+    /// </summary>
+    private static void QueueEchoWeightsLoad(RoleDetail? role)
+    {
+        if (role?.PhantomData?.Phantoms is not { Count: > 0 } phantoms)
+        {
+            return;
+        }
+        var roleName = role.Role?.RoleName;
+        if (string.IsNullOrWhiteSpace(roleName))
+        {
+            return;
+        }
+        _ = Task.Run(async () =>
+        {
+            var weights = await WikiGuideService.GetPriorityWeightsAsync(roleName);
+            if (weights is null)
+            {
+                return;
+            }
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                foreach (var echo in phantoms)
+                {
+                    echo.PriorityWeights = weights;
+                }
+                role.RefreshEchoRating();
+            });
+        });
+    }
+
     /// <summary>把库街区 getRoleDetail 结果合并进选中角色(权威数据:整体替换详情区块,保留列表基础信息)。</summary>
     private static void MergeKujiequDetail(RoleDetail target, RoleDetail source)
     {
@@ -1525,6 +1615,7 @@ public sealed partial class RolesViewModel : ViewModelBase
         target.Skills = source.Skills;
         target.Attributes = source.Attributes;
         target.PhantomData = source.PhantomData;
+        QueueEchoWeightsLoad(target);
         target.Chains = source.Chains;
         target.NotifyDetailChanged();
     }
@@ -1664,6 +1755,7 @@ public sealed partial class RolesViewModel : ViewModelBase
             target.Attributes = source.Attributes;
         }
         target.PhantomData ??= source.PhantomData;
+        QueueEchoWeightsLoad(target);
         if (target.Chains is not { Count: > 0 })
         {
             target.Chains = source.Chains;
@@ -2639,18 +2731,15 @@ public sealed class StarThumbBrushConverter : Avalonia.Data.Converters.IValueCon
 }
 
 /// <summary>
-/// 词条装饰条色:有效词条按权重分两档着色,<b>无效词条一律灰色</b>。
+/// 词条装饰条色(档位由 <see cref="McKuro.Core.Models.Roles.EchoProp.EffectiveLevel"/> 决定):
 /// <para>
-/// 档位含义(通用权重表,见 <see cref="McKuro.Core.Services.Roles.EchoRatingService"/>):
-/// level3 = 暴击/暴击伤害/攻击% 等核心词条(金);
-/// level2 = 攻击/生命%/共鸣效率/各类伤害加成 等有效词条(青);
-/// level1 = 防御/生命/防御% 等低价值词条 → <b>灰(无效)</b>;
-/// level0 = 未收录词条 → 灰(无效)。
+/// level3 = 暴击/暴击伤害/攻击% 等核心词条(亮色);level2 = <b>官方 valid 判定有效</b>的
+/// 其他词条(青;如普攻/重击/共鸣技能/共鸣解放/谐度破坏伤害加成、共鸣效率 —— 按角色区分,
+/// 来源 getRoleDetail subProps[].valid);level1/0 = 官方无效或无官方数据时的非核心词条 → 灰。
 /// </para>
 /// <para>
-/// <b>2026-10 调整(用户反馈)</b>:有效词条只有 level3(暴击/暴击伤害/攻击百分比),
-/// 颜色改为更鲜艳的高饱和亮色;level2/level1/level0 一律灰(此前 level2 用青色,
-/// 使「共鸣效率/伤害加成」看起来和核心词条一样有效,用户要求"其他都算无效"。
+/// 演进:2026-10 曾按用户反馈把 level2 降灰(当时只有通用权重表,无法按角色区分"是否有效");
+/// 后实测 getRoleDetail 自带按角色的 valid 字段,恢复青档表达"官方认可的有效词条"。
 /// </para>
 /// </summary>
 public sealed class PropLevelBrushConverter : Avalonia.Data.Converters.IValueConverter
@@ -2662,9 +2751,11 @@ public sealed class PropLevelBrushConverter : Avalonia.Data.Converters.IValueCon
         bool dark = ThemeHelper.IsDarkTheme();
         return value switch
         {
-            // 有效词条(核心):更鲜艳的亮色(暗色主题亮黄,浅色主题高饱和琥珀)
+            // 核心有效词条:更鲜艳的亮色(暗色主题亮黄,浅色主题高饱和琥珀)
             3 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#FFE81A" : "#E08A00")),
-            // 其余(level2/1/0)统一灰 = 无效词条
+            // 官方 valid 判定有效的其他词条:青
+            2 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#4DD0E1" : "#0097A7")),
+            // 官方无效 / 无官方数据时的非核心词条:灰
             _ => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#666666" : "#B0B0B0")),
         };
     }
@@ -2675,7 +2766,7 @@ public sealed class PropLevelBrushConverter : Avalonia.Data.Converters.IValueCon
 
 /// <summary>
 /// 词条文字色:与 <see cref="PropLevelBrushConverter"/> 同档
-/// (仅 level3 = 有效鲜艳色;level2/1/0 一律灰 —— 无效词条必须一眼可辨)。
+/// (level3 亮色核心 / level2 青色官方有效 / 其余灰 —— 无效词条必须一眼可辨)。
 /// </summary>
 public sealed class PropTextBrushConverter : Avalonia.Data.Converters.IValueConverter
 {
@@ -2686,8 +2777,8 @@ public sealed class PropTextBrushConverter : Avalonia.Data.Converters.IValueConv
         bool dark = ThemeHelper.IsDarkTheme();
         return value switch
         {
-            // 与 PropLevelBrushConverter 完全同色(避免"条一个色、字另一个色")
             3 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#FFE81A" : "#E08A00")),
+            2 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#4DD0E1" : "#0097A7")),
             _ => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#8A8A8A" : "#9A9A9A")),
         };
     }
@@ -2706,10 +2797,13 @@ public sealed class EchoRatingLevelBrushConverter : Avalonia.Data.Converters.IVa
         bool dark = ThemeHelper.IsDarkTheme();
         return (value as EchoRatingLevel?) switch
         {
+            // 完美毕业:红;毕业:黄;小毕业:紫;未毕业:灰(与评级的四档术语对应)
             EchoRatingLevel.Ace => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#e33737")),
-            EchoRatingLevel.SSS or EchoRatingLevel.SS =>
+            EchoRatingLevel.SSS =>
                 new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#ffec16" : "#a88400")),
-            EchoRatingLevel.S => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#9300e8" : "#6a00a8")),
+            EchoRatingLevel.SS => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#c77dff" : "#7e22ce")),
+            EchoRatingLevel.S or EchoRatingLevel.N =>
+                new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#9a9a9a" : "#8a8a8a")),
             _ => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#9a9a9a" : "#8a8a8a")),
         };
     }

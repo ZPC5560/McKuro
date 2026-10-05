@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Core.Models.Kuro;
 using McKuro.Core.Services.Kuro;
 using McKuro.Core.Services.Settings;
+using McKuro.Core.Services.User;
 using McKuro.Services;
 
 namespace McKuro.ViewModels;
@@ -111,12 +112,7 @@ public sealed partial class SignViewModel : ViewModelBase
     {
         var accounts = AppServices.KuroAccounts.GetAccounts();
         IsLoggedIn = accounts.Count > 0;
-        AccountText = accounts.Count switch
-        {
-            0 => LanguageService.Format("Sign.NotLoggedIn"),
-            1 => DescribeAccount(accounts[0]),
-            _ => LanguageService.Format("Sign.AccountsCount", accounts.Count),
-        };
+        AccountText = BuildAccountText(accounts);
         if (accounts.Count > 0)
         {
             // 异步校验各账号 token 并拉取全部角色(失效账号自动移除并提示)
@@ -124,8 +120,73 @@ public sealed partial class SignViewModel : ViewModelBase
         }
     }
 
-    private static string DescribeAccount(KuroAccount account) =>
-        $"{(string.IsNullOrEmpty(account.Nickname) ? LanguageService.Format("Sign.KuroUser") : account.Nickname)} (ID: {account.UserId})";
+    /// <summary>
+    /// 标题栏「当前账号」文案:一律用<b>游戏角色昵称 + 游戏角色 UID</b>
+    /// (与账号页三张卡片、首页账号卡片、抽卡页 player_id 同口径)。
+    /// 多账号时逐个列出并以「 / 」连接(视图侧限宽省略,完整内容在悬停提示里)。
+    /// </summary>
+    private string BuildAccountText(IReadOnlyList<KuroAccount> accounts)
+        => accounts.Count == 0
+            ? LanguageService.Format("Sign.NotLoggedIn")
+            : LocalGameAccountLabel.Join(accounts.Select(DescribeAccount));
+
+    /// <summary>标题栏账号文案的悬停提示(多账号时逐个一行,避免限宽省略后看不全)。</summary>
+    public string AccountTooltipText
+        => LocalGameAccountLabel.Join(
+            AppServices.KuroAccounts.GetAccounts().Select(DescribeAccount),
+            Environment.NewLine);
+
+    // ---- 账号 → 游戏角色显示口径(与账号页三张卡片、首页账号卡片、抽卡页 player_id 同源) ----
+    private List<LocalLauncherPlayer> _localPlayers = [];
+    private bool _localPlayersLoaded;
+
+    /// <summary>
+    /// 枚举本地官方启动器凭证对应的游戏角色(带短缓存;账号页与首页共用同一份)。
+    /// 失败/未装启动器时保持接口账号文案,不显示半截信息。
+    /// </summary>
+    private async Task EnsureLocalPlayersAsync()
+    {
+        if (_localPlayersLoaded)
+        {
+            return;
+        }
+        try
+        {
+            _localPlayers = await AppServices.LocalDaily.GetLocalPlayersCachedAsync().ConfigureAwait(true);
+            _localPlayersLoaded = _localPlayers.Count > 0;
+        }
+        catch (Exception)
+        {
+            _localPlayersLoaded = false;
+        }
+    }
+
+    /// <summary>
+    /// 描述一个库街区账号:能匹配到本地游戏角色时显示「游戏昵称 · 游戏角色 UID」
+    /// (与账号页/首页/抽卡页同一口径),否则回退库街区账号名 + 库街区 UID。
+    /// </summary>
+    private string DescribeAccount(KuroAccount account)
+    {
+        var gameRole = _localPlayersLoaded
+            ? LocalGameAccountLabel.Match(_localPlayers, account.Mobile, userName: null, kuroUid: account.UserId)
+            : null;
+        if (gameRole is not null && LocalGameAccountLabel.Format(gameRole.RoleName, gameRole.RoleId) is { Length: > 0 } text)
+        {
+            return text;
+        }
+        return $"{(string.IsNullOrEmpty(account.Nickname) ? LanguageService.Format("Sign.KuroUser") : account.Nickname)} (ID: {account.UserId})";
+    }
+
+    /// <summary>多账号时用于区分同名角色的账号标签(同样优先显示游戏角色身份)。</summary>
+    private string AccountRoleLabel(KuroAccount account)
+    {
+        var gameRole = _localPlayersLoaded
+            ? LocalGameAccountLabel.Match(_localPlayers, account.Mobile, userName: null, kuroUid: account.UserId)
+            : null;
+        return gameRole is not null
+            ? LocalGameAccountLabel.Format(gameRole.RoleName, gameRole.RoleId)
+            : (string.IsNullOrEmpty(account.Nickname) ? $"ID {account.UserId}" : account.Nickname);
+    }
 
     /// <summary>遍历全部已保存账号:拉取角色、失效账号自动移除、汇总签到状态。</summary>
     private async Task RefreshAllAccountsAsync(IReadOnlyList<KuroAccount> accounts)
@@ -137,17 +198,25 @@ public sealed partial class SignViewModel : ViewModelBase
         }
         _refreshingRoles = true;
         IsBusy = true;
-        Roles.Clear();
-        var removed = new List<string>();
-        var seenRoleIds = new HashSet<string>();
+        // 整个方法体(含 try 之前的准备步骤)都必须包在 try 内:此前 _refreshingRoles/IsBusy
+        // 在 try 之外置位、只在 finally 复位,准备阶段一旦抛异常(枚举本地角色/取账号/清列表)
+        // 就会永久卡住 —— 之后每次刷新都在上面那个重入判断处直接 return,角色列表再也不刷新,
+        // 且 IsBusy 常真会让按钮一直处于禁用态(IsEnabled="{Binding !IsBusy}")。
         try
         {
+            // 本地角色先于列表枚举:列表里的账号标签要用游戏昵称 · 游戏角色 UID
+            await EnsureLocalPlayersAsync();
+            // 本地枚举晚于构造时,AccountText 需按其结果重算(接口账号 → 游戏角色身份)
+            var refreshedAccounts = AppServices.KuroAccounts.GetAccounts();
+            AccountText = BuildAccountText(refreshedAccounts);
+            OnPropertyChanged(nameof(AccountTooltipText));
+            Roles.Clear();
+            var removed = new List<string>();
+            var seenRoleIds = new HashSet<string>();
             foreach (var account in accounts)
             {
-                // 单账号标签:不显示(底部行已有账号语义);多账号:用昵称/ID 区分同名角色
-                var label = accounts.Count > 1
-                    ? (string.IsNullOrEmpty(account.Nickname) ? $"ID {account.UserId}" : account.Nickname)
-                    : "";
+                // 单账号标签:不显示(底部行已有账号语义);多账号:用游戏角色身份/账号名区分同名角色
+                var label = accounts.Count > 1 ? AccountRoleLabel(account) : "";
                 try
                 {
                     var resp = await AppServices.Kuro.GetGamerAsync(account, (int)KuroGameType.Waves);

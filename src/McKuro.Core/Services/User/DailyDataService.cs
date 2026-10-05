@@ -33,8 +33,14 @@ public sealed class DailyDataService
 
     /// <summary>拉取当前账号角色每日数据;返回 null 表示失败。</summary>
     public async Task<RoleDailyData?> GetDailyDataAsync(CancellationToken ct = default)
+        => await GetDailyDataAsync(_accounts.Current, ct).ConfigureAwait(false);
+
+    /// <summary>
+    /// 拉取指定库街区账号的角色每日数据(首页「绑定账号」可指向非当前登录账号;
+    /// account 为 null 直接返回 null 表示失败/未登录)。
+    /// </summary>
+    public async Task<RoleDailyData?> GetDailyDataAsync(KuroAccount? account, CancellationToken ct = default)
     {
-        var account = _accounts.Current;
         if (account is null)
         {
             return null;
