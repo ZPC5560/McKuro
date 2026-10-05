@@ -121,7 +121,7 @@ McKuro/
 │   ├── Services/                   # Update (self-update) / Launcher / Notification / Redeem / Settings and the rest
 │   └── Infrastructure/             # SQLite (Microsoft.Data.Sqlite)
 ├── src/ThirdParty/Sparkle.Live2DView/  # vendored Live2D rendering control (MIT)
-└── tests/McKuro.Tests/             # xUnit unit tests (902 cases)
+└── tests/McKuro.Tests/             # xUnit unit tests (923 cases)
 ```
 
 ## Usage Guide
@@ -176,7 +176,7 @@ Release tags (`v*`) trigger GitHub Actions to build Native AOT binaries for all 
 For unpacked assets run `chmod +x McKuro` first. To compile the installer locally (requires Inno Setup 6):
 
 ```bash
-ISCC.exe installer\setup.iss /DMyAppVersion=1.3.3
+ISCC.exe installer\setup.iss /DMyAppVersion=1.3.3.1
 ```
 
 ## Self-Update
@@ -184,14 +184,14 @@ ISCC.exe installer\setup.iss /DMyAppVersion=1.3.3
 Settings checks GitHub Releases (default repository `ZPC5560/McKuro`); the update pipeline follows [Haiyu](https://github.com/HaiyuGame/Haiyu)'s design:
 
 - **Check fallback**: GitHub API → GitHub HTML degradation — updates still work when the anonymous API quota is exhausted or `api.github.com` is unreachable; Release results are cached for 5 minutes (auto + manual checks don't double-spend the quota).
-- **Download**: resumable (`.part` + Range, auto-retry on stalls); when the publisher provides a digest (Release body or a `<asset>.sha256` asset), **sha256 integrity verification** runs after download and mismatches trigger a discard-and-redownload; without a digest the update is not blocked, and Settings honestly reports whether verification was active.
+- **Download**: resumable (`.part` + Range, auto-retry on stalls); when a digest is available (the sha256 GitHub computes for every release asset — the text you can copy on the release page; the release body also works), **sha256 integrity verification** runs after download and mismatches trigger a discard-and-redownload; without a digest the update is not blocked, and Settings honestly reports whether verification was active.
 - **Optional acceleration**: download acceleration template (supports the `{downloadUrl}` placeholder, e.g. `https://gh-proxy.example/{downloadUrl}`); GitHub IP SNI-fronting (off by default, effective immediately, bypasses DNS pollution via a built-in IP table, each IP times out independently after 5 s before the next is tried).
 - **Install**: the zip green pack is preferred (unzip in place, then restart); the exe installer runs silently (`/VERYSILENT` + `/DIR` pinned to the current directory, `/CURRENTUSER` without UAC when the directory is writable, a watcher script relaunches the new version), zero wizards throughout.
 - **Auto-check**: a silent check runs 5 s after launch (on by default); a new version can auto-download, install and restart (zero clicks, off by default) or ask via dialog (update now / later / skip this version). Double-clicking setup.exe manually locates an existing install (the app self-registers `HKCU\Software\McKuro\InstallPath`, covering zip portable installs without uninstall registry entries).
 
 ## Testing & CI
 
-- `tests/McKuro.Tests`: **768 xUnit unit tests** (log decryption, gacha analysis, banner statistics, update pipeline, notifications, i18n, and more).
+- `tests/McKuro.Tests`: **923 xUnit unit tests** (log decryption, gacha analysis, banner statistics, update pipeline, notifications, i18n, and more).
 - `build-and-test.yml`: build + test on Linux for every push/PR; release tags or manual dispatch run the full-platform AOT publishes and attach Release assets.
 - `website.yml`: rebuilds and deploys the website whenever `website/` or `website-src/` changes, failing on any drift between built output and committed artifacts.
 

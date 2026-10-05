@@ -72,6 +72,23 @@ public static partial class UpdateChecksum
         return hashes.Count == 1 ? hashes[0] : null;
     }
 
+    /// <summary>
+    /// 解析 GitHub 资产自带的摘要串(<c>sha256:&lt;64hex&gt;</c>,GitHub API 的 <c>assets[].digest</c>
+    /// 与 Release 页资产行的 <c>sha256:…</c> 文本同一形态)。
+    /// <para>
+    /// 非 sha256 算法(如 GitHub 后续引入其他算法)返回 null,交由调用方视为"无摘要"跳过校验。
+    /// </para>
+    /// </summary>
+    public static string? ParseDigest(string? digest)
+    {
+        if (string.IsNullOrWhiteSpace(digest))
+        {
+            return null;
+        }
+        var m = DigestPattern().Match(digest);
+        return m.Success ? m.Groups["hash"].Value.ToLowerInvariant() : null;
+    }
+
     /// <summary>计算文件 sha256(小写 hex);失败返回 null。</summary>
     public static async Task<string?> ComputeSha256Async(string path, CancellationToken ct = default)
     {
@@ -109,4 +126,11 @@ public static partial class UpdateChecksum
     [GeneratedRegex(
         @"(?<name>[^\s:=][^\r\n:=]*?)\s*[:=]\s*(?<hash>\b[0-9a-fA-F]{64}\b)")]
     private static partial Regex NameThenHash();
+
+    // GitHub 资产摘要:"sha256:<64hex>"(API assets[].digest 与 Release 页同一形态)。
+    // 用 \b 锁前缀避免误匹配 "md5:…"/"sha512:…" 中的 64 位片段。
+    [GeneratedRegex(
+        @"(?:^|\b)sha256\s*:\s*(?<hash>[0-9a-fA-F]{64})\b",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex DigestPattern();
 }

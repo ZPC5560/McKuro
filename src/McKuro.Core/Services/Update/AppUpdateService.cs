@@ -49,6 +49,11 @@ public sealed class AppUpdateService
     /// 用户手动点击在短时间内重复打满匿名 API 配额(60 次/小时/IP)。</summary>
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
 
+    /// <summary>releases/expanded_assets 片段里的单个资产行(每行含资产名与其 sha256 摘要)。</summary>
+    private static readonly Regex HtmlAssetRow = new(
+        @"<li[^>]*class=""[^""]*Box-row[^""]*""[\s\S]*?</li>",
+        RegexOptions.IgnoreCase);
+
     private readonly SemaphoreSlim _cacheGate = new(1, 1);
     private AppUpdateInfo? _cached;
     private DateTime _cachedAt;
@@ -61,6 +66,38 @@ public sealed class AppUpdateService
     /// <summary>版本比较:当前版本低于远程版本(需更新);复用 GameUpdater 的数值比较语义。</summary>
     public static bool IsNewer(string currentVersion, string remoteVersion) =>
         McKuro.Core.Services.Game.GameUpdater.IsVersionOlder(currentVersion, remoteVersion);
+
+    /// <summary>
+    /// 把程序集版本渲染成展示与比较共用的字符串:保留全部有效段,只去掉第四段起的尾随 0
+    /// (<c>1.3.3.0</c> → <c>"1.3.3"</c> 保持既有展示形态;<c>1.3.3.1</c> → <c>"1.3.3.1"</c> 不得截断)。
+    /// <para>
+    /// <b>四段版本号必须完整保留</b>:此前两处调用点都写 <c>Version.ToString(3)</c>,
+    /// 四段版本(如 1.3.3.1)会被截断成 <c>"1.3.3"</c> —— 于是<b>已经装上新版的用户仍判定"有新版本"</b>,
+    /// 更新提示永远消不掉(每次检查都提示更新到 1.3.3.1)。见 <see cref="IsNewer"/> 的缺段按 0 语义。
+    /// </para>
+    /// </summary>
+    public static string FormatVersion(Version? version)
+    {
+        if (version is null)
+        {
+            return "1.0.0";
+        }
+        var parts = new List<int> { version.Major, version.Minor };
+        if (version.Build >= 0)
+        {
+            parts.Add(version.Build);
+        }
+        if (version.Revision >= 0)
+        {
+            parts.Add(version.Revision);
+        }
+        // 只裁掉第三段之后的尾随 0:1.3.3.0 → 1.3.3,而 1.3.3.1 原样保留
+        while (parts.Count > 3 && parts[^1] == 0)
+        {
+            parts.RemoveAt(parts.Count - 1);
+        }
+        return string.Join('.', parts);
+    }
 
     /// <summary>检查指定 GitHub 仓库(owner/repo)的最新 Release:API 优先,失败回退 HTML 通道。
     /// 结果缓存 5 分钟(<paramref name="forceRefresh"/> 为真时绕过缓存,供用户手动点「检查更新」)。</summary>
@@ -196,6 +233,7 @@ public sealed class AppUpdateService
                 AssetSize = asset.Size ?? 0,
                 DownloadUrl = asset.BrowserDownloadUrl!,
                 Sha256 = UpdateChecksum.ParseSha256(release.Body, asset.Name!)
+                         ?? UpdateChecksum.ParseDigest(asset.Digest)
                          ?? await FetchAssetSha256Async(release, asset.Name!, http, ct).ConfigureAwait(false),
                 ReleaseUrl = string.IsNullOrWhiteSpace(release.HtmlUrl) ? null : release.HtmlUrl,
             };
@@ -228,6 +266,37 @@ public sealed class AppUpdateService
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// 从 releases/expanded_assets 片段中取指定资产的 GitHub 摘要行文本
+    /// (<c>sha256:&lt;hex&gt;</c>,即 Release 页资产行「可复制」的那个值)。
+    /// <para>
+    /// 每个资产是独立的 <c>&lt;li class="Box-row"&gt;</c>,因此按行切分后在<b>同一行内</b>
+    /// 同时找资产名与摘要 —— 避免把别的资产的摘要用到本资产上(错配会误判校验失败并反复重下)。
+    /// 找不到返回 null(视为无摘要,不阻断更新)。
+    /// </para>
+    /// </summary>
+    private static string? ParseHtmlAssetDigest(string fragment, string repo, string assetName)
+    {
+        // 下载链接形如 href="/owner/repo/releases/download/<tag>/<asset>"
+        var hrefFragment = $"/{repo}/releases/download/";
+        foreach (Match row in HtmlAssetRow.Matches(fragment))
+        {
+            var html = row.Value;
+            if (html.IndexOf(hrefFragment, StringComparison.OrdinalIgnoreCase) < 0
+                || html.IndexOf(Uri.EscapeDataString(assetName), StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                continue;
+            }
+            var digest = UpdateChecksum.ParseDigest(
+                Regex.Match(html, @"sha256\s*:\s*[0-9a-fA-F]{64}").Value);
+            if (digest is not null)
+            {
+                return digest;
+            }
+        }
+        return null;
     }
 
     /// <summary>
@@ -272,8 +341,9 @@ public sealed class AppUpdateService
                 AssetName = asset,
                 AssetSize = 0,
                 DownloadUrl = $"https://github.com/{trimmed}/releases/download/{tag}/{Uri.EscapeDataString(asset)}",
-                // 该通道不含 Release 正文,摘要留给下载后的 *.sha256 见证/用户自校验
-                Sha256 = null,
+                // 该通道不含 Release 正文,但资产行自带 GitHub 计算的 sha256 摘要文本
+                // ("sha256:<hex>",与 Release 页上可复制的值同源),据此校验下载包。
+                Sha256 = ParseHtmlAssetDigest(fragment, trimmed, asset),
                 ReleaseUrl = $"https://github.com/{trimmed}/releases/tag/{tag}",
             };
         }
@@ -482,6 +552,17 @@ public sealed class GitHubAsset
 
     [JsonPropertyName("browser_download_url")]
     public string? BrowserDownloadUrl { get; set; }
+
+    /// <summary>
+    /// GitHub 自动计算的资产摘要(<c>sha256:&lt;64hex&gt;</c>)。
+    /// <para>
+    /// 自 v1.3.3.1 起不再上传 <c>*.sha256</c> 摘要资产,改由本字段提供校验值
+    /// (Release 页面上可复制的 sha256 文本即此字段)。旧资产无该字段时为 null,
+    /// 此时回退 <c>*.sha256</c> 资产解析,保证 v1.3.3 及更早版本仍可校验。
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("digest")]
+    public string? Digest { get; set; }
 }
 
 [JsonSerializable(typeof(GitHubRelease))]

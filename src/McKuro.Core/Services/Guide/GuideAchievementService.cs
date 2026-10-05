@@ -313,6 +313,35 @@ public sealed partial class GuideAchievementService
     };
 
     /// <summary>
+    /// 按名称归一化匹配「当前佩戴武器」在攻略推荐列表中的条目(未命中返回 null)。
+    /// <para>
+    /// 名称归一化复用 <see cref="NormalizeName"/>(去空格/间隔符/冒号 + 剥「梦魇」前缀),
+    /// 与声骸推荐判定同口径:此前武器这里只做 <c>Replace(" ", "")</c>,
+    /// 攻略写「源能臂铠·测肆」而库街区返回「源能臂铠测肆」时会静默判成「有差距」。
+    /// </para>
+    /// <para>
+    /// <paramref name="equippedWeaponName"/> 为空(库街区详情未到/极验风控兜底)时返回 null,
+    /// 调用方据此区分「确认不匹配」与「暂时无从判定」——不得把后者渲染成「有差距」。
+    /// </para>
+    /// </summary>
+    public static GuideWeaponItem? MatchEquippedWeapon(string? equippedWeaponName, IReadOnlyList<GuideWeaponItem>? guideWeapons)
+    {
+        if (string.IsNullOrWhiteSpace(equippedWeaponName) || guideWeapons is not { Count: > 0 })
+        {
+            return null;
+        }
+        var norm = NormalizeName(equippedWeaponName);
+        foreach (var w in guideWeapons)
+        {
+            if (!string.IsNullOrWhiteSpace(w.Name) && NormalizeName(w.Name) == norm)
+            {
+                return w;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
     /// 首位声骸是否为攻略推荐声骸:与推荐配装(echo.main/spare/current)的首件名称一致(归一化比较)。
     /// mcguide 推荐配装的首件即官方推荐主声骸(如椿=无常凶鹭)。
     /// </summary>

@@ -305,6 +305,33 @@ public class GuideRoleDetailMappingTests
     }
 
     [Fact]
+    public void MatchEquippedWeapon_Normalizes_Separators_And_Null_When_Unknown()
+    {
+        // 实测 1303 渊武:库街区返回「源能臂铠·测肆」,攻略同样含间隔号 → 必须命中
+        var items = new List<GuideWeaponItem>
+        {
+            new() { Status = 1, Texts = [Zh("源能臂铠·测肆")] },
+            new() { Status = 2, Texts = [Zh("诸方玄枢")] },
+        };
+        Assert.NotNull(GuideAchievementService.MatchEquippedWeapon("源能臂铠·测肆", items));
+        Assert.NotNull(GuideAchievementService.MatchEquippedWeapon("源能臂铠测肆", items));   // 间隔号差异
+        Assert.NotNull(GuideAchievementService.MatchEquippedWeapon(" 源能臂铠 · 测肆 ", items)); // 空白差异
+        Assert.Equal(2, GuideAchievementService.MatchEquippedWeapon("诸方玄枢", items)!.Status);
+
+        // ★ 竞态核心:武器名未知(库街区详情未到)必须返回 null,调用方据此保持中性,
+        //   不得把它当成"确认不匹配"渲染成「有差距」。
+        Assert.Null(GuideAchievementService.MatchEquippedWeapon(null, items));
+        Assert.Null(GuideAchievementService.MatchEquippedWeapon("", items));
+        Assert.Null(GuideAchievementService.MatchEquippedWeapon("   ", items));
+
+        // 详情已到但确实不在列表里 → null,由调用方判定「有差距」
+        Assert.Null(GuideAchievementService.MatchEquippedWeapon("纹秋", items));
+        // 无推荐列表 → null
+        Assert.Null(GuideAchievementService.MatchEquippedWeapon("源能臂铠·测肆", []));
+        Assert.Null(GuideAchievementService.MatchEquippedWeapon("源能臂铠·测肆", null));
+    }
+
+    [Fact]
     public void PhantomRecommendation_Matches_Main_Spare_Current()
     {
         var echo = new GuideEcho

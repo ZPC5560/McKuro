@@ -121,7 +121,7 @@ McKuro/
 │   ├── Services/                   # Update(自更新) / Launcher / Notification / Redeem / Settings 等其余服务
 │   └── Infrastructure/             # SQLite (Microsoft.Data.Sqlite)
 ├── src/ThirdParty/Sparkle.Live2DView/  # vendored Live2D 渲染控件 (MIT)
-└── tests/McKuro.Tests/             # xUnit 单元测试 (902 个用例)
+└── tests/McKuro.Tests/             # xUnit 单元测试 (923 个用例)
 ```
 
 ## 使用说明
@@ -176,7 +176,7 @@ macOS/Linux 暂不支持(渲染控件当前仅面向 Windows x64),设置页相�
 解压类资产 `chmod +x McKuro` 后运行。本地编译安装包(需安装 Inno Setup 6):
 
 ```bash
-ISCC.exe installer\setup.iss /DMyAppVersion=1.3.3
+ISCC.exe installer\setup.iss /DMyAppVersion=1.3.3.1
 ```
 
 ## 应用自更新
@@ -184,14 +184,14 @@ ISCC.exe installer\setup.iss /DMyAppVersion=1.3.3
 设置页检查 GitHub Release(默认仓库 `ZPC5560/McKuro`),更新链路参考 [Haiyu](https://github.com/HaiyuGame/Haiyu) 的实现:
 
 - **检查回退**:GitHub API → GitHub HTML 双通道依次降级,匿名配额耗尽或 `api.github.com` 不可达时仍能更新;Releases 结果缓存 5 分钟(启动自动检查与手动点击不重复打满配额)。
-- **下载**:断点续传(`.part` + Range,卡死自动重试);发布方提供摘要(Release 正文或 `<资产名>.sha256` 资产)时进行 **sha256 完整性校验**,不符自动丢弃重下;未提供摘要时不阻断更新,设置页如实标注当前是否带校验。
+- **下载**:断点续传(`.part` + Range,卡死自动重试);提供摘要(GitHub 自动为资产计算的 sha256,即发布页上可复制的摘要文本;兼容 Release 正文)时进行 **sha256 完整性校验**,不符自动丢弃重下;未提供摘要时不阻断更新,设置页如实标注当前是否带校验。
 - **可选加速**:下载加速模板(含 `{downloadUrl}` 占位符,如 `https://gh-proxy.example/{downloadUrl}`);GitHub IP 域前置(默认关,开关即生效,绕过 DNS 污染直连内置 IP 表,单个 IP 独立 5 秒超时后自动换下一个)。
 - **安装**:优先下载 zip 绿色包(解压替换安装目录并重启);exe 安装包走静默更新(`/VERYSILENT` + `/DIR` 锁定当前目录,目录可写时 `/CURRENTUSER` 免 UAC,装完由监视脚本自动拉起新版),全程零向导。
 - **自动检查**:启动后延迟 5 秒静默检查(默认开);发现新版可自动下载安装并重启(零点击,默认关)或弹窗询问(立即更新/稍后/跳过此版本);支持跳过指定版本。手动双击 setup.exe 时自动定位既有安装目录(应用启动自注册 `HKCU\Software\McKuro\InstallPath`,覆盖无卸载注册表项的 zip 便携版)。
 
 ## 测试与 CI
 
-- `tests/McKuro.Tests`:xUnit 单元测试 **902 个用例**(覆盖日志解密、抽卡分析、卡池统计、更新链路、通知、多语言等)。
+- `tests/McKuro.Tests`:xUnit 单元测试 **923 个用例**(覆盖日志解密、抽卡分析、卡池统计、更新链路、通知、多语言等)。
 - `build-and-test.yml`:push/PR 在 Linux 构建 + 测试;发布 tag 或手动触发时进行全平台 AOT 构建并附加 Release 资产。
 - `website.yml`:`website/` 或 `website-src/` 变更时重新构建并部署官网。
 

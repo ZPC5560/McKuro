@@ -1106,27 +1106,8 @@ public sealed partial class RolesViewModel : ViewModelBase
             }
         }
 
-        // 推荐武器(首选 status=1,否则 items 首件;供角色卡武器对比)
-        var guideWeapons = info.Weapon?.Items ?? [];
-        var primary = guideWeapons.FirstOrDefault(w => w.Status == 1) ?? guideWeapons.FirstOrDefault();
-        RecommendedWeaponName = primary?.Name;
-        RecommendedWeaponIcon = primary?.PictureUrl;
-
-        // 当前武器档位(推荐/备选/有差距)
-        var equipped = role.WeaponData?.Weapon?.WeaponName;
-        var matched = guideWeapons.FirstOrDefault(w =>
-            string.Equals(w.Name?.Replace(" ", ""), equipped?.Replace(" ", ""), StringComparison.Ordinal));
-        if (matched is not null)
-        {
-            var tier = GuideAchievementService.WeaponRecommendText(matched);
-            CurrentWeaponIsRecommended = !string.IsNullOrEmpty(tier);
-            CurrentWeaponTierText = tier;
-        }
-        else
-        {
-            CurrentWeaponIsRecommended = guideWeapons.Count > 0 ? false : null;
-            CurrentWeaponTierText = guideWeapons.Count > 0 ? LanguageService.Format("Roles.Guide.StateDiff") : "";
-        }
+        // 推荐武器档位(角色卡武器对比):攻略与库街区详情到达顺序不定,双方各自到达后都要重算
+        RefreshWeaponVerdict(role, info);
 
         // 加点建议(未达标项逐条「建议提升至 N 级」;结构化条目,技能名/等级单独着色):
         // 本地化模板按 {0}/{1} 占位符拆三段,句子结构仍随语言走。
@@ -1402,6 +1383,59 @@ public sealed partial class RolesViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// 重算角色卡上的「当前佩戴武器 vs 官方推荐武器」档位徽章(推荐/备选/有差距)。
+    /// <para>
+    /// <b>必须幂等、可重复调用</b>:攻略数据(本地 SQLite 缓存,毫秒级)与库街区详情(网络,慢得多)
+    /// 在 <see cref="OnSelectedRoleChanged"/> 里并发发起,到达顺序不定。
+    /// 此前只在攻略到达时算一次 —— 攻略先到时 <c>role.WeaponData</c> 还是 null,
+    /// 匹配不到任何推荐武器就落进 else 硬写「有差距」,而库街区详情到达后只重建了
+    /// 技能卡/属性/共鸣链,<b>没有重算武器档位</b>,错误徽章便一直留在界面上
+    /// (用户反馈:佩戴的武器是对的,却提示有差距;重新点一次角色就恢复正常)。
+    /// </para>
+    /// <para>纳入同步的四种状态:① 有攻略+已匹配 → 推荐/备选;② 有攻略+详情已到但未命中 → 有差距;
+    /// ③ 有攻略+详情未到(武器名未知)→ 保持中性(不误报);④ 无攻略 → 清空。</para>
+    /// </summary>
+    private void RefreshWeaponVerdict(RoleDetail role, GuideIntroductionInfo? info)
+    {
+        var guideWeapons = info?.Weapon?.Items ?? [];
+
+        // 推荐武器名/图标(首选 status=1,否则 items 首件;供箭头后的推荐图标展示)
+        var primary = guideWeapons.FirstOrDefault(w => w.Status == 1) ?? guideWeapons.FirstOrDefault();
+        RecommendedWeaponName = primary?.Name;
+        RecommendedWeaponIcon = primary?.PictureUrl;
+
+        var equipped = role.WeaponData?.Weapon?.WeaponName;
+        var matched = GuideAchievementService.MatchEquippedWeapon(equipped, guideWeapons);
+        if (matched is not null)
+        {
+            // 命中列表 ≠ 命中推荐档:status=0 表示"在攻略 items 里但非首选/备选",
+            // 此时档位文本为空 —— 徽章隐藏、箭头仍指向官方首选(与原行为一致)。
+            var tier = GuideAchievementService.WeaponRecommendText(matched);
+            CurrentWeaponIsRecommended = !string.IsNullOrEmpty(tier);
+            CurrentWeaponTierText = tier;
+            return;
+        }
+        if (guideWeapons.Count == 0)
+        {
+            // 无攻略推荐武器:中性态(不显示徽章,也不显示推荐图标)
+            CurrentWeaponIsRecommended = null;
+            CurrentWeaponTierText = "";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(equipped))
+        {
+            // 有推荐但库街区详情还没到(武器名未知):无从判定,保持中性。
+            // 关键修复点:此处此前会写 false +「有差距」,把"还没到"误报成"不匹配"。
+            CurrentWeaponIsRecommended = null;
+            CurrentWeaponTierText = "";
+            return;
+        }
+        // 详情已到且确实不在推荐列表里 → 有差距
+        CurrentWeaponIsRecommended = false;
+        CurrentWeaponTierText = LanguageService.Format("Roles.Guide.StateDiff");
+    }
+
+    /// <summary>
     /// 构建官方推荐建议区条目(数据源 = 点赞最高的攻略):
     /// 武器推荐(佩戴的是首选/备选)、声骸推荐(首件是否推荐声骸)、技能加点(各项推荐等级 vs 当前)、
     /// 共鸣链推荐(推荐链数说明)。
@@ -1415,10 +1449,10 @@ public sealed partial class RolesViewModel : ViewModelBase
         }
 
         // ① 武器:玩家当前佩戴 vs 攻略推荐(首选 status=1 / 备选 status=2)
+        //    匹配口径与角色卡徽章共用 MatchEquippedWeapon(归一化去间隔符/剥「梦魇」前缀)
         var equippedWeapon = role.WeaponData?.Weapon?.WeaponName;
         var guideWeapons = info.Weapon?.Items ?? [];
-        var matchedWeapon = guideWeapons.FirstOrDefault(w =>
-            string.Equals(w.Name?.Replace(" ", ""), equippedWeapon?.Replace(" ", ""), StringComparison.Ordinal));
+        var matchedWeapon = GuideAchievementService.MatchEquippedWeapon(equippedWeapon, guideWeapons);
         if (matchedWeapon is not null)
         {
             var grade = GuideAchievementService.WeaponRecommendText(matchedWeapon);
@@ -1433,8 +1467,10 @@ public sealed partial class RolesViewModel : ViewModelBase
                     : LanguageService.Format("Roles.Guide.WeaponMatched", equippedWeapon ?? "-", grade),
             });
         }
-        else if (guideWeapons is { Count: > 0 })
+        else if (guideWeapons is { Count: > 0 } && !string.IsNullOrWhiteSpace(equippedWeapon))
         {
+            // 仅在「库街区详情已到、武器名已知」时才断言有差距。
+            // 详情未到时 equippedWeapon 为空 —— 那是"还没到",不能报成"不匹配"。
             var primary = guideWeapons.FirstOrDefault(w => w.Status == 1) ?? guideWeapons[0];
             GuideRecommendations.Add(new GuideRecommendItem
             {
@@ -1442,7 +1478,7 @@ public sealed partial class RolesViewModel : ViewModelBase
                 Title = LanguageService.Format("Roles.Guide.WeaponTitle"),
                 State = LanguageService.Format("Roles.Guide.StateDiff"),
                 StateMet = false,
-                Detail = LanguageService.Format("Roles.Guide.WeaponSuggest", equippedWeapon ?? "-", primary.Name ?? "-"),
+                Detail = LanguageService.Format("Roles.Guide.WeaponSuggest", equippedWeapon, primary.Name ?? "-"),
             });
         }
 
@@ -1539,6 +1575,14 @@ public sealed partial class RolesViewModel : ViewModelBase
                 BuildSkillCards(role, GuideAchievement);
                 MergeGuideChains(role, GuideAchievement);
                 RebuildAttributeItems();
+                // 武器档位也必须跟着重算:攻略(本地缓存)常先于库街区详情(网络)到达,
+                // 那次计算时 WeaponData 仍为 null ⇒ 徽章会误判。详见 RefreshWeaponVerdict 说明。
+                if (GuideAchievement is { } guideInfo)
+                {
+                    RefreshWeaponVerdict(role, guideInfo);
+                    // 推荐建议区同样基于 WeaponData/PhantomData(武器行 + 声骸行),一并重建
+                    BuildGuideRecommendations(role, guideInfo);
+                }
                 // 加点顺序节点同样基于技能卡:重建后必须跟着刷新,否则停留在被丢弃的旧 SkillCardItem 实例上
                 BuildSkillPriority();
                 OnPropertyChanged(nameof(HasSkillPriority));
@@ -1706,6 +1750,13 @@ public sealed partial class RolesViewModel : ViewModelBase
             }
             var wasComplete = role.IsDetailComplete;
             MergeGuideDetail(role, detail);
+            // mcguide 兜底填充同样会带来 WeaponData(库街区详情被极验风控时为唯一来源):
+            // 武器档位徽章必须跟着重算,否则停留在攻略先到时算出的中性/误判态。
+            if (GuideAchievement is { } guideInfo)
+            {
+                RefreshWeaponVerdict(role, guideInfo);
+                BuildGuideRecommendations(role, guideInfo);
+            }
             if (wasComplete)
             {
                 return; // 库街区按需详情已先返回完整数据:保留库街区状态,不用 guide 覆盖文案

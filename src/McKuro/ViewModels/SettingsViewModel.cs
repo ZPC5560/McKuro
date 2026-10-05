@@ -713,9 +713,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     private AppUpdateInfo? _pendingUpdate;
 
-    /// <summary>当前应用版本(读程序集版本)。</summary>
+    /// <summary>当前应用版本(读程序集版本;四段版本号完整显示,见 AppUpdateService.FormatVersion)。</summary>
     public string CurrentAppVersionText =>
-        $"v{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0"}";
+        $"v{AppUpdateService.FormatVersion(Assembly.GetExecutingAssembly().GetName().Version)}";
 
     /// <summary>日志目录(为空表示文件日志不可用)。</summary>
     public string LogDirText => AppServices.LogDir;
@@ -1308,7 +1308,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 return;
             }
 
-            var current = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
+            // 必须用完整版本段比较:截断成 3 段会让四段版本(1.3.3.1)永远"有新版本"
+            var current = AppUpdateService.FormatVersion(Assembly.GetExecutingAssembly().GetName().Version);
             var isNewer = AppUpdateService.IsNewer(current, info.Version);
             if (!isNewer)
             {
