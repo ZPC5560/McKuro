@@ -276,8 +276,9 @@ public sealed class AppUpdateService
     /// 同时找资产名与摘要 —— 避免把别的资产的摘要用到本资产上(错配会误判校验失败并反复重下)。
     /// 找不到返回 null(视为无摘要,不阻断更新)。
     /// </para>
+    /// <para>internal 供单测直接覆盖(Linux 上无自动更新资产,走不到该分支)。</para>
     /// </summary>
-    private static string? ParseHtmlAssetDigest(string fragment, string repo, string assetName)
+    internal static string? ParseHtmlAssetDigest(string fragment, string repo, string assetName)
     {
         // 下载链接形如 href="/owner/repo/releases/download/<tag>/<asset>"
         var hrefFragment = $"/{repo}/releases/download/";

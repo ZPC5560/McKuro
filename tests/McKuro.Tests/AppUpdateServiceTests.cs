@@ -214,6 +214,33 @@ public class AppUpdateServiceTests
     /// HTML 回退通道(匿名 API 限流时的常用路径)此前完全不解析摘要。
     /// 现按资产行取 GitHub 计算的 sha256 —— 必须取自**本资产所在行**,
     /// 取错行会把正确下载包判成损坏并反复重下。
+    /// <para>直接覆盖解析器:Linux 上无自动更新资产(PickAsset 返回 null),走不到该分支。</para>
+    /// </summary>
+    [Fact]
+    public void ParseHtmlAssetDigest_Scopes_Digest_To_Its_Own_Row()
+    {
+        var fragment = string.Join("\n", HtmlDigestAssets.Select(a =>
+            $"""
+             <li class="Box-row d-flex">
+               <a href="/owner/repo/releases/download/v1.3.3/{a.Name}" rel="nofollow">{a.Name}</a>
+               <span class="Truncate-text">sha256:{a.Digest}</span>
+             </li>
+             """));
+
+        // 每个资产都取到自己的摘要(不含别的资产行)
+        foreach (var (name, digest) in HtmlDigestAssets)
+        {
+            Assert.Equal(digest, AppUpdateService.ParseHtmlAssetDigest(fragment, "owner/repo", name));
+        }
+
+        // 未知资产 / 空片段 → null(视为无摘要,不阻断更新)
+        Assert.Null(AppUpdateService.ParseHtmlAssetDigest(fragment, "owner/repo", "McKuro-linux-x64-1.3.3.tar.gz"));
+        Assert.Null(AppUpdateService.ParseHtmlAssetDigest("", "owner/repo", "McKuro-win-x64-1.3.3.zip"));
+    }
+
+    /// <summary>
+    /// 端到端:HTML 回退通道在 API 限流时被启用,且所选资产带摘要。
+    /// Linux 无自动更新资产(设计如此)→ 该平台不产生更新信息,断言相应跳过。
     /// </summary>
     [Fact]
     public async Task Check_Via_Html_Fallback_Reads_Per_Asset_Digest()
@@ -229,10 +256,13 @@ public class AppUpdateServiceTests
         var service = new AppUpdateService(new HttpClient(new HtmlFallbackHandler(fragment)));
         var info = await service.CheckAsync("owner/repo", forceRefresh: true);
 
-        Assert.NotNull(info);
-        // 仅断言"取的是所选资产自己的摘要"(平台不同选中的资产不同,CI 上也要成立)
-        var picked = HtmlDigestAssets.FirstOrDefault(a => a.Name == info!.AssetName);
-        Assert.False(picked.Name is null, $"未预期的资产:{info!.AssetName}");
+        if (info is null)
+        {
+            // Linux:无自动更新资产,通道按设计返回空
+            return;
+        }
+        var picked = HtmlDigestAssets.FirstOrDefault(a => a.Name == info.AssetName);
+        Assert.False(picked.Name is null, $"未预期的资产:{info.AssetName}");
         Assert.Equal(picked.Digest, info.Sha256);
     }
 
