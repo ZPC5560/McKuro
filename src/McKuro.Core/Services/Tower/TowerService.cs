@@ -11,8 +11,32 @@ using System.Text.Json;
 namespace McKuro.Core.Services.Tower;
 
 /// <summary>
-/// 深塔/海墟数据服务:用库街区 accessToken 拉取逆境深塔、终焉矩阵与再生海域数据。
-/// (对齐 WutheringWavesTool TowerDataDetailTask / NewTowerDataDetailTask / SlashDataDetailTask)
+/// 深塔/海墟页一次拉取的全部数据。
+/// <para>
+/// 原先是 5 元组返回;加入全息战略后到 7 项,元组已经读不出含义(多个 <c>?Data</c> 类型相邻),
+/// 故改为具名记录:<see cref="Error"/> 非空即表示本次整体失败(未登录/无令牌),各数据成员可能为 null。
+/// </para>
+/// </summary>
+/// <param name="Tower">逆境深塔(towerDataDetail)。</param>
+/// <param name="NewTower">终焉矩阵(newTowerDetail)。</param>
+/// <param name="Slash">再生海域(slashDetail)。</param>
+/// <param name="HologramIndex">全息战略总览(challengeIndex)。</param>
+/// <param name="HologramDetails">全息战略各难度记录(challengeDetails)。</param>
+/// <param name="Error">整体失败原因;空串表示成功。</param>
+/// <param name="RoleId">本次解析出的库街区角色条目 ID(矩阵历史按它落库)。</param>
+public sealed record TowerDataResult(
+    TowerSeasonData? Tower,
+    NewTowerData? NewTower,
+    SlashData? Slash,
+    HologramIndexData? HologramIndex,
+    HologramDetailData? HologramDetails,
+    string Error,
+    string RoleId);
+
+/// <summary>
+/// 深塔/海墟数据服务:用库街区 accessToken 拉取逆境深塔、终焉矩阵、再生海域与全息战略数据。
+/// (对齐 WutheringWavesTool TowerDataDetailTask / NewTowerDataDetailTask / SlashDataDetailTask,
+/// 全息战略对齐官方 H5 的 challengeIndex / challengeDetails)
 /// </summary>
 public sealed class TowerService
 {
@@ -37,10 +61,11 @@ public sealed class TowerService
     }
 
     /// <summary>
-    /// 拉取深塔与海墟数据;返回 null 表示失败(未登录/无 accessToken/接口异常)。
+    /// 拉取深塔、海墟与全息战略数据;<see cref="TowerDataResult.Error"/> 非空表示失败
+    /// (未登录/无 accessToken/接口异常)。
     /// RoleId 为本次解析的库街区角色条目 ID(矩阵历史按它落库)。
     /// </summary>
-    public async Task<(TowerSeasonData? Tower, NewTowerData? NewTower, SlashData? Slash, string Error, string RoleId)> GetTowerDataAsync(CancellationToken ct = default)
+    public async Task<TowerDataResult> GetTowerDataAsync(CancellationToken ct = default)
     {
         // 诊断"深塔/海墟数据不刷新"这类问题:每次真正发起拉取都留一行(含调用时刻),
         // 若进入页面后日志没有新行,说明是该页面根本没重新拉(reload 触发问题),不是接口/缓存问题。
@@ -48,7 +73,7 @@ public sealed class TowerService
         var account = _accounts.Current;
         if (account is null)
         {
-            return (null, null, null, CoreStrings.T("Core.Tower.NoLogin", "请先登录库街区账号"), "");
+            return Failed(CoreStrings.T("Core.Tower.NoLogin", "请先登录库街区账号"));
         }
 
         // 复用角色数据服务的 accessToken 换取流程
@@ -56,7 +81,7 @@ public sealed class TowerService
         var gamer = await _kuro.GetGamerAsync(account, (int)KuroGameType.Waves, ct).ConfigureAwait(false);
         if (gamer is not { Code: 200, Data: not null } || gamer.Data.Count == 0)
         {
-            return (null, null, null, CoreStrings.T("Core.Tower.RoleListFailed", "获取角色列表失败"), "");
+            return Failed(CoreStrings.T("Core.Tower.RoleListFailed", "获取角色列表失败"));
         }
         var role = gamer.Data[0];
         var roleId = role.RoleId ?? "";
@@ -64,7 +89,7 @@ public sealed class TowerService
             gamer.Data.Count, roleId, role.RoleName, role.ServerId);
         if (string.IsNullOrEmpty(roleId))
         {
-            return (null, null, null, CoreStrings.T("Core.Tower.NoRoleId", "角色 ID 为空"), "");
+            return Failed(CoreStrings.T("Core.Tower.NoRoleId", "角色 ID 为空"));
         }
 
         _api.PublicIp = _kuro.Ip;
@@ -72,12 +97,14 @@ public sealed class TowerService
             account.Token, deviceId, roleId, account.UserId ?? "", "android", ct).ConfigureAwait(false);
         if (string.IsNullOrEmpty(accessToken))
         {
-            return (null, null, null, CoreStrings.T("Core.Tower.TokenFailed", "获取访问令牌失败(Token 可能已失效)"), roleId);
+            return Failed(CoreStrings.T("Core.Tower.TokenFailed", "获取访问令牌失败(Token 可能已失效)"), roleId);
         }
 
         TowerSeasonData? tower = null;
         NewTowerData? newTower = null;
         SlashData? slash = null;
+        HologramIndexData? hologramIndex = null;
+        HologramDetailData? hologramDetails = null;
         try
         {
             tower = await _api.GetTowerAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
@@ -106,12 +133,40 @@ public sealed class TowerService
         {
             _logger.LogWarning(ex, "拉取海墟数据失败");
         }
-
-        if (tower is null && newTower is null && slash is null)
+        try
         {
-            return (null, null, null, CoreStrings.T("Core.Tower.EmptyData", "接口返回空数据(可能受风控)"), roleId);
+            hologramIndex = await _api.GetChallengeIndexAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
         }
-        // 三个接口各自的关键量(诊断"某页签数据不刷新":能区分"没重新拉"还是"接口返回的就是旧值")
+        catch (OperationCanceledException)
+        {
+            // 取消语义必须保留:吞掉 OCE 会把"用户已离开/取消"变成一条误导性的"拉取失败"警告,
+            // 并让已取消的加载继续往下跑。(相邻的 details 块同理,两块保持同一写法。)
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "拉取全息战略总览失败");
+        }
+        // 两个接口之间留间隔:数据中心接口有风控,连续密集请求易触发极验(官方 H5 自己也是分次请求)
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(600), ct).ConfigureAwait(false);
+            hologramDetails = await _api.GetChallengeDetailsAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "拉取全息战略挑战记录失败");
+        }
+
+        if (tower is null && newTower is null && slash is null && hologramIndex is null && hologramDetails is null)
+        {
+            return Failed(CoreStrings.T("Core.Tower.EmptyData", "接口返回空数据(可能受风控)"), roleId);
+        }
+        // 各接口的关键量(诊断"某页签数据不刷新":能区分"没重新拉"还是"接口返回的就是旧值")
         // 注意 seasonEndTime/endTime 是"剩余毫秒"而非绝对时间,这里折算成剩余时长便于阅读
         static string Remain(long? ms) => ms is { } v
             ? TimeSpan.FromMilliseconds(v) is { TotalDays: > 0 } t ? $"{t.Days}天{t.Hours}小时" : $"{v / 3600000.0:F1}小时"
@@ -125,6 +180,14 @@ public sealed class TowerService
         _logger.LogInformation(
             "Tower: 海墟难度明细(难度:总积分/满积分) {Detail}",
             string.Join(" | ", slash?.DifficultyList?.Select(d => $"{d.Difficulty}:{d.AllScore}/{d.MaxScore}") ?? []));
+        // 全息战略:地区数/boss 数/满档数 + 有记录的难度条数(便于核对"卡片角标与详情是否一致")
+        _logger.LogInformation(
+            "Tower: 全息战略 地区{HC}个 boss{HB}个 满档{HF}个 | 详情 boss{HDB}个 有记录难度{HDR}档",
+            hologramIndex?.ChallengeList?.Count ?? -1,
+            hologramIndex?.ChallengeList?.Sum(c => c.IndexList?.Count ?? 0) ?? -1,
+            hologramIndex?.ChallengeList?.Sum(c => HologramParser.CountFullyCleared(c.IndexList)) ?? -1,
+            hologramDetails?.ChallengeInfo?.Count ?? -1,
+            hologramDetails?.ChallengeInfo?.Values.Sum(v => v.Count(HologramParser.IsCleared)) ?? -1);
         // 原始值:用于判定 seasonEndTime/endTime 究竟是"剩余毫秒"还是绝对时间戳
         // (剩余毫秒按 now+值 折算成结束时刻;若原值本身就是 epoch 毫秒,这里的绝对值会接近 1.7e12)
         static string RawMs(long? ms) => ms is { } v
@@ -133,8 +196,12 @@ public sealed class TowerService
         _logger.LogInformation(
             "Tower: 原始时间字段 | 深塔.seasonEndTime={TSE} | 矩阵.endTime={NTE} | 海墟.seasonEndTime={SSE}",
             RawMs(tower?.SeasonEndTime), RawMs(newTower?.EndTime), RawMs(slash?.SeasonEndTime));
-        return (tower, newTower, slash, "", roleId);
+        return new TowerDataResult(tower, newTower, slash, hologramIndex, hologramDetails, "", roleId);
     }
+
+    /// <summary>整体失败结果(各数据成员为 null,只带原因)。</summary>
+    private static TowerDataResult Failed(string error, string roleId = "")
+        => new(null, null, null, null, null, error, roleId);
 
     /// <summary>
     /// 终焉矩阵本期有记录时落库一期历史(key=roleId+赛季结束时间,对齐 WutheringWavesTool saveToDB)。

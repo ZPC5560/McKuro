@@ -113,6 +113,100 @@ public class RoleCacheFallbackTests : IDisposable
     }
 
     [Fact]
+    public void MergeMissingSections_Prefers_Echo_Block_With_Substat_Validity()
+    {
+        // 回归(用户反馈「部分角色看不到库街区有效词条:相里要/折枝/漂泊者/安可等」):
+        // EchoProp.Valid 于 2026-10-05 才加入,更早写盘的缓存整行没有 valid(全 null)。
+        // 早期合并是 `target.PhantomData ??= source.PhantomData` —— 只要 target 非 null 就沿用,
+        // 于是每轮同步都把无 valid 的旧区块粘滞写回缓存,永不自愈。
+        // 实测库街区实时响应里 valid 一直是完整的(null=0),所以缺的不是数据源,是覆盖策略。
+        var stale = new RoleDetail
+        {
+            Role = new RoleInfo { RoleId = 1305, RoleName = "相里要" },
+            PhantomData = EchoBlock(hasValidity: false),
+        };
+        var fresh = new RoleDetail
+        {
+            Role = new RoleInfo { RoleId = 1305, RoleName = "相里要" },
+            PhantomData = EchoBlock(hasValidity: true),
+        };
+
+        RoleDataService.MergeMissingSections(fresh, stale);
+
+        // 带判定的区块必须覆盖无判定的陈旧区块
+        Assert.True(fresh.PhantomData!.HasSubstatValidity);
+    }
+
+    [Fact]
+    public void MergeMissingSections_Keeps_Existing_Echo_Block_When_Source_Lacks_Validity()
+    {
+        // 反向保护:不得用"无判定"的旧数据覆盖"有判定"的新数据(避免修 bug 时把好数据冲掉)
+        var good = new RoleDetail
+        {
+            Role = new RoleInfo { RoleId = 1305, RoleName = "相里要" },
+            PhantomData = EchoBlock(hasValidity: true),
+        };
+        var stale = new RoleDetail
+        {
+            Role = new RoleInfo { RoleId = 1305, RoleName = "相里要" },
+            PhantomData = EchoBlock(hasValidity: false),
+        };
+
+        RoleDataService.MergeMissingSections(good, stale);
+
+        Assert.True(good.PhantomData!.HasSubstatValidity);
+    }
+
+    [Fact]
+    public void MergeMissingSections_Takes_Echo_Block_When_Target_Is_Empty()
+    {
+        // 目标没有声骸数据 → 正常用来源补全(保持既有行为)
+        var target = new RoleDetail { Role = new RoleInfo { RoleId = 1, RoleName = "秧秧" } };
+        var source = new RoleDetail
+        {
+            Role = new RoleInfo { RoleId = 1, RoleName = "秧秧" },
+            PhantomData = EchoBlock(hasValidity: true),
+        };
+
+        RoleDataService.MergeMissingSections(target, source);
+
+        Assert.NotNull(target.PhantomData);
+        Assert.True(target.PhantomData!.HasSubstatValidity);
+    }
+
+    [Theory]
+    [InlineData(null, false)]   // valid=null(陈旧快照/无判定)
+    [InlineData(false, true)]   // valid=false 也算"有判定"(明确无效也是一种判定)
+    [InlineData(true, true)]
+    public void HasSubstatValidity_Distinguishes_Missing_Judgement_From_False(bool? valid, bool expected)
+    {
+        var echo = new EchoInfo
+        {
+            SubProps = [new EchoProp { AttributeName = "暴击", AttributeValue = "6.3%", Valid = valid }],
+        };
+        Assert.Equal(expected, echo.HasSubstatValidity);
+        Assert.Equal(expected, new PhantomData { Phantoms = [echo] }.HasSubstatValidity);
+    }
+
+    /// <summary>构造一个含一件声骸的声骸区块;<paramref name="hasValidity"/> 决定是否带 valid 判定。</summary>
+    private static PhantomData EchoBlock(bool hasValidity) => new()
+    {
+        Phantoms =
+        [
+            new EchoInfo
+            {
+                Cost = 4,
+                Level = 25,
+                PhantomProp = new PhantomPropInfo { PhantomName = "梦魇·云闪之鳞" },
+                SubProps =
+                [
+                    new EchoProp { AttributeName = "暴击", AttributeValue = "6.3%", Valid = hasValidity ? true : null },
+                ],
+            },
+        ],
+    };
+
+    [Fact]
     public void LoadFromCache_Prefers_Account_Row_When_Complete()
     {
         using var db = new AppDatabase(_tmpDir);

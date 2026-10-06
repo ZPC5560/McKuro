@@ -1097,13 +1097,24 @@ public sealed partial class RolesViewModel : ViewModelBase
         if (phantoms is { Count: > 0 })
         {
             var recSetNorm = RecommendedSetName?.Replace(" ", "") ?? "";
+            // 推荐主词条(按 COST 分组):评分判断“主词条选得对不对”的依据。
+            // 缺了它,生命/防御/治疗型角色(莫宁/卡提希娅等)的正确主词条会被拿去和暴击比而判低分。
+            var recMains = GuideAchievementService.ParseRecommendedMainStats(info);
             foreach (var echo in phantoms)
             {
+                // equipPhantomList 的元素可能为 null(未装备槽位,见 PhantomData.Phantoms 注释),
+                // 与 QueueEchoWeightsLoad 的遍历保持同一判空口径
+                if (echo is null)
+                {
+                    continue;
+                }
                 echo.IsRecommendedPhantom = echo.Cost == 4
                     && GuideAchievementService.IsRecommendedPhantom(echo.PhantomName, info.Echo);
                 echo.IsRecommendedSet = recSetNorm.Length > 0
                     && string.Equals(echo.FetterName?.Replace(" ", ""), recSetNorm, StringComparison.Ordinal);
+                echo.RecommendedMainStats = recMains.TryGetValue(echo.Cost, out var mains) ? mains : null;
             }
+            role.RefreshEchoRating();
         }
 
         // 推荐武器档位(角色卡武器对比):攻略与库街区详情到达顺序不定,双方各自到达后都要重算
@@ -1529,14 +1540,25 @@ public sealed partial class RolesViewModel : ViewModelBase
     /// 「同步」之后点选的角色即使详情已由缓存补全,也强制重取一次(见 <see cref="_pendingDetailRefresh"/>):
     /// 同步的意义就是拿最新数据,不能因为缓存里有旧详情而跳过在线刷新。
     /// </para>
+    /// <para>
+    /// <b>陈旧声骸快照补修</b>:缓存的声骸区块若完全没有库街区的 <c>valid</c> 判定
+    /// (<see cref="PhantomData.HasSubstatValidity"/> 为 false,即 2026-10-05 之前写盘的旧行),
+    /// 也必须重取一次 —— 否则 <see cref="RoleDetail.IsDetailComplete"/> 为 true 会让这里直接返回,
+    /// 界面上永远"看不到有效词条",且每次同步都把旧行粘滞写回(实测相里要/折枝/漂泊者/安可等)。
+    /// </para>
     /// </summary>
     private async Task LoadRoleDetailFromKujiequAsync(RoleDetail role)
     {
         var cardRoleId = role.Role?.RoleId ?? 0;
         var forceRefresh = cardRoleId > 0 && _pendingDetailRefresh.Contains(cardRoleId);
 
-        // 详情已完整(本地缓存合并/mcguide 填充/已获取过)且不在本次同步的强制刷新名单中 → 不再请求
-        if (role.IsDetailComplete && !forceRefresh)
+        // 陈旧声骸快照:有装备声骸、但一条 valid 都没有 → 需要在线重取以补齐判定
+        var staleEchoSnapshot = role.PhantomData is { } pd
+            && pd.Phantoms is { Count: > 0 }
+            && !pd.HasSubstatValidity;
+
+        // 详情已完整(本地缓存合并/mcguide 填充/已获取过)、且不在强制刷新名单、且声骸判定不缺失 → 不再请求
+        if (role.IsDetailComplete && !forceRefresh && !staleEchoSnapshot)
         {
             return;
         }
@@ -1615,7 +1637,7 @@ public sealed partial class RolesViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 角色详情合并后异步回填 Wiki「声骸词条」权重(每角色;联名角色/无攻略回退官方 valid/通用权重)。
+    /// 角色详情合并后异步回填「声骸词条」权重(每角色;联名角色/无攻略回退官方 valid/通用权重)。
     /// <para>fire-and-forget:结果按角色名缓存,回填走 UI 线程(INPC 通知刷新评级徽章)。</para>
     /// </summary>
     private static void QueueEchoWeightsLoad(RoleDetail? role)
@@ -1640,7 +1662,10 @@ public sealed partial class RolesViewModel : ViewModelBase
             {
                 foreach (var echo in phantoms)
                 {
-                    echo.PriorityWeights = weights;
+                    if (echo is not null)
+                    {
+                        echo.PriorityWeights = weights;
+                    }
                 }
                 role.RefreshEchoRating();
             });
@@ -1648,7 +1673,7 @@ public sealed partial class RolesViewModel : ViewModelBase
     }
 
     /// <summary>把库街区 getRoleDetail 结果合并进选中角色(权威数据:整体替换详情区块,保留列表基础信息)。</summary>
-    private static void MergeKujiequDetail(RoleDetail target, RoleDetail source)
+    private void MergeKujiequDetail(RoleDetail target, RoleDetail source)
     {
         if (source.Role is not null)
         {
@@ -1778,7 +1803,7 @@ public sealed partial class RolesViewModel : ViewModelBase
     }
 
     /// <summary>把 mcguide 映射的角色详情合并进现有 SelectedRole(仅补缺失区块,保留库街区已有基础信息)。</summary>
-    private static void MergeGuideDetail(RoleDetail target, RoleDetail source)
+    private void MergeGuideDetail(RoleDetail target, RoleDetail source)
     {
         if (target.Role is not null && source.Role is not null)
         {
@@ -1863,7 +1888,8 @@ public sealed partial class RolesViewModel : ViewModelBase
         {
             foreach (var e in role.PhantomData.Phantoms)
             {
-                if (e.PhantomProp is { } pp && !string.IsNullOrWhiteSpace(pp.IconUrl))
+                // 元素可能为 null(未装备槽位),与 QueueEchoWeightsLoad/ApplyGuideInfo 同一口径
+                if (e?.PhantomProp is { } pp && !string.IsNullOrWhiteSpace(pp.IconUrl))
                 {
                     pp.IconUrl = cache.ResolveIcon(IconDiskCacheService.CategoryEcho, pp.PhantomName, pp.IconUrl);
                 }
@@ -2784,29 +2810,27 @@ public sealed class StarThumbBrushConverter : Avalonia.Data.Converters.IValueCon
 /// <summary>
 /// 词条装饰条色(档位由 <see cref="McKuro.Core.Models.Roles.EchoProp.EffectiveLevel"/> 决定):
 /// <para>
-/// level3 = 暴击/暴击伤害/攻击% 等核心词条(亮色);level2 = <b>官方 valid 判定有效</b>的
-/// 其他词条(青;如普攻/重击/共鸣技能/共鸣解放/谐度破坏伤害加成、共鸣效率 —— 按角色区分,
-/// 来源 getRoleDetail subProps[].valid);level1/0 = 官方无效或无官方数据时的非核心词条 → 灰。
+/// <b>有效 = 统一青色,不再区分核心与其他</b>(用户定案 2026-10:此前 level3 核心词条=琥珀金、
+/// level2 官方 valid 的其他有效词条=青,视觉上两套色;现合并为同一色,
+/// 只要 <see cref="McKuro.Core.Models.Roles.EchoProp.Valid"/> 判定有效即同色)。
 /// </para>
-/// <para>
-/// 演进:2026-10 曾按用户反馈把 level2 降灰(当时只有通用权重表,无法按角色区分"是否有效");
-/// 后实测 getRoleDetail 自带按角色的 valid 字段,恢复青档表达"官方认可的有效词条"。
-/// </para>
+/// <para>level1/0(官方无效、或无官方数据时的非核心词条)→ 灰,无效词条仍须一眼可辨。</para>
 /// </summary>
 public sealed class PropLevelBrushConverter : Avalonia.Data.Converters.IValueConverter
 {
     public static readonly PropLevelBrushConverter Instance = new();
+
+    /// <summary>有效词条的统一点缀色(浅色主题深青保证白底可读;深色主题提亮)。</summary>
+    private static string ValidColor(bool dark) => dark ? "#4DD0E1" : "#0097A7";
 
     public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
     {
         bool dark = ThemeHelper.IsDarkTheme();
         return value switch
         {
-            // 核心有效词条:更鲜艳的亮色(暗色主题亮黄,浅色主题高饱和琥珀)
-            3 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#FFE81A" : "#E08A00")),
-            // 官方 valid 判定有效的其他词条:青
-            2 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#4DD0E1" : "#0097A7")),
-            // 官方无效 / 无官方数据时的非核心词条:灰
+            // 有效词条(核心 3 / 其他有效 2)→ 同一青色
+            >= 2 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(ValidColor(dark))),
+            // 无效 / 无官方数据时的非核心词条:灰
             _ => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#666666" : "#B0B0B0")),
         };
     }
@@ -2817,7 +2841,7 @@ public sealed class PropLevelBrushConverter : Avalonia.Data.Converters.IValueCon
 
 /// <summary>
 /// 词条文字色:与 <see cref="PropLevelBrushConverter"/> 同档
-/// (level3 亮色核心 / level2 青色官方有效 / 其余灰 —— 无效词条必须一眼可辨)。
+/// (有效词条统一青色 / 其余灰 —— 无效词条必须一眼可辨)。
 /// </summary>
 public sealed class PropTextBrushConverter : Avalonia.Data.Converters.IValueConverter
 {
@@ -2828,8 +2852,9 @@ public sealed class PropTextBrushConverter : Avalonia.Data.Converters.IValueConv
         bool dark = ThemeHelper.IsDarkTheme();
         return value switch
         {
-            3 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#FFE81A" : "#E08A00")),
-            2 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#4DD0E1" : "#0097A7")),
+            // 与装饰条同色(有效词条统一青色)
+            >= 2 => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#4DD0E1" : "#0097A7")),
+            // 灰档文字色比装饰条略深,保证白底可读
             _ => new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(dark ? "#8A8A8A" : "#9A9A9A")),
         };
     }

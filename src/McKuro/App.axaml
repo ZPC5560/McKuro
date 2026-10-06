@@ -112,6 +112,13 @@
                     <SolidColorBrush x:Key="McKuroInfoTint" Color="#241677FF" />
                     <SolidColorBrush x:Key="McKuroWarning" Color="#FFC53D" />
                     <SolidColorBrush x:Key="McKuroWarningTint" Color="#29FA8C16" />
+                    <!-- 全息战略「已通关/满档」的金色:
+                         暗色主题用亮金(#FFD24D 在深底上对比充足),
+                         亮色主题必须压暗(#B8860B 系),否则浅底上的黄字几乎看不见
+                         —— 用户实测反馈「当期难度文本在白色主题下不明显」。 -->
+                    <SolidColorBrush x:Key="McKuroHoloGold" Color="#FFD24D" />
+                    <SolidColorBrush x:Key="McKuroHoloGoldSoft" Color="#E0B94E" />
+                    <SolidColorBrush x:Key="McKuroHoloPipEmpty" Color="#4A4E58" />
                     <!-- 账号/版本切换按键与列表项:
                          按键本身透明底(仅悬停给一点反馈),列表项用极淡的中性面;
                          选中项用「主题强调色」淡染底 + 强调色描边 + 高对比文字(对齐 Haiyu 的蓝框选中),
@@ -178,6 +185,10 @@
                     <SolidColorBrush x:Key="McKuroInfoTint" Color="#1A1677FF" />
                     <SolidColorBrush x:Key="McKuroWarning" Color="#D48806" />
                     <SolidColorBrush x:Key="McKuroWarningTint" Color="#1AFA8C16" />
+                    <!-- 全息战略金色:亮色主题压暗(理由见暗色主题同类注释) -->
+                    <SolidColorBrush x:Key="McKuroHoloGold" Color="#B8860B" />
+                    <SolidColorBrush x:Key="McKuroHoloGoldSoft" Color="#9A7209" />
+                    <SolidColorBrush x:Key="McKuroHoloPipEmpty" Color="#C9CDD6" />
                     <!-- 账号/版本切换按键:亮色主题下的同族令牌(理由见暗色主题同类注释) -->
                     <SolidColorBrush x:Key="McKuroSwitchChipFill" Color="#0D000000" />
                     <SolidColorBrush x:Key="McKuroSwitchChipFillHover" Color="#1F000000" />

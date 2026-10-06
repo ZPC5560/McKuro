@@ -3,7 +3,7 @@ using McKuro.Core.Services.Roles;
 
 namespace McKuro.Tests;
 
-/// <summary>声骸词条评级/角色养成达成度测试(算法:wuwa.uk 评分法,见 <see cref="EchoRatingService"/>)。</summary>
+/// <summary>声骸词条评级/角色养成达成度测试(算法:主副词条统一口径评分,见 <see cref="EchoRatingService"/>)。</summary>
 public class EchoRatingServiceTests
 {
     private static EchoInfo Echo(params (string Name, string Value)[] subProps)
@@ -12,7 +12,7 @@ public class EchoRatingServiceTests
             SubProps = subProps.Select(p => new EchoProp { AttributeName = p.Name, AttributeValue = p.Value }).ToList(),
         };
 
-    /// <summary>全部词条都给首位权重(2.0)的 Wiki 权重表(用于验证满分口径)。</summary>
+    /// <summary>全部词条都给首位权重(2.0)的 Wiki 权重表(受双暴 1.5/攻击% 1.25 上限约束,用于验证上限压制口径)。</summary>
     private static IReadOnlyDictionary<string, double> AllTopWeight => new Dictionary<string, double>(StringComparer.Ordinal)
     {
         ["暴击"] = 2.0,
@@ -26,7 +26,9 @@ public class EchoRatingServiceTests
     [Fact]
     public void Perfect_Echo_Rates_Ace_With_Full_Score()
     {
-        // 5 条词条全部满 Roll 且都吃首位权重(2.0)→ 10.0/10.0 = 100 分
+        // 全部词条给首位权重(2.0),但双暴受全局上限压制为 1.5、攻击% 为 1.25。
+        // 该用例无 mainProps → 走兼容口径(固定分母 5×旧顶档 2.0 = 10):
+        // 暴击 1.5 + 暴伤 1.5 + 攻击 2.0 + 生命 2.0 + 防御 2.0 = 9.0 → 9/10 = 90 分
         var echo = Echo(
             ("暴击", "10.5%"),
             ("暴击伤害", "21%"),
@@ -36,7 +38,7 @@ public class EchoRatingServiceTests
         var rating = EchoRatingService.RateEcho(echo, AllTopWeight);
         Assert.Equal(EchoRatingLevel.Ace, rating.PhantomStatus);
         Assert.Equal(EchoRatingLevel.Ace, rating.PropStatus);
-        Assert.Equal(100.0, rating.Score);
+        Assert.Equal(90.0, rating.Score);
     }
 
     [Fact]
@@ -53,17 +55,17 @@ public class EchoRatingServiceTests
     [Fact]
     public void RateEcho_Without_Official_Valid_Falls_Back_To_Universal_Weights()
     {
-        // 无 Wiki 权重、无官方 valid → 通用权重表:3→2.0 / 2→1.0 / 1→0.5
-        // 暴击 10.5%(2.0) + 暴击伤害 21%(2.0) + 攻击 60(1.0) = 5.0 → 50 分
+        // 无 Wiki 权重、无官方 valid → 通用权重表(含双暴上限:暴击/暴伤 1.5、攻击% 1.25)
+        // 暴击 10.5%(1.5) + 暴击伤害 21%(1.5) + 攻击 60(1.0) = 4.0 → 4/10 = 40 分
         var echo = Echo(("暴击", "10.5%"), ("暴击伤害", "21%"), ("攻击", "60"));
         var rating = EchoRatingService.RateEcho(echo, null);
-        Assert.Equal(50.0, rating.Score);
+        Assert.Equal(40.0, rating.Score);
     }
 
     [Fact]
     public void RateEcho_Official_Invalid_Substat_Scores_Zero_Contribution()
     {
-        // 官方 valid=false → 权重 0,该词条完全不参与计分
+        // 官方 valid=false → 权重 0,该词条完全不参与计分(最高优先级,不受权重表影响)
         var echo = new EchoInfo
         {
             SubProps =
@@ -73,8 +75,8 @@ public class EchoRatingServiceTests
             ],
         };
         var rating = EchoRatingService.RateEcho(echo, null);
-        // 只有暴击贡献:核心(≥3)→ 2.0,满 Roll → 2.0/10 = 20 分
-        Assert.Equal(20.0, rating.Score);
+        // 只有暴击贡献:核心(≥3)→ 上限 1.5,满 Roll → 1.5/10 = 15 分
+        Assert.Equal(15.0, rating.Score);
     }
 
     [Fact]
@@ -89,12 +91,12 @@ public class EchoRatingServiceTests
                 ("防御", "70")))
             .ToList();
         var rating = EchoRatingService.RateRole(echoes);
-        // 通用权重表:暴击/暴伤各 2.0 + 攻击 1.0 + 生命/防御各 0.5 = 6.0 → 单件 60.0 分
-        Assert.Equal(60.0, rating.Echoes[0].Score);
-        Assert.Equal(300.0, rating.TotalScore);
+        // 通用权重表(含双暴上限):暴击/暴伤各 1.5 + 攻击 1.0 + 生命/防御各 0.5 = 5.0 → 单件 50.0 分
+        Assert.Equal(50.0, rating.Echoes[0].Score);
+        Assert.Equal(250.0, rating.TotalScore);
         Assert.Equal(500.0, rating.MaxScore);
-        Assert.Equal(60, rating.AchievementPercent);
-        Assert.Equal(EchoRatingLevel.Ace, rating.Level);
+        Assert.Equal(50, rating.AchievementPercent);
+        Assert.Equal(EchoRatingLevel.SSS, rating.Level);
     }
 
     [Fact]
@@ -111,26 +113,26 @@ public class EchoRatingServiceTests
     [Fact]
     public void Percent_Values_Are_Normalized()
     {
-        // 攻击 + % 值 → 攻击百分比(权重 3 → 2.0,max 11.6)
-        // 11.6%(2.0) + 10%(2.0×0.862) + 共鸣效率 12.4%(1.0×1.0) = 4.724 → 47.2 分 → 毕业(SSS)
+        // 攻击 + % 值 → 攻击百分比(权重 3 → 上限 1.25,max 11.6)
+        // 11.6%(1.25) + 10%(1.25×0.862) + 共鸣效率 12.4%(1.0) = 3.327 → 33.3 分 → 小毕业(SS)
         var echo = Echo(("攻击", "11.6%"), ("攻击", "10%"), ("共鸣效率", "12.4%"));
         var rating = EchoRatingService.RateEcho(echo, null);
-        Assert.Equal(47.2, rating.Score);
-        Assert.Equal(EchoRatingLevel.SSS, rating.PhantomStatus);
+        Assert.Equal(33.3, rating.Score);
+        Assert.Equal(EchoRatingLevel.SS, rating.PhantomStatus);
     }
 
     [Fact]
     public void RateRole_Level_Uses_Per_Echo_Mean_Not_Sum()
     {
-        // 等级按"单件均分"判定:5 件满分单件 60 分 → 档位按 60 判定(ACE);
-        // 若误按总分 300 判定会溢出档位表,永远拿不到正确等级。
+        // 等级按"单件均分"判定:5 件单件 50 分 → 档位按 50 判定(SSS);
+        // 若误按总分 250 判定会溢出档位表,永远拿不到正确等级。
         var echoes = Enumerable.Range(0, 5)
             .Select(_ => Echo(("暴击", "10.5%"), ("暴击伤害", "21%"), ("攻击", "60"), ("生命", "580"), ("防御", "70")))
             .ToList();
         var rating = EchoRatingService.RateRole(echoes);
-        Assert.Equal(60.0, rating.Echoes[0].Score);
+        Assert.Equal(50.0, rating.Echoes[0].Score);
         Assert.Equal(rating.Echoes.Sum(e => e.Score), rating.TotalScore);
-        Assert.Equal(EchoRatingLevel.Ace, rating.Level);
+        Assert.Equal(EchoRatingLevel.SSS, rating.Level);
     }
 
     [Fact]

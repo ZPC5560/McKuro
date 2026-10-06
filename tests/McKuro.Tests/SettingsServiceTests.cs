@@ -206,9 +206,10 @@ public class RoleDetailModelTests
         // 关键:全程不调用 RefreshEchoRating / 任何合并逻辑
         Assert.True(d.HasEchoRating);
         Assert.True(d.HasEchoTotal);
-        Assert.Equal(60.0, d.EchoTotalScore);
-        Assert.Equal("完美毕业", d.EchoTotalGrade);
-        Assert.Equal(EchoRatingLevel.Ace, d.EchoTotalLevel);
+        // 无 mainProps → 兼容口径固定分母 10(双暴受上限压制):暴击1.5+暴伤1.5+攻击1.0+生命0.5+防御0.5 = 5.0 → 50 分
+        Assert.Equal(50.0, d.EchoTotalScore);
+        Assert.Equal("毕业", d.EchoTotalGrade);
+        Assert.Equal(EchoRatingLevel.SSS, d.EchoTotalLevel);
     }
 
     /// <summary>RefreshEchoRating 仍要能在 Wiki 权重回填后失效并重算(改权重 ⇒ 分数变化)。</summary>
@@ -225,8 +226,8 @@ public class RoleDetailModelTests
         };
         var d = new RoleDetail { PhantomData = new PhantomData { Phantoms = [echo] } };
 
-        // 通用权重兜底:暴击(3→2.0,满) + 防御(1→0.5,半档 35/70) = 2.25 → 22.5 分
-        Assert.Equal(22.5, d.EchoTotalScore);
+        // 通用权重兜底(双暴受上限压制):暴击(3→1.5,满) + 防御(1→0.5,半档 35/70) = 1.75 → 17.5 分
+        Assert.Equal(17.5, d.EchoTotalScore);
 
         // 回填 Wiki 权重:暴击降为 1.0、防御升为 2.0 → 1.0 + 1.0 = 2.0 → 20.0 分
         echo.PriorityWeights = new Dictionary<string, double>(StringComparer.Ordinal)

@@ -403,11 +403,46 @@ public sealed class RoleDataService : IRoleDataService
         {
             target.Attributes = source.Attributes;
         }
-        target.PhantomData ??= source.PhantomData;
+        // 声骸区块:不能只看"target 是不是 null"。
+        // <para>
+        // 陈旧快照问题(2026-10 实测):EchoProp.Valid 是 2026-10-05 才加入的字段,更早写盘的缓存
+        // 整行没有 valid(全 null)。若这里无条件沿用旧区块,列表同步每轮都会把它原样写回缓存
+        // (见 <see cref="MergeListIntoCachedRoles"/>),表现为"同步了却还是看不到有效词条",
+        // 且永远不自愈。而库街区实时响应里 valid 一直是完整的(实测相里要/折枝/漂泊者/安可等
+        // 均 null=0),所以缺的不是数据源,是覆盖策略。
+        // </para>
+        // <para>
+        // 规则:target 无数据 → 用 source;target 有数据但<b>缺 valid 而 source 有</b> → 用 source
+        // (只有"更完整的判定信息"才能覆盖,避免用旧数据覆盖新数据)。
+        // </para>
+        target.PhantomData = PickPhantomData(target.PhantomData, source.PhantomData);
         if (target.Chains is not { Count: > 0 })
         {
             target.Chains = source.Chains;
         }
+    }
+
+    /// <summary>
+    /// 声骸区块合并择取:优先"带词条有效性判定"的一侧,避免陈旧快照(无 valid)粘滞。
+    /// <para>target 为空 → source;source 无数据 → target;两者都有 real 数据时,
+    /// 只要 target 缺 valid 且 source 有,就用 source 覆盖。</para>
+    /// </summary>
+    internal static PhantomData? PickPhantomData(PhantomData? target, PhantomData? source)
+    {
+        if (target is null)
+        {
+            return source;
+        }
+        if (source?.Phantoms is not { Count: > 0 })
+        {
+            return target; // 来源没数据,不覆盖
+        }
+        if (target.Phantoms is not { Count: > 0 })
+        {
+            return source; // 目标没数据,直接用来源
+        }
+        // 双方都有声骸:仅当来源带了有效性判定而目标没有时,才让来源覆盖(修陈旧快照)
+        return !target.HasSubstatValidity && source.HasSubstatValidity ? source : target;
     }
 
     /// <summary>

@@ -31,6 +31,8 @@ public sealed class KujiequApiClient
     public const string NewTowerUrl = BaseUrl + "/aki/roleBox/akiBox/newTowerDetail";
     public const string SlashUrl = BaseUrl + "/aki/roleBox/akiBox/slashDetail";
     public const string TowerUrl = BaseUrl + "/aki/roleBox/akiBox/towerDataDetail";
+    public const string ChallengeIndexUrl = BaseUrl + "/aki/roleBox/akiBox/challengeIndex";
+    public const string ChallengeDetailsUrl = BaseUrl + "/aki/roleBox/akiBox/challengeDetails";
     public const string DailyDataUrl = BaseUrl + "/gamer/widget/game3/getData";
     public const string BaseDataUrl = BaseUrl + "/aki/roleBox/akiBox/baseData";
 
@@ -86,6 +88,12 @@ public sealed class KujiequApiClient
 
     /// <summary>towerDataDetail(逆境深塔)端点。</summary>
     public string TowerUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/akiBox/towerDataDetail";
+
+    /// <summary>challengeIndex(全息战略总览)端点。</summary>
+    public string ChallengeIndexUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/akiBox/challengeIndex";
+
+    /// <summary>challengeDetails(全息战略挑战记录)端点。</summary>
+    public string ChallengeDetailsUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/akiBox/challengeDetails";
 
     /// <summary>getData(每日数据)端点。</summary>
     public string DailyDataUrlValue => _baseUrl.TrimEnd('/') + "/gamer/widget/game3/getData";
@@ -448,6 +456,70 @@ public sealed class KujiequApiClient
         _logger.LogDebug("slashDetail payload 片段: {Snippet}", Truncate(dataStr, 700));
         DumpPayload("slash", dataStr);
         return JsonSerializer.Deserialize(dataStr, TowerJsonContext.Default.SlashData);
+    }
+
+    /// <summary>
+    /// 获取全息战略总览(challengeIndex 接口):四个地区(演武/同步/幻痛/强袭)各自的 boss 列表
+    /// 与「已通关最高难度」。
+    /// <para>
+    /// 参数实测结论(2026-10):<c>countryCode</c> 对返回内容<b>完全无影响</b>
+    /// (1/100001/100002/100004/不传 都是同一份),<c>channelId</c> 可省 ——
+    /// 故这里固定带 channelId/countryCode,与官方 H5 现值保持一致即可,无需按地区循环请求。
+    /// </para>
+    /// </summary>
+    public async Task<HologramIndexData?> GetChallengeIndexAsync(
+        string accessToken,
+        string deviceId,
+        string roleId,
+        string? source = null,
+        CancellationToken ct = default)
+    {
+        var headers = BuildWebHeader(accessToken, deviceId);
+        var body = $"gameId={ParamGameId}&roleId={roleId}&serverId={ParamServerId}&channelId=19&countryCode=1";
+        var env = await SendEnvelopeAsync(
+            ChallengeIndexUrlValue, headers, body, ct, extraSuccessCodes: KujiequSoftSuccessCodes).ConfigureAwait(false);
+        var dataStr = GetDataString(env);
+        if (dataStr is null)
+        {
+            _logger.LogWarning("challengeIndex 返回空 data: roleId={RoleId} code={Code} msg={Msg}",
+                roleId, env?.Code, env?.Msg);
+            return null;
+        }
+        _logger.LogInformation("challengeIndex 返回: code={Code} msg={Msg} dataLen={Len}", env?.Code, env?.Msg, dataStr.Length);
+        DumpPayload("challengeIndex", dataStr);
+        return JsonSerializer.Deserialize(dataStr, HologramJsonContext.Default.HologramIndexData);
+    }
+
+    /// <summary>
+    /// 获取全息战略各 boss 的全难度挑战记录(challengeDetails 接口)。
+    /// <para>
+    /// 一次返回<b>全部</b> boss × 6 档难度(键为字符串 bossId 的字典),无需按地区/难度分别请求。
+    /// roleId/serverId 无效时服务端返回 <c>code=200</c> + <c>data="null"</c>:
+    /// 这里反序列化后即为 null,由上层按「无数据」处理(不当作错误)。
+    /// </para>
+    /// </summary>
+    public async Task<HologramDetailData?> GetChallengeDetailsAsync(
+        string accessToken,
+        string deviceId,
+        string roleId,
+        string? source = null,
+        CancellationToken ct = default)
+    {
+        var headers = BuildWebHeader(accessToken, deviceId);
+        var body = $"gameId={ParamGameId}&roleId={roleId}&serverId={ParamServerId}&channelId=19&countryCode=1";
+        var env = await SendEnvelopeAsync(
+            ChallengeDetailsUrlValue, headers, body, ct, extraSuccessCodes: KujiequSoftSuccessCodes).ConfigureAwait(false);
+        var dataStr = GetDataString(env);
+        if (dataStr is null)
+        {
+            _logger.LogWarning("challengeDetails 返回空 data: roleId={RoleId} code={Code} msg={Msg}",
+                roleId, env?.Code, env?.Msg);
+            return null;
+        }
+        _logger.LogInformation("challengeDetails 返回: code={Code} msg={Msg} dataLen={Len}", env?.Code, env?.Msg, dataStr.Length);
+        DumpPayload("challengeDetails", dataStr);
+        // data 内容可能是字符串 "null"(roleId/serverId 无效时实测形态),反序列化结果为 null
+        return JsonSerializer.Deserialize(dataStr, HologramJsonContext.Default.HologramDetailData);
     }
 
     /// <summary>

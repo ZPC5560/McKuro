@@ -163,8 +163,18 @@ public static class WikiGuideService
     }
 
     /// <summary>
-    /// 解析「声骸词条」文本为权重表:去 HTML 标签 → &gt;/＞/&gt; 分组(=/＝ 并列)→ 组序递减赋权。
-    /// 无法映射到已知词条的组(如括号里的推荐说明)终止解析。
+    /// 解析「声骸词条」文本为权重表:去 HTML 标签 → &gt;/＞ 分组 → 同级分隔符 → 组序递减赋权。
+    /// <para>
+    /// <b>同级分隔符</b>:Wiki 用 <c>=</c>,而 mcguide 攻略正文常用 <c>/</c>(如「暴击/暴击伤害」)
+    /// 与 <c>、</c>。早期只按 <c>=</c> 切分,导致 <c>暴击/暴击伤害</c> 被当成单个 token 而只映射出
+    /// 「暴击伤害」—— <c>暴击</c> 静默丢失(实测千咲「暴击/暴击伤害/攻击%/共鸣解放/共鸣效率」
+    /// 只解析出 1 条,丢 4 条)。
+    /// </para>
+    /// <para>
+    /// <b>括号处理</b>:早期遇到第一个 <c>（</c> 就截断其后全部内容,但 mcguide 的补充说明
+    /// 出现在句中(如「共鸣效率（230%）&gt;暴击伤害&gt;…」),截断会把后面真正有效的词条全丢掉。
+    /// 现改为<b>只删除括号及其内部内容</b>,保留其余文本。
+    /// </para>
     /// </summary>
     public static IReadOnlyDictionary<string, double>? ParsePriorityWeights(string? section)
     {
@@ -174,34 +184,30 @@ public static class WikiGuideService
         }
         var s = Regex.Replace(section, "<[^>]+>", " ");
         s = s.Replace("&gt;", ">").Replace("&amp;", "&").Replace('＝', '>').Replace('＞', '>');
-        var cut = s.IndexOfAny(new[] { '（', '(' });
-        if (cut >= 0)
-        {
-            s = s[..cut];
-        }
+        // 删除括号内容(含全角/半角),而不是截断其后文本 —— 说明常出现在句中
+        s = Regex.Replace(s, "[（(][^）)]*[）)]", " ");
+        // 句号/分号/顿号等拆成独立段落,避免与前缀说明(如「共鸣效率120%」)黏连
+        s = s.Replace('；', '>').Replace(';', '>').Replace('。', '>').Replace('，', '>').Replace(',', '>');
         var groups = s.Split('>', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var dict = new Dictionary<string, double>(StringComparer.Ordinal);
         for (var g = 0; g < groups.Length; g++)
         {
             var weight = g < RankWeights.Length ? RankWeights[g] : RankWeights[^1];
-            var mapped = 0;
-            foreach (var token in groups[g].Split(['=', '＝'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            foreach (var token in groups[g].Split(TierSeparators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
                 foreach (var affix in MapTokenToAffixes(token))
                 {
-                    if (dict.TryAdd(affix, weight))
-                    {
-                        mapped++;
-                    }
+                    dict.TryAdd(affix, weight);
                 }
             }
-            if (mapped == 0 && g > 0)
-            {
-                break; // 解析到非词条文本(下一节标题/说明)即停
-            }
+            // 该组一个词条都没映射出来(纯数值/说明文字)时不再中断解析:
+            // mcguide 正文里「共鸣效率120%」这类带数值的说明很常见,中断会丢掉其后全部词条。
         }
         return dict.Count > 0 ? dict : null;
     }
+
+    /// <summary>同级词条分隔符:Wiki 的 <c>=</c>/<c>＝</c>,以及 mcguide 常用的 <c>/</c>、<c>、</c>。</summary>
+    private static readonly char[] TierSeparators = ['=', '＝', '/', '／', '、'];
 
     /// <summary>优先级词条别名 → 标准属性名(一个别名可覆盖多个词条,如「攻击」含攻击%与固定攻击)。</summary>
     private static IEnumerable<string> MapTokenToAffixes(string token)

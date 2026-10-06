@@ -36,6 +36,11 @@
                         <TextBlock Text="{Binding SameAccountStatus}" FontSize="12" Foreground="White"
                                    MaxWidth="320" TextTrimming="CharacterEllipsis" />
                     </Border>
+                    <!-- 有接口登录态已失效(橙色:优先于"同一账号",提示需重新登录) -->
+                    <Border CornerRadius="8" Padding="10,4" Background="#E08A00" IsVisible="{Binding SameAccountIsSessionExpired}">
+                        <TextBlock Text="{Binding SameAccountStatus}" FontSize="12" Foreground="White"
+                                   MaxWidth="320" TextTrimming="CharacterEllipsis" />
+                    </Border>
                     <!-- 信息不足(中性) -->
                     <Border CornerRadius="8" Padding="10,4" Background="{DynamicResource SemiColorBg3}"
                             IsVisible="{Binding SameAccountIsUnknown}">

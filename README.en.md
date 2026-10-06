@@ -25,7 +25,7 @@ A desktop launcher for *Wuthering Waves*, built with **.NET 10 + Avalonia 12 + S
 | News | KuroBBS wiki front page + announcement cards + web shortcuts; multi-language PV auto-selects the English part; links switch to global official sources in English UI |
 | Redeem Codes | Remote code list (CN/global, active first), one-click copy per card with a floating success toast |
 | Play Stats | Daily play time for the last 7 days + 7×24 hour heat grid |
-| Tower & Wastes | Three tabs — Tower of Adversity / Mortal Matrix / Whimpering Wastes; past history persisted locally (with start→end ranges); per-team scores by round for Mortal Matrix |
+| Tower & Wastes | Four tabs — Tower of Adversity / Mortal Matrix / Whimpering Wastes / Tactical Hologram; past history persisted locally (with start→end ranges); per-team scores by round for Mortal Matrix; per-difficulty progress and clearing teams for Tactical Hologram |
 | Account | Single entry point for KuroBBS multi-accounts / Cloud Wuthering Waves / Official Guide Site sign-in; in-app CAPTCHA window; same-account auto-detection |
 | Settings | Game directory auto-detect, download concurrency/speed limit, launch & minimize behavior, background video source, in-app self-update, full zh-Hans / en-US UI switching |
 
@@ -55,13 +55,13 @@ App icon: official Shorekeeper icon (shared under CC BY-NC-SA), multi-size ICO e
 ### Data Analysis
 
 - **Gacha Analysis**: decrypts `Client.log` to extract record URLs → pulls history from the official endpoint. **Dual-channel sync** (Cloud Wuthering Waves API first, local log fallback, SQLite cache as last resort). Per-banner pity / current ceiling / soft-pity miss rate / luck score / title / double-5★ / off-banner count / average pulls / rate / days; **per-5★ UP/off-banner tagging** (undeterminable banners such as the standard weapon banner are never mislabeled); **ring chart** (banner switcher) + **smoothed daily-pull area chart** (hover for date/banner/count); multi-account switching with an "all accounts" aggregate; real 5★ character/weapon icons; deduplicated local SQLite storage.
-- **Characters**: KuroBBS API or Official Guide Site (level/weapon/skills/chain/echo/stats), native grid cards; icon cache persisted on disk (6 categories, survives data-source switches); when KuroBBS hits GeeTest risk control the complete cache is shown first; local game cache parsing; Echo rating.
-- **Tower & Wastes**: three tabs — Tower of Adversity / Mortal Matrix / Whimpering Wastes — parsed to match the Java project [WutheringWavesTool](https://github.com/leck995/WutheringWavesTool); stable two-column area cards; past Mortal Matrix history persisted locally with start→end ranges (start dates back-derived from the season cycle); auto-refresh on entry; per-round team scores (per-team points/progress/characters/buff plus round totals, score and portraits vertically aligned); ratings rendered as the official 6 tiers (SSS/SS/S/A/B/C).
+- **Characters**: KuroBBS API or Official Guide Site (level/weapon/skills/chain/echo/stats), native grid cards; icon cache persisted on disk (6 categories, survives data-source switches); when KuroBBS hits GeeTest risk control the complete cache is shown first; local game cache parsing; **Echo rating (unified main+sub scale)**: per-echo 0-100 score + total graduation grade, with the "ideal" main stat judged against the character's official recommended build so HP/DEF/healing-oriented characters are no longer systematically underscored; legacy caches without main-stat data fall back to the historical scale.
+- **Tower & Wastes**: four tabs — Tower of Adversity / Mortal Matrix / Whimpering Wastes / **Tactical Hologram** — parsed to match the Java project [WutheringWavesTool](https://github.com/leck995/WutheringWavesTool) (the Hologram aligns with the official H5's challengeIndex / challengeDetails); stable two-column area cards; past Mortal Matrix history persisted locally with start→end ranges (start dates back-derived from the season cycle); auto-refresh on entry; per-round team scores (per-team points/progress/characters/buff plus round totals, score and portraits vertically aligned); the Hologram shows every boss across four regions with a 6-pip difficulty gauge, plus clear time and the 3-character team in the details pane; ratings rendered as the official 6 tiers (SSS/SS/S/A/B/C).
 - **Play Stats**: daily play time for the last 7 days + a 7×24 hour heat grid.
 
 ### Accounts & Notifications
 
-- The **Account page** is the single entry point for every API login: KuroBBS multi-accounts (SMS + GeeTest sign-in / switch / remove), Cloud Wuthering Waves, and Official Guide Site rating sign-in — three stacked login cards. SMS verification runs in an **in-app CAPTCHA window** (macOS = WKWebView / Windows = WebView2). **Same-account auto-detection** across interfaces via phone number (advisory only, never forces sign-out); each tab header carries a login status dot (green/orange/grey).
+- The **Account page** is the single entry point for every API login: KuroBBS multi-accounts (SMS + GeeTest sign-in / switch / remove), Cloud Wuthering Waves, and Official Guide Site rating sign-in — three stacked login cards. SMS verification runs in an **in-app CAPTCHA window** (macOS = WKWebView / Windows = WebView2). **Same-account auto-detection** across interfaces via phone number (advisory only, never forces sign-out); when any interface's session has expired, the verdict prioritizes "please sign in again" over "same account"; each tab header carries a login status dot (green/orange/grey), and expired verdicts are recorded per account so neither page repaints nor network hiccups can wipe them.
 - **Five floating reminders** (pop up globally outside the Settings page, auto-dismiss after 8 s, with "Go" jump or manual close): unfinished daily sign-in, event ending soon (≤3 days), account session expired (KuroBBS / Cloud / Guide Site), weekly bosses wrap-up, daily activity. Each category has an independent toggle; **deduplicated per day and persisted** (restarting the same day won't nag twice); the first check runs 15 s after launch, and sign-in-related reminders wait for the auto sign-in to finish to avoid false positives.
 
 ### Sign-in · Events · News · Codes
@@ -73,7 +73,7 @@ App icon: official Shorekeeper icon (shared under CC BY-NC-SA), multi-size ICO e
 
 ### Internationalization & Self-Update
 
-- Full **zh-Hans / en-US** UI switching (873-key bilingual resources covering every page and dynamic message; applied on restart).
+- Full **zh-Hans / en-US** UI switching (901-key bilingual resources covering every page and dynamic message; applied on restart).
 - Built-in GitHub Release self-update with channel fallback, resumable downloads and integrity verification — see [Self-Update](#self-update).
 
 ## Requirements
@@ -109,7 +109,7 @@ McKuro/
 │   ├── ViewModels/                 # MVVM (CommunityToolkit.Mvvm)
 │   ├── Controls/                   # AsyncImage / VideoBackgroundControl(libmpv) / charts / WebView2·WKWebView (CAPTCHA) / Live2DModelHost
 │   ├── Services/                   # manual DI (AppServices) + system materials / game process monitor / daily scheduler / i18n / Live2D runtime lookup
-│   └── Assets/lang/                # zh-Hans / en-US UI strings (873 keys)
+│   └── Assets/lang/                # zh-Hans / en-US UI strings (901 keys)
 ├── src/McKuro.Core/                # UI-free core library (AOT-friendly, source-generated JSON)
 │   ├── Services/Gacha/             # log decryption / URL extraction / endpoints / analysis / storage / cloud dual channel
 │   ├── Services/Game/              # manifest loading / resumable download / diff install (hpatchz) / update / play time
@@ -121,7 +121,7 @@ McKuro/
 │   ├── Services/                   # Update (self-update) / Launcher / Notification / Redeem / Settings and the rest
 │   └── Infrastructure/             # SQLite (Microsoft.Data.Sqlite)
 ├── src/ThirdParty/Sparkle.Live2DView/  # vendored Live2D rendering control (MIT)
-└── tests/McKuro.Tests/             # xUnit unit tests (923 cases)
+└── tests/McKuro.Tests/             # xUnit unit tests (1049 cases)
 ```
 
 ## Usage Guide
@@ -161,7 +161,7 @@ Not yet supported on macOS/Linux (the rendering control currently targets Window
 
 ### UI Language
 
-Settings → **UI language** supports **简体中文 / English**, applied after restart. Bilingual resources (873 keys) cover all page copy, messages and service-layer statuses (the `CoreStrings` gateway: Core resolves strings through a parser registered by the app, falling back to the original Chinese in unit tests when none is registered).
+Settings → **UI language** supports **简体中文 / English**, applied after restart. Bilingual resources (901 keys) cover all page copy, messages and service-layer statuses (the `CoreStrings` gateway: Core resolves strings through a parser registered by the app, falling back to the original Chinese in unit tests when none is registered).
 
 ## Releases & Installer
 
@@ -176,7 +176,7 @@ Release tags (`v*`) trigger GitHub Actions to build Native AOT binaries for all 
 For unpacked assets run `chmod +x McKuro` first. To compile the installer locally (requires Inno Setup 6):
 
 ```bash
-ISCC.exe installer\setup.iss /DMyAppVersion=1.3.3.1
+ISCC.exe installer\setup.iss /DMyAppVersion=1.3.4
 ```
 
 ## Self-Update
@@ -191,7 +191,7 @@ Settings checks GitHub Releases (default repository `ZPC5560/McKuro`); the updat
 
 ## Testing & CI
 
-- `tests/McKuro.Tests`: **923 xUnit unit tests** (log decryption, gacha analysis, banner statistics, update pipeline, notifications, i18n, and more).
+- `tests/McKuro.Tests`: **1049 xUnit unit tests** (log decryption, gacha analysis, banner statistics, update pipeline, notifications, i18n, and more).
 - `build-and-test.yml`: build + test on Linux for every push/PR; release tags or manual dispatch run the full-platform AOT publishes and attach Release assets.
 - `website.yml`: rebuilds and deploys the website whenever `website/` or `website-src/` changes, failing on any drift between built output and committed artifacts.
 

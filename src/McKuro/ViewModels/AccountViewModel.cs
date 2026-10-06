@@ -28,6 +28,12 @@ public enum SameAccountVerdict
     Same,
     /// <summary>已登录接口使用不同手机号,可能不是同一账号。</summary>
     Different,
+    /// <summary>
+    /// 有接口的登录态已失效(会话过期)。
+    /// <para>优先于「同一账号」结论:即便手机号一致,失效的接口也需要重新登录,
+    /// 此时不该只显示"均为同一账号"而掩盖问题。</para>
+    /// </summary>
+    SessionExpired,
 }
 
 /// <summary>接口账号登录状态(登录卡片标签后的状态点)。</summary>
@@ -334,11 +340,18 @@ public sealed partial class AccountViewModel : ViewModelBase
     /// <summary>信息不足(中性提示)。</summary>
     public bool SameAccountIsUnknown => SameAccountVerdict == SameAccountVerdict.Unknown;
 
+    /// <summary>
+    /// 有接口登录态已失效(橙色提示,优先于"同一账号")。
+    /// <para>会话过期后右上角必须显示需要重新登录,而不是继续说"均为同一账号"。</para>
+    /// </summary>
+    public bool SameAccountIsSessionExpired => SameAccountVerdict == SameAccountVerdict.SessionExpired;
+
     partial void OnSameAccountVerdictChanged(SameAccountVerdict value)
     {
         OnPropertyChanged(nameof(SameAccountIsSame));
         OnPropertyChanged(nameof(SameAccountIsDifferent));
         OnPropertyChanged(nameof(SameAccountIsUnknown));
+        OnPropertyChanged(nameof(SameAccountIsSessionExpired));
     }
 
     private readonly object _checkLock = new();
@@ -377,39 +390,71 @@ public sealed partial class AccountViewModel : ViewModelBase
         _ = RefreshGameRoleLabelsAsync();
     }
 
-    /// <summary>导航到账号页时调用:并行校验三个接口的登录态是否过期,并补一次本地角色枚举(首次失败可重试)。</summary>
+    /// <summary>
+    /// 导航到账号页时调用:并行校验三个接口的登录态是否过期,并补一次本地角色枚举(首次失败可重试)。
+    /// <para>
+    /// 每次进入页面都应重跑校验:否则"在别处退出登录/会话过期"后回到账号页仍显示绿点。
+    /// 若上一次校验仍在进行,则只做"当前账号已变"时的重跑(见 <see cref="ValidateSessionsAsync"/>)。
+    /// </para>
+    /// </summary>
     public void OnNavigatedTo()
     {
         if (!_localPlayersLoaded)
         {
             _ = RefreshGameRoleLabelsAsync();
         }
-        if (_sessionValidating)
-        {
-            return;
-        }
-        _sessionValidating = true;
         _ = ValidateSessionsAsync();
     }
 
     private bool _sessionValidating;
+    /// <summary>正在进行的校验所针对的库街区账号 UserId(用于识别"校验期间换了账号")。</summary>
+    private string? _validatingKuroUserId;
+    /// <summary>校验期间账号发生变化时置位,使校验结束后对新账号再跑一轮。</summary>
+    private bool _rescheduleValidation;
 
+    /// <summary>
+    /// 并行校验三个接口的登录态。不重入(并发 getGamer 易触发风控);
+    /// 若校验期间用户切换了库街区账号,则结束后对新账号再校验一轮,避免拿旧账号结论显示新账号状态。
+    /// </summary>
     private async Task ValidateSessionsAsync()
     {
+        if (_sessionValidating)
+        {
+            if (AppServices.KuroAccounts.Current?.UserId != _validatingKuroUserId)
+            {
+                _rescheduleValidation = true;
+            }
+            return;
+        }
+        _sessionValidating = true;
         try
         {
-            await Task.WhenAll(
-                ValidateKuroSessionAsync(),
-                ValidateCloudSessionAsync(),
-                ValidateGuideSessionAsync()).ConfigureAwait(true);
+            do
+            {
+                _rescheduleValidation = false;
+                _validatingKuroUserId = AppServices.KuroAccounts.Current?.UserId;
+                await Task.WhenAll(
+                    ValidateKuroSessionAsync(),
+                    ValidateCloudSessionAsync(),
+                    ValidateGuideSessionAsync()).ConfigureAwait(true);
+            }
+            while (_rescheduleValidation);
         }
         finally
         {
             _sessionValidating = false;
+            _validatingKuroUserId = null;
         }
     }
 
-    /// <summary>库街区:用当前账号 token 拉角色列表判定登录态(不自动删除账号,非破坏性)。</summary>
+    /// <summary>
+    /// 库街区:用当前账号 token 拉角色列表判定登录态(不自动删除账号,非破坏性)。
+    /// <para>
+    /// 账号页每次导航进入都会执行,使"登录已失效"在账号页就能看到,而不必等到角色页点同步。
+    /// 判定结果记入 <see cref="_expiredKuroUserIds"/>,避免随后的一次 <see cref="RefreshAccounts"/>
+    /// (页面重绘)把橙点刷回绿点。
+    /// </para>
+    /// </summary>
     private async Task ValidateKuroSessionAsync()
     {
         var account = AppServices.KuroAccounts.Current;
@@ -420,14 +465,26 @@ public sealed partial class AccountViewModel : ViewModelBase
         try
         {
             var gamer = await AppServices.Kuro.GetGamerAsync(account, (int)KuroGameType.Waves).ConfigureAwait(true);
-            if (gamer is { Code: 200, Data: not null })
+            switch (AccountLoginStateLogic.ProbeKuroSession(gamer))
             {
-                KuroLoginState = InterfaceLoginState.Ok;
-                return; // 有效,不打扰
+                case AccountLoginStateLogic.KuroSessionProbe.Valid:
+                    // 服务端确认有效:清除失效标记,橙点恢复绿点
+                    ClearKuroSessionExpired(account.UserId);
+                    KuroLoginState = InterfaceLoginState.Ok;
+                    return; // 有效,不打扰
+                case AccountLoginStateLogic.KuroSessionProbe.Rejected:
+                    // 服务端明确拒绝 → 橙点(异常登录);记入失效集合,页面重绘后仍是橙点。
+                    _expiredKuroUserIds.Add(account.UserId);
+                    KuroLoginState = InterfaceLoginState.Error;
+                    StatusText = LanguageService.Format("Account.KuroSessionExpired", gamer?.Msg ?? $"code={gamer?.Code}");
+                    return;
+                case AccountLoginStateLogic.KuroSessionProbe.Unreachable:
+                default:
+                    // 未拿到响应(网络失败/超时/响应体不可解析):无法判定 → 不改任何状态,
+                    // 也不清失效标记,避免一次网络抖动把刚判定的「会话失效(橙)」刷回绿点。
+                    // (等价于旧的「网络异常不改状态」行为。)
+                    return;
             }
-            // 服务端明确拒绝 → 橙点(异常登录);网络异常不改状态,避免误报
-            KuroLoginState = InterfaceLoginState.Error;
-            StatusText = LanguageService.Format("Account.KuroSessionExpired", gamer?.Msg ?? $"code={gamer?.Code}");
         }
         catch (Exception ex)
         {
@@ -502,12 +559,37 @@ public sealed partial class AccountViewModel : ViewModelBase
             ? LanguageService.Format("Sign.NotLoggedIn")
             : AccountOptions.ElementAtOrDefault(IndexByKey(_accountOptionKeys, current.UserId)) ?? LanguageService.Format("Sign.NotLoggedIn");
         SelectedAccountIndex = current is null ? -1 : IndexByKey(_accountOptionKeys, current.UserId);
-        // 已保存登录先按绿点显示,会话校验失败再转橙点
-        KuroLoginState = current is null ? InterfaceLoginState.NotLoggedIn : InterfaceLoginState.Ok;
+        // 登录状态点:未登录 → 灰;已保存登录 → 默认绿(会话校验失败后再转橙)。
+        // ⚠️ 不能无条件写 Ok:本方法会被 RefreshGameRoleLabelsAsync 等在页面加载时反复调用,
+        // 若每次都重置为 Ok,就会把 ValidateKuroSessionAsync 刚判定的「会话失效(橙)」冲掉,
+        // 表现为「账号页看不到失效提示,直到去角色页点同步才发现」。
+        // 判定规则抽到 AccountLoginStateLogic.ResolveKuroDot(纯函数,有单测锁定)。
+        KuroLoginState = AccountLoginStateLogic.ResolveKuroDot(
+            current?.UserId, IsKuroSessionKnownExpired(current?.UserId));
         OnPropertyChanged(nameof(HasKuroLogin));
         OnPropertyChanged(nameof(HasKuroAccounts));
         OnPropertyChanged(nameof(KuroAccountDisplay));
         RefreshSameAccountAuto();
+    }
+
+    /// <summary>
+    /// 已判定失效的库街区账号 UserId 集合。
+    /// <para>校验失败后记入,使页面重绘(<see cref="RefreshAccounts"/>)不会把橙点刷回绿点;
+    /// 该账号成功登录/切换为其他账号时清除。仅按 UserId 记,不含任何凭据。</para>
+    /// </summary>
+    private readonly HashSet<string> _expiredKuroUserIds = new(StringComparer.Ordinal);
+
+    /// <summary>该库街区账号是否已被判定会话失效(橙点)。</summary>
+    private bool IsKuroSessionKnownExpired(string? userId)
+        => !string.IsNullOrEmpty(userId) && _expiredKuroUserIds.Contains(userId);
+
+    /// <summary>清除某账号的失效标记(重新登录成功 / 主动切换后调用)。</summary>
+    private void ClearKuroSessionExpired(string? userId)
+    {
+        if (!string.IsNullOrEmpty(userId))
+        {
+            _expiredKuroUserIds.Remove(userId);
+        }
     }
 
     /// <summary>按键列表定位下标(找不到返回 -1)。</summary>
@@ -650,6 +732,8 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
         var account = accounts[value];
         AppServices.KuroAccounts.Current = account;
+        // 切到该账号视为"重新开始":清除上一次的失效判定,由本次会话校验重新确认
+        ClearKuroSessionExpired(account.UserId);
         // 同步 token 到设置:角色数据页自动加载依赖 KujiequToken
         AppServices.Settings.Current.KujiequToken = account.Token;
         AppServices.Settings.Save();
@@ -657,6 +741,8 @@ public sealed partial class AccountViewModel : ViewModelBase
         StatusText = LanguageService.Format("Account.Switched", string.IsNullOrEmpty(account.Nickname) ? account.UserId : account.Nickname);
         // 通知角色数据页按新账号刷新
         WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(account.UserId));
+        // 切换后立即校验新账号的会话(切到已失效的账号时,账号页马上显示橙点与提示)
+        _ = ValidateSessionsAsync();
     }
 
     /// <summary>展开/收起库街区登录表单(添加新账号)。</summary>
@@ -730,6 +816,8 @@ public sealed partial class AccountViewModel : ViewModelBase
         if (current is not null)
         {
             AppServices.KuroAccounts.Remove(current.UserId);
+            // 账号已移除:清掉失效标记,避免残留(重新登录同一 UserId 时不应继承旧结论)
+            ClearKuroSessionExpired(current.UserId);
             // 通知签到/角色等页同步登出态(与登录消息同源)
             WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(current.UserId));
         }
@@ -950,6 +1038,8 @@ public sealed partial class AccountViewModel : ViewModelBase
             // 同步 Token 到设置:角色数据页自动加载依赖 KujiequToken
             AppServices.Settings.Current.KujiequToken = account.Token;
             AppServices.Settings.Save();
+            // 重新登录成功 → 清除该账号的失效标记(橙点恢复为绿点)
+            ClearKuroSessionExpired(account.UserId);
             RefreshAccounts();
             SmsStatusText = LanguageService.Format("Account.LoginSuccessWith", note);
             StatusText = LanguageService.Format("Account.KuroLoginSuccess", note);
@@ -1308,35 +1398,47 @@ public sealed partial class AccountViewModel : ViewModelBase
         {
             // 各接口登录态与手机号
             var kuro = AppServices.KuroAccounts.Current;
-            var kuroPhone = kuro?.Mobile ?? "";
             var cloudPhone = AppServices.CloudGacha.SavedLoginPhone;
             var guidePhone = AppServices.Settings.Current.GuidePhone;
 
-            // 已登录的接口
-            var active = new List<(string Name, string Phone)>();
+            // 已登录的接口(附"是否已知会话失效";失效结论优先于"同一账号"暴露,
+            // 否则登录过期后右上角仍显示"均为同一账号",用户看不到要重新登录 —— 用户反馈)
+            var probes = new List<AccountLoginStateLogic.InterfaceProbe>();
             if (kuro is not null)
             {
-                active.Add((LanguageService.Format("Account.IfKuro"), kuroPhone));
+                probes.Add(new AccountLoginStateLogic.InterfaceProbe(
+                    LanguageService.Format("Account.IfKuro"), kuro.Mobile ?? "", IsKuroSessionKnownExpired(kuro.UserId)));
             }
             if (AppServices.CloudGacha.HasSavedLogin)
             {
-                active.Add((LanguageService.Format("Account.IfCloud"), cloudPhone));
+                probes.Add(new AccountLoginStateLogic.InterfaceProbe(
+                    LanguageService.Format("Account.IfCloud"), cloudPhone, CloudLoginState == InterfaceLoginState.Error));
             }
             if (AppServices.Guide.HasToken)
             {
-                active.Add(("mcguide", guidePhone));
+                probes.Add(new AccountLoginStateLogic.InterfaceProbe(
+                    "mcguide", guidePhone, GuideLoginState == InterfaceLoginState.Error));
             }
 
-            if (active.Count <= 1)
+            var expired = AccountLoginStateLogic.ExpiredNames(probes);
+            if (expired.Count > 0)
             {
-                SameAccountVerdict = SameAccountVerdict.Unknown;
-                SameAccountStatus = active.Count == 0
-                    ? LanguageService.Format("Account.NoAccounts")
-                    : LanguageService.Format("Account.OnlyOne", active[0].Name);
+                // 有接口失效:优先提示重新登录(不再显示"均为同一账号"掩盖问题)
+                SameAccountVerdict = SameAccountVerdict.SessionExpired;
+                SameAccountStatus = LanguageService.Format("Account.SessionExpiredInterfaces", string.Join(" / ", expired));
                 return;
             }
 
-            var missing = active.Where(a => string.IsNullOrWhiteSpace(a.Phone)).ToList();
+            if (probes.Count <= 1)
+            {
+                SameAccountVerdict = SameAccountVerdict.Unknown;
+                SameAccountStatus = probes.Count == 0
+                    ? LanguageService.Format("Account.NoAccounts")
+                    : LanguageService.Format("Account.OnlyOne", probes[0].Name);
+                return;
+            }
+
+            var missing = probes.Where(p => string.IsNullOrWhiteSpace(p.Phone)).ToList();
             if (missing.Count > 0)
             {
                 // 有接口没记录手机号,无法完整判定
@@ -1345,18 +1447,11 @@ public sealed partial class AccountViewModel : ViewModelBase
                 return;
             }
 
-            var distinctPhones = active.Select(a => a.Phone).Distinct().Count();
-            if (distinctPhones == 1)
-            {
-                SameAccountVerdict = SameAccountVerdict.Same;
-                SameAccountStatus = LanguageService.Format("Account.AllSame", active.Count);
-            }
-            else
-            {
-                // 不同手机号 → 完全不同或部分不同,仅提醒不强制登出
-                SameAccountVerdict = SameAccountVerdict.Different;
-                SameAccountStatus = LanguageService.Format("Account.DifferentPhones");
-            }
+            var verdict = AccountLoginStateLogic.ResolveVerdict(probes);
+            SameAccountVerdict = verdict;
+            SameAccountStatus = verdict == SameAccountVerdict.Same
+                ? LanguageService.Format("Account.AllSame", probes.Count)
+                : LanguageService.Format("Account.DifferentPhones");
         }
         finally
         {

@@ -142,12 +142,15 @@ public class RatingBrushConverterTests
     }
 
     [Fact]
-    public void PropLevel_3_Returns_Vivid_Amber_In_Light()
+    public void PropLevel_3_And_2_Share_The_Same_Valid_Color()
     {
-        // 2026-10 调整:有效词条(level3)改为更鲜艳的高饱和琥珀(#E08A00)
+        // 2026-10 用户定案:有效词条不再按"核心/其他"分色 —— level2 与 level3 同为青色
+        // (此前 level3 = 琥珀金 #E08A00、level2 = 青 #0097A7,视觉上是两套色)。
         var c = new PropLevelBrushConverter();
-        var brush = Assert.IsType<SolidColorBrush>(c.Convert(3, typeof(IBrush), null, CultureInfo.InvariantCulture));
-        Assert.Equal(Color.Parse("#E08A00"), brush.Color);
+        var lv3 = Assert.IsType<SolidColorBrush>(c.Convert(3, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        var lv2 = Assert.IsType<SolidColorBrush>(c.Convert(2, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
+        Assert.Equal(Color.Parse("#0097A7"), lv3);
+        Assert.Equal(lv3, lv2);
     }
 
     [Fact]
@@ -171,24 +174,21 @@ public class RatingBrushConverterTests
     }
 
     [Fact]
-    public void PropLevel_ThreeTiers_CoreValidInvalid()
+    public void PropLevel_TwoVisualTiers_ValidAndInvalid()
     {
-        // 现行三档规则(见 PropLevelBrushConverter 注释):
-        // level3 = 核心有效(亮色);level2 = 官方 getRoleDetail valid 判定的有效词条(青);
-        // level1/0 = 官方无效或无官方数据的非核心词条 → 灰。
-        // 演进:2026-10 曾把 level2 降灰(当时只有通用权重表,无法按角色区分是否有效),
-        // 实测接口自带按角色的 valid 字段后恢复青档。
+        // 现行视觉两档(见 PropLevelBrushConverter 注释):
+        // level2/3 = 有效 → 同一青色;level1/0 = 无效/低价值 → 灰。
+        // 演进:2026-10 曾 level3=琥珀、level2=青(三档视觉),用户要求"只要是有效就同一种颜色"后合并。
         var c = new PropLevelBrushConverter();
         var gray = Assert.IsType<SolidColorBrush>(c.Convert(0, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         var lv1 = Assert.IsType<SolidColorBrush>(c.Convert(1, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         var lv2 = Assert.IsType<SolidColorBrush>(c.Convert(2, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
         var lv3 = Assert.IsType<SolidColorBrush>(c.Convert(3, typeof(IBrush), null, CultureInfo.InvariantCulture)).Color;
-        // level1 与 level0 同为灰(无效)
+        // 无效档:level1 与 level0 同为灰
         Assert.Equal(gray, lv1);
-        // level2/3 都是"有效",必须区别于灰,且两档彼此可辨
+        // 有效档:level2/3 同为青,且区别于灰
+        Assert.Equal(lv2, lv3);
         Assert.NotEqual(gray, lv2);
-        Assert.NotEqual(gray, lv3);
-        Assert.NotEqual(lv2, lv3);
     }
 
     [Fact]
@@ -203,10 +203,10 @@ public class RatingBrushConverterTests
     [Fact]
     public void PropText_Matches_PropLevel_Bar_For_Valid_Levels()
     {
-        // 有效词条(仅 level3)装饰条与文字必须完全同色,避免"条一个色、字另一个色"
+        // 有效词条(level2/3)装饰条与文字必须完全同色,避免"条一个色、字另一个色"
         var bars = new PropLevelBrushConverter();
         var texts = new PropTextBrushConverter();
-        foreach (var level in new[] { 3 })
+        foreach (var level in new[] { 2, 3 })
         {
             var bar = Assert.IsType<SolidColorBrush>(bars.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture));
             var text = Assert.IsType<SolidColorBrush>(texts.Convert(level, typeof(IBrush), null, CultureInfo.InvariantCulture));

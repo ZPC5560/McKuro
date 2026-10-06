@@ -30,7 +30,98 @@
                 </StackPanel>
             </Border>
         </DataTemplate>
+
     </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!-- 全息战略-地区 logo 徽章(演武/同步/幻痛/强袭)。
+             四个地区图标是"整块彩色浮雕图",没有可着色的线稿,故选中态不换图标颜色,
+             而是靠底色淡染 + 描边表达;这样两个主题下都不会把原图颜色改坏。 -->
+        <Style Selector="Button.holoRegion">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="8,7" />
+        </Style>
+        <Style Selector="Button.holoRegion:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
+        </Style>
+        <Style Selector="Button.holoRegion.active">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipSelectedFill}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorPrimary}" />
+        </Style>
+        <!-- 选中项悬停时保持选中底色,避免"一悬停就把选中高亮冲掉" -->
+        <Style Selector="Button.holoRegion.active:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipSelectedFill}" />
+        </Style>
+        <Style Selector="Button.holoRegion:disabled">
+            <Setter Property="Opacity" Value="0.55" />
+        </Style>
+
+        <!-- 全息战略-boss 卡片:整卡可点,选中用描边 + 淡染底突出 -->
+        <Style Selector="Button.holoBoss">
+            <Setter Property="Background" Value="{DynamicResource SemiColorBg3}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="10,9" />
+        </Style>
+        <Style Selector="Button.holoBoss:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
+        </Style>
+        <Style Selector="Button.holoBoss.active">
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorPrimary}" />
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipSelectedFill}" />
+        </Style>
+        <Style Selector="Button.holoBoss.active:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipSelectedFill}" />
+        </Style>
+
+        <!-- 全息战略-难度刻度格。
+             颜色**必须走主题令牌**:此前把色值硬编码在 VM 里(#E0B94E 浅金 / #8A8F99 浅灰),
+             浅色主题下浅金压在浅底上几乎看不出来(用户反馈"当期难度文本在白色主题下不明显")。
+             现在亮/暗主题各取一份 McKuroHolo* 令牌。 -->
+        <Style Selector="Border.holoPip">
+            <Setter Property="Background" Value="{DynamicResource McKuroHoloPipEmpty}" />
+        </Style>
+        <Style Selector="Border.holoPip.filled">
+            <Setter Property="Background" Value="{DynamicResource McKuroHoloGoldSoft}" />
+        </Style>
+        <!-- 满档那一格更亮一档,把"打满了"和"打到第 5 档"一眼分开 -->
+        <Style Selector="Border.holoPip.filled.max">
+            <Setter Property="Background" Value="{DynamicResource McKuroHoloGold}" />
+        </Style>
+
+        <!-- 全息战略-boss 卡片的难度文案:未挑战次级灰,已挑战常规文字色 -->
+        <Style Selector="TextBlock.holoDifficulty">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText3}" />
+        </Style>
+        <Style Selector="TextBlock.holoDifficulty.challenged">
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText1}" />
+        </Style>
+
+        <!-- 全息战略-难度档位的「已通关」圆点(未通关透明占位,避免切换档位时行高跳动) -->
+        <Style Selector="Ellipse.holoDot">
+            <Setter Property="Fill" Value="Transparent" />
+        </Style>
+        <Style Selector="Ellipse.holoDot.cleared">
+            <Setter Property="Fill" Value="{DynamicResource McKuroHoloGold}" />
+        </Style>
+
+        <!-- 全息战略-通关时间数值 -->
+        <Style Selector="TextBlock.holoTime">
+            <Setter Property="Foreground" Value="{DynamicResource McKuroHoloGold}" />
+        </Style>
+
+        <!-- 全息战略-难度档位选择器(竖向 6 行)。
+             行间距给足:每行是一个可点目标,贴太紧既难瞄准、也读不出"6 个独立档位";
+             用 ListBoxItem 内边距做间距(比给每行加 Margin 更稳,选中高亮块会跟着一起变高)。 -->
+        <Style Selector="ListBox.holoTiers ListBoxItem">
+            <Setter Property="Padding" Value="6,5" />
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+    </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*" Margin="20,16,20,16">
         <!-- 标题 -->
@@ -542,6 +633,302 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- 全息战略(challengeIndex + challengeDetails) -->
+            <TabItem Header="{loc:Localize Key=Tower.TabHolo}">
+                <Grid RowDefinitions="Auto,*" Margin="8,8,8,8">
+                    <!-- 未解锁提示 -->
+                    <StackPanel Grid.Row="0" Grid.RowSpan="2" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Spacing="8" IsVisible="{Binding !HologramUnlocked}">
+                        <TextBlock Text="{loc:Localize Key=Tower.Holo.Locked}" FontSize="16" FontWeight="Bold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="{loc:Localize Key=Tower.Holo.LockedDesc}"
+                                   FontSize="12" Foreground="{DynamicResource SemiColorText2}"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- 已解锁但本期无数据 -->
+                    <StackPanel Grid.Row="0" Grid.RowSpan="2" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Spacing="8" IsVisible="{Binding HologramShowEmpty}">
+                        <TextBlock Text="{loc:Localize Key=Tower.Holo.Empty}" FontSize="16" FontWeight="Bold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="{loc:Localize Key=Tower.Holo.EmptyDesc}"
+                                   FontSize="12" Foreground="{DynamicResource SemiColorText2}"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- 主从布局:左列(地区菜单 / 总览 / boss 网格)+ 右列(挑战详情)。
+                         详情单独占满右侧整列高度(而不是只在下半区),这样小窗口下
+                         立绘、难度档位、通关时间与通关队伍能一次看全,不必在窄条里滚动。 -->
+                    <Grid Grid.Row="0" Grid.RowSpan="2"
+                          IsVisible="{Binding HologramHasData}"
+                          ColumnDefinitions="*,312" ColumnSpacing="14">
+
+                      <!-- 左列:地区菜单 / 总览 / boss 网格 -->
+                      <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*" RowSpacing="12">
+
+                        <!-- ① 地区 logo 菜单:四个浮雕徽章(演武/同步/幻痛/强袭)。
+                             接口只给"整块彩色图"的地区图标,没有可着色的线稿,故不做着色;
+                             选中态用强调色描边 + 底色提亮表达(而非给图标换色,避免色偏)。
+                             每个徽章下方是名称 + 该地区"已通关进度"(已打过任意档的 boss 数 / 总数)
+                            + 一条细进度条,一眼看清打到哪。 -->
+                        <ItemsControl Grid.Row="0" ItemsSource="{Binding HologramRegions}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="8" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.Styles>
+                                <!-- 徽章自带内边距,外层不需要额外间距(否则选中描边会与相邻项贴住) -->
+                                <Style Selector="ItemsControl > ContentPresenter">
+                                    <Setter Property="Margin" Value="0" />
+                                </Style>
+                            </ItemsControl.Styles>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:HologramRegionItem">
+                                    <Button Classes="holoRegion"
+                                            Classes.active="{Binding IsSelected}"
+                                            Command="{Binding $parent[ItemsControl].((vm:TowerViewModel)DataContext).SelectHologramRegionCommand}"
+                                            CommandParameter="{Binding}"
+                                            ToolTip.Tip="{Binding TooltipText}">
+                                        <StackPanel Spacing="4" HorizontalAlignment="Center" Width="72">
+                                            <Border Width="38" Height="38" CornerRadius="10"
+                                                    HorizontalAlignment="Center"
+                                                    ClipToBounds="True"
+                                                    Background="{DynamicResource SemiColorBg2}">
+                                                <controls:AsyncImage ImageUrl="{Binding LogoUrl}"
+                                                                     Width="38" Height="38"
+                                                                     Stretch="Uniform" />
+                                            </Border>
+                                            <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" />
+                                            <!-- 进度:已打过任意档的 boss 数 / 总数 + 一条细进度条
+                                                 (不再显示「满档」—— 用户口径:有进度就行) -->
+                                            <TextBlock Text="{Binding ProgressText}" FontSize="10.5"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{DynamicResource SemiColorText2}" />
+                                            <ProgressBar Minimum="0" Maximum="100"
+                                                         Value="{Binding ProgressPercent}"
+                                                         Height="3" CornerRadius="1.5"
+                                                         Margin="4,0" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- ② 总览一行(已通关 boss 统计)。库街区攻略站入口已按用户要求移除。 -->
+                        <TextBlock Grid.Row="1" Text="{Binding HologramSummaryText}" FontSize="12"
+                                   Margin="2,0,2,0" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+
+                        <!-- ③ boss 卡片网格(头像 + 名称 + 6 格难度刻度) -->
+                        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding HologramBosses}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel ItemSpacing="10" LineSpacing="10" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:HologramBossItem">
+                                        <Button Classes="holoBoss"
+                                                Classes.active="{Binding IsSelected}"
+                                                Command="{Binding $parent[ItemsControl].((vm:TowerViewModel)DataContext).SelectHologramBossCommand}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel Width="106" Spacing="6">
+                                                <!-- 头像:不加满档金色描边(用户口径:去掉)——
+                                                     "打满了"由下方 6 格难度刻度与难度文案表达。 -->
+                                                <Border Width="106" Height="106" CornerRadius="11" ClipToBounds="True"
+                                                        Background="{DynamicResource SemiColorBg2}">
+                                                    <controls:AsyncImage ImageUrl="{Binding HeadIcon}"
+                                                                         Width="106" Height="106"
+                                                                         Stretch="UniformToFill" />
+                                                </Border>
+                                                <TextBlock Text="{Binding BossName}" FontSize="13" FontWeight="Bold"
+                                                           HorizontalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip.Tip="{Binding BossName}" />
+                                                <!-- 难度刻度:6 格恒在,已通关上色、未通关压暗。
+                                                     颜色走 Classes + 主题令牌,亮/暗主题各取一份 —— 硬编码浅金在白底上看不见。 -->
+                                                <ItemsControl ItemsSource="{Binding Pips}" HorizontalAlignment="Center">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <StackPanel Orientation="Horizontal" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:HologramPip">
+                                                            <Border Width="13" Height="5" CornerRadius="2.5"
+                                                                    Margin="0,0,3,0"
+                                                                    Classes="holoPip"
+                                                                    Classes.filled="{Binding Filled}"
+                                                                    Classes.max="{Binding IsMaxTier}"
+                                                                    ToolTip.Tip="{Binding Tooltip}" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <!-- 难度文案:已挑战用常规文字色,未挑战用次级灰。
+                                                     此前硬编码浅灰(#8A8F99)在白色主题下几乎不可见(用户反馈)。 -->
+                                                <TextBlock Text="{Binding DifficultyText}" FontSize="11"
+                                                           HorizontalAlignment="Center"
+                                                           Classes="holoDifficulty"
+                                                           Classes.challenged="{Binding HasAnyClear}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                      </Grid>
+
+                      <!-- 右列:选中 boss 的挑战详情。
+                           布局(自上而下):① boss 大图(通栏)② 名称 + 等级
+                                          ③ 通关难度(左) | 通关时间 + 通关队伍(右)。
+                           大图通栏用 UniformToFill:3:2 横图铺满整宽只裁掉很少的上下边,
+                           比"缩成方形卡留大片空白"更像封面;难度与队伍并排后小窗口也能一次看全。
+                           内容超出时整块滚动。 -->
+                      <Border Grid.Column="1" CornerRadius="12" Background="{DynamicResource SemiColorBg3}"
+                              ClipToBounds="True">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel Spacing="0">
+                                <!-- ① boss 大图:通栏封面,直接贴住卡片的上/左/右边缘
+                                     (无边框、无外边距)—— 由外层 Border 的 CornerRadius + ClipToBounds 收圆角。
+                                     随难度切换而换图(每个难度一张独立立绘)。 -->
+                                <controls:AsyncImage ImageUrl="{Binding HologramHeroIcon}"
+                                                     Height="140"
+                                                     Stretch="UniformToFill"
+                                                     HorizontalAlignment="Stretch"
+                                                     VerticalAlignment="Stretch" />
+
+                                <StackPanel Margin="12,10,12,12" Spacing="10">
+                                <!-- ② 标题行(名称 + 等级) -->
+                                <StackPanel Spacing="1">
+                                    <TextBlock Text="{Binding HologramBossName}" FontSize="16" FontWeight="Bold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding HologramBossLevelText}" FontSize="11.5"
+                                               Foreground="{DynamicResource SemiColorText2}" />
+                                </StackPanel>
+
+                                <!-- ③ 通关难度(左列) | 通关时间 + 通关队伍(右列) -->
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="{loc:Localize Key=Tower.Holo.DifficultyTitle}"
+                                                   FontSize="12" FontWeight="Bold"
+                                                   Foreground="{DynamicResource SemiColorText2}" />
+                                        <!-- 难度竖向排列:每档一行(数字 + 已通关标记),
+                                             行式比横排数字条更好点、也更省横向空间 -->
+                                        <ListBox Classes="holoTiers"
+                                                 ItemsSource="{Binding HologramTiers}"
+                                                 SelectedItem="{Binding SelectedHologramTier}"
+                                                 Background="Transparent" BorderThickness="0" Padding="0">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:HologramTierItem">
+                                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8"
+                                                          ToolTip.Tip="{Binding Tooltip}">
+                                                        <TextBlock Text="{Binding Label}" FontSize="13"
+                                                                   FontWeight="Bold" VerticalAlignment="Center"
+                                                                   MinWidth="10" />
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                                    Spacing="5" VerticalAlignment="Center">
+                                                            <!-- 已通关标记(未通关保持占位,避免行高跳动) -->
+                                                            <Ellipse Width="6" Height="6"
+                                                                     VerticalAlignment="Center"
+                                                                     Classes="holoDot"
+                                                                     Classes.cleared="{Binding IsCleared}" />
+                                                            <TextBlock Text="{Binding StateText}" FontSize="11"
+                                                                       VerticalAlignment="Center"
+                                                                       Classes="holoDifficulty"
+                                                                       Classes.challenged="{Binding IsCleared}" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </StackPanel>
+
+                                    <!-- 右侧:通关时间 + 通关队伍 -->
+                                    <StackPanel Grid.Column="1" Spacing="8">
+                                        <!-- 通关时间:三种状态——
+                                             已通关 → 用时;未通关 → 「暂无挑战记录」;
+                                             详情接口失败(索引仍显示打到第 N 档)→ 「挑战记录暂不可用」,
+                                             绝不把"拿不到记录"渲染成"没打过"(会与左侧卡片矛盾)。 -->
+                                        <Border CornerRadius="9" Background="{DynamicResource SemiColorBg2}"
+                                                Padding="10,8">
+                                            <StackPanel Spacing="2">
+                                                <TextBlock Text="{loc:Localize Key=Tower.Holo.PassTime}"
+                                                           FontSize="11.5"
+                                                           Foreground="{DynamicResource SemiColorText2}" />
+                                                <TextBlock Text="{Binding HologramPassTimeText}"
+                                                           FontSize="21" FontWeight="Bold"
+                                                           Classes="holoTime"
+                                                           IsVisible="{Binding HologramTierCleared}" />
+                                                <TextBlock Text="{loc:Localize Key=Tower.Holo.RecordsUnavailable}"
+                                                           FontSize="12.5"
+                                                           Foreground="{DynamicResource SemiColorText2}"
+                                                           IsVisible="{Binding !HologramRecordsAvailable}" />
+                                                <TextBlock Text="{loc:Localize Key=Tower.Holo.NoRecord}"
+                                                           FontSize="12.5"
+                                                           Foreground="{DynamicResource SemiColorText2}"
+                                                           IsVisible="{Binding HologramShowNoRecord}" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- 通关队伍(3 名角色:头像 + 属性图标 + 等级) -->
+                                        <StackPanel Spacing="6" IsVisible="{Binding HologramTierCleared}">
+                                            <TextBlock Text="{loc:Localize Key=Tower.Holo.TeamTitle}"
+                                                       FontSize="12" FontWeight="Bold"
+                                                       Foreground="{DynamicResource SemiColorText2}" />
+                                            <ItemsControl ItemsSource="{Binding HologramRoles}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Spacing="6" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:HologramRoleItem">
+                                                        <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                                                            <!-- 头像:圆角方形,与深塔/海墟的角色头像同一套形状语言 -->
+                                                            <Border Width="34" Height="34" CornerRadius="8"
+                                                                    ClipToBounds="True"
+                                                                    Background="{DynamicResource SemiColorBg2}">
+                                                                <controls:AsyncImage ImageUrl="{Binding HeadIcon}"
+                                                                                     Width="34" Height="34"
+                                                                                     Stretch="UniformToFill" />
+                                                            </Border>
+                                                            <!-- 属性图标(本地 Assets/attr/{id}.png,与角色页同一份) -->
+                                                            <Border Grid.Column="1" Width="18" Height="18"
+                                                                    CornerRadius="5" ClipToBounds="True"
+                                                                    VerticalAlignment="Center"
+                                                                    ToolTip.Tip="{Binding ElementName}">
+                                                                <controls:AsyncImage ImageUrl="{Binding ElementIconPath}"
+                                                                                     Width="18" Height="18"
+                                                                                     Stretch="UniformToFill" />
+                                                            </Border>
+                                                            <StackPanel Grid.Column="2" VerticalAlignment="Center"
+                                                                        Spacing="1">
+                                                                <TextBlock Text="{Binding RoleName}" FontSize="12.5"
+                                                                           FontWeight="Bold"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Text="{Binding LevelText}" FontSize="11"
+                                                                           Foreground="{DynamicResource SemiColorText3}" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                      </Border>
+                    </Grid>
                 </Grid>
             </TabItem>
         </TabControl>

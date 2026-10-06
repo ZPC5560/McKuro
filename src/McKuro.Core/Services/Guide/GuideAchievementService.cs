@@ -367,6 +367,60 @@ public sealed partial class GuideAchievementService
     }
 
     /// <summary>
+    /// 解析官方攻略站给出的<b>推荐主词条</b>(按 COST 分组)。
+    /// <para>
+    /// 来源:推荐配装的 <c>echoAttributes[].attribute</c>(实测每套 5 项,如守岸人
+    /// 「4C 治疗效果加成 / 3C 攻击% / 3C 衍射伤害加成 / 1C 攻击% ×2」)。
+    /// 这是评分判断“主词条选得对不对”的唯一权威依据 —— 缺了它就只能拿词条池全局最大权重
+    /// (4C 恒为暴击)当基准,生命/防御/治疗型角色会被系统性判低分。
+    /// </para>
+    /// <para>同时合并 <c>attribute2</c>(第二主词条,部分数据源才有)。</para>
+    /// </summary>
+    public static IReadOnlyDictionary<int, IReadOnlySet<string>> ParseRecommendedMainStats(GuideIntroductionInfo? info)
+    {
+        var result = new Dictionary<int, IReadOnlySet<string>>();
+        if (info is null)
+        {
+            return result;
+        }
+        // 推荐配装优先 main,其次 spare/current(与推荐声骸判定同源顺序)
+        var build = info.Echo?.Main ?? info.Echo?.Spare ?? info.Echo?.Current;
+        var items = build?.EchoAttributes;
+        if (items is null)
+        {
+            // 配队推荐里也带推荐主词条(teammate.items[*].echoAttributes);作为兜底源
+            items = info.Teammate?.Items?.FirstOrDefault()?.EchoAttributes;
+        }
+        if (items is null)
+        {
+            return result;
+        }
+
+        foreach (var attr in items)
+        {
+            if (attr.Cost <= 0)
+            {
+                continue;
+            }
+            foreach (var name in new[] { attr.Attribute?.Name, attr.Attribute2?.Name })
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    continue;
+                }
+                if (!result.TryGetValue(attr.Cost, out var set))
+                {
+                    set = new HashSet<string>(StringComparer.Ordinal);
+                    result[attr.Cost] = set;
+                }
+                // 规范化到评分内部词条名(攻略站给「攻击%」,评分用「攻击百分比」)
+                ((HashSet<string>)set).Add(McKuro.Core.Services.Roles.EchoRatingService.NormalizeMainStatName(name!));
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
     /// 共鸣链推荐标记:从攻略推荐描述里解析被推荐的链号(如「共鸣链2…共鸣链4…共鸣链6」→ [2,4,6])。
     /// <para>支持写法(定死范围,避免过度匹配误报):「共鸣链N」N=1-6,允许全角数字与中间空白;
     /// 其余写法("C2"/"2链" 等)不识别 —— 实测攻略站正文均为「共鸣链N」格式。</para>

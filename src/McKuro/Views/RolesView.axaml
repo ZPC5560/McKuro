@@ -1019,7 +1019,7 @@
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
 
-                                            <!-- 副词条(有效词条鲜艳色/其余灰;见 PropLevelBrushConverter) -->
+                                            <!-- 副词条(有效词条统一同色/其余灰;见 PropLevelBrushConverter) -->
                                             <ItemsControl ItemsSource="{Binding SubProps}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="roles:EchoProp">

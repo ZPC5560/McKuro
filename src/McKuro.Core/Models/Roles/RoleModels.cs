@@ -166,6 +166,42 @@ public sealed class EchoInfo : INotifyPropertyChanged
     /// <summary>副词条(参照 WutheringWavesTool subProps)。</summary>
     [JsonPropertyName("subProps")] public List<EchoProp>? SubProps { get; set; }
 
+    /// <summary>
+    /// 本声骸的副词条是否带库街区有效性判定(<c>valid</c> 至少一条非 null)。
+    /// <para>用于识别无 valid 的陈旧快照(见 <see cref="PhantomData.HasSubstatValidity"/>)。</para>
+    /// </summary>
+    [JsonIgnore]
+    public bool HasSubstatValidity => SubProps?.Any(s => s?.Valid is not null) == true;
+
+    /// <summary>
+    /// 该角色此 COST 的<b>推荐主词条</b>集合(标准化词条名;来自官方攻略站 echoAttributes,按 cost 过滤)。
+    /// <para>
+    /// 评分用:主词条“理想值”的基准。没有它就只能拿词条池的全局最大权重当分母,
+    /// 会让生命/防御/治疗型角色(莫宁、卡提希娅、守岸人等)即使主词条选对也被判低分。
+    /// null/空 = 无推荐数据 → 主词条分项只评数值是否满,不评词条选择。
+    /// </para>
+    /// </summary>
+    [JsonIgnore]
+    public IReadOnlySet<string>? RecommendedMainStats
+    {
+        get => _recommendedMainStats;
+        set
+        {
+            if (_recommendedMainStats is not null && _recommendedMainStats.SetEquals(value ?? new HashSet<string>()))
+            {
+                return;
+            }
+            _recommendedMainStats = value;
+            _rateCache = null;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PhantomRatingText)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PhantomStatus)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PropRatingText)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PropStatus)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ScoreText)));
+        }
+    }
+    [JsonIgnore] private IReadOnlySet<string>? _recommendedMainStats;
+
     public string PhantomName => PhantomProp?.PhantomName ?? "";
     public string IconUrl => PhantomProp?.IconUrl ?? "";
 
@@ -197,7 +233,36 @@ public sealed class EchoInfo : INotifyPropertyChanged
     private McKuro.Core.Services.Roles.EchoRating? _rateCache;
     [JsonIgnore]
     private McKuro.Core.Services.Roles.EchoRating Rate
-        => _rateCache ??= McKuro.Core.Services.Roles.EchoRatingService.RateEcho(this, PriorityWeights);
+        => _rateCache ??= McKuro.Core.Services.Roles.EchoRatingService.RateEcho(this, PriorityWeights, SkillCoefficients);
+
+    /// <summary>
+    /// 技能伤害角色级系数(可选;见 <see cref="EchoRatingService.RateEcho"/> 的 <c>skillCoefficients</c>)。
+    /// <para>
+    /// 用于把普攻/重击/共鸣技能/共鸣解放四类技能伤害词条按角色再细分权重。
+    /// 本项目<b>不内置</b>该表(Wiki 优先级已能按角色区分技能权重的场合无需它);
+    /// 数据源/调用方有自有系数时回填,变更会清评级缓存并通知 UI。
+    /// </para>
+    /// </summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, double>? SkillCoefficients
+    {
+        get => _skillCoefficients;
+        set
+        {
+            if (ReferenceEquals(_skillCoefficients, value))
+            {
+                return;
+            }
+            _skillCoefficients = value;
+            _rateCache = null;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PhantomRatingText)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PhantomStatus)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PropRatingText)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PropStatus)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ScoreText)));
+        }
+    }
+    [JsonIgnore] private IReadOnlyDictionary<string, double>? _skillCoefficients;
 
     /// <summary>
     /// Wiki「声骸词条」优先级权重(每角色,来自攻略站 Wiki 角色攻略;见 WikiGuideService)。
@@ -296,8 +361,11 @@ public sealed class EchoProp
     /// <summary>
     /// 有效词条重要度(0-3,副词条色条/文字着色):
     /// 官方 valid=false → 0(灰,无效);valid=true → 核心(暴击/暴伤/攻击%)= 3,
-    /// 其余官方认可的有效词条 = 2(青,含权重表未收录的伤害加成类);
-    /// 无官方判定 → 旧规则(核心 3,其余 1 —— 2026-10 用户反馈:无官方数据时只亮核心)。
+    /// 其余官方认可的有效词条 = 2;无官方判定 → 旧规则(核心 3,其余 1)。
+    /// <para>
+    /// <b>着色口径(2026-10 用户定案)</b>:2 与 3 都表示"有效",UI 上<b>使用同一种颜色</b>
+    /// (不再区分核心与其他有效);1/0 一律灰。档位本身仍保留,便于后续按需再分级。
+    /// </para>
     /// </summary>
     [JsonIgnore]
     public int EffectiveLevel
@@ -489,7 +557,23 @@ public sealed class RoleDetail : INotifyPropertyChanged
 /// <summary>声骸数据(对齐 Haiyu getRoleDetail.phantomData → equipPhantomList)。</summary>
 public sealed class PhantomData
 {
+    /// <summary>
+    /// 已装备声骸列表。
+    /// <para>
+    /// ⚠️ <b>元素可能是 null</b>:库街区对"未装备的槽位"会返回 <c>[null,null,null,null,null]</c>
+    /// (实测未装备角色)。遍历时须判空,否则会 NullReferenceException。
+    /// </para>
+    /// </summary>
     [JsonPropertyName("equipPhantomList")] public List<EchoInfo>? Phantoms { get; set; }
+
+    /// <summary>
+    /// 本声骸区块是否携带库街区的词条有效性判定(至少一条 <c>subProps[].valid</c> 非 null)。
+    /// <para>
+    /// 用于识别<b>陈旧快照</b>:早期版本(<c>EchoProp.Valid</c> 于 2026-10-05 才加入)写盘的缓存整行无 valid,
+    /// 若一直沿用,界面上就"看不到有效词条",且每次同步都被粘滞合并固化(见 RoleDataService 合并说明)。
+    /// </para>
+    /// </summary>
+    public bool HasSubstatValidity => Phantoms?.Any(p => p?.HasSubstatValidity == true) == true;
 }
 
 /// <summary>角色数据接口响应(data 部分)。</summary>

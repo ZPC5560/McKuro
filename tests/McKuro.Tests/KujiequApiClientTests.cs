@@ -493,4 +493,143 @@ public class KujiequApiClientTests
             listener.Stop();
         }
     }
+
+    // ---------------- 全息战略(challengeIndex / challengeDetails) ----------------
+
+    [Fact]
+    public async Task GetChallengeIndexAsync_Parses_Regions_And_Bosses()
+    {
+        var (baseUrl, listener, bodies) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/challengeIndex"] =
+                """
+                {"code":200,"msg":"请求成功","data":"{\"isUnlock\":true,\"open\":true,\"wikiUrl\":\"https://wiki.kurobbs.com/mc/home\",\"challengeList\":[{\"sort\":130,\"country\":{\"countryId\":100004,\"countryName\":\"演武\",\"homePageImage\":\"https://img/region.png\",\"homePageIcon\":\"https://img/dir/\"},\"indexList\":[{\"bossId\":31010,\"bossName\":\"达妮娅\",\"bossLevel\":60,\"difficulty\":5,\"bossHeadIcon\":\"https://img/h.png\",\"bossIconUrl\":\"https://img/p.png\",\"contryId\":100004,\"sort\":109}]}]}","success":true}
+                """,
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var index = await client.GetChallengeIndexAsync("at-1", DeviceId, RoleId);
+
+            Assert.NotNull(index);
+            Assert.True(index!.IsUnlock);
+            Assert.Equal("https://wiki.kurobbs.com/mc/home", index.WikiUrl);
+            var group = Assert.Single(index.ChallengeList!);
+            Assert.Equal("演武", group.Country!.CountryName);
+            var boss = Assert.Single(group.IndexList!);
+            Assert.Equal(31010, boss.BossId);
+            Assert.Equal(5, boss.ClearedDifficulty);  // 索引里是"已通关最高难度"
+            Assert.Equal(100004, boss.CountryId);     // 服务端拼写 contryId
+
+            var body = Assert.Single(bodies);
+            Assert.Contains("roleId=" + RoleId, body);
+            Assert.Contains("serverId=" + KujiequApiClient.ParamServerId, body);
+            Assert.Contains("gameId=" + KujiequApiClient.ParamGameId, body);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task GetChallengeDetailsAsync_Parses_Dictionary_Keyed_By_BossId()
+    {
+        var (baseUrl, listener, bodies) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/challengeDetails"] =
+                """
+                {"code":200,"msg":"请求成功","data":"{\"isUnlock\":true,\"open\":true,\"challengeInfo\":{\"31010\":[{\"bossHeadIcon\":\"h1\",\"bossIconUrl\":\"p1\",\"bossLevel\":60,\"bossName\":\"达妮娅\",\"challengeId\":3101,\"difficulty\":1,\"passTime\":10,\"roles\":[{\"natureId\":1,\"roleName\":\"绯雪\",\"roleLevel\":90,\"roleHeadIcon\":\"r1\"}]},{\"bossHeadIcon\":\"h6\",\"bossIconUrl\":\"p6\",\"bossLevel\":100,\"bossName\":\"达妮娅\",\"challengeId\":3106,\"difficulty\":6,\"passTime\":0}]}}","success":true}
+                """,
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var details = await client.GetChallengeDetailsAsync("at-1", DeviceId, RoleId);
+
+            Assert.NotNull(details);
+            // 字典 key 是字符串 bossId(不是数组下标)
+            var tiers = Assert.Single(details!.ChallengeInfo!).Value;
+            Assert.Equal(2, tiers.Count);
+            var cleared = tiers.Single(t => t.Difficulty == 1);
+            Assert.Equal(10, cleared.PassTime);
+            Assert.Equal("绯雪", Assert.Single(cleared.Roles!).RoleName);
+            // 未通关的记录:roles 键整体缺失 → null
+            Assert.Null(tiers.Single(t => t.Difficulty == 6).Roles);
+
+            var body = Assert.Single(bodies);
+            Assert.Contains("channelId=19", body);
+            Assert.Contains("countryCode=1", body);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task GetChallengeDetailsAsync_String_Null_Data_Returns_Null()
+    {
+        // 实测:roleId/serverId 无效时服务端返回 code=200 且 data 是字符串 "null"
+        var (baseUrl, listener, _) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/challengeDetails"] =
+                """{"code":200,"msg":"请求成功","data":"null","success":true}""",
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            Assert.Null(await client.GetChallengeDetailsAsync("at-1", DeviceId, RoleId));
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task GetChallengeIndexAsync_Empty_List_Has_Unlock_Keys_Missing()
+    {
+        // 实测:roleId 不存在时 200 + challengeList:[] 且 isUnlock/open 键缺失
+        var (baseUrl, listener, _) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/challengeIndex"] =
+                """{"code":200,"msg":"请求成功","data":"{\"challengeList\":[],\"wikiUrl\":\"https://wiki.kurobbs.com/mc/home\"}","success":true}""",
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var index = await client.GetChallengeIndexAsync("at-1", DeviceId, RoleId);
+            Assert.NotNull(index);
+            Assert.Null(index!.IsUnlock);   // 键缺失 → null,不能当作"未解锁"以外的结论
+            Assert.Null(index.Open);
+            Assert.Empty(index.ChallengeList!);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task ChallengeEndpoints_Accept_Soft_Success_Code_10902()
+    {
+        // 深塔/矩阵/海墟允许 10902(软状态)携带可解析 data;全息战略沿用同一约定
+        var (baseUrl, listener, _) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/challengeIndex"] =
+                """{"code":10902,"msg":"本期无记录","data":"{\"isUnlock\":true,\"challengeList\":[]}","success":true}""",
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var index = await client.GetChallengeIndexAsync("at-1", DeviceId, RoleId);
+            Assert.NotNull(index);
+            Assert.True(index!.IsUnlock);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
 }
