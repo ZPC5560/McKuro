@@ -1,0 +1,51 @@
+{
+  "generatedBy": "website-src/tools/optimize-live2d.mjs",
+  "note": "由原始展示包离线优化而来；原始包不入库。",
+  "runtime": {
+    "file": "puppetloom-web.js",
+    "sha256": "4cf9d9576842912d394bf786b53c8e786262438cf01dff0bbf4e0e51e0cdb86d",
+    "bytes": 292737
+  },
+  "forms": [
+    {
+      "form": "form1",
+      "label": "红黑形态",
+      "revision": 33,
+      "projectJson": {
+        "file": "form1/project.json",
+        "bytes": 1257939,
+        "sha256": "b6ebfcd186105957783ea8663474e8514012b628f57b16afcea856064987a0be"
+      },
+      "textures": {
+        "count": 63,
+        "bytes": 973890,
+        "format": "webp/lossless"
+      },
+      "source": {
+        "projectJsonBytes": 4995931,
+        "textureBytes": 2112957,
+        "projectJsonSha256": "9c210fff71379bd170454776d69548a7a53ff88beb7327c79f35f3b6d8fd7691"
+      }
+    },
+    {
+      "form": "form2",
+      "label": "白金形态",
+      "revision": 35,
+      "projectJson": {
+        "file": "form2/project.json",
+        "bytes": 1381753,
+        "sha256": "b702250831209e3211df866fcc96e7ae61f2c3ed8c2d40e535e2b38109212b91"
+      },
+      "textures": {
+        "count": 70,
+        "bytes": 974248,
+        "format": "webp/lossless"
+      },
+      "source": {
+        "projectJsonBytes": 5420286,
+        "textureBytes": 2146979,
+        "projectJsonSha256": "15876b114fc7e461548d9edb71c8d6e8179611539db4ef58866dee5ec4860b45"
+      }
+    }
+  ]
+}

@@ -147,19 +147,29 @@ def main():
         raise SystemExit("missing font sources (output left untouched):\n  " + "\n  ".join(missing))
 
     vendored = os.path.join(HERE, "vendor")
-    required = [
-        "three.module.min.js",
-        os.path.join("jsm", "loaders", "GLTFLoader.js"),
-        os.path.join("jsm", "utils", "BufferGeometryUtils.js"),
-    ]
+    # Only the bare three.js build is still needed: the hero backdrop (hero3d.js) uses
+    # core THREE only, and the character no longer goes through GLTFLoader.
+    required = ["three.module.min.js"]
     missing_vendor = [os.path.join(vendored, r) for r in required
                       if not os.path.isfile(os.path.join(vendored, r))]
     if missing_vendor:
         raise SystemExit("missing vendored libs:\n  " + "\n  ".join(missing_vendor))
 
-    model_src = os.path.join(HERE, "models", "xin-yuehu.glb")
-    if not os.path.isfile(model_src):
-        raise SystemExit(f"missing {model_src}")
+    # The hero character (心, both forms) is pre-optimised by tools/optimize-live2d.mjs and
+    # committed under live2d/. Verify it is complete before anything is written: a hero with
+    # a missing project.json would silently render as an empty margin.
+    live2d_src = os.path.join(HERE, "live2d")
+    needed_l2d = [
+        "puppetloom-web.js", "manifest.json",
+        os.path.join("form1", "project.json"), os.path.join("form2", "project.json"),
+    ]
+    missing_l2d = [p for p in needed_l2d if not os.path.isfile(os.path.join(live2d_src, p))]
+    if missing_l2d:
+        raise SystemExit(
+            "missing optimised Live2D assets (output left untouched):\n  "
+            + "\n  ".join(missing_l2d)
+            + "\nRun tools/optimize-live2d.mjs against the original showcase package."
+        )
 
     # ---- write page + scripts ----
     write(os.path.join(OUT, "index.html"), html)
@@ -167,18 +177,20 @@ def main():
     for n in js_names:
         shutil.copy2(os.path.join(HERE, "js", n), os.path.join(OUT, n))
 
-    # vendor/ keeps the loaders' own folder layout: GLTFLoader imports
-    # '../utils/BufferGeometryUtils.js' relative to itself, so flattening breaks it.
+    # vendor/ is copied wholesale: three.module.min.js is imported by name from the
+    # importmap in the page head, so the path has to stay ./vendor/three.module.min.js.
     vd = os.path.join(OUT, "vendor")
     if os.path.isdir(vd):
         shutil.rmtree(vd)
+    os.makedirs(vd, exist_ok=True)
     for r in required:
-        dst = os.path.join(vd, r)
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        shutil.copy2(os.path.join(vendored, r), dst)
+        shutil.copy2(os.path.join(vendored, r), os.path.join(vd, r))
 
-    os.makedirs(os.path.join(OUT, "models"), exist_ok=True)
-    shutil.copy2(model_src, os.path.join(OUT, "models", "xin-yuehu.glb"))
+    # ---- the hero character: rebuilt from scratch so a removed asset cannot linger ----
+    l2d_out = os.path.join(OUT, "live2d")
+    if os.path.isdir(l2d_out):
+        shutil.rmtree(l2d_out)
+    shutil.copytree(live2d_src, l2d_out)
 
     # ---- fonts: sans covers the whole page, serif only the headings ----
     SAFE = set("0123456789%·—–、。，：；！？（）《》「」“”‘’…+/-=#@&*[]{}<>|\\~^$ "

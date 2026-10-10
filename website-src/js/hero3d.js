@@ -1,11 +1,15 @@
-/* Hero 3D: a tide of points with the 心月狐 figure standing over it.
-   three.js and GLTFLoader are self-hosted (vendor/, MIT). The canvas fades in only
-   after the first frame renders; the model loads separately, so a slow or missing
-   asset still leaves a working hero. If WebGL is missing the CSS gradient stays.
-   Rendering pauses when the hero is off screen or the tab is hidden; reduced motion
-   gets a single still frame. */
+/* Hero backdrop: a tide of points behind the copy, drawn with three.js.
+ *
+ * The character standing at the right of the hero is NOT here any more — it is the
+ * Live2D 心 figure from hero-figure.js (PuppetLoom runtime), which is what the project
+ * actually ships as the character showcase. This module owns only the tide field.
+ *
+ * three.js is self-hosted (vendor/, MIT). The canvas fades in only after the first
+ * frame renders, so a slow or missing asset still leaves a working hero: the CSS
+ * gradient in .hero__fallback stays underneath either way. Rendering pauses when the
+ * hero is off screen or the tab is hidden; reduced motion gets a single still frame.
+ */
 import * as THREE from "./vendor/three.module.min.js";
-import { GLTFLoader } from "./vendor/jsm/loaders/GLTFLoader.js";
 
 const canvas = document.getElementById("hero-gl");
 const hero = canvas && canvas.closest(".hero");
@@ -80,82 +84,11 @@ if (canvas && hero && supportsGL()) {
   });
   scene.add(new THREE.Points(tideGeo, tideMat));
 
-  /* ---- 心月狐 model ----
-     Loaded lazily, after the tide is already on screen, so the 2.8 MB asset never
-     delays first paint. Normalised to height 1 here; resize() then scales it in
-     proportion to the viewport, which keeps its on-screen size stable. */
-  const figure = new THREE.Group();
-  figure.visible = false;
-  scene.add(figure);
-
-  let figureReady = false;
-  let figBaseY = 0;
-  const FIG_YAW = -0.73;   // rad (~-42deg): turn her to face left, toward the copy
-
-  new GLTFLoader().load("./models/xin-yuehu.glb", (gltf) => {
-    const src = gltf.scene;
-    src.updateWorldMatrix(true, true);
-    const box = new THREE.Box3().setFromObject(src);
-    const size = box.getSize(new THREE.Vector3());
-    const h = size.y || 1;
-    src.scale.setScalar(1 / h);
-    src.updateWorldMatrix(true, true);
-    // origin at the feet, centred on x/z, so placement maths is simple
-    const b2 = new THREE.Box3().setFromObject(src);
-    src.position.set(-(b2.min.x + b2.max.x) / 2, -b2.min.y, -(b2.min.z + b2.max.z) / 2);
-
-    // The GLB carries KHR_materials_unlit (GLTFLoader gives MeshBasicMaterial), which is
-    // what these toon-shaded characters want: the atlas already has baked shading, and
-    // pushing it through PBR washed the whites out. Only the colour space needs stating.
-    src.traverse((n) => {
-      if (!n.isMesh) return;
-      (Array.isArray(n.material) ? n.material : [n.material]).forEach((m) => {
-        if (m.map && m.map.colorSpace !== THREE.SRGBColorSpace) {
-          m.map.colorSpace = THREE.SRGBColorSpace;
-          m.needsUpdate = true;
-        }
-      });
-    });
-
-    figure.add(src);
-    figure.visible = true;
-    figureReady = true;
-    resize();
-    // Under reduced motion only the single setup frame was drawn, which happened
-    // before the model arrived; draw once more so the figure actually appears.
-    if (reduce) { frame(); }
-  }, undefined, () => { /* keep the tide-only hero if the model cannot load */ });
-
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x9fb6dd, 1.6));
-  const key = new THREE.DirectionalLight(0xffffff, 2.2);
-  key.position.set(3, 5, 4);
-  scene.add(key);
-  const rim = new THREE.DirectionalLight(0x7fb0ff, 1.4);
-  rim.position.set(-4, -1, -3);
-  scene.add(rim);
-
-  /* ---- layout: stand the figure in the free margin beside the centred copy ---- */
   function resize() {
     const w = hero.clientWidth, h = hero.clientHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    if (!figureReady) { return; }
-    // The copy is centred and its widest line is a fixed pixel width, so the free
-    // margin shrinks in world units as the viewport narrows. Below this width the
-    // figure would sit behind the headline, so it is hidden instead.
-    const wide = w >= 1280;
-    figure.visible = wide;
-    if (!wide) { return; }
-    const visH = 2 * Math.tan((camera.fov * Math.PI) / 360) * camera.position.z;
-    const visW = visH * camera.aspect;
-    // Measured: at this size the figure spans ~0.83 of NDC width and its flowing
-    // cloth bleeds a little past the right edge, which reads as intentional framing.
-    // Sizing it to fit entirely would need ~0.32 and makes her noticeably smaller.
-    const fh = visW * 0.40;
-    figure.scale.setScalar(fh);
-    figBaseY = -fh * 0.5 + visH * 0.03;
-    figure.position.set(visW * 0.345, figBaseY, 0);
   }
   resize();
   window.addEventListener("resize", resize);
@@ -178,14 +111,6 @@ if (canvas && hero && supportsGL()) {
     tideMat.uniforms.uTime.value = t;
     tilt.x += (target.x - tilt.x) * 0.05;
     tilt.y += (target.y - tilt.y) * 0.05;
-    if (figureReady) {
-      // shallow turntable: enough to read as 3D, never a distracting spin
-      // She is authored facing the camera; turned to the left she looks in toward the
-      // copy rather than off the right edge. The sway is kept small so the pose stays
-      // readable as "facing left" instead of swinging back to front.
-      figure.rotation.y = FIG_YAW + Math.sin(t * 0.28) * 0.13 + tilt.x * 0.05;
-      figure.position.y = figBaseY + Math.sin(t * 0.7) * 0.04;
-    }
     camera.position.x = tilt.x * 0.4;
     camera.lookAt(0, 0.1, 0);
     renderer.render(scene, camera);

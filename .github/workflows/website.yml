@@ -52,12 +52,19 @@ jobs:
       # between fontTools releases, so gating on those would break unrelated PRs.
       - name: Verify committed output matches the sources
         run: |
-          if ! git diff --quiet -- website/index.html website/site.css website/site.js website/hero3d.js website/fonts.css; then
+          if ! git diff --quiet -- website/index.html website/site.css website/site.js website/hero3d.js website/hero-figure.js website/fonts.css; then
             echo "::error::website/ is out of date with website-src/. Run 'python website-src/build.py' and commit the result."
-            git --no-pager diff --stat -- website/index.html website/site.css website/site.js website/hero3d.js website/fonts.css
+            git --no-pager diff --stat -- website/index.html website/site.css website/site.js website/hero3d.js website/hero-figure.js website/fonts.css
             exit 1
           fi
           echo "committed output is up to date"
+
+      # The hero character's assets are copied verbatim from website-src/live2d/, so a
+      # stale or half-regenerated copy would ship an empty hero margin silently.
+      - name: Verify the Live2D assets were copied through
+        run: |
+          diff -r website-src/live2d website/live2d
+          echo "live2d assets match their sources"
 
       - name: Configure Pages
         uses: actions/configure-pages@v6

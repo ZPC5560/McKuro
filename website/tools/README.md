@@ -1,4 +1,9 @@
-# tools/ — 首页舞蹈动画管线
+# tools/ — 首页舞蹈动画管线（已从首屏撤下，管线保留供参考）
+
+> **状态**：首屏右侧现在由「心」的双形态 Live2D 角色占据（`hero-figure.js` +
+> `website-src/live2d/`），原先的 3D 跳舞模型不再出现在页面上。本目录保留这条
+> 管线与它的产物说明，供将来重新使用；`website-src/models/xin-yuehu.glb` 仍是
+> 它的输入模型。
 
 官网首页心月狐模型(`models/xin-yuehu.glb`)里烘焙了一段 27.5s 循环舞蹈,
 由 MMD 动作 `玉兰开花三月三_动作.vmd`(bilibili 鲸落璃沙郊,目标模型
