@@ -22,8 +22,12 @@
  * gradient and the toggle stays hidden — the section never depends on this module.
  *
  * Reduced motion: one static frame, no rotation and no timers at all.
+ *
+ * The runtime is imported DYNAMICALLY, not with a top-level `import`: a static import
+ * is fetched as soon as this module evaluates, which would download the 72 KB runtime
+ * even on the narrow viewports where the figure is hidden by CSS.
  */
-import { PuppetLoomWebPlayer } from "./live2d/puppetloom-web.js";
+const RUNTIME_URL = "./live2d/puppetloom-web.js";
 
 const host = document.getElementById("hero-figure");
 const hero = host && host.closest(".hero");
@@ -39,6 +43,14 @@ const FORMS = [
 const DWELL_MIN = 11000;
 const DWELL_MAX = 26000;
 
+let PlayerClass = null;
+async function playerClass() {
+  if (!PlayerClass) {
+    ({ PuppetLoomWebPlayer: PlayerClass } = await import(RUNTIME_URL));
+  }
+  return PlayerClass;
+}
+
 function supportsGL() {
   try {
     const c = document.createElement("canvas");
@@ -47,7 +59,7 @@ function supportsGL() {
 }
 
 /* The figure is hidden by CSS below ~1100px (the copy fills the width and there is no
-   free right margin). Skip loading her there entirely: the two projects are ~1.1 MB
+   free right margin). Skip loading her there entirely: the two projects are ~1.2 MB
    gzipped each, which is not worth spending on a character nobody can see. Re-checked
    on resize, so a window widened later still gets her. */
 function hasRoom() {
@@ -89,7 +101,14 @@ if (host && hero && supportsGL()) {
       /* Only the visible canvas keeps a compositing layer once the other faded out. */
       c.style.willChange = on ? "opacity" : "";
     });
-    buttons.forEach((b, i) => b.setAttribute("aria-pressed", String(i === state.current)));
+    buttons.forEach((b, i) => {
+      b.setAttribute("aria-pressed", String(i === state.current));
+      /* On a slow connection the second form can take tens of seconds to arrive. A
+         button that looks enabled but does nothing is worse than one that says so, so
+         the pending form is disabled until it is actually playable. */
+      b.disabled = !state.ready[i] || state.failed[i];
+      b.title = b.disabled ? `${FORMS[i].label}载入中…` : "";
+    });
     if (toggle) { toggle.hidden = !state.ready.some(Boolean); }
   }
 
@@ -99,8 +118,14 @@ if (host && hero && supportsGL()) {
     if (reduce || i !== state.current) { p.pause(); } else { p.play(); }
   }
 
+  /* Show form `i`. If it is still loading, the request is REMEMBERED and honoured when
+     it arrives — the button is disabled while pending, but a keyboard/screen-reader
+     activation or a click racing the load must not be silently dropped. */
+  let wanted = null;
+
   function show(i) {
-    if (!state.ready[i] || state.failed[i]) { return; }
+    if (state.failed[i]) { return; }
+    if (!state.ready[i]) { wanted = i; return; }
     state.current = i;
     state.players.forEach((p, k) => { if (p) { play(k); } });
     publish();
@@ -123,7 +148,8 @@ if (host && hero && supportsGL()) {
 
   async function load(i) {
     try {
-      const player = await PuppetLoomWebPlayer.create({
+      const Player = await playerClass();
+      const player = await Player.create({
         projectUrl: `./live2d/${FORMS[i].key}/project.json`,
         canvas: canvases[i],
         autoplay: false,
@@ -134,13 +160,16 @@ if (host && hero && supportsGL()) {
       /* Draw one frame now: a canvas that is not current (or is paused under reduced
          motion) would otherwise stay blank until its first play(). */
       player.renderer.restartMotion();
-      if (i === state.current) { play(i); }
       publish();
+      /* Honour a switch requested while this form was still loading. */
+      if (wanted === i) { wanted = null; show(i); return; }
+      if (i === state.current) { play(i); }
       /* Re-arm here: this is the only moment the rotation becomes possible, and the
          observer's initial callback already fired before anything was ready. */
       schedule();
     } catch (err) {
       state.failed[i] = true;
+      publish();
       console.warn(`[hero] ${FORMS[i].label} 载入失败`, err);
     }
   }
@@ -153,6 +182,9 @@ if (host && hero && supportsGL()) {
       b.className = "hero__form";
       b.textContent = f.label;
       b.setAttribute("aria-pressed", String(i === state.current));
+      /* Start disabled: nothing is loaded yet, and a button that does nothing must not
+         look available. publish() enables each one as its form becomes playable. */
+      b.disabled = true;
       /* Show this one now; the dwell restarts, so the rhythm stays un-scheduled. */
       b.addEventListener("click", () => show(i));
       toggle.appendChild(b);
@@ -161,6 +193,9 @@ if (host && hero && supportsGL()) {
   }
 
   buildToggle();
+  /* Reflect the (nothing ready yet) state immediately, so there is no window in which
+     the buttons exist but still look clickable. */
+  publish();
 
   /* ---- hold while the pointer is actually on her ----
      The figure layer ignores pointer events (it sits behind the copy), so hit-testing
@@ -194,15 +229,18 @@ if (host && hero && supportsGL()) {
     state.players.forEach((p) => { try { p?.dispose(); } catch (e) { /* ignore */ } });
   });
 
-  /* ---- staged load: first form for an immediate figure, second while idle ----
+  /* ---- staged load: first form for an immediate figure, second after that ----
      The second load needs an explicit deadline: `requestIdleCallback` without a timeout
      is allowed to defer forever, and this page never stops animating (the tide plus the
      character's own render loop), so the idle period can simply never arrive. Without
-     the timeout the second form silently never loads. */
+     the timeout the second form silently never loads.
+
+     Both forms are fetched even under reduced motion: that preference is about
+     autonomous animation, not bandwidth, and switching forms is a user action that
+     should still work (the rotation itself stays off — schedule() returns early). */
   async function start() {
     if (state.ready[0] || state.failed[0]) { return; }
     await load(0);
-    if (reduce) { return; }
     const later = () => load(1);
     if (window.requestIdleCallback) {
       window.requestIdleCallback(later, { timeout: 2500 });
