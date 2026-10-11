@@ -154,14 +154,49 @@ public class Live2DLocatorTests : IDisposable
     // ---------------------------------------------------------------------
 
     [Fact]
-    public void DiscoveryRoots_ContainsProgramDirAndBaseDirectory()
+    public void DiscoveryRoots_OnlyReturnsExistingDirectories()
     {
+        // 契约:发现根只包含【确实存在】的目录(纯探测,不创建)。
+        // 注意不要断言"一定包含 ProgramDir" —— 随包资源只在 Windows 构建产出,
+        // Linux/macOS 或纯测试环境下该目录可能不存在,那样的断言是环境依赖的假失败
+        // (CI 上真的红过一次)。这里只验证"返回的都可枚举/都存在"这一真正的不变量。
         var roots = Live2DLocator.DiscoveryRoots().ToList();
 
-        // 只返回真实存在的目录(不创建),但程序目录必须参与发现
-        Assert.Contains(Live2DLocator.ProgramDir, roots);
-        Assert.Contains(AppContext.BaseDirectory, roots);
         Assert.All(roots, r => Assert.True(Directory.Exists(r), $"发现根不存在:{r}"));
+        Assert.Equal(roots.Distinct(StringComparer.Ordinal).Count(), roots.Count);
+    }
+
+    [Fact]
+    public void DiscoveryRoots_IncludesApplicationBaseDirectory()
+    {
+        // AppContext.BaseDirectory 必然存在,因此必须出现在发现根中 ——
+        // 这是"随包模型能被找到"的最小保证(程序目录 live2d\ 在其下)。
+        var roots = Live2DLocator.DiscoveryRoots().ToList();
+
+        Assert.Contains(AppContext.BaseDirectory, roots);
+    }
+
+    [Fact]
+    public void DiscoveryRoots_EnumeratesBundledModelPlacedUnderBaseDirectory()
+    {
+        // 端到端语义:把模型放到 <BaseDirectory>/live2d/<形态>/ 后,发现逻辑必须能找到它。
+        // 这正是随包布局;用真实 BaseDirectory 验证,顺带覆盖 ProgramDir 参与发现这一点。
+        var bundled = Path.Combine(AppContext.BaseDirectory, "live2d", "测试形态-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(bundled);
+            var name = Path.GetFileName(bundled);
+            File.WriteAllText(Path.Combine(bundled, name + ".model3.json"), "{}");
+
+            var hit = Live2DLocator.ResolveModelDirAnywhere(name);
+
+            Assert.NotNull(hit);
+            Assert.Equal(name, Path.GetFileName(hit!));
+        }
+        finally
+        {
+            try { Directory.Delete(bundled, recursive: true); } catch { /* ignore */ }
+        }
     }
 
     [Fact]
