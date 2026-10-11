@@ -89,13 +89,44 @@
      width-driven (`aspect-ratio: 1024/1536` means height = width * 1.5). Capping the
      width at `60svh` would let her reach 90svh tall and run off the top of the hero on
      short viewports, so the cap is `(100svh - 124px) / 1.5`: 84px for the toggle +
-     40px of breathing room at the top. */
+     40px of breathing room at the top.
+
+     Switching forms is a HANDOFF, not a cross-dissolve. The two forms are different
+     poses (one standing with an arm raised, one crouched), so overlapping them at
+     equal weight reads as a double-exposed glitch — four legs, two faces. But a pure
+     handoff (wait for one to fully leave before the other starts) leaves ~300ms with
+     NEITHER visible, a blank flash of background that measures as a hard cut.
+
+     So: the outgoing form sinks and fades fast, the incoming one rises into place a
+     little later. The travel lets the brief low-opacity overlap read as one figure
+     leaving and another arriving rather than as a dissolve, and the measured
+     "total visible" never approaches zero. The scale/translate pivot at her feet, so
+     she settles onto the ground instead of drifting. */
   position: absolute; right: 0; bottom: 84px;
   width: min(calc(50vw - 340px), calc((100svh - 124px) / 1.5));
   height: auto; aspect-ratio: 1024 / 1536;
-  opacity: 0; transition: opacity .9s var(--ease);
+  transform-origin: bottom center;
+  opacity: 0; transform: translateY(20px) scale(1.03);
+  /* Plays when she LEAVES: prompt, no delay. Slightly longer than the arrival's delay
+     so the two are both on screen for a beat — that overlap is what keeps the switch
+     from dipping through a blank frame. */
+  transition: opacity .42s var(--ease), transform .42s var(--ease);
 }
-.hero__l2d.is-on { opacity: 1; }
+.hero__l2d.is-on {
+  opacity: 1; transform: none;
+  /* Plays when she ARRIVES (first appearance, or after the wait below). */
+  transition: opacity .5s var(--ease), transform .5s var(--ease);
+}
+/* A real switch (something was already on screen): start the arrival slightly late so
+   the departure has begun sinking away first — the two briefly share the frame, which
+   is what covers the gap, but they are at different travel positions so it never reads
+   as a double exposure. hero-figure.js keeps the outgoing form animated through it. */
+.hero__figure[data-swap="swap"] .hero__l2d.is-on {
+  transition: opacity .5s var(--ease) .1s, transform .5s var(--ease) .1s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero__l2d, .hero__l2d.is-on { transition: none; transform: none; }
+}
 .hero__forms {
   position: absolute; right: max(72px, calc((100vw - var(--wrap)) / 2)); bottom: 24px;
   z-index: 1; display: flex; gap: 6px; padding: 6px;

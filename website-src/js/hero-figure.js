@@ -93,14 +93,28 @@ if (host && hero && supportsGL()) {
   const toggle = document.getElementById("hero-form-toggle");
   const buttons = [];
 
+  /* True once a form has actually been VISIBLE, so we can tell the first appearance
+     (nothing to hand off from — show her at once) apart from a real switch (the
+     incoming form must wait for the outgoing one to clear).
+     Deliberately not set by the initial publish() that only exists to put the buttons
+     into their disabled state — that call happens before anything is loaded, and
+     counting it would put the arrival delay on her very first fade-in. */
+  let shownOnce = false;
+
   function publish() {
+    const swap = shownOnce;
     host.dataset.form = FORMS[state.current].key;
+    /* Drives the delayed arrival in CSS. Set BEFORE the class flip so the transition
+       that starts on this frame already knows which of the two timings to use. */
+    host.dataset.swap = swap ? "swap" : "first";
     canvases.forEach((c, i) => {
       const on = i === state.current;
       c.classList.toggle("is-on", on);
       /* Only the visible canvas keeps a compositing layer once the other faded out. */
       c.style.willChange = on ? "opacity" : "";
     });
+    /* Only a form that can actually be seen counts as "she has appeared". */
+    if (state.ready[state.current]) { shownOnce = true; }
     buttons.forEach((b, i) => {
       b.setAttribute("aria-pressed", String(i === state.current));
       /* On a slow connection the second form can take tens of seconds to arrive. A
@@ -118,6 +132,13 @@ if (host && hero && supportsGL()) {
     if (reduce || i !== state.current) { p.pause(); } else { p.play(); }
   }
 
+  /* How long the outgoing form stays animated while it fades out. Must cover the
+     departure transition in CSS (.42s) — pausing her the instant the switch starts
+     would freeze her mid-gesture for the whole fade, which is exactly the kind of
+     snap this handoff exists to remove. */
+  const DEPART_MS = 460;
+  let departTimer = 0;
+
   /* Show form `i`. If it is still loading, the request is REMEMBERED and honoured when
      it arrives — the button is disabled while pending, but a keyboard/screen-reader
      activation or a click racing the load must not be silently dropped. */
@@ -126,8 +147,18 @@ if (host && hero && supportsGL()) {
   function show(i) {
     if (state.failed[i]) { return; }
     if (!state.ready[i]) { wanted = i; return; }
+    const prev = state.current;
+    const unchanged = prev === i;
     state.current = i;
-    state.players.forEach((p, k) => { if (p) { play(k); } });
+    clearTimeout(departTimer);
+    if (unchanged) {
+      play(i);
+    } else {
+      /* Incoming plays immediately — it has to be animating the moment it appears.
+         The outgoing one keeps playing until it has cleared, then stops. */
+      if (state.players[i]) { state.players[i].play(); }
+      departTimer = setTimeout(() => { play(prev); }, reduce ? 0 : DEPART_MS);
+    }
     publish();
     schedule();
   }
