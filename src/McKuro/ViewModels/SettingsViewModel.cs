@@ -366,18 +366,18 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>
     /// 生效的模型目录:已导入用导入目录;未导入时在首选 live2d 目录树中按选中模型名
     /// 定位实际所在子目录(模型可放在任意层级,加载不递归),与首页默认发现一致。
+    /// 已导入目录同样要按名字解析 —— 导入的是根目录而模型在子目录时,直接返回根目录会
+    /// 让预览按「根目录/模型名.model3.json」找文件而加载失败。
     /// </summary>
     public string EffectiveLive2DModelDir
     {
         get
         {
-            if (!string.IsNullOrWhiteSpace(Live2DModelDir))
-            {
-                return Live2DModelDir;
-            }
-            var root = Live2DLocator.EnsurePreferredDir();
+            var root = string.IsNullOrWhiteSpace(Live2DModelDir) ? Live2DLocator.EnsurePreferredDir() : Live2DModelDir;
             var name = SelectedLive2DModelName;
-            return string.IsNullOrWhiteSpace(name) ? root : Live2DLocator.FindModelDir(root, name) ?? root;
+            return string.IsNullOrWhiteSpace(name)
+                ? root
+                : Live2DLocator.ResolveModelDir(root, name) ?? root;
         }
     }
 

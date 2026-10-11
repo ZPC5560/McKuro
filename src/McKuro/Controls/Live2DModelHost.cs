@@ -226,6 +226,12 @@ public sealed class Live2DModelHost : Panel
             Children.Add(_view);
         }
 
+        // 开启「无动作时自动播放 Idle」:Sparkle 的 _automaticIdle 默认 false,
+        // 加载时会把 SDK LAppModel.RandomMotion 的默认 true 覆盖掉,于是 _motionManager
+        // 恒为空、model3.json 里的 Idle 动作永不自动起播 —— 模型完全静止(只剩呼吸等参数效果)。
+        // 首页/设置页里的「心」与 Hiyori 都依赖 model3.json 的 Idle 组,必须显式打开。
+        _view.SetAutomaticIdle(true);
+
         _view.FramesPerSecond = FramesPerSecond;
         if (_loadedDir != ModelDirectory || _loadedName != ModelName)
         {

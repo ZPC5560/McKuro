@@ -307,13 +307,15 @@ public sealed partial class HomeViewModel : ViewModelBase
     {
         var s = AppServices.Settings.Current;
         // 未导入模型目录时回退到首选 live2d 目录(程序目录下 live2d\,无写权限才用用户数据目录)自动发现默认模型
-        var modelDir = string.IsNullOrWhiteSpace(s.Live2DModelDir) ? Live2DLocator.EnsurePreferredDir() : s.Live2DModelDir;
+        var root = string.IsNullOrWhiteSpace(s.Live2DModelDir) ? Live2DLocator.EnsurePreferredDir() : s.Live2DModelDir;
         var modelName = Live2DLocator.NormalizeModelName(s.Live2DModelName);
-        var valid = !string.IsNullOrWhiteSpace(modelName)
-                    && File.Exists(Path.Combine(modelDir, modelName + ".model3.json"));
+        // 选中模型可能放在任意层级子目录:按名字递归定位,不能用「根目录下的 .model3.json」判定,
+        // 否则多形态各自建目录时 valid 恒为 false,会退回默认模型(切形态不生效)。
+        var modelDir = Live2DLocator.ResolveModelDir(root, modelName);
+        var valid = modelDir is not null;
         if (!valid)
         {
-            var fallback = Live2DLocator.FindDefaultModel(modelDir);
+            var fallback = Live2DLocator.FindDefaultModel(root);
             if (fallback is not null)
             {
                 modelDir = fallback.Value.Dir;
@@ -321,7 +323,7 @@ public sealed partial class HomeViewModel : ViewModelBase
                 valid = true;
             }
         }
-        Live2DModelDir = valid ? modelDir : "";
+        Live2DModelDir = valid ? modelDir! : "";
         Live2DModelName = valid ? modelName : "";
         Live2DZoom = Math.Clamp(s.Live2DZoom, 0.5f, 3f);
         Live2DPositionX = Math.Clamp(s.Live2DPositionX, -2f, 2f);

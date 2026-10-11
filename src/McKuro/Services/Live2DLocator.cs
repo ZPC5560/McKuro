@@ -107,6 +107,33 @@ public static class Live2DLocator
     }
 
     /// <summary>
+    /// 定位指定模型名所在目录:先看根目录,再递归查找 &lt;name&gt;.model3.json。
+    /// 首页与设置页共用这一套解析 —— 多模型分放不同子目录时,选中的模型必须与加载的一致,
+    /// 否则首页会退回 FindDefaultModel 的「字典序第一个」:用户切到白金形态,首页却仍加载红黑。
+    /// name 为空或未找到返回 null。
+    /// </summary>
+    public static string? ResolveModelDir(string? root, string? name)
+    {
+        var normalized = NormalizeModelName(name);
+        if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(normalized) || !Directory.Exists(root))
+        {
+            return null;
+        }
+        try
+        {
+            if (File.Exists(Path.Combine(root, normalized + ".model3.json")))
+            {
+                return root;
+            }
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+        return FindModelDir(root, normalized);
+    }
+
+    /// <summary>
     /// 归一化模型名为 Sparkle.Live2DView 要求的裸名(加载时由库拼 ".model3.json")。
     /// 兼容历史数据:早期扫描用 GetFileNameWithoutExtension 只剥了 ".json",
     /// 把 "Hiyori.model3" 存进了设置,按此名加载会找不到文件。

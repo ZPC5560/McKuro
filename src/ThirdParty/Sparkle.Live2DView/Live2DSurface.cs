@@ -156,7 +156,11 @@ public sealed partial class Live2DSurface : OpenGlControlBase
         _automaticIdle = enabled;
 
         if (_model is not null)
-            _model.RandomMotion = enabled;
+        {
+            // 由 autoplay 并行层接管动作的模型不能再开 SDK 随机 Idle,
+            // 否则它会随机起 Idle 组里的一条、与并行层抢同一批参数。
+            _model.RandomMotion = enabled && _autoplay.LayerCount == 0;
+        }
     }
 
     public void SetOpacity(float opacity)
