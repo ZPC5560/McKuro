@@ -1,0 +1,1715 @@
+{
+  "status": "awaiting-visual-review",
+  "editorVersion": "5.3",
+  "runtimeVersion": "5.0",
+  "outputDirectory": "form1",
+  "cmo3": "form1\\model.cmo3",
+  "model3": "form1\\model.model3.json",
+  "moc3": "form1\\model.moc3",
+  "sourceRevision": 33,
+  "sourceFingerprint": "63eedaed4d2edbe8af66c1e800c7cd5c633260311cc11968aa835152e8b1d079",
+  "parameterScale": 100,
+  "parameterIds": {
+    "param-head-yaw": "ParamPL_param_head_yaw_80184865e1e5",
+    "param-head-pitch": "ParamPL_param_head_pitch_8dedbfee3591",
+    "param-head-roll": "ParamPL_param_head_roll_a14ac09ff14a",
+    "param-body-sway": "ParamPL_param_body_sway_236bb03fd820",
+    "param-body-pitch": "ParamPL_param_body_pitch_3a4139a82bc5",
+    "param-body-roll": "ParamPL_param_body_roll_4df13af85c9a",
+    "param-gaze-x": "ParamPL_param_gaze_x_55eed3e96610",
+    "param-gaze-y": "ParamPL_param_gaze_y_b8cd88c8b40e",
+    "param-breath": "ParamPL_param_breath_fe85afa832bc",
+    "param-blink": "ParamPL_param_blink_3211d72191ad",
+    "param-mouth-open": "ParamPL_param_mouth_open_7831396b8360",
+    "param-blink-left": "ParamPL_param_blink_left_215b222e3679",
+    "param-blink-right": "ParamPL_param_blink_right_b2203085a552",
+    "param-brow-left": "ParamPL_param_brow_left_ee5ecc765437",
+    "param-brow-right": "ParamPL_param_brow_right_7bb5e349cd77",
+    "param-smile": "ParamPL_param_smile_1a5f523fb6c1",
+    "param-cheek-puff": "ParamPL_param_cheek_puff_6e12d3308d6b",
+    "param-mouth-a": "ParamPL_param_mouth_a_b7529a7639da",
+    "param-mouth-i": "ParamPL_param_mouth_i_9e772df5eb76",
+    "param-mouth-u": "ParamPL_param_mouth_u_f2e2f210903a",
+    "param-mouth-e": "ParamPL_param_mouth_e_b949db18ea97",
+    "param-mouth-o": "ParamPL_param_mouth_o_4334e4066e62",
+    "limb-idle-arm-L": "ParamPL_limb_idle_arm_L_ece39ae0ef68",
+    "limb-idle-arm-R": "ParamPL_limb_idle_arm_R_85a096270b5f",
+    "limb-idle-leg-L": "ParamPL_limb_idle_leg_L_cf3b06ab1d7d",
+    "limb-idle-leg-R": "ParamPL_limb_idle_leg_R_c30012812403"
+  },
+  "drawableIds": {
+    "layer-000-原模型部件-native-source-component-parts-tail": "ArtMeshPL_layer_000_______native_source_componen_52b1f8aaa8b8",
+    "layer-001-原模型部件-native-source-component-parts-back-hair-ca": "ArtMeshPL_layer_001_______native_source_componen_3d7d4640903f",
+    "layer-002-原模型部件-native-source-component-parts-back-hair-r": "ArtMeshPL_layer_002_______native_source_componen_7de12d8f855a",
+    "layer-003-原模型部件-native-source-component-parts-outer-drape-": "ArtMeshPL_layer_003_______native_source_componen_d9498b3b36cb",
+    "layer-005-原模型部件-native-source-component-parts-tail-accesso": "ArtMeshPL_layer_005_______native_source_componen_66f59d56ef90",
+    "layer-006-原模型部件-native-source-component-parts-hip-base": "ArtMeshPL_layer_006_______native_source_componen_8627fb518493",
+    "layer-007-原模型部件-native-source-component-parts-leg-l": "ArtMeshPL_layer_007_______native_source_componen_e3501bba52c3",
+    "layer-008-原模型部件-native-source-component-parts-leg-r": "ArtMeshPL_layer_008_______native_source_componen_d7ae963fec74",
+    "layer-009-原模型部件-native-source-component-parts-neck-shoulde": "ArtMeshPL_layer_009_______native_source_componen_c96325aaf579",
+    "layer-010-原模型部件-native-source-component-parts-bodice-drape": "ArtMeshPL_layer_010_______native_source_componen_499897cdf956",
+    "layer-011-原模型部件-native-source-component-parts-bodice-drape": "ArtMeshPL_layer_011_______native_source_componen_d337ad521898",
+    "layer-012-原模型部件-native-source-component-parts-bodice": "ArtMeshPL_layer_012_______native_source_componen_2d4bf0094636",
+    "layer-016-原模型部件-native-source-component-parts-skirt-l": "ArtMeshPL_layer_016_______native_source_componen_4e51b56c72d4",
+    "layer-017-原模型部件-native-source-component-parts-skirt-r": "ArtMeshPL_layer_017_______native_source_componen_2f47e6d71527",
+    "layer-018-原模型部件-native-source-component-parts-front-skirt": "ArtMeshPL_layer_018_______native_source_componen_119ff0a076a4",
+    "layer-019-原模型部件-native-source-component-parts-sleeve-l": "ArtMeshPL_layer_019_______native_source_componen_576e64ca0469",
+    "layer-020-原模型部件-native-source-component-parts-sleeve-r": "ArtMeshPL_layer_020_______native_source_componen_ad8834fc5300",
+    "layer-021-原模型部件-native-source-component-parts-sleeve-fur-l": "ArtMeshPL_layer_021_______native_source_componen_e288161ecece",
+    "layer-022-原模型部件-native-source-component-parts-sleeve-fur-r": "ArtMeshPL_layer_022_______native_source_componen_58be10f1f560",
+    "layer-023-原模型部件-native-source-component-parts-arm-l": "ArtMeshPL_layer_023_______native_source_componen_6dc48f4b9747",
+    "layer-024-原模型部件-native-source-component-parts-arm-r": "ArtMeshPL_layer_024_______native_source_componen_618ef566284e",
+    "layer-025-原模型部件-native-source-component-parts-hand-l": "ArtMeshPL_layer_025_______native_source_componen_ea2c3739995d",
+    "layer-026-原模型部件-native-source-component-parts-hand-r": "ArtMeshPL_layer_026_______native_source_componen_a55538cb13d2",
+    "layer-027-原模型部件-native-source-component-parts-head-accesso": "ArtMeshPL_layer_027_______native_source_componen_a0e015463cc9",
+    "layer-028-原模型部件-native-source-component-parts-face": "ArtMeshPL_layer_028_______native_source_componen_9fecb6e1859c",
+    "layer-029-原模型部件-native-source-component-parts-mouth": "ArtMeshPL_layer_029_______native_source_componen_da7be28c32e3",
+    "layer-030-原模型部件-native-source-component-parts-iris-l": "ArtMeshPL_layer_030_______native_source_componen_791440e2f16e",
+    "layer-031-原模型部件-native-source-component-parts-iris-r": "ArtMeshPL_layer_031_______native_source_componen_67ac9b810928",
+    "layer-032-原模型部件-native-source-component-parts-eyelash-l": "ArtMeshPL_layer_032_______native_source_componen_1c8f621374ba",
+    "layer-033-原模型部件-native-source-component-parts-eyelash-r": "ArtMeshPL_layer_033_______native_source_componen_027bfdbe0cd0",
+    "layer-034-原模型部件-native-source-component-parts-brow-l": "ArtMeshPL_layer_034_______native_source_componen_d08f4e6887ec",
+    "layer-035-原模型部件-native-source-component-parts-brow-r": "ArtMeshPL_layer_035_______native_source_componen_875e10fc85ef",
+    "layer-036-原模型部件-native-source-component-parts-ear-l": "ArtMeshPL_layer_036_______native_source_componen_7439e54485dd",
+    "layer-037-原模型部件-native-source-component-parts-ear-r": "ArtMeshPL_layer_037_______native_source_componen_211cc80326f7",
+    "layer-038-原模型部件-native-source-component-parts-ear-fur-l": "ArtMeshPL_layer_038_______native_source_componen_fac83ac9cf7f",
+    "layer-039-原模型部件-native-source-component-parts-ear-fur-r": "ArtMeshPL_layer_039_______native_source_componen_dd0e26a52710",
+    "layer-040-原模型部件-native-source-component-parts-side-hair-l": "ArtMeshPL_layer_040_______native_source_componen_dbd287ee43e1",
+    "layer-041-原模型部件-native-source-component-parts-side-hair-r": "ArtMeshPL_layer_041_______native_source_componen_01a2a7434335",
+    "layer-042-原模型部件-native-source-component-parts-front-hair-l": "ArtMeshPL_layer_042_______native_source_componen_5adcf14f37d3",
+    "layer-043-原模型部件-native-source-component-parts-front-hair-r": "ArtMeshPL_layer_043_______native_source_componen_82da8e3c8319",
+    "layer-044-原模型部件-native-source-component-parts-front-hair-m": "ArtMeshPL_layer_044_______native_source_componen_ae003c230576",
+    "layer-045-原模型部件-native-source-component-parts-hair-ornamen": "ArtMeshPL_layer_045_______native_source_componen_6a62b83408df",
+    "layer-046-原模型部件-native-source-component-parts-head-accesso": "ArtMeshPL_layer_046_______native_source_componen_5a775fd3ff0d",
+    "layer-047-原模型部件-native-source-component-parts-head-accesso": "ArtMeshPL_layer_047_______native_source_componen_df8c7fcf4bca",
+    "native-eye-face-01": "ArtMeshPL_native_eye_face_01_185c1091f56c",
+    "native-eye-face-02": "ArtMeshPL_native_eye_face_02_ed6b21787986",
+    "native-eye-face-03": "ArtMeshPL_native_eye_face_03_25ac9a2e7ff5",
+    "native-eye-face-04": "ArtMeshPL_native_eye_face_04_0fbcb609bc58",
+    "native-eye-face-05": "ArtMeshPL_native_eye_face_05_d8ade72cacc9",
+    "native-eye-face-06": "ArtMeshPL_native_eye_face_06_35e69e229795",
+    "native-eye-face-07": "ArtMeshPL_native_eye_face_07_6cb9cc197960",
+    "native-eye-face-08": "ArtMeshPL_native_eye_face_08_0db05c20ac85",
+    "native-attachment-outer-drape-r-head": "ArtMeshPL_native_attachment_outer_drape_r_head_d821cc196c2e",
+    "native-attachment-outer-drape-r-body": "ArtMeshPL_native_attachment_outer_drape_r_body_12ba54cfc459",
+    "native-attachment-body-accessory-l-body": "ArtMeshPL_native_attachment_body_accessory_l_bod_42abbc7d62fd",
+    "native-attachment-body-accessory-r-head": "ArtMeshPL_native_attachment_body_accessory_r_hea_db12358f767a",
+    "native-attachment-body-accessory-r-body": "ArtMeshPL_native_attachment_body_accessory_r_bod_3ad1878427fc",
+    "native-attachment-body-accessory-m-head": "ArtMeshPL_native_attachment_body_accessory_m_hea_4d55b83109cc",
+    "native-attachment-body-accessory-m-body": "ArtMeshPL_native_attachment_body_accessory_m_bod_4e2c715f4e81"
+  },
+  "tolerancePixels": 0.5,
+  "layers": [
+    {
+      "layer": "layer-000-原模型部件-native-source-component-parts-tail",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 15,
+      "maxError": {
+        "pixels": 0.3712837940618249,
+        "opacity": 1.1102230246251565e-16,
+        "order": 0
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-001-原模型部件-native-source-component-parts-back-hair-ca",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.04841705366580483,
+        "opacity": 2.220446049250313e-16,
+        "order": 7.105427357601002e-15
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-002-原模型部件-native-source-component-parts-back-hair-r",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.0485624585579364,
+        "opacity": 2.220446049250313e-16,
+        "order": 1.4210854715202004e-14
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-003-原模型部件-native-source-component-parts-outer-drape-",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        }
+      ],
+      "keyforms": 3645,
+      "maxError": {
+        "pixels": 0.34511624986914197,
+        "opacity": 7.771561172376096e-16,
+        "order": 4.263256414560601e-14
+      },
+      "samplesChecked": 160
+    },
+    {
+      "layer": "layer-005-原模型部件-native-source-component-parts-tail-accesso",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 15,
+      "maxError": {
+        "pixels": 0.36493962690391213,
+        "opacity": 1.1102230246251565e-16,
+        "order": 1.4210854715202004e-14
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-006-原模型部件-native-source-component-parts-hip-base",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 4
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        }
+      ],
+      "keyforms": 36,
+      "maxError": {
+        "pixels": 0.49725971904826616,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.842170943040401e-14
+      },
+      "samplesChecked": 151
+    },
+    {
+      "layer": "layer-007-原模型部件-native-source-component-parts-leg-l",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "limb-idle-leg-L",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.2153103077465952,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.842170943040401e-14
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-008-原模型部件-native-source-component-parts-leg-r",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "limb-idle-leg-R",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.16767837548745465,
+        "opacity": 2.220446049250313e-16,
+        "order": 5.684341886080802e-14
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-009-原模型部件-native-source-component-parts-neck-shoulde",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        }
+      ],
+      "keyforms": 3645,
+      "maxError": {
+        "pixels": 0.11738530116589391,
+        "opacity": 7.771561172376096e-16,
+        "order": 1.4210854715202004e-13
+      },
+      "samplesChecked": 160
+    },
+    {
+      "layer": "layer-010-原模型部件-native-source-component-parts-bodice-drape",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        }
+      ],
+      "keyforms": 135,
+      "maxError": {
+        "pixels": 0.14815493780247838,
+        "opacity": 2.220446049250313e-16,
+        "order": 5.684341886080802e-14
+      },
+      "samplesChecked": 154
+    },
+    {
+      "layer": "layer-011-原模型部件-native-source-component-parts-bodice-drape",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        }
+      ],
+      "keyforms": 135,
+      "maxError": {
+        "pixels": 0.1849753036976698,
+        "opacity": 2.220446049250313e-16,
+        "order": 8.526512829121202e-14
+      },
+      "samplesChecked": 154
+    },
+    {
+      "layer": "layer-012-原模型部件-native-source-component-parts-bodice",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        }
+      ],
+      "keyforms": 135,
+      "maxError": {
+        "pixels": 0.17264045110986548,
+        "opacity": 2.220446049250313e-16,
+        "order": 8.526512829121202e-14
+      },
+      "samplesChecked": 154
+    },
+    {
+      "layer": "layer-016-原模型部件-native-source-component-parts-skirt-l",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        }
+      ],
+      "keyforms": 45,
+      "maxError": {
+        "pixels": 0.27461865262374746,
+        "opacity": 2.220446049250313e-16,
+        "order": 1.1368683772161603e-13
+      },
+      "samplesChecked": 152
+    },
+    {
+      "layer": "layer-017-原模型部件-native-source-component-parts-skirt-r",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        }
+      ],
+      "keyforms": 45,
+      "maxError": {
+        "pixels": 0.4256602755176789,
+        "opacity": 2.220446049250313e-16,
+        "order": 1.1368683772161603e-13
+      },
+      "samplesChecked": 152
+    },
+    {
+      "layer": "layer-018-原模型部件-native-source-component-parts-front-skirt",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        }
+      ],
+      "keyforms": 135,
+      "maxError": {
+        "pixels": 0.17450606123140708,
+        "opacity": 2.220446049250313e-16,
+        "order": 1.7053025658242404e-13
+      },
+      "samplesChecked": 154
+    },
+    {
+      "layer": "layer-019-原模型部件-native-source-component-parts-sleeve-l",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        },
+        {
+          "id": "limb-idle-arm-L",
+          "keys": 3
+        }
+      ],
+      "keyforms": 405,
+      "maxError": {
+        "pixels": 0.24842938214679988,
+        "opacity": 4.440892098500626e-16,
+        "order": 2.8421709430404007e-13
+      },
+      "samplesChecked": 156
+    },
+    {
+      "layer": "layer-020-原模型部件-native-source-component-parts-sleeve-r",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        },
+        {
+          "id": "limb-idle-arm-R",
+          "keys": 3
+        }
+      ],
+      "keyforms": 405,
+      "maxError": {
+        "pixels": 0.22810644770745933,
+        "opacity": 3.3306690738754696e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 156
+    },
+    {
+      "layer": "layer-021-原模型部件-native-source-component-parts-sleeve-fur-l",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        },
+        {
+          "id": "limb-idle-arm-L",
+          "keys": 3
+        }
+      ],
+      "keyforms": 405,
+      "maxError": {
+        "pixels": 0.2100990062692978,
+        "opacity": 4.440892098500626e-16,
+        "order": 1.7053025658242404e-13
+      },
+      "samplesChecked": 156
+    },
+    {
+      "layer": "layer-022-原模型部件-native-source-component-parts-sleeve-fur-r",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        },
+        {
+          "id": "limb-idle-arm-R",
+          "keys": 3
+        }
+      ],
+      "keyforms": 405,
+      "maxError": {
+        "pixels": 0.2889948528888765,
+        "opacity": 3.3306690738754696e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 156
+    },
+    {
+      "layer": "layer-023-原模型部件-native-source-component-parts-arm-l",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        },
+        {
+          "id": "limb-idle-arm-L",
+          "keys": 3
+        }
+      ],
+      "keyforms": 405,
+      "maxError": {
+        "pixels": 0.21425062705936943,
+        "opacity": 4.440892098500626e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 156
+    },
+    {
+      "layer": "layer-024-原模型部件-native-source-component-parts-arm-r",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        },
+        {
+          "id": "limb-idle-arm-R",
+          "keys": 3
+        }
+      ],
+      "keyforms": 405,
+      "maxError": {
+        "pixels": 0.1352048301575152,
+        "opacity": 3.3306690738754696e-16,
+        "order": 1.7053025658242404e-13
+      },
+      "samplesChecked": 156
+    },
+    {
+      "layer": "layer-025-原模型部件-native-source-component-parts-hand-l",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "limb-idle-arm-L",
+          "keys": 3
+        }
+      ],
+      "keyforms": 135,
+      "maxError": {
+        "pixels": 0.14277852913673156,
+        "opacity": 2.220446049250313e-16,
+        "order": 1.7053025658242404e-13
+      },
+      "samplesChecked": 154
+    },
+    {
+      "layer": "layer-026-原模型部件-native-source-component-parts-hand-r",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "limb-idle-arm-R",
+          "keys": 3
+        }
+      ],
+      "keyforms": 135,
+      "maxError": {
+        "pixels": 0.1167103108184332,
+        "opacity": 2.220446049250313e-16,
+        "order": 1.1368683772161603e-13
+      },
+      "samplesChecked": 154
+    },
+    {
+      "layer": "layer-027-原模型部件-native-source-component-parts-head-accesso",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-body-sway",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.11317858860002161,
+        "opacity": 4.440892098500626e-16,
+        "order": 3.410605131648481e-13
+      },
+      "samplesChecked": 154
+    },
+    {
+      "layer": "layer-028-原模型部件-native-source-component-parts-face",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.04082349671971446,
+        "opacity": 2.220446049250313e-16,
+        "order": 1.1368683772161603e-13
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-029-原模型部件-native-source-component-parts-mouth",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.016433037392256867,
+        "opacity": 2.220446049250313e-16,
+        "order": 1.1368683772161603e-13
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-030-原模型部件-native-source-component-parts-iris-l",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-blink",
+          "keys": 9
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.02861055158241909,
+        "opacity": 1.1102230246251565e-16,
+        "order": 3.410605131648481e-13
+      },
+      "samplesChecked": 158
+    },
+    {
+      "layer": "layer-031-原模型部件-native-source-component-parts-iris-r",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-blink",
+          "keys": 9
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.019589236639354513,
+        "opacity": 1.1102230246251565e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 158
+    },
+    {
+      "layer": "layer-032-原模型部件-native-source-component-parts-eyelash-l",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-blink",
+          "keys": 9
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.0292698242970172,
+        "opacity": 1.1102230246251565e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 158
+    },
+    {
+      "layer": "layer-033-原模型部件-native-source-component-parts-eyelash-r",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-blink",
+          "keys": 9
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.020228055194908508,
+        "opacity": 1.1102230246251565e-16,
+        "order": 3.410605131648481e-13
+      },
+      "samplesChecked": 158
+    },
+    {
+      "layer": "layer-034-原模型部件-native-source-component-parts-brow-l",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.01850761360154345,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-035-原模型部件-native-source-component-parts-brow-r",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.014695727886407892,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-036-原模型部件-native-source-component-parts-ear-l",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.06762683857579775,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-037-原模型部件-native-source-component-parts-ear-r",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.06683374422147707,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-038-原模型部件-native-source-component-parts-ear-fur-l",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.03801149223392372,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-039-原模型部件-native-source-component-parts-ear-fur-r",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.0486959646990886,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-040-原模型部件-native-source-component-parts-side-hair-l",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.037032211353039725,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-041-原模型部件-native-source-component-parts-side-hair-r",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.03524653496584807,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-042-原模型部件-native-source-component-parts-front-hair-l",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 5
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 45,
+      "maxError": {
+        "pixels": 0.4313245730357366,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 152
+    },
+    {
+      "layer": "layer-043-原模型部件-native-source-component-parts-front-hair-r",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 4
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 36,
+      "maxError": {
+        "pixels": 0.4423718409630526,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 151
+    },
+    {
+      "layer": "layer-044-原模型部件-native-source-component-parts-front-hair-m",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.032335014225677965,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.2737367544323206e-13
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "layer-045-原模型部件-native-source-component-parts-hair-ornamen",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-body-sway",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.28901195819992154,
+        "opacity": 4.440892098500626e-16,
+        "order": 4.547473508864641e-13
+      },
+      "samplesChecked": 154
+    },
+    {
+      "layer": "layer-046-原模型部件-native-source-component-parts-head-accesso",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-body-sway",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.1531289186000322,
+        "opacity": 4.440892098500626e-16,
+        "order": 4.547473508864641e-13
+      },
+      "samplesChecked": 154
+    },
+    {
+      "layer": "layer-047-原模型部件-native-source-component-parts-head-accesso",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-body-sway",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.15618658860000778,
+        "opacity": 4.440892098500626e-16,
+        "order": 4.547473508864641e-13
+      },
+      "samplesChecked": 154
+    },
+    {
+      "layer": "native-eye-face-01",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-blink",
+          "keys": 9
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.04082413741740831,
+        "opacity": 2.220446049250313e-16,
+        "order": 3.410605131648481e-13
+      },
+      "samplesChecked": 158
+    },
+    {
+      "layer": "native-eye-face-02",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-blink",
+          "keys": 9
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.04082413741740831,
+        "opacity": 2.220446049250313e-16,
+        "order": 3.410605131648481e-13
+      },
+      "samplesChecked": 158
+    },
+    {
+      "layer": "native-eye-face-03",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-blink",
+          "keys": 9
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.04082413741740831,
+        "opacity": 2.220446049250313e-16,
+        "order": 3.410605131648481e-13
+      },
+      "samplesChecked": 158
+    },
+    {
+      "layer": "native-eye-face-04",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-blink",
+          "keys": 9
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.04082413741740831,
+        "opacity": 2.220446049250313e-16,
+        "order": 3.410605131648481e-13
+      },
+      "samplesChecked": 158
+    },
+    {
+      "layer": "native-eye-face-05",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-blink",
+          "keys": 9
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.04082413741740831,
+        "opacity": 2.220446049250313e-16,
+        "order": 3.410605131648481e-13
+      },
+      "samplesChecked": 158
+    },
+    {
+      "layer": "native-eye-face-06",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-blink",
+          "keys": 9
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.04082413741740831,
+        "opacity": 2.220446049250313e-16,
+        "order": 3.410605131648481e-13
+      },
+      "samplesChecked": 158
+    },
+    {
+      "layer": "native-eye-face-07",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-blink",
+          "keys": 9
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.04082413741740831,
+        "opacity": 2.220446049250313e-16,
+        "order": 3.410605131648481e-13
+      },
+      "samplesChecked": 158
+    },
+    {
+      "layer": "native-eye-face-08",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-blink",
+          "keys": 9
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.04082413741740831,
+        "opacity": 2.220446049250313e-16,
+        "order": 3.410605131648481e-13
+      },
+      "samplesChecked": 158
+    },
+    {
+      "layer": "native-attachment-outer-drape-r-head",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.07741165994896346,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.842170943040401e-14
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "native-attachment-outer-drape-r-body",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 9
+        },
+        {
+          "id": "param-body-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        },
+        {
+          "id": "param-breath",
+          "keys": 3
+        }
+      ],
+      "keyforms": 243,
+      "maxError": {
+        "pixels": 0.48450825773393785,
+        "opacity": 2.220446049250313e-16,
+        "order": 2.842170943040401e-14
+      },
+      "samplesChecked": 158
+    },
+    {
+      "layer": "native-attachment-body-accessory-l-body",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 4
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 12,
+      "maxError": {
+        "pixels": 0.42881169456577145,
+        "opacity": 0,
+        "order": 5.684341886080802e-14
+      },
+      "samplesChecked": 149
+    },
+    {
+      "layer": "native-attachment-body-accessory-r-head",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.04682214359576956,
+        "opacity": 2.220446049250313e-16,
+        "order": 5.684341886080802e-14
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "native-attachment-body-accessory-r-body",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 15,
+      "maxError": {
+        "pixels": 0.11381789271836826,
+        "opacity": 1.1102230246251565e-16,
+        "order": 5.684341886080802e-14
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "native-attachment-body-accessory-m-head",
+      "axes": [
+        {
+          "id": "param-head-yaw",
+          "keys": 3
+        },
+        {
+          "id": "param-head-pitch",
+          "keys": 3
+        },
+        {
+          "id": "param-head-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 27,
+      "maxError": {
+        "pixels": 0.02432324498782547,
+        "opacity": 2.220446049250313e-16,
+        "order": 1.1368683772161603e-13
+      },
+      "samplesChecked": 150
+    },
+    {
+      "layer": "native-attachment-body-accessory-m-body",
+      "axes": [
+        {
+          "id": "param-body-sway",
+          "keys": 5
+        },
+        {
+          "id": "param-body-roll",
+          "keys": 3
+        }
+      ],
+      "keyforms": 15,
+      "maxError": {
+        "pixels": 0.06941869364855234,
+        "opacity": 1.1102230246251565e-16,
+        "order": 5.684341886080802e-14
+      },
+      "samplesChecked": 150
+    }
+  ],
+  "verification": {
+    "valid": true,
+    "model": "form1\\model.model3.json",
+    "moc": "model.moc3",
+    "textures": [
+      "textures/texture_0.png",
+      "textures/texture_1.png"
+    ],
+    "referencedFiles": [
+      "model.moc3",
+      "puppetloom/expressions/agent-eyes-closed.exp3.json",
+      "puppetloom/model/puppetloom.cdi3.json",
+      "puppetloom/motions/autoplay-limb-idle-arm-L.motion3.json",
+      "puppetloom/motions/autoplay-limb-idle-arm-R.motion3.json",
+      "puppetloom/motions/autoplay-limb-idle-leg-L.motion3.json",
+      "puppetloom/motions/autoplay-limb-idle-leg-R.motion3.json",
+      "textures/texture_0.png",
+      "textures/texture_1.png"
+    ],
+    "issues": []
+  },
+  "limitations": [
+    "几何为当前修订参数求值后的可编辑网格关键形，原程序化变形器层级不保留。",
+    "双素材嘴型在 mouth-open 的 .498 到 .5 之间完成透明度切换；原播放器在 .5 瞬时切换。",
+    "运行时行为与物理通过配套 JSON 转换；时间驱动的未参数化运动不等于原播放器。"
+  ],
+  "sidecarIssues": []
+}

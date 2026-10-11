@@ -17,7 +17,7 @@
     <!-- Native AOT 发布 (win-x64 需在 Windows 上发布;osx-arm64 可本地验证) -->
     <PublishAot>true</PublishAot>
     <StripSymbols>true</StripSymbols>
-    <Version>1.3.4</Version>
+    <Version>1.4.0</Version>
     <!-- 注意:不要启用 InvariantGlobalization —— Semi 主题需要 zh-CN 文化支持 -->
     <!-- IL2104: 第三方 HanumanInstitute.LibMpv 自身产生的裁剪警告;本项目仅用其
          原生库加载/符号解析路径(无反射),该警告对本用法不适用 -->
@@ -107,6 +107,31 @@
     <None Include="Assets\HpatchzResource\hpatchz.exe" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\HpatchzResource\NOTICE.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\HpatchzResource\LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
+    内置 Live2D 运行环境与「心」双形态模型:随包分发到输出目录的 live2d\ 子目录,
+    正是 Live2DLocator.ProgramDir 探测的位置,因此用户零配置即可在首页看到模型。
+
+    为什么可以随包分发 Cubism Core:官方 SDK 的 Core/RedistributableFiles.txt 明确把
+    dll/windows/x86_64/Live2DCubismCore.dll 列为 "available for redistribution"
+    (依据 Live2D Proprietary Software License Agreement 第 5 条)。分发时须保留
+    许可声明并让用户同意等效条款 —— 见 Assets/live2d/NOTICE.txt。
+
+    必须 Remove + Include(而不是只 Update):
+    · 默认 glob <None Include="**/*"> 已收下这些文件,且它的 %(RecursiveDir) 是相对
+      【项目根】的整段路径(Assets\live2d\心-红黑\),直接拿来拼 Link 会得到
+      live2d\Assets\live2d\... 的错位路径。
+    · 先 Remove 掉默认项,再用 <None Include="Assets\live2d\**\*"> 重新收一遍,
+      此时 %(RecursiveDir) 才是相对该 glob 的 <模型>\<子目录>\,Link 结果正好是
+      live2d\<模型>\... ,与 Live2DLocator.ProgramDir 一致。
+    · 不 Remove 会因同一文件被收两次而报 NETSDK1022。
+  -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x64' Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')">
+    <None Remove="Assets\live2d\**\*" />
+    <None Include="Assets\live2d\**\*"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="live2d\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- macOS 构建后自动打包 libmpv + 依赖到 libmpv/ 子目录(仅构建脚本存在时,不阻断构建) -->

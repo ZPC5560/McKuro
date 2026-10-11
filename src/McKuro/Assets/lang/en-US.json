@@ -401,7 +401,7 @@
   "Launcher.UpdateAvailable": "Update available",
   "Launcher.Verifying": "Verifying local files {0}/{1}…",
   "Live2D.CoreFound": "Ready",
-  "Live2D.CoreHint": "Cubism Core is separately licensed and not bundled: download the Cubism SDK for Native from live2d.com and put Live2DCubismCore.dll into the opened folder (or next to the app). Models use Cubism 3+ .model3.json.",
+  "Live2D.CoreHint": "The Cubism runtime ships with the app and works out of the box. To replace or upgrade it, download the Cubism SDK for Native from live2d.com and put Live2DCubismCore.dll into the opened folder (or next to the app). Models use Cubism 3+ .model3.json.",
   "Live2D.CoreMissing": "Not found",
   "Live2D.CoreRowTitle": "Cubism Runtime",
   "Live2D.DisplayDesc": "Zoom and position apply live on Home",

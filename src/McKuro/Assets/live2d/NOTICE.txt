@@ -1,0 +1,51 @@
+Live2D Cubism Core / Live2D Cubism SDK
+======================================
+
+本目录包含随 McKuro 分发的 Live2D Cubism 运行环境与示例模型资源。
+
+--------------------------------------------------------------------------
+1. Live2DCubismCore.dll
+--------------------------------------------------------------------------
+
+来源:  Live2D Cubism SDK for Native (Core)
+        https://www.live2d.com/sdk/download/native/
+版权:  (c) Live2D Inc. All rights reserved.
+
+允许再分发的依据:官方 SDK 附带的 `Core/RedistributableFiles.txt` 明确列出
+
+    dll/windows/x86_64/Live2DCubismCore.dll
+
+为 "available for redistribution under the terms of the Live2D Proprietary
+Software License Agreement"(该协议第 5 条「Redistributable Code」)。
+
+适用协议: Live2D Proprietary Software License Agreement
+          https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_en.html
+
+按该协议第 5.2 条,再分发须满足:
+  · 在本应用中提供使用该二进制的主要功能(本应用用它渲染 Live2D 模型);
+  · 使用户受等效保护条款约束;
+  · 不对该二进制做修改,原样分发(本仓库不改动该文件);
+  · 不暗示本应用由 Live2D Inc. 制作、认证或推荐。
+
+Live2D、Cubism 是 Live2D Inc. 在日本及其他国家的注册商标或商标。
+本应用与 Live2D Inc. 无隶属或背书关系。
+
+--------------------------------------------------------------------------
+2. 心-红黑 / 心-白金 (模型资源)
+--------------------------------------------------------------------------
+
+「心」双形态 Live2D 模型(含 model.moc3、纹理、动作与物理 JSON),由第三方工具
+从分层美术素材离线转换为 Cubism 格式,作为 McKuro 首页的展示素材随包分发。
+
+角色形象与原始美术素材的权利归其各自权利人所有;《鸣潮》相关权利归库洛游戏
+(Kuro Games)所有。本应用是非官方第三方工具,与库洛游戏、Live2D Inc. 均无
+隶属或背书关系。
+
+若权利人对本仓库分发这些素材有异议,请通过仓库 Issues 联系,我们会立即移除。
+
+--------------------------------------------------------------------------
+3. 若你自行放置了其它模型
+--------------------------------------------------------------------------
+
+程序目录 live2d\ 与用户数据目录(%AppData%\McKuro\live2d)下的模型由使用者自行提供,
+其授权与合规责任由使用者承担。

@@ -5,10 +5,13 @@ namespace McKuro.Services;
 /// <summary>
 /// Live2D 运行环境定位:
 /// - 平台支持:Sparkle.Live2DView(OpenGL 渲染 Cubism)当前仅面向 Windows x64;
-/// - Cubism Core(Live2DCubismCore.dll)有独立许可,不随仓库/安装包分发,
-///   按以下顺序探测:① 程序目录根(安装包未来内置时自动生效);② 程序目录 live2d\;
-///   ③ 用户数据目录 live2d\(设置页"打开目录"引导放置)。命中非程序目录时通过
-///   AddDllDirectory 加入 DLL 搜索路径;首选放置目录见 EnsurePreferredDir(程序目录可写即用程序目录)。
+/// - Cubism Core(<c>Live2DCubismCore.dll</c>)随包内置在程序目录的 <c>live2d\</c> 下
+///   (官方 SDK 的 <c>Core/RedistributableFiles.txt</c> 把 <c>dll/windows/x86_64/Live2DCubismCore.dll</c>
+///   列为可再分发,依据 Live2D Proprietary Software License Agreement 第 5 条;
+///   许可声明见 <c>Assets/live2d/NOTICE.txt</c>)。用户自备的副本同样可用,
+///   按以下顺序探测:① 程序目录根 → ② 程序目录 live2d\ → ③ 用户数据目录 live2d\。
+///   命中非程序目录时通过 AddDllDirectory 加入 DLL 搜索路径;
+///   首选「可写」放置目录见 <see cref="EnsurePreferredDir"/>(程序目录可写即用程序目录)。
 /// </summary>
 public static class Live2DLocator
 {
@@ -151,6 +154,129 @@ public static class Live2DLocator
         }
         return n;
     }
+
+    /// <summary>
+    /// 全部可发现模型的根目录(只读探测,不创建):程序目录(live2d\ 与程序根)+ 用户数据目录。
+    ///
+    /// <para><b>为什么必须同时搜程序目录</b>:随包分发的模型放在程序目录的 <c>live2d\</c> 下。
+    /// 装到 Program Files 时该目录<b>不可写</b>,于是 <see cref="EnsurePreferredDir"/> 会回退到
+    /// 用户数据目录 —— 而那里没有随包模型。若发现逻辑只认"首选可写目录",随包模型将永远不可见
+    /// (表现为"装了却看不到模型")。故「可写目录」与「发现目录」必须是两套概念。</para>
+    ///
+    /// <para>程序根也算一个根:便于把模型直接平铺在 exe 同级(与 Core 探测顺序一致)。</para>
+    /// </summary>
+    public static IEnumerable<string> DiscoveryRoots()
+    {
+        foreach (var dir in new[] { ProgramDir, AppContext.BaseDirectory, UserDir })
+        {
+            bool exists;
+            try
+            {
+                exists = Directory.Exists(dir);
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+            if (exists)
+            {
+                yield return dir;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 在所有发现根目录中定位指定模型名(先程序目录再用户目录,各根内先根后递归)。
+    /// 找不到返回 null。
+    /// </summary>
+    public static string? ResolveModelDirAnywhere(string? name)
+    {
+        foreach (var root in DiscoveryRoots())
+        {
+            var hit = ResolveModelDir(root, name);
+            if (hit is not null)
+            {
+                return hit;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 在所有发现根目录中找默认模型。偏好顺序:Hiyori(官方示例)→ 内置主形态(红黑)
+    /// → 其余取字典序第一个。找不到返回 null。
+    ///
+    /// <para><b>必须跨根统一排序,不能"每个根只挑一个"</b>:<see cref="FindDefaultModel"/> 在单个根内
+    /// 只会返回一个结果(字典序第一),而随包目录里同时有「心-红黑」与「心-白金」 ——
+    /// 按 Ordinal 比较「白」(U+767D) &lt; 「红」(U+7EA2),字典序第一是<b>白金</b>,
+    /// 于是逐根挑选会把白金当成默认,内置主形态永远选不中(实测踩到)。</para>
+    ///
+    /// <paramref name="roots"/> 仅供单测注入(默认 = <see cref="DiscoveryRoots"/>)。
+    /// </summary>
+    public static (string Dir, string Name)? FindDefaultModelAnywhere(IEnumerable<string>? roots = null)
+    {
+        (string Dir, string Name)? best = null;
+        var bestRank = int.MaxValue;
+
+        foreach (var root in roots ?? DiscoveryRoots())
+        {
+            foreach (var (dir, name) in EnumerateModels(root))
+            {
+                var rank = PreferenceRank(name);
+                if (rank < bestRank)
+                {
+                    bestRank = rank;
+                    best = (dir, name);
+                }
+
+                if (bestRank == 0)
+                {
+                    return best;   // Hiyori 最高优先级,命中即可停
+                }
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>枚举单个根目录下的全部模型(目录, 裸名)。失败返回空序列。</summary>
+    private static IEnumerable<(string Dir, string Name)> EnumerateModels(string root)
+    {
+        List<(string Dir, string Name)> found = [];
+        try
+        {
+            if (!Directory.Exists(root))
+            {
+                return found;
+            }
+
+            foreach (var file in Directory.EnumerateFiles(root, "*.model3.json", SearchOption.AllDirectories))
+            {
+                var name = NormalizeModelName(Path.GetFileName(file));
+                var dir = Path.GetDirectoryName(file);
+                if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(dir))
+                {
+                    found.Add((dir, name));
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // 无权限/枚举失败:视为该根没有模型
+        }
+        return found;
+    }
+
+    /// <summary>默认模型偏好:0 = Hiyori(官方示例);1 = 内置主形态;2 = 其它。</summary>
+    private static int PreferenceRank(string name) => name switch
+    {
+        "Hiyori" => 0,
+        _ when BundledDefaultName.Equals(name, StringComparison.OrdinalIgnoreCase) => 1,
+        _ => 2,
+    };
+
+    /// <summary>随包内置模型的默认形态(红黑)。随包时用作未指定模型时的首选。</summary>
+    public const string BundledDefaultName = "心-红黑";
 
     /// <summary>探测 Cubism Core 路径;未找到返回 null。</summary>
     public static string? FindCore()

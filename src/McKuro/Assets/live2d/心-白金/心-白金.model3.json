@@ -1,0 +1,53 @@
+{
+  "Version": 3,
+  "FileReferences": {
+    "Moc": "model.moc3",
+    "Textures": [
+      "textures/texture_0.png"
+    ],
+    "DisplayInfo": "puppetloom/model/puppetloom.cdi3.json",
+    "Expressions": [
+      {
+        "Name": "闭眼",
+        "File": "puppetloom/expressions/agent-eyes-closed.exp3.json"
+      }
+    ],
+    "Motions": {
+      "autoplay-limb-idle-arm-L": [
+        {
+          "File": "puppetloom/motions/autoplay-limb-idle-arm-L.motion3.json"
+        }
+      ],
+      "autoplay-limb-idle-arm-R": [
+        {
+          "File": "puppetloom/motions/autoplay-limb-idle-arm-R.motion3.json"
+        }
+      ],
+      "autoplay-limb-idle-leg-L": [
+        {
+          "File": "puppetloom/motions/autoplay-limb-idle-leg-L.motion3.json"
+        }
+      ],
+      "autoplay-limb-idle-leg-R": [
+        {
+          "File": "puppetloom/motions/autoplay-limb-idle-leg-R.motion3.json"
+        }
+      ],
+      "Idle": [
+        {
+          "File": "puppetloom/motions/autoplay-limb-idle-arm-L.motion3.json"
+        },
+        {
+          "File": "puppetloom/motions/autoplay-limb-idle-arm-R.motion3.json"
+        },
+        {
+          "File": "puppetloom/motions/autoplay-limb-idle-leg-L.motion3.json"
+        },
+        {
+          "File": "puppetloom/motions/autoplay-limb-idle-leg-R.motion3.json"
+        }
+      ]
+    },
+    "Physics": "puppetloom/physics/puppetloom.physics3.json"
+  }
+}

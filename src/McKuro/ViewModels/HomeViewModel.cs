@@ -306,16 +306,23 @@ public sealed partial class HomeViewModel : ViewModelBase
     public void RefreshLive2D()
     {
         var s = AppServices.Settings.Current;
-        // 未导入模型目录时回退到首选 live2d 目录(程序目录下 live2d\,无写权限才用用户数据目录)自动发现默认模型
-        var root = string.IsNullOrWhiteSpace(s.Live2DModelDir) ? Live2DLocator.EnsurePreferredDir() : s.Live2DModelDir;
+        // 用户显式导入过目录:只认那个目录(尊重用户意图,不去别处找同名模型)。
+        // 未导入:在【全部发现根】里找 —— 随包模型在程序目录 live2d\ 下,而装到 Program Files 时
+        // 该目录不可写,EnsurePreferredDir() 会回退到用户数据目录;只认"首选可写目录"会让随包模型永远不可见。
+        var importedRoot = string.IsNullOrWhiteSpace(s.Live2DModelDir) ? null : s.Live2DModelDir;
         var modelName = Live2DLocator.NormalizeModelName(s.Live2DModelName);
+
         // 选中模型可能放在任意层级子目录:按名字递归定位,不能用「根目录下的 .model3.json」判定,
         // 否则多形态各自建目录时 valid 恒为 false,会退回默认模型(切形态不生效)。
-        var modelDir = Live2DLocator.ResolveModelDir(root, modelName);
+        var modelDir = importedRoot is null
+            ? Live2DLocator.ResolveModelDirAnywhere(modelName)
+            : Live2DLocator.ResolveModelDir(importedRoot, modelName);
         var valid = modelDir is not null;
         if (!valid)
         {
-            var fallback = Live2DLocator.FindDefaultModel(root);
+            var fallback = importedRoot is null
+                ? Live2DLocator.FindDefaultModelAnywhere()
+                : Live2DLocator.FindDefaultModel(importedRoot);
             if (fallback is not null)
             {
                 modelDir = fallback.Value.Dir;

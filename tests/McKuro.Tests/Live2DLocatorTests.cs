@@ -144,4 +144,138 @@ public class Live2DLocatorTests : IDisposable
         Assert.NotNull(pick);
         Assert.Equal("Alpha", pick!.Value.Name);
     }
+
+    // ---------------------------------------------------------------------
+    // 随包分发相关:发现根与偏好顺序
+    //
+    // 背景:模型随包放在程序目录的 live2d\ 下。装到 Program Files 时该目录不可写,
+    // EnsurePreferredDir() 会回退到用户数据目录 —— 而随包模型不在那里。
+    // 若发现逻辑只认"首选可写目录",随包模型将永远不可见。
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public void DiscoveryRoots_ContainsProgramDirAndBaseDirectory()
+    {
+        var roots = Live2DLocator.DiscoveryRoots().ToList();
+
+        // 只返回真实存在的目录(不创建),但程序目录必须参与发现
+        Assert.Contains(Live2DLocator.ProgramDir, roots);
+        Assert.Contains(AppContext.BaseDirectory, roots);
+        Assert.All(roots, r => Assert.True(Directory.Exists(r), $"发现根不存在:{r}"));
+    }
+
+    [Fact]
+    public void DiscoveryRoots_DoesNotCreateMissingDirectories()
+    {
+        // 纯探测:不得因为"发现"而随手建目录(否则会在用户机器上留下空目录)
+        var before = Live2DLocator.DiscoveryRoots().ToList();
+        var after = Live2DLocator.DiscoveryRoots().ToList();
+
+        Assert.Equal(before, after);
+    }
+
+    [Fact]
+    public void BundledDefaultName_IsTheRedBlackForm()
+    {
+        // 随包主形态;FindDefaultModelAnywhere 用它做第二优先级
+        Assert.Equal("心-红黑", Live2DLocator.BundledDefaultName);
+    }
+
+    [Fact]
+    public void FindDefaultModel_StillPrefersHiyori_OverEverythingElse()
+    {
+        // Hiyori(官方示例)优先级最高:用户自行放置时不应被随包模型抢走
+        MakeModel("心-红黑", "心-红黑");
+        MakeModel("h", "Hiyori");
+
+        var pick = Live2DLocator.FindDefaultModel(_root);
+
+        Assert.Equal("Hiyori", pick!.Value.Name);
+    }
+
+    [Fact]
+    public void ResolveModelDirAnywhere_ReturnsNullForUnknownName()
+    {
+        Assert.Null(Live2DLocator.ResolveModelDirAnywhere("绝对不存在的模型名"));
+        Assert.Null(Live2DLocator.ResolveModelDirAnywhere(""));
+        Assert.Null(Live2DLocator.ResolveModelDirAnywhere(null));
+    }
+
+    [Fact]
+    public void ResolveModelDirAnywhere_FindsBundledModelInProgramDir()
+    {
+        // 真实随包布局:程序目录 live2d\<形态>\<形态>.model3.json。
+        // 用临时目录模拟后断言解析路径正确(不去动真实安装目录)。
+        var bundled = Path.Combine(_root, "live2d");
+        Directory.CreateDirectory(Path.Combine(bundled, "心-红黑"));
+        File.WriteAllText(Path.Combine(bundled, "心-红黑", "心-红黑.model3.json"), "{}");
+
+        var hit = Live2DLocator.ResolveModelDir(bundled, "心-红黑");
+
+        Assert.NotNull(hit);
+        Assert.Equal("心-红黑", Path.GetFileName(hit!));
+    }
+
+    [Fact]
+    public void FindDefaultModelAnywhere_PrefersBundledRedBlack_OverWhiteGold()
+    {
+        // 回归(实测踩到):随包目录同时有「心-红黑」与「心-白金」。
+        // 按 Ordinal 比较「白」(U+767D) < 「红」(U+7EA2),所以字典序第一是白金。
+        // 若逐根只挑"字典序第一个",默认模型会变成白金,内置主形态(红黑)永远选不中。
+        MakeModel("心-白金", "心-白金");
+        MakeModel("心-红黑", "心-红黑");
+
+        var pick = Live2DLocator.FindDefaultModelAnywhere([_root]);
+
+        Assert.NotNull(pick);
+        Assert.Equal("心-红黑", pick!.Value.Name);
+    }
+
+    [Fact]
+    public void FindDefaultModelAnywhere_StillPrefersHiyori_AcrossRoots()
+    {
+        // Hiyori 优先级高于内置形态,即使内置形态在更靠前的根里
+        var first = Path.Combine(_root, "rootA");
+        var second = Path.Combine(_root, "rootB");
+        Directory.CreateDirectory(Path.Combine(first, "心-红黑"));
+        File.WriteAllText(Path.Combine(first, "心-红黑", "心-红黑.model3.json"), "{}");
+        Directory.CreateDirectory(Path.Combine(second, "h"));
+        File.WriteAllText(Path.Combine(second, "h", "Hiyori.model3.json"), "{}");
+
+        var pick = Live2DLocator.FindDefaultModelAnywhere([first, second]);
+
+        Assert.NotNull(pick);
+        Assert.Equal("Hiyori", pick!.Value.Name);
+    }
+
+    [Fact]
+    public void FindDefaultModelAnywhere_SkipsMissingRoots()
+    {
+        // 不存在/无权限的根不能让发现整体失败
+        MakeModel("real", "心-红黑");
+
+        var pick = Live2DLocator.FindDefaultModelAnywhere(
+            [Path.Combine(_root, "不存在"), Path.Combine(_root, "real")]);
+
+        Assert.NotNull(pick);
+        Assert.Equal("心-红黑", pick!.Value.Name);
+    }
+
+    [Fact]
+    public void FindDefaultModelAnywhere_ReturnsNull_WhenNoModelsAnywhere()
+    {
+        var empty = Path.Combine(_root, "empty");
+        Directory.CreateDirectory(empty);
+
+        Assert.Null(Live2DLocator.FindDefaultModelAnywhere([empty]));
+    }
+
+    [Fact]
+    public void PreferenceOrder_RedBlackBeatsWhiteGold_UnderOrdinalSort()
+    {
+        // 锁住"为什么需要显式偏好":Ordinal 顺序确实把白金排在前面
+        Assert.True(string.CompareOrdinal("心-白金", "心-红黑") < 0,
+            "前提变化:字典序不再把白金排在前面,本回归的前提需重新审视");
+        Assert.Equal("心-红黑", Live2DLocator.BundledDefaultName);
+    }
 }
