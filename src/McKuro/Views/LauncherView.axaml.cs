@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
 using McKuro.Core.Models.Game;
+using McKuro.Services;
 using McKuro.ViewModels;
 
 namespace McKuro.Views;
@@ -52,8 +53,9 @@ public partial class LauncherView : UserControl
     }
 
     /// <summary>
-    /// 注入资源等级切换的二次确认弹窗:切换未安装的等级会下载几十 GB,
-    /// 必须由用户在模态窗口里明确确认(防误点)。未注入时 ViewModel 会拒绝切换。
+    /// 注入资源等级切换 / 画质包删除的二次确认弹窗:切换未安装的等级会下载几十 GB、
+    /// 删除画质包不可逆,都必须由用户在模态窗口里明确确认(防误点)。
+    /// 未注入时 ViewModel 会拒绝执行。
     /// </summary>
     private void AttachConfirmation()
     {
@@ -65,6 +67,19 @@ public partial class LauncherView : UserControl
                 // 用纯体积文案("99.45 GB"),避免把卡片的"游戏大小:"前缀带进句子
                 var size = string.IsNullOrWhiteSpace(item.SizeOnlyText) ? item.SizeText : item.SizeOnlyText;
                 return ResourceLevelConfirmWindow.ShowAsync(owner, item.DisplayName, size);
+            };
+
+            // 删除画质包复用同一个确认窗口,但标题/正文/确认键都换成"删除"措辞
+            // (否则用户会误以为是在切换画质)。
+            vm.ConfirmPackDeleteAsync = item =>
+            {
+                var owner = TopLevel.GetTopLevel(this) as Window;
+                return ResourceLevelConfirmWindow.ShowAsync(
+                    owner,
+                    LanguageService.Format("Launcher.PackDeleteConfirmTitle"),
+                    LanguageService.Format("Launcher.PackDeleteConfirmBody", item.DisplayName, item.SizeText),
+                    LanguageService.Format("Launcher.PackDeleteConfirmOk"),
+                    LanguageService.Format("Launcher.LevelCancel"));
             };
         }
     }

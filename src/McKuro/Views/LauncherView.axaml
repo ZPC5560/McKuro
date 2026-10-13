@@ -398,10 +398,101 @@
                     </StackPanel>
                 </Border>
 
+                <!-- 画质包管理面板(回收磁盘):与等级面板同一套材质/定位,两者互斥展开。
+                     只列出已安装的包,共享包(common)标注不可删原因;可回收空间在标题处汇总。 -->
+                <Border Grid.Column="2"
+                        Classes="mcPanel"
+                        MinWidth="240"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                        Margin="0,0,0,128"
+                        IsVisible="{Binding ShowPackManager}">
+                    <StackPanel Spacing="8" MaxWidth="320" Margin="14">
+                        <StackPanel Spacing="2">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="{loc:Localize Key=Launcher.PackPanelTitle}" FontSize="14"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                <TextBlock Grid.Column="1" Text="{Binding ReclaimableText}" FontSize="10"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource SemiColorText2}" />
+                            </Grid>
+                            <TextBlock Text="{loc:Localize Key=Launcher.PackPanelHint}" FontSize="10"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource SemiColorText2}" />
+                        </StackPanel>
+                        <ItemsControl ItemsSource="{Binding ResourcePackItems}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ResourcePackItem">
+                                    <!-- 用本视图自己的玻璃材质(LauncherView 没有 SettingsView 的 Border.row 样式,
+                                         写 Classes="row" 在这里是空操作、不会上任何底色)。 -->
+                                    <Border Margin="0,2" Padding="10,8" CornerRadius="10"
+                                            Background="{DynamicResource McKuroGlassFillStrong}"
+                                            BorderBrush="{DynamicResource McKuroGlassStroke}"
+                                            BorderThickness="1">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                            <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <TextBlock Text="{Binding DisplayName}" FontSize="13"
+                                                               FontWeight="Bold"
+                                                               Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                                    <Border Background="{DynamicResource SemiColorFill0}"
+                                                            CornerRadius="4" Padding="4,1"
+                                                            VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding TagText}" FontSize="9"
+                                                                   Foreground="{DynamicResource SemiColorText2}" />
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Classes="dim" Text="{Binding SizeText}" FontSize="11"
+                                                           Foreground="{DynamicResource SemiColorText2}" />
+                                                <!-- 不可删原因:如实展示(共享包 / 当前唯一等级) -->
+                                                <TextBlock Text="{Binding BlockReason}" FontSize="10"
+                                                           TextWrapping="Wrap"
+                                                           Foreground="{DynamicResource McKuroWarning}"
+                                                           IsVisible="{Binding ShowBlockReason}" />
+                                            </StackPanel>
+                                            <Button Grid.Column="1"
+                                                    Classes="mcChrome"
+                                                    VerticalAlignment="Center"
+                                                    Padding="8,3"
+                                                    Content="{loc:Localize Key=Launcher.PackDeleteConfirmOk}"
+                                                    FontSize="11"
+                                                    Command="{Binding $parent[ItemsControl].((vm:LauncherViewModel)DataContext).DeleteResourcePackCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    IsEnabled="{Binding CanDelete}"
+                                                    IsVisible="{Binding CanDelete}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <!-- 没有可删的包时给一句说明,而不是留个空面板 -->
+                        <TextBlock Text="{loc:Localize Key=Launcher.PackNoDeletable}" FontSize="10"
+                                   Foreground="{DynamicResource SemiColorText2}"
+                                   IsVisible="{Binding !HasDeletablePacks}" />
+                    </StackPanel>
+                </Border>
+
                 <!-- 启动/安装大按钮(从底部排列,底边与轮播图/进度卡对齐,无背景) -->
                 <StackPanel Grid.Column="2" Width="220"
                             HorizontalAlignment="Right" VerticalAlignment="Bottom" Spacing="10"
                             Margin="0,0,0,8">
+                    <!-- 画质包管理入口:仅在存在可删除的包时显示,避免给一个点了没用的按钮 -->
+                    <Button Classes="mcChrome"
+                            HorizontalAlignment="Right"
+                            CornerRadius="14" Padding="10,4"
+                            Foreground="{DynamicResource McKuroTextOnVideo}"
+                            Command="{Binding TogglePackManagerCommand}"
+                            IsVisible="{Binding HasDeletablePacks}">
+                        <StackPanel Orientation="Horizontal" Spacing="6"
+                                    controls:VideoTextChrome.Shadow="True">
+                            <ic:FluentIcon Icon="Delete" IconVariant="Regular" IconSize="Size12"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource McKuroTextOnVideo}" />
+                            <TextBlock Text="{loc:Localize Key=Launcher.PackManage}" FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource McKuroTextOnVideo}" />
+                        </StackPanel>
+                    </Button>
                     <!-- 资源等级小按钮(对齐官方启动器:仅显示当前等级,点击才展开卡片列表)
                          箭头随展开状态翻转,让"这是可展开的选择器"一眼可读。
                          前景用 McKuroTextOnVideo(不随主题翻转)+ 容器级反向投影阴影:

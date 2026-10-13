@@ -40,6 +40,26 @@ public sealed class GameFileEntry
     /// <summary>Haiyu/Kuro 分片校验信息;存在时按 HTTP Range 逐片续传。</summary>
     [JsonIgnore]
     public List<GameChunkInfo> ChunkInfos { get; set; } = [];
+
+    /// <summary>
+    /// 该条目是否带有<b>文件级</b>完整性依据(文件大小或 MD5)。
+    /// <para>
+    /// 两者皆空时,任何「本地文件已完好、可以跳过下载」的判断都是<b>不可验证的乐观假设</b>
+    /// —— 任意内容都会被判为成功。真实库洛清单里每个条目都带 size+md5,
+    /// 这是防御性判据:宁可多下一次,也不谎报「已完好」。
+    /// </para>
+    /// <para>
+    /// <b>下载与校验两侧必须共用本判据</b>(而非各写一遍),否则同一条清单行会出现相反结论:
+    /// 校验侧说「完好、无需下载」,下载侧却拒绝跳过 —— 用户看到的是「0 个文件待下载却始终不动」。
+    /// </para>
+    /// <para>
+    /// <b>刻意不含 <see cref="ChunkInfos"/></b>:两侧的文件级判定(长度比较 / 整文件 MD5)
+    /// 都用不到分片哈希。若把分片算作依据,「只有分片、没有 size/md5」的行就会被允许跳过,
+    /// 而跳过分支并不校验分片 —— 等于未经验证就声称完好,比多下一次更糟。
+    /// </para>
+    /// </summary>
+    [JsonIgnore]
+    public bool HasIntegrityData => Size > 0 || !string.IsNullOrWhiteSpace(Md5);
 }
 
 /// <summary>官方 patch index 的分阶段安装计划。</summary>

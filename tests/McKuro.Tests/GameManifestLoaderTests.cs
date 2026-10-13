@@ -59,6 +59,202 @@ public class GameManifestLoaderTests
     }
     """;
 
+    // ---------- 完整校验索引(indexFile.json)优先 ----------
+
+    private const string Cdn = "https://cdn.example.com/launcher";
+    private const string VerificationIndexPath = "game/G152/10003_xxx/resource/10003/2.3.0/indexFile.json";
+    private const string ResourceJsonPath = "game/G152/10003_xxx/resource.json";
+
+    /// <summary>带 config.indexFile/indexFileMd5 的 index.json(模拟真实协议)。</summary>
+    private static string IndexWithVerification(string? indexFileMd5) => $$"""
+    {
+      "default": {
+        "cdnList": [ { "url": "{{Cdn}}/", "ping": 10 } ],
+        "resources": "{{ResourceJsonPath}}",
+        "resourcesBasePath": "game/G152/10003_xxx/",
+        "version": "2.3.0",
+        "config": {
+          "indexFile": "{{VerificationIndexPath}}",
+          "indexFileMd5": "{{indexFileMd5}}"
+        }
+      }
+    }
+    """;
+
+    /// <summary>校验索引:与 resource.json 同样的 dest/md5/size,但多带 chunkInfos。</summary>
+    private const string VerificationIndexJson = """
+    {
+      "resource": [
+        { "dest": "Client/Binaries/Win64/Client-Win64-Shipping.exe", "md5": "abc123", "size": 1024,
+          "chunkInfos": [
+            { "start": 0, "end": 511, "md5": "c0ffee00000000000000000000000001" },
+            { "start": 512, "end": 1023, "md5": "c0ffee00000000000000000000000002" }
+          ] },
+        { "dest": "Client/Saved/Config/Client.ini", "md5": "def456", "size": 512 }
+      ]
+    }
+    """;
+
+    private static string Md5Of(string text) =>
+        Convert.ToHexStringLower(System.Security.Cryptography.MD5.HashData(Encoding.UTF8.GetBytes(text)));
+
+    /// <summary>
+    /// 校验索引可用时必须优先使用它 —— 这是分片续传与快速校验能生效的前提
+    /// (实测 resource.json 在所有渠道都不带 chunkInfos,校验索引才带)。
+    /// </summary>
+    [Fact]
+    public async Task LoadKuroAsync_PrefersVerificationIndex_AndKeepsChunkInfos()
+    {
+        var indexUrl = "https://prod-cn-alicdn-gamestarter.kurogame.com/launcher/game/G152/10003/index.json";
+        var handler = new FakeHandler(new Dictionary<string, string>
+        {
+            [indexUrl] = IndexWithVerification(Md5Of(VerificationIndexJson)),
+            [$"{Cdn}/{VerificationIndexPath}"] = VerificationIndexJson,
+            // resource.json 故意给一份"不同"的内容:若实现错误地优先用它,断言会失败
+            [$"{Cdn}/{ResourceJsonPath}"] = ResourceJson,
+        });
+        var loader = new GameManifestLoader(new HttpClient(handler));
+
+        var result = await loader.LoadKuroAsync(indexUrl);
+
+        Assert.True(result.Success, result.Message);
+        var manifest = result.Manifest!;
+        Assert.Equal(2, manifest.Files.Count);
+        var exe = manifest.Files.Single(f => f.Path.EndsWith("Client-Win64-Shipping.exe"));
+        Assert.Equal(2, exe.ChunkInfos.Count);
+        Assert.Equal(0, exe.ChunkInfos[0].Start);
+        Assert.Equal(511, exe.ChunkInfos[0].End);
+        Assert.Equal("c0ffee00000000000000000000000001", exe.ChunkInfos[0].Md5);
+    }
+
+    /// <summary>indexFileMd5 不符时必须拒绝该索引并回退 resource.json(索引错一个字节会导致误判)。</summary>
+    [Fact]
+    public async Task LoadKuroAsync_VerificationIndexMd5Mismatch_FallsBackToResourceJson()
+    {
+        var indexUrl = "https://prod-cn-alicdn-gamestarter.kurogame.com/launcher/game/G152/10003/index.json";
+        var handler = new FakeHandler(new Dictionary<string, string>
+        {
+            [indexUrl] = IndexWithVerification("00000000000000000000000000000000"),
+            [$"{Cdn}/{VerificationIndexPath}"] = VerificationIndexJson,
+            [$"{Cdn}/{ResourceJsonPath}"] = ResourceJson,
+        });
+        var loader = new GameManifestLoader(new HttpClient(handler));
+
+        var result = await loader.LoadKuroAsync(indexUrl);
+
+        Assert.True(result.Success, result.Message);
+        // 回退到 resource.json:3 个文件,且没有分片信息
+        Assert.Equal(3, result.Manifest!.Files.Count);
+        Assert.All(result.Manifest.Files, f => Assert.Empty(f.ChunkInfos));
+    }
+
+    /// <summary>校验索引 404 时必须静默回退 resource.json(不能把整个更新流程搞挂)。</summary>
+    [Fact]
+    public async Task LoadKuroAsync_VerificationIndexMissing_FallsBackToResourceJson()
+    {
+        var indexUrl = "https://prod-cn-alicdn-gamestarter.kurogame.com/launcher/game/G152/10003/index.json";
+        var handler = new FakeHandler(new Dictionary<string, string>
+        {
+            // 不提供校验索引 → FakeHandler 返回 404
+            [indexUrl] = IndexWithVerification(Md5Of(VerificationIndexJson)),
+            [$"{Cdn}/{ResourceJsonPath}"] = ResourceJson,
+        });
+        var loader = new GameManifestLoader(new HttpClient(handler));
+
+        var result = await loader.LoadKuroAsync(indexUrl);
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(3, result.Manifest!.Files.Count);
+    }
+
+    /// <summary>index.json 未声明 indexFile(旧协议)时行为与改造前完全一致。</summary>
+    [Fact]
+    public async Task LoadKuroAsync_WithoutIndexFile_UsesResourceJsonAsBefore()
+    {
+        var indexUrl = "https://prod-cn-alicdn-gamestarter.kurogame.com/launcher/game/G152/10003/index.json";
+        var handler = new FakeHandler(new Dictionary<string, string>
+        {
+            [indexUrl] = IndexJson,
+            [$"{Cdn}/{ResourceJsonPath}"] = ResourceJson,
+        });
+        var loader = new GameManifestLoader(new HttpClient(handler));
+
+        var result = await loader.LoadKuroAsync(indexUrl);
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(3, result.Manifest!.Files.Count);
+    }
+
+    /// <summary>
+    /// 回归保护:真实 CDN 的 <c>resourcesBasePath</c> **没有**结尾斜杠(实测
+    /// <c>.../zcRdpyNBiSNVKeMUrEhfyRZmOEZArRGE/zip</c>),<c>dest</c> **没有**开头斜杠。
+    /// 旧实现直接字符串相加会拼出 <c>.../zipWuthering Waves.exe</c>(实测 404),
+    /// 只因测试夹具恰好带斜杠才长期未被发现。
+    /// </summary>
+    [Fact]
+    public async Task LoadKuroAsync_JoinsUrlWithExactlyOneSlash_WhenBasePathHasNoTrailingSlash()
+    {
+        var indexUrl = "https://cdn.example.com/index.json";
+        var handler = new FakeHandler(new Dictionary<string, string>
+        {
+            // 刻意复刻真实 CDN 的形态:resourcesBasePath 无结尾斜杠
+            [indexUrl] = """
+            {
+              "default": {
+                "cdnList": [ { "url": "https://cdn.example.com/launcher/", "ping": 10 } ],
+                "resourcesBasePath": "game/G152/10003_xxx/zip",
+                "version": "2.3.0",
+                "config": { "downloadLimit": 8 }
+              },
+              "gameResourceList": {
+                "resource": [
+                  { "dest": "Wuthering Waves.exe", "md5": "aaa111", "size": 2048 },
+                  { "dest": "Client/Binaries/Win64/Client-Win64-Shipping.exe", "md5": "abc123", "size": 1024 }
+                ]
+              }
+            }
+            """,
+        });
+        var loader = new GameManifestLoader(new HttpClient(handler));
+
+        var result = await loader.LoadKuroAsync(indexUrl);
+
+        Assert.True(result.Success, result.Message);
+        var exe = result.Manifest!.Files.Single(f => f.Path == "Wuthering Waves.exe");
+        Assert.Equal("https://cdn.example.com/launcher/game/G152/10003_xxx/zip/Wuthering Waves.exe", exe.Url);
+        var nested = result.Manifest.Files.Single(f => f.Path.EndsWith("Client-Win64-Shipping.exe"));
+        Assert.Equal(
+            "https://cdn.example.com/launcher/game/G152/10003_xxx/zip/Client/Binaries/Win64/Client-Win64-Shipping.exe",
+            nested.Url);
+    }
+
+    /// <summary>路径自带斜杠时不能拼出双斜杠(与上一条互为边界)。</summary>
+    [Fact]
+    public async Task LoadKuroAsync_DoesNotDoubleSlash_WhenBasePathHasTrailingSlash()
+    {
+        var indexUrl = "https://cdn.example.com/index.json";
+        var handler = new FakeHandler(new Dictionary<string, string>
+        {
+            [indexUrl] = """
+            {
+              "default": {
+                "cdnList": [ { "url": "https://cdn.example.com/launcher/", "ping": 10 } ],
+                "resourcesBasePath": "/game/G152/10003_xxx/zip/",
+                "version": "2.3.0"
+              },
+              "gameResourceList": { "resource": [ { "dest": "a.exe", "md5": "x", "size": 1 } ] }
+            }
+            """,
+        });
+        var loader = new GameManifestLoader(new HttpClient(handler));
+
+        var result = await loader.LoadKuroAsync(indexUrl);
+
+        Assert.True(result.Success, result.Message);
+        var only = result.Manifest!.Files.Single();
+        Assert.Equal("https://cdn.example.com/launcher/game/G152/10003_xxx/zip/a.exe", only.Url);
+    }
+
     [Fact]
     public async Task LoadKuroAsync_ParsesManifestAndBuildsCdnUrls()
     {

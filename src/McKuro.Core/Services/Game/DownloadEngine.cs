@@ -149,7 +149,9 @@ public sealed class DownloadEngine
                     CurrentFile = currentFile,
                     FileIndex = completedFiles,
                     FileTotal = files.Count,
-                    BytesDownloaded = Math.Min(downloadedBytes, totalBytes),
+                    // 负向修正(下载器丢弃已写字节)可能让计数短暂为负:下界必须夹 0,
+                    // 否则 Percent 会算出负百分比(UI 进度条倒退到负值)。
+                    BytesDownloaded = Math.Clamp(downloadedBytes, 0, totalBytes),
                     BytesTotal = totalBytes,
                     SpeedBps = speedMeter.BytesPerSecond,
                     // 下载批次:字节读取受暂停门控制,是唯一可暂停的阶段
@@ -159,7 +161,8 @@ public sealed class DownloadEngine
             progress.Report(update);
         }
 
-        var downloader = new FileDownloader(_http);
+        // 传入 logger:下载中断重试/续传会记 Warning(便于用户反馈时定位 CDN 侧问题)。
+        var downloader = new FileDownloader(_http, _logger);
         // 流式安装:下载落位即进入游戏目录。替换目标前把旧文件备份到 .McKuro_backup,
         // 备份由 UpdateInstaller.BackupFile 完成(与暂存安装的备份实现一致)。
         var onReplace = streamingGameRoot is null
@@ -182,10 +185,15 @@ public sealed class DownloadEngine
                         {
                             lock (byteLock)
                             {
+                                // 负值 = 下载器丢弃了已写入的字节(CDN 忽略 Range、被迫从头重写):
+                                // 只回退「已完成进度」,不回退「网络流量/速度」—— 那些字节确实走过网线。
                                 fileDownloadedBytes += bytes;
                                 downloadedBytes += bytes;
-                                transferredBytes += bytes;
-                                speedMeter.Add(transferredBytes);
+                                if (bytes > 0)
+                                {
+                                    transferredBytes += bytes;
+                                    speedMeter.Add(transferredBytes);
+                                }
                             }
                             ReportProgress(entry.Path);
                         });

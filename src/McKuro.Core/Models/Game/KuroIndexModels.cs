@@ -72,6 +72,25 @@ public sealed class KuroConfig
     /// <summary>解压后体积(参考 Haiyu Config.UnCompressSize)。</summary>
     [JsonPropertyName("unCompressSize")] public long? UnCompressSize { get; set; }
 
+    /// <summary>当前版本号(如 "3.7.0")。</summary>
+    [JsonPropertyName("version")] public string? Version { get; set; }
+
+    /// <summary>文件下载地址前缀(与 <see cref="KuroUpdateData.ResourcesBasePath"/> 同值)。</summary>
+    [JsonPropertyName("baseUrl")] public string? BaseUrl { get; set; }
+
+    /// <summary>
+    /// <b>完整校验索引</b>(indexFile.json)的相对路径(参考 Haiyu 的 GetVerificationResourceAsync)。
+    /// <para>
+    /// 与 <see cref="KuroUpdateData.Resources"/>(resource.json)相比,该索引是<b>严格超集</b>:
+    /// 实测鸣潮 CN 两者同为 915 条且 dest/md5/size 全等,但校验索引额外有 76 条带
+    /// <c>chunkInfos</c>(分片哈希)—— 分片续传与快速校验都依赖它,故优先使用本索引。
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("indexFile")] public string? IndexFile { get; set; }
+
+    /// <summary>完整校验索引的 MD5(用于校验下载到的 indexFile.json 完整性)。</summary>
+    [JsonPropertyName("indexFileMd5")] public string? IndexFileMd5 { get; set; }
+
     /// <summary>历史补丁配置(最新一项为当前版本)。</summary>
     [JsonPropertyName("patchConfig")] public List<KuroPatchConfig>? PatchConfig { get; set; }
 }

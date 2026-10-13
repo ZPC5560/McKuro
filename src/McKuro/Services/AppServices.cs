@@ -271,7 +271,11 @@ public static class AppServices
             logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<LocalGameDailyDataService>()));
 
         // ---- 游戏启动器(鸣潮) ----
-        services.AddSingleton<GameManifestLoader>();
+        // 传入 logger:便于确认「完整校验索引」是否被采用,以及其中有多少文件带分片信息
+        // (分片续传与快速校验都依赖它;回退 resource.json 时也值得留痕)。
+        services.AddSingleton<GameManifestLoader>(sp => new GameManifestLoader(
+            sp.GetRequiredService<HttpClient>(),
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger<GameManifestLoader>()));
         services.AddSingleton<DownloadEngine>(sp => new DownloadEngine(
             sp.GetRequiredService<HttpClient>(),
             8,

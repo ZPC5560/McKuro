@@ -134,6 +134,11 @@ public sealed partial class LauncherViewModel
             // 无可用等级(端点不可用/解析失败)时不显示空面板
             SetResourceLevelPanelReady(ResourceLevelItems.Count > 0);
             SyncCurrentLevelText();
+
+            // 顺带刷新已安装画质包列表:入口按钮的可见性取决于 HasDeletablePacks,
+            // 而该值只能由这次刷新填充 —— 若只在「点开面板时」才刷,按钮就永远不会出现
+            // (入口的可见性依赖只有点它才会产生的数据 = 死锁)。
+            await RefreshResourcePacksAsync();
         }
         catch (Exception)
         {
@@ -274,6 +279,196 @@ public sealed partial class LauncherViewModel
             OnPropertyChanged(nameof(CurrentResourceLevelText));
         }
     }
+
+    // ---------- 删除画质包(回收磁盘) ----------
+
+    /// <summary>已安装、可管理的画质包列表(供「管理画质包」面板展示)。</summary>
+    public ObservableCollection<ResourcePackItem> ResourcePackItems { get; } = [];
+
+    /// <summary>是否正在加载画质包列表。</summary>
+    [ObservableProperty]
+    private bool _isLoadingResourcePacks;
+
+    /// <summary>是否正在删除画质包。</summary>
+    [ObservableProperty]
+    private bool _isDeletingResourcePack;
+
+    /// <summary>「管理画质包」面板是否展开(与等级选择面板互斥,避免两块叠在一起)。</summary>
+    [ObservableProperty]
+    private bool _isPackManagerOpen;
+
+    /// <summary>面板是否可见(点开 + 未在下载/切换/删除中)。</summary>
+    public bool ShowPackManager => _resourceLevelPanelReady && IsPackManagerOpen
+        && !IsDownloading && !IsSwitchingResourceLevel && !IsDeletingResourcePack;
+
+    partial void OnIsPackManagerOpenChanged(bool value) => OnPropertyChanged(nameof(ShowPackManager));
+
+    partial void OnIsDeletingResourcePackChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowPackManager));
+        OnPropertyChanged(nameof(ResourceLevelEnabled));
+    }
+
+    /// <summary>是否存在可删除的包(没有可删包时隐藏入口,不给空面板)。</summary>
+    public bool HasDeletablePacks => ResourcePackItems.Any(p => p.CanDelete)
+        && AppServices.GameMonitor.State == GameSessionState.Idle;
+
+    /// <summary>可回收的总空间文案(如「可回收 61.50 GB」);无则空。</summary>
+    [ObservableProperty]
+    private string _reclaimableText = "";
+
+    /// <summary>打开/收起「管理画质包」面板(打开时刷新列表)。</summary>
+    [RelayCommand]
+    private async Task TogglePackManagerAsync()
+    {
+        if (!_resourceLevelPanelReady || IsDownloading || IsSwitchingResourceLevel || IsDeletingResourcePack)
+        {
+            return;
+        }
+
+        // 与等级选择面板互斥
+        IsResourceLevelPickerOpen = false;
+        IsPackManagerOpen = !IsPackManagerOpen;
+        if (IsPackManagerOpen)
+        {
+            await RefreshResourcePacksAsync();
+        }
+    }
+
+    /// <summary>刷新已安装画质包列表(含可删性与体积)。</summary>
+    public async Task RefreshResourcePacksAsync()
+    {
+        if (!NativeGameManagementSupported || !IsInstalled || !ResourceLevelSupported)
+        {
+            ResourcePackItems.Clear();
+            UpdateReclaimable();
+            return;
+        }
+
+        IsLoadingResourcePacks = true;
+        try
+        {
+            var packs = await AppServices.ResourceLevels.GetInstalledPacksAsync(ServerType);
+            ResourcePackItems.Clear();
+            foreach (var p in packs)
+            {
+                ResourcePackItems.Add(new ResourcePackItem
+                {
+                    PackName = p.PackName,
+                    DisplayName = PackDisplayName(p.PackName),
+                    SizeText = p.SizeBytes > 0 ? FormatSize(p.SizeBytes) : "",
+                    SizeBytes = p.SizeBytes,
+                    IsShared = p.IsShared,
+                    CanDelete = p.CanDelete,
+                    BlockReason = p.BlockReason ?? "",
+                    // 共享包标注「共享」;等级包标注对应等级名
+                    TagText = p.IsShared
+                        ? LanguageService.Format("Launcher.PackTagShared")
+                        : PackDisplayName(p.PackName),
+                });
+            }
+        }
+        catch (Exception)
+        {
+            // 画质包管理属增强信息,失败不影响主流程
+            ResourcePackItems.Clear();
+        }
+        finally
+        {
+            IsLoadingResourcePacks = false;
+            UpdateReclaimable();
+        }
+    }
+
+    private void UpdateReclaimable()
+    {
+        var bytes = ResourcePackItems.Where(p => p.CanDelete).Sum(p => p.SizeBytes);
+        ReclaimableText = bytes > 0
+            ? LanguageService.Format("Launcher.PackReclaimable", FormatSize(bytes))
+            : "";
+        OnPropertyChanged(nameof(HasDeletablePacks));
+    }
+
+    /// <summary>画质包显示名(uhd→极致、hd→高清、sd→流畅、common→通用)。</summary>
+    private static string PackDisplayName(string packName) => packName.ToLowerInvariant() switch
+    {
+        "uhd" => LanguageService.Format("Launch.ResourceLevel.Ultra.Short"),
+        "sd" => LanguageService.Format("Launch.ResourceLevel.Smooth.Short"),
+        "common" => LanguageService.Format("Launcher.PackCommon"),
+        _ => LanguageService.Format("Launch.ResourceLevel.High.Short"),
+    };
+
+    /// <summary>
+    /// 二次确认钩子:由 View 注入弹窗,参数为待删包项,返回是否确认。
+    /// 未注入时视为拒绝(删除是不可逆操作,不静默执行)。
+    /// </summary>
+    public Func<ResourcePackItem, Task<bool>>? ConfirmPackDeleteAsync { get; set; }
+
+    /// <summary>删除某个画质包(需二次确认;不可删的包直接拒绝)。</summary>
+    [RelayCommand]
+    private async Task DeleteResourcePackAsync(ResourcePackItem? item)
+    {
+        if (item is null || !item.CanDelete || IsDownloading || IsSwitchingResourceLevel || IsDeletingResourcePack)
+        {
+            return;
+        }
+
+        // 游戏运行中禁止删除:文件被游戏占用会删不掉,而"删一半"会让安装处于不一致状态。
+        // 只在按钮可见性上挡不够 —— 面板打开后用户仍可能去启动游戏,故命令入口再挡一次。
+        if (AppServices.GameMonitor.State != GameSessionState.Idle)
+        {
+            StatusText = LanguageService.Format("Launcher.PackDeleteGameRunning");
+            return;
+        }
+
+        if (ConfirmPackDeleteAsync is null)
+        {
+            StatusText = LanguageService.Format("Launcher.PackDeleteNeedConfirm", item.DisplayName, item.SizeText);
+            return;
+        }
+
+        var confirmed = await ConfirmPackDeleteAsync(item);
+        if (!confirmed)
+        {
+            return;
+        }
+
+        IsDeletingResourcePack = true;
+        StatusText = LanguageService.Format("Launcher.PackDeleting", item.DisplayName);
+        try
+        {
+            var result = await AppServices.ResourceLevels.DeletePackAsync(ServerType, item.PackName);
+            if (result.Success)
+            {
+                StatusText = result.FailedFiles > 0
+                    // 有删不掉的文件(占用/权限):如实告知,不谎报"已全部删除"
+                    ? LanguageService.Format("Launcher.PackDeletePartial", item.DisplayName, FormatSize(result.FreedBytes), result.FailedFiles)
+                    : LanguageService.Format("Launcher.PackDeleted", item.DisplayName, FormatSize(result.FreedBytes));
+
+                // 自动回退过等级:告知用户,并同步界面上的当前等级
+                if (!string.IsNullOrWhiteSpace(result.FallbackLevel))
+                {
+                    CurrentResourceLevel = LaunchArguments.Normalize(result.FallbackLevel);
+                    StatusText += " " + LanguageService.Format("Launcher.PackDeleteFellBack", PackDisplayName(result.FallbackLevel));
+                }
+            }
+            else
+            {
+                StatusText = result.Message ?? LanguageService.Format("Launcher.PackDeleteFailed", item.DisplayName);
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText = LanguageService.Format("Launcher.LevelFailedWith", ex.Message);
+        }
+        finally
+        {
+            IsDeletingResourcePack = false;
+            await RefreshResourcePacksAsync();
+            await RefreshResourceLevelsAsync();
+            RefreshState();
+        }
+    }
 }
 
 /// <summary>单个资源等级条目(官方样式卡片:名称 + 体积 + 已安装标记)。</summary>
@@ -305,4 +500,37 @@ public sealed partial class ResourceLevelItem : ObservableObject
 
     /// <summary>是否显示「已安装」徽标。</summary>
     public bool ShowInstalledBadge => Installed;
+}
+
+/// <summary>
+/// 单个已安装画质包(「管理画质包」面板条目:名称 + 体积 + 可否删除)。
+/// </summary>
+public sealed partial class ResourcePackItem : ObservableObject
+{
+    /// <summary>包名(uhd/hd/sd/common;删除时作为标识)。</summary>
+    public required string PackName { get; init; }
+
+    /// <summary>显示名(极致/高清/流畅/通用)。</summary>
+    public required string DisplayName { get; init; }
+
+    /// <summary>体积文案(如「61.50 GB」)。</summary>
+    public required string SizeText { get; init; }
+
+    /// <summary>体积字节数(用于汇总"可回收")。</summary>
+    public long SizeBytes { get; init; }
+
+    /// <summary>标签文案(共享包显示「共享」,等级包显示等级名)。</summary>
+    public string TagText { get; init; } = "";
+
+    /// <summary>是否为共享包(common)。</summary>
+    public bool IsShared { get; init; }
+
+    /// <summary>是否允许删除。</summary>
+    public bool CanDelete { get; init; }
+
+    /// <summary>不可删除的原因(展示用);可删时为空。</summary>
+    public string BlockReason { get; init; } = "";
+
+    /// <summary>是否展示不可删原因。</summary>
+    public bool ShowBlockReason => !CanDelete && BlockReason.Length > 0;
 }

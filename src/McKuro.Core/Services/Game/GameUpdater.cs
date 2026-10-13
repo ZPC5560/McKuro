@@ -68,6 +68,12 @@ public sealed class GameUpdater : IGameUpdater
     private readonly Func<GameServerType, string> _indexUrlProvider;
     private readonly ILogger<GameUpdater> _logger;
 
+    /// <summary>
+    /// 是否启用快速校验(对齐 Haiyu 1.4.3 FastVerify)。设置服务缺失(测试/工具场景)时保持关闭,
+    /// 即回退全文件 MD5 校验。
+    /// </summary>
+    private bool FastVerifyEnabled => _settings?.Current.FastVerifyEnabled ?? false;
+
     public GameUpdater(
         GameManifestLoader loader,
         DownloadEngine downloader,
@@ -730,7 +736,12 @@ public sealed class GameUpdater : IGameUpdater
         }
 
         var diff = await Task.Run(
-            () => _installer.ComputeDiff(manifest, root, progress: diffProgress, ct: ct),
+            () => _installer.ComputeDiff(
+                manifest,
+                root,
+                progress: diffProgress,
+                ct: ct,
+                fastVerify: FastVerifyEnabled),
             ct).ConfigureAwait(false);
         if (!diff.HasChanges)
         {
@@ -1203,7 +1214,16 @@ public sealed class GameUpdater : IGameUpdater
                 CurrentFile = CoreStrings.F("Launcher.Verifying", $"正在检查本地文件 {p.Checked}/{p.Total}…", p.Checked, p.Total),
             }));
         var diff = await Task.Run(
-            () => _installer.ComputeDiff(manifest, root, skipPaths, diffProgress, ct),
+            () => _installer.ComputeDiff(
+                manifest,
+                root,
+                skipPaths,
+                diffProgress,
+                ct,
+                // 修复必须全量校验:用户点「修复」的前提是"文件可能坏了",而快速校验会漏过
+                // 未采样分片的损坏,修完仍可能进不去游戏。对齐 Haiyu 在重校验步骤上传
+                // forceFullVerify: true 的处置。
+                fastVerify: false),
             ct).ConfigureAwait(false);
         if (!diff.HasChanges)
         {
