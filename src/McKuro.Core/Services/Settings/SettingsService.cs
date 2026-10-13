@@ -29,6 +29,19 @@ public sealed class AppSettings
     /// <summary>下载速度限制(MB/s,0 = 不限速;对齐 Haiyu LimitSpeed)。</summary>
     public int LimitSpeedMbps { get; set; }
 
+    /// <summary>
+    /// 快速校验(对齐 Haiyu 1.4.3 的 FastVerify):对带分片信息的文件只校验
+    /// 「文件大小 + 若干采样分片」,跳过其余分片的读盘,加快大文件校验。
+    /// <para>
+    /// 采样数按分片数成比例放大(小文件全查),详见 <see cref="Game.FastVerify.SampleCountFor"/>。
+    /// </para>
+    /// <para>
+    /// 默认关闭以保持既有行为;开启后无分片信息或采样分片缺哈希的文件仍走全文件 MD5,
+    /// 且「修复游戏」路径强制全量校验。
+    /// </para>
+    /// </summary>
+    public bool FastVerifyEnabled { get; set; }
+
     // ---------- 游戏启动参数(对齐 Haiyu StartGameOption) ----------
 
     /// <summary>使用 DX11 启动(追加 -dx11 -slno 参数)。</summary>

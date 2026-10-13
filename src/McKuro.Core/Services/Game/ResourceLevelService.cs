@@ -360,4 +360,304 @@ public sealed class ResourceLevelService
         _settings.Current.ResourceLevel = level;
         _settings.Save();
     }
+
+    // ---------- 删除资源包(回收磁盘) ----------
+
+    /// <summary>
+    /// 列出当前<b>已安装</b>的包及其可否删除(供 UI 展示「删除」按钮)。
+    /// <para>
+    /// 用于让用户回收旧画质包占用的磁盘(如从 UHD 降到 SD 后可删 uhd,实测 61.5 GB)。
+    /// 共享包 common 与「当前唯一可用等级」的包会被标为不可删,理由见
+    /// <see cref="ResourceLevelPlanner.CanDeletePack"/>。
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<ResourcePackInfo>> GetInstalledPacksAsync(
+        GameServerType serverType,
+        CancellationToken ct = default)
+    {
+        var root = _paths.GameRootDir;
+        var indexUrl = ResolveIndexUrl(serverType);
+        if (string.IsNullOrEmpty(root) || indexUrl is null)
+        {
+            return [];
+        }
+
+        KuroResourcePackIndex? index;
+        try
+        {
+            index = await _loader.LoadResourcePackIndexAsync(indexUrl, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "读取资源包列表失败");
+            return [];
+        }
+
+        if (index?.ResourcePacks is null)
+        {
+            return [];
+        }
+
+        var installed = GetInstalledPackNames(root, index);
+        var current = _settings?.Current.ResourceLevel;
+        var result = new List<ResourcePackInfo>();
+        foreach (var (packName, pack) in index.ResourcePacks)
+        {
+            if (!installed.Contains(packName))
+            {
+                continue;
+            }
+
+            var reason = ResourceLevelPlanner.CanDeletePack(index, packName, current, installed);
+            result.Add(new ResourcePackInfo
+            {
+                PackName = packName,
+                SizeBytes = ResourceLevelPlanner.PackBytes(pack),
+                IsShared = reason == ResourceLevelPlanner.PackDeleteBlockReason.SharedPack,
+                CanDelete = reason == ResourceLevelPlanner.PackDeleteBlockReason.None,
+                BlockReason = reason switch
+                {
+                    ResourceLevelPlanner.PackDeleteBlockReason.SharedPack =>
+                        CoreStrings.T("Launcher.PackShared", "共享包(所有画质等级都用到),不能删除"),
+                    ResourceLevelPlanner.PackDeleteBlockReason.ActiveLevelOnly =>
+                        CoreStrings.T("Launcher.PackActiveLevelOnly", "这是当前唯一可用的画质等级,删除后游戏可能无法正常启动"),
+                    _ => null,
+                },
+            });
+        }
+
+        // 大包在前,便于用户优先看到能回收多少空间
+        return [.. result.OrderByDescending(p => p.SizeBytes)];
+    }
+
+    /// <summary>已安装的包名集合(依据官方 launcherDownloadConfig 标记)。</summary>
+    private static HashSet<string> GetInstalledPackNames(string gameRoot, KuroResourcePackIndex index)
+    {
+        var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (index.ResourcePacks is null)
+        {
+            return installed;
+        }
+
+        foreach (var (packName, _) in index.ResourcePacks)
+        {
+            if (HasInstalledMarker(gameRoot, packName))
+            {
+                installed.Add(packName);
+            }
+        }
+        return installed;
+    }
+
+    /// <summary>
+    /// 删除某个已安装的资源包(按包清单逐个删文件 + 删官方安装标记),回收磁盘。
+    /// <para>
+    /// <b>安全前置(比上游更严)</b>:共享包、以及「当前唯一可用等级」的包会被拒绝。
+    /// 若删除的包属于当前等级且存在其它完整等级,会自动把设置回退到那个等级,
+    /// 避免用户停留在"设置指向残缺等级"的状态(上游只提示、不处理)。
+    /// </para>
+    /// <para>
+    /// 只删该包清单里列出的文件;清单外的文件不动(避免误删用户资源或其它包的文件)。
+    /// </para>
+    /// </summary>
+    public async Task<ResourcePackDeleteResult> DeletePackAsync(
+        GameServerType serverType,
+        string packName,
+        IProgress<ResourcePackDeleteProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        var root = _paths.GameRootDir;
+        var indexUrl = ResolveIndexUrl(serverType);
+        if (string.IsNullOrEmpty(root) || !Directory.Exists(root) || indexUrl is null)
+        {
+            return ResourcePackDeleteResult.Fail(CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
+        }
+
+        KuroResourcePackIndex? index;
+        try
+        {
+            index = await _loader.LoadResourcePackIndexAsync(indexUrl, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "删除资源包前读取索引失败");
+            return ResourcePackDeleteResult.Fail(CoreStrings.T("Launcher.LevelPlanFailed", "获取资源等级清单失败"));
+        }
+
+        if (index?.ResourcePacks is null || !index.ResourcePacks.TryGetValue(packName, out var pack))
+        {
+            return ResourcePackDeleteResult.Fail(CoreStrings.F("Launcher.PackNotFound", $"未找到资源包: {packName}", packName));
+        }
+
+        var installed = GetInstalledPackNames(root, index);
+        if (!installed.Contains(packName))
+        {
+            return ResourcePackDeleteResult.Fail(CoreStrings.F("Launcher.PackNotInstalled", $"该资源包未安装: {packName}", packName));
+        }
+
+        // 安全闸:共享包 / 当前唯一等级 → 拒绝
+        var current = _settings?.Current.ResourceLevel;
+        var reason = ResourceLevelPlanner.CanDeletePack(index, packName, current, installed);
+        if (reason != ResourceLevelPlanner.PackDeleteBlockReason.None)
+        {
+            return ResourcePackDeleteResult.Fail(reason == ResourceLevelPlanner.PackDeleteBlockReason.SharedPack
+                ? CoreStrings.T("Launcher.PackShared", "共享包(所有画质等级都用到),不能删除")
+                : CoreStrings.T("Launcher.PackActiveLevelOnly", "这是当前唯一可用的画质等级,删除后游戏可能无法正常启动"));
+        }
+
+        // 取出包清单(只有清单里的文件才允许删)
+        var cdn = index.CdnList?
+            .Where(c => !string.IsNullOrWhiteSpace(c.Url))
+            .OrderBy(c => c.P == 0 ? int.MaxValue : c.P)
+            .FirstOrDefault()?.Url;
+        if (string.IsNullOrWhiteSpace(cdn))
+        {
+            return ResourcePackDeleteResult.Fail(CoreStrings.T("Launcher.LevelPlanFailed", "获取资源等级清单失败"));
+        }
+
+        var load = await _loader.LoadResourcePackAsync(pack, cdn, ct: ct).ConfigureAwait(false);
+        if (!load.Success || load.Manifest is null)
+        {
+            return ResourcePackDeleteResult.Fail(CoreStrings.F("Launcher.PackManifestFailed", $"读取资源包清单失败: {packName}", packName));
+        }
+
+        // 回退等级:仅当删的是**当前生效等级**自己的包时才需要回退。
+        // 删无关等级(如当前 SD、删 UHD)绝不能顺手改用户的画质选择 —— 那会把
+        // 「回收磁盘」变成「静默改画质」。判据由 planner 依 currentLevel 判定。
+        var fallback = ResourceLevelPlanner.NeedsFallbackAfterDelete(index, packName, current, installed)
+            ? ResourceLevelPlanner.FallbackLevelAfterDelete(index, packName, installed)
+            : null;
+
+        var files = load.Manifest.Files;
+        long freed = 0;
+        int deleted = 0, failed = 0;
+        for (var i = 0; i < files.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var entry = files[i];
+            progress?.Report(new ResourcePackDeleteProgress
+            {
+                PackName = packName,
+                Done = i,
+                Total = files.Count,
+            });
+
+            try
+            {
+                var path = GameFilePath.CombineUnderRoot(root, entry.Path);
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                var length = new FileInfo(path).Length;
+                File.Delete(path);
+                freed += length;
+                deleted++;
+            }
+            catch (Exception ex)
+            {
+                // 单个文件删不掉(占用/权限)不中断整体,计入失败
+                failed++;
+                _logger.LogDebug(ex, "删除资源文件失败: {Path}", entry.Path);
+            }
+        }
+
+        progress?.Report(new ResourcePackDeleteProgress
+        {
+            PackName = packName,
+            Done = files.Count,
+            Total = files.Count,
+        });
+
+        // 删完标记:标记还在的话会被判为"已安装",下次切换等级不会重新下载
+        DeleteInstalledMarker(root, packName);
+
+        if (fallback is not null)
+        {
+            ApplyResourceLevelSetting(fallback);
+            _logger.LogInformation("资源包 {Pack} 已删除,画质等级回退为 {Level}", packName, fallback);
+        }
+
+        return new ResourcePackDeleteResult
+        {
+            Success = true,
+            DeletedFiles = deleted,
+            FailedFiles = failed,
+            FreedBytes = freed,
+            FallbackLevel = fallback,
+        };
+    }
+
+    /// <summary>删除官方已安装标记;失败只记日志(标记残留会让该包被误判为已安装)。</summary>
+    private void DeleteInstalledMarker(string gameRoot, string packName)
+    {
+        try
+        {
+            var path = Path.Combine(gameRoot, "launcherDownloadConfig", packName.ToLowerInvariant() + ".json");
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "删除资源包标记失败: {Pack}", packName);
+        }
+    }
+}
+
+/// <summary>可删除的资源包信息(供 UI 展示)。</summary>
+public sealed class ResourcePackInfo
+{
+    public required string PackName { get; init; }
+
+    /// <summary>包体字节数(用于展示"可回收 X GB")。</summary>
+    public long SizeBytes { get; init; }
+
+    /// <summary>是否为共享包(common)。</summary>
+    public bool IsShared { get; init; }
+
+    /// <summary>是否允许删除。</summary>
+    public bool CanDelete { get; init; }
+
+    /// <summary>不可删除的原因(可直接展示);可删时为 null。</summary>
+    public string? BlockReason { get; init; }
+}
+
+/// <summary>资源包删除进度。</summary>
+public sealed class ResourcePackDeleteProgress
+{
+    public required string PackName { get; init; }
+    public required int Done { get; init; }
+    public required int Total { get; init; }
+}
+
+/// <summary>资源包删除结果。</summary>
+public sealed class ResourcePackDeleteResult
+{
+    public required bool Success { get; init; }
+    public string? Message { get; init; }
+
+    /// <summary>成功删除的文件数。</summary>
+    public int DeletedFiles { get; init; }
+
+    /// <summary>删除失败的文件数(占用/权限)。</summary>
+    public int FailedFiles { get; init; }
+
+    /// <summary>回收的字节数。</summary>
+    public long FreedBytes { get; init; }
+
+    /// <summary>删除后自动回退到的等级(仅当删的是当前等级的包);未回退为 null。</summary>
+    public string? FallbackLevel { get; init; }
+
+    public static ResourcePackDeleteResult Fail(string message) => new() { Success = false, Message = message };
 }

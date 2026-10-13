@@ -21,9 +21,25 @@ public partial class ResourceLevelConfirmWindow : Window
     /// <returns>用户是否确认切换。</returns>
     public static async Task<bool> ShowAsync(Window? owner, string levelName, string sizeText)
     {
+        return await ShowAsync(
+            owner,
+            LanguageService.Format("Launcher.LevelConfirmTitle"),
+            LanguageService.Format("Launcher.LevelConfirmBody", levelName, sizeText),
+            LanguageService.Format("Launcher.LevelConfirmOk"),
+            LanguageService.Format("Launcher.LevelCancel"));
+    }
+
+    /// <summary>
+    /// 通用二次确认(标题/正文/确认键文案自定)。
+    /// 删除画质包复用同一个窗口,避免为一句文案再造一个 Window 与 XAML。
+    /// </summary>
+    public static async Task<bool> ShowAsync(Window? owner, string title, string body, string confirmText, string cancelText)
+    {
         var window = new ResourceLevelConfirmWindow();
-        window.TitleText.Text = LanguageService.Format("Launcher.LevelConfirmTitle");
-        window.BodyText.Text = LanguageService.Format("Launcher.LevelConfirmBody", levelName, sizeText);
+        window.TitleText.Text = title;
+        window.BodyText.Text = body;
+        window.ConfirmButton.Content = confirmText;
+        window.CancelButton.Content = cancelText;
 
         var result = false;
         window.ConfirmButton.Click += (_, _) =>

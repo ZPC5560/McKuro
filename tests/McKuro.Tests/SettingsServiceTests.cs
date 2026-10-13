@@ -35,10 +35,26 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal(12, s2.Current.DownloadConcurrency);
     }
 
+    /// <summary>
+    /// 快速校验开关(对齐 Haiyu 1.4.3 FastVerify)必须默认关闭 ——
+    /// 默认开启会让所有老用户在升级后静默换成采样校验,属行为回归。
+    /// </summary>
     [Fact]
-    public void SkipVerifyFiles_And_AutoDelete_RoundTrip()
+    public void FastVerify_Defaults_Off_And_RoundTrips()
     {
         var s = new SettingsService(_dir, NullLogger<SettingsService>.Instance);
+        Assert.False(s.Current.FastVerifyEnabled);
+
+        s.Current.FastVerifyEnabled = true;
+        s.Save();
+
+        var s2 = new SettingsService(_dir, NullLogger<SettingsService>.Instance);
+        Assert.True(s2.Current.FastVerifyEnabled);
+    }
+
+    [Fact]
+    public void SkipVerifyFiles_And_AutoDelete_RoundTrip()
+    {        var s = new SettingsService(_dir, NullLogger<SettingsService>.Instance);
         s.Current.SkipVerifyFiles = ["Client/Saved/Logs/Client.log", "Client/Saved/Config/WindowsNoEditor/GameUserSettings.ini"];
         s.Current.AutoSkipVerifyDelete = false;
         s.Save();

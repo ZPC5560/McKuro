@@ -32,13 +32,23 @@ public sealed class UpdateInstaller
     /// <param name="skipPaths">跳过校验的相对路径集合(OrdinalIgnoreCase,使用正斜杠);命中则视为无需下载。</param>
     /// <param name="progress">校验进度回调(节流,避免几万文件高频回调阻塞 UI)。</param>
     /// <param name="maxDegreeOfParallelism">并行度;默认 min(Environment.ProcessorCount, 8)。</param>
+    /// <param name="fastVerify">
+    /// 快速校验(对齐 Haiyu 1.4.3):对带分片信息的文件只校验「大小 + 若干采样分片」,
+    /// 跳过其余分片的读盘。采样数按分片数成比例放大,详见 <see cref="FastVerify.SampleCountFor"/>。
+    /// <para>
+    /// <b>更新路径</b>传入用户设置;<b>修复路径必须传 false</b>(对齐 Haiyu 重校验步骤的
+    /// <c>forceFullVerify: true</c>)—— 采样会漏过未采样分片的损坏,修复若用它
+    /// 可能"修完仍进不去游戏"。无分片信息或采样分片缺哈希的文件始终回退全文件 MD5。
+    /// </para>
+    /// </param>
     public UpdateDiff ComputeDiff(
         GameManifest manifest,
         string gameRootDir,
         IReadOnlySet<string>? skipPaths = null,
         IProgress<DiffProgress>? progress = null,
         CancellationToken ct = default,
-        int? maxDegreeOfParallelism = null)
+        int? maxDegreeOfParallelism = null,
+        bool fastVerify = false)
     {
         var diff = new UpdateDiff();
         var total = manifest.Files.Count;
@@ -74,7 +84,7 @@ public sealed class UpdateInstaller
                             diff.ToDownload.Add(entry);
                         }
                     }
-                    else if (!string.IsNullOrEmpty(entry.Md5) && !FileDownloader.VerifyLocalFile(localPath, entry))
+                    else if (!IsLocalFileIntact(localPath, entry, fastVerify, ct))
                     {
                         lock (diff.ToDownload)
                         {
@@ -113,6 +123,47 @@ public sealed class UpdateInstaller
     }
 
     /// <summary>
+    /// 判断本地文件是否与清单条目一致(ComputeDiff 的单个文件判定入口)。
+    /// <para>
+    /// 快速校验只在「开关开启 + 采样分片齐全」时生效。
+    /// <b>⚠ 该分支只证明被采样的分片完好</b>:长度对、采样片对,但其余分片损坏时,
+    /// 本方法返回 <c>true</c>(判为完好),与全文件 MD5 的结论不同 —— 这是性能与完整性的
+    /// 已知取舍,不是"等价于全量校验"(实测官方校验索引:按比例采样后仍有约 40% 字节不被校验;
+    /// 分片数 ≤ <see cref="FastVerify.FullCoverageChunkLimit"/> 的小文件则是全查,无此缺口)。
+    /// 详见 <see cref="FastVerify"/> 的类型注释。
+    /// </para>
+    /// <para>
+    /// 其余情况(未开启 / 无分片信息 / 采样分片缺哈希)一律回退到
+    /// <see cref="FileDownloader.LocalFileMatches"/> —— 与下载侧「已存在即跳过」共用同一份判据,
+    /// 两侧结论必然一致(不会出现"校验说无需下载、下载器却拒绝跳过"的死锁观感)。
+    /// </para>
+    /// </summary>
+    /// <param name="fastVerify">是否启用快速校验。</param>
+    public static bool IsLocalFileIntact(
+        string localPath,
+        GameFileEntry entry,
+        bool fastVerify = false,
+        CancellationToken ct = default)
+    {
+        if (!File.Exists(localPath))
+        {
+            return false;
+        }
+
+        // 仅当采样分片齐全时才走快速路径。注意:该路径只覆盖被采样的分片,
+        // 未采样分片的损坏不会被发现(见类型注释中的实测统计)。
+        if (fastVerify && FastVerify.CanFastVerify(entry))
+        {
+            return FastVerify.VerifyFileFast(localPath, entry, ct: ct);
+        }
+
+        // 回退:与开启快速校验之前完全相同 —— 无任何文件级依据(size 与 md5 皆空)时
+        // 不得声称完好;否则按长度 + 全文件 MD5 判定。判定实现单点在
+        // FileDownloader.LocalFileMatches,与下载侧「已存在即跳过」共用,两侧结论必然一致。
+        return FileDownloader.LocalFileMatches(localPath, entry);
+    }
+
+    /// <summary>
     /// 将暂存目录(预下载)中的文件安装到游戏目录。
     /// 文件彼此独立,使用 <see cref="Parallel.ForEach"/> 并行「校验→备份→替换」,
     /// 移动前目录创建幂等;单个文件失败不中断其余文件(失败列表与顺序版语义一致)。
@@ -148,18 +199,17 @@ public sealed class UpdateInstaller
                         Directory.CreateDirectory(destDir);
                     }
 
-                    // 校验暂存文件
-                    if (!string.IsNullOrEmpty(entry.Md5))
+                    // 校验暂存文件:与其它判定点共用同一份判据(单点实现,避免三处漂移)。
+                    // 用 HasIntegrityData 做前置条件:真的一条依据都没有时"无从校验",
+                    // 既不谎报校验通过,也不凭空判它损坏(否则会下载完却拒绝安装)。
+                    // 有 size 时会顺带做长度校验 —— 旧写法在 md5 为空时连大小都不查。
+                    if (entry.HasIntegrityData && !FileDownloader.LocalFileMatches(stagedPath, entry))
                     {
-                        var ok = FileDownloader.VerifyLocalFile(stagedPath, entry);
-                        if (!ok)
+                        lock (failures)
                         {
-                            lock (failures)
-                            {
-                                failures.Add($"{entry.Path}: 暂存文件校验失败");
-                            }
-                            return;
+                            failures.Add($"{entry.Path}: 暂存文件校验失败");
                         }
+                        return;
                     }
 
                     if (File.Exists(destPath))

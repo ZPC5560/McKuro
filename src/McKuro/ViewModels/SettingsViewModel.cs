@@ -57,6 +57,17 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Downloader.SetSpeedLimit((long)v * 1024 * 1024);
     }
 
+    /// <summary>快速校验(对齐 Haiyu 1.4.3 FastVerify):分片文件只校验大小 + 若干采样分片(采样数按分片数放大,小文件全查)。</summary>
+    [ObservableProperty]
+    private bool _fastVerifyEnabled;
+
+    /// <summary>快速校验即时保存(改动即生效,无需点保存)。</summary>
+    partial void OnFastVerifyEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.FastVerifyEnabled = value;
+        AppServices.Settings.Save();
+    }
+
     // 游戏启动参数(对齐 Haiyu StartGameOption)
     [ObservableProperty]
     private bool _useDx11;
@@ -1003,6 +1014,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _gameRootDir = s.GameRootDir;
         _downloadConcurrency = s.DownloadConcurrency;
         _limitSpeedMbps = s.LimitSpeedMbps;
+        _fastVerifyEnabled = s.FastVerifyEnabled;
         _useDx11 = s.UseDx11;
         _disableDlss = s.DisableDlss;
         _startGameArguments = s.StartGameArguments;
@@ -1201,6 +1213,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.Live2DModelDir = Live2DModelDir;
         s.SkipVerifyFiles = [.. SkipVerifyFiles];
         s.AutoSkipVerifyDelete = AutoSkipVerifyDelete;
+        s.FastVerifyEnabled = FastVerifyEnabled;
         s.NotifEnabled = NotifEnabled;
         s.Language = LanguageIndex == 1 ? "en-US" : "zh-Hans";
         s.StartupPage = StartupPageIndex == 1 ? "Launcher" : "Home";

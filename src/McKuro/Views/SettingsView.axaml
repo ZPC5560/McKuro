@@ -948,6 +948,21 @@
                                    Minimum="0" Maximum="1024" />
                 </Grid>
             </Border>
+            <!-- 快速校验(对齐 Haiyu 1.4.3 FastVerify):勾选以加快大文件校验流程 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="FlashCheckmark" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.FastVerify}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.FastVerify.Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{Binding FastVerifyEnabled, Mode=TwoWay}" />
+                </Grid>
+            </Border>
         </StackPanel>
     </Border>
 </StackPanel>

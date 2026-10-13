@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using McKuro.Core.Models.Game;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace McKuro.Core.Services.Game;
 
@@ -35,14 +37,16 @@ public sealed class ManifestLoadResult
 public sealed class GameManifestLoader
 {
     private readonly HttpClient _http;
+    private readonly ILogger _logger;
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
         TypeInfoResolver = GameJsonContext.Default,
     };
 
-    public GameManifestLoader(HttpClient http)
+    public GameManifestLoader(HttpClient http, ILogger? logger = null)
     {
         _http = http;
+        _logger = logger ?? NullLogger.Instance;
     }
 
     /// <summary>
@@ -81,7 +85,20 @@ public sealed class GameManifestLoader
                 ? cdnUrl + "/" + updateData.Resources.TrimStart('/')
                 : null;
             var fileList = index.GameResourceList?.Resource ?? [];
-            if (!string.IsNullOrEmpty(resourceJsonUrl))
+
+            // 首选「完整校验索引」indexFile.json(参考 Haiyu GetVerificationResourceAsync)。
+            // 它是 resource.json 的严格超集:实测鸣潮 CN 两者同为 915 条且 dest/md5/size 全等,
+            // 但校验索引额外带 chunkInfos(分片哈希)—— 分片续传与快速校验都依赖它。
+            // 取不到/校验不过时回退 resource.json,再回退 index.json 内嵌清单,行为逐级退化不报错。
+            var verificationList = await TryLoadVerificationIndexAsync(
+                updateData.Config,
+                cdnUrl,
+                ct).ConfigureAwait(false);
+            if (verificationList is { Count: > 0 })
+            {
+                fileList = verificationList;
+            }
+            else if (!string.IsNullOrEmpty(resourceJsonUrl))
             {
                 // 完整文件清单在 resource.json 中(默认清单与预下载节点各有自己的 resource.json)
                 try
@@ -124,7 +141,7 @@ public sealed class GameManifestLoader
                     Size = file.Size ?? 0,
                     Md5 = file.Md5 ?? "",
                     // 下载地址 = CDN + resourcesBasePath + dest
-                    Url = !string.IsNullOrEmpty(cdnUrl) ? $"{cdnUrl}/{basePath}{file.Dest}" : null,
+                    Url = string.IsNullOrEmpty(cdnUrl) ? null : JoinUrl(cdnUrl, basePath, file.Dest),
                 };
                 CopyChunks(entry, file.ChunkInfos);
                 manifest.Files.Add(entry);
@@ -157,9 +174,98 @@ public sealed class GameManifestLoader
         }
     }
 
-    /// <summary>从预下载节点提取下载体积与所需磁盘空间(优先最新 patchConfig,回退 config)。</summary>
-    private static (long Download, long Disk) ExtractPredownloadSizes(KuroUpdateData? predownload)
+    /// <summary>
+    /// 尝试加载「完整校验索引」<c>indexFile.json</c>(对齐 Haiyu <c>GetVerificationResourceAsync</c>)。
+    /// <para>
+    /// 该索引是 <c>resource.json</c> 的严格超集:实测鸣潮 CN 两者同为 915 条、dest/md5/size 全等,
+    /// 但校验索引额外有 76 条带 <c>chunkInfos</c>。分片续传(<c>DownloadByChunksAsync</c>)与
+    /// 快速校验都依赖分片哈希,只有这份索引能让它们真正生效。
+    /// </para>
+    /// <para>
+    /// 任何失败(路径缺失/MD5 不符/网络异常/解析失败)都返回 <c>null</c>,由调用方回退
+    /// <c>resource.json</c> —— 保持既有行为不被削弱。
+    /// </para>
+    /// </summary>
+    private async Task<List<KuroFileInfo>?> TryLoadVerificationIndexAsync(
+        KuroConfig? config,
+        string cdnUrl,
+        CancellationToken ct)
     {
+        if (config is null
+            || string.IsNullOrWhiteSpace(config.IndexFile)
+            || string.IsNullOrWhiteSpace(cdnUrl))
+        {
+            return null;
+        }
+
+        try
+        {
+            var url = cdnUrl + "/" + config.IndexFile.TrimStart('/');
+            using var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var payload = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+
+            // 官方给了 indexFileMd5 就校验:索引错一个字节会导致"该下的不下、不该下的下"。
+            if (!string.IsNullOrWhiteSpace(config.IndexFileMd5)
+                && !HashMatches(payload, config.IndexFileMd5))
+            {
+                _logger.LogWarning("完整校验索引 MD5 不符,回退 resource.json");
+                return null;
+            }
+
+            var list = JsonSerializer.Deserialize(payload, GameJsonContext.Default.KuroGameResourceList);
+            var files = list?.Resource;
+            if (files is not { Count: > 0 })
+            {
+                return null;
+            }
+
+            _logger.LogInformation(
+                "使用完整校验索引: {Count} 个文件,其中 {Chunked} 个带分片信息",
+                files.Count,
+                files.Count(f => f.ChunkInfos is { Count: > 0 }));
+            return files;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "完整校验索引不可用,回退 resource.json");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 用「/」拼接 URL 片段,并保证片段之间恰好一个斜杠。
+    /// <para>
+    /// <b>必须这样做</b>:官方 index.json 的 <c>resourcesBasePath</c> <b>没有</b>结尾斜杠
+    /// (实测值 <c>.../zcRdpyNBiSNVKeMUrEhfyRZmOEZArRGE/zip</c>),而 <c>dest</c> <b>没有</b>
+    /// 开头斜杠(实测值 <c>Wuthering Waves.exe</c>);直接字符串相加会拼出
+    /// <c>.../zipWuthering Waves.exe</c>(404)。旧实现依赖"路径自带斜杠"这一错误假设,
+    /// 而单元测试的夹具恰好带斜杠,所以一直没暴露。
+    /// </para>
+    /// </summary>
+    private static string JoinUrl(params string?[] segments)
+    {
+        var parts = segments
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s!.Trim())
+            .ToList();
+        if (parts.Count == 0)
+        {
+            return "";
+        }
+
+        // 首段保留其原有形态(可能是 https://host,不能把 // 折叠掉)
+        var head = parts[0].TrimEnd('/');
+        var tail = parts.Skip(1).Select(p => p.Trim('/'));
+        return string.Join('/', new[] { head }.Concat(tail));
+    }
+
+    /// <summary>从预下载节点提取下载体积与所需磁盘空间(优先最新 patchConfig,回退 config)。</summary>
+    private static (long Download, long Disk) ExtractPredownloadSizes(KuroUpdateData? predownload)    {
         if (predownload?.Config is null)
         {
             return (0, 0);
