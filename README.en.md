@@ -176,7 +176,7 @@ Release tags (`v*`) trigger GitHub Actions to build Native AOT binaries for all 
 For unpacked assets run `chmod +x McKuro` first. To compile the installer locally (requires Inno Setup 6):
 
 ```bash
-ISCC.exe installer\setup.iss /DMyAppVersion=1.3.4
+ISCC.exe installer\setup.iss /DMyAppVersion=1.3.5
 ```
 
 ## Self-Update

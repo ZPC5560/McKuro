@@ -176,7 +176,7 @@ macOS/Linux 暂不支持(渲染控件当前仅面向 Windows x64),设置页相�
 解压类资产 `chmod +x McKuro` 后运行。本地编译安装包(需安装 Inno Setup 6):
 
 ```bash
-ISCC.exe installer\setup.iss /DMyAppVersion=1.3.4
+ISCC.exe installer\setup.iss /DMyAppVersion=1.3.5
 ```
 
 ## 应用自更新
