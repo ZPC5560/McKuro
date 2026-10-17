@@ -73,7 +73,7 @@ App icon: official Shorekeeper icon (shared under CC BY-NC-SA), multi-size ICO e
 
 ### Internationalization & Self-Update
 
-- Full **zh-Hans / en-US** UI switching (901-key bilingual resources covering every page and dynamic message; applied on restart).
+- Full **zh-Hans / en-US** UI switching (919-key bilingual resources covering every page and dynamic message; applied on restart).
 - Built-in GitHub Release self-update with channel fallback, resumable downloads and integrity verification — see [Self-Update](#self-update).
 
 ## Requirements
@@ -109,7 +109,7 @@ McKuro/
 │   ├── ViewModels/                 # MVVM (CommunityToolkit.Mvvm)
 │   ├── Controls/                   # AsyncImage / VideoBackgroundControl(libmpv) / charts / WebView2·WKWebView (CAPTCHA) / Live2DModelHost
 │   ├── Services/                   # manual DI (AppServices) + system materials / game process monitor / daily scheduler / i18n / Live2D runtime lookup
-│   └── Assets/lang/                # zh-Hans / en-US UI strings (901 keys)
+│   └── Assets/lang/                # zh-Hans / en-US UI strings (919 keys)
 ├── src/McKuro.Core/                # UI-free core library (AOT-friendly, source-generated JSON)
 │   ├── Services/Gacha/             # log decryption / URL extraction / endpoints / analysis / storage / cloud dual channel
 │   ├── Services/Game/              # manifest loading / resumable download / diff install (hpatchz) / update / play time
@@ -121,7 +121,7 @@ McKuro/
 │   ├── Services/                   # Update (self-update) / Launcher / Notification / Redeem / Settings and the rest
 │   └── Infrastructure/             # SQLite (Microsoft.Data.Sqlite)
 ├── src/ThirdParty/Sparkle.Live2DView/  # vendored Live2D rendering control (MIT)
-└── tests/McKuro.Tests/             # xUnit unit tests (1049 cases)
+└── tests/McKuro.Tests/             # xUnit unit tests (1276 cases)
 ```
 
 ## Usage Guide
@@ -161,7 +161,7 @@ Not yet supported on macOS/Linux (the rendering control currently targets Window
 
 ### UI Language
 
-Settings → **UI language** supports **简体中文 / English**, applied after restart. Bilingual resources (901 keys) cover all page copy, messages and service-layer statuses (the `CoreStrings` gateway: Core resolves strings through a parser registered by the app, falling back to the original Chinese in unit tests when none is registered).
+Settings → **UI language** supports **简体中文 / English**, applied after restart. Bilingual resources (919 keys) cover all page copy, messages and service-layer statuses (the `CoreStrings` gateway: Core resolves strings through a parser registered by the app, falling back to the original Chinese in unit tests when none is registered).
 
 ## Releases & Installer
 
@@ -191,7 +191,7 @@ Settings checks GitHub Releases (default repository `ZPC5560/McKuro`); the updat
 
 ## Testing & CI
 
-- `tests/McKuro.Tests`: **1049 xUnit unit tests** (log decryption, gacha analysis, banner statistics, update pipeline, notifications, i18n, and more).
+- `tests/McKuro.Tests`: **1276 xUnit unit tests** (log decryption, gacha analysis, banner statistics, update pipeline, notifications, i18n, and more).
 - `build-and-test.yml`: build + test on Linux for every push/PR; release tags or manual dispatch run the full-platform AOT publishes and attach Release assets.
 - `website.yml`: rebuilds and deploys the website whenever `website/` or `website-src/` changes, failing on any drift between built output and committed artifacts.
 
