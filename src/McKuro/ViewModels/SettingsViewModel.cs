@@ -700,7 +700,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Save();
     }
 
-    // 签到设置(AutoSignEnabled/AutoKuroClientTaskEnabled)已迁移至「签到」页管理,
+    // 签到设置(AutoSignEnabled)已迁移至「签到」页管理,
     // 此处不再持有副本:避免保存其他设置时用启动时的旧值回滚签到页的新值
     [ObservableProperty]
     private string _appUpdateStatusText = "";

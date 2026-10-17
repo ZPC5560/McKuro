@@ -137,7 +137,11 @@ public sealed partial class GuideAchievementService
     /// <para>走与详情页相同的缓存入口(评审反馈:旧实现直连 API 绕过缓存,
     /// 角色选中时与按需拉取并发,同一 cardRoleId 重复发 list+info 请求)。</para>
     /// </summary>
-    public async Task<GuideIntroductionInfo?> GetAchievementAsync(string roleName, int cardRoleId, CancellationToken ct = default)
+    public async Task<GuideIntroductionInfo?> GetAchievementAsync(
+        string roleName,
+        int cardRoleId,
+        CancellationToken ct = default,
+        bool forceRefresh = false)
     {
         var gbId = GuideRoleMap.TryGetRoleGbId(roleName) ?? GuideRoleMap.TryGetRoleGbId(cardRoleId);
         if (gbId is null)
@@ -151,11 +155,11 @@ public sealed partial class GuideAchievementService
         }
 
         // 多攻略默认取点赞最高的一篇(GetIntroductionListAsync 已按点赞数降序)
-        var list = await GetIntroductionListAsync(roleName, cardRoleId, ct).ConfigureAwait(false);
+        var list = await GetIntroductionListAsync(roleName, cardRoleId, ct, forceRefresh).ConfigureAwait(false);
         var top = list.FirstOrDefault();
         return top is null
             ? null
-            : await GetAchievementByIdAsync(roleName, cardRoleId, top.Id, ct).ConfigureAwait(false);
+            : await GetAchievementByIdAsync(roleName, cardRoleId, top.Id, ct, forceRefresh).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -176,11 +180,17 @@ public sealed partial class GuideAchievementService
     /// <para>优先命中本地缓存(SQLite guide_cache);未命中或过期才走网络,成功后由本方法统一回写
     /// (评审反馈:此前回写散落在各调用方,行为分叉)。</para>
     /// </summary>
-    public async Task<List<GuideIntroductionItem>> GetIntroductionListAsync(string roleName, int cardRoleId, CancellationToken ct = default)
+    public async Task<List<GuideIntroductionItem>> GetIntroductionListAsync(
+        string roleName,
+        int cardRoleId,
+        CancellationToken ct = default,
+        bool forceRefresh = false)
     {
         // 1. 缓存优先:24h 内的列表结果(含"确认无攻略"的空列表,负缓存)直接返回,点角色不必等网络
+        //    forceRefresh(手动「同步」)跳过这一步:同步的语义就是"把攻略站的数据拉过来",
+        //    不能被当日缓存挡住而表现为"点了同步攻略数据没变化"。
         var cached = _cache?.TryGet(GuideCacheAccountKey, cardRoleId);
-        if (_cache?.IsListKnownFresh(cached) == true)
+        if (!forceRefresh && _cache?.IsListKnownFresh(cached) == true)
         {
             return [.. cached!.List];
         }
@@ -216,10 +226,15 @@ public sealed partial class GuideAchievementService
     /// <para>若与缓存里记录的选中攻略相同且详情缓存新鲜,直接返回缓存详情(含共鸣链图标);
     /// 网络成功后由本方法统一回写详情列。</para>
     /// </summary>
-    public async Task<GuideIntroductionInfo?> GetAchievementByIdAsync(string roleName, int cardRoleId, long introductionId, CancellationToken ct = default)
+    public async Task<GuideIntroductionInfo?> GetAchievementByIdAsync(
+        string roleName,
+        int cardRoleId,
+        long introductionId,
+        CancellationToken ct = default,
+        bool forceRefresh = false)
     {
         var cached = _cache?.TryGet(GuideCacheAccountKey, cardRoleId);
-        if (_cache?.IsDetailFresh(cached) == true && cached!.SelectedId == introductionId)
+        if (!forceRefresh && _cache?.IsDetailFresh(cached) == true && cached!.SelectedId == introductionId)
         {
             return cached.Detail;
         }

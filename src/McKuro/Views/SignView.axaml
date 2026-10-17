@@ -57,12 +57,12 @@
         </Grid>
 
         <!-- 签到设置(自设置页迁移到功能页;常显,执行时自行校验登录)。
-             每日自动任务在应用启动后自动执行一次(当天去重,见 DailyTaskScheduler),无需配置时间 -->
+             自动游戏签到在应用启动后自动执行一次(当天去重,见 DailyTaskScheduler),无需配置时间。
+             库街区每日任务不参与自动调度,只能由标题栏「库街区每日任务」按钮手动执行 -->
         <Border Grid.Row="1" Margin="20,0,20,10" Padding="16" CornerRadius="12"
                 Background="{DynamicResource SemiColorBg2}">
             <StackPanel Orientation="Horizontal" Spacing="16">
                 <CheckBox Content="{loc:Localize Key=Sign.AutoGame}" IsChecked="{Binding AutoSignEnabled}" />
-                <CheckBox Content="{loc:Localize Key=Sign.AutoKuroDaily}" IsChecked="{Binding AutoKuroClientTaskEnabled}" />
                 <TextBlock Text="{Binding AutoRunStatusText}" FontSize="12"
                            Foreground="{DynamicResource SemiColorText2}"
                            VerticalAlignment="Center" />

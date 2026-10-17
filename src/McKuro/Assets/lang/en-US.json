@@ -751,7 +751,6 @@
   "Settings.VideoSource.Desc": "Custom mode loads a local video or a Wallpaper Engine video wallpaper as the launcher background",
   "Sign.AutoDone": "Today's auto tasks are done",
   "Sign.AutoGame": "Auto in-game sign-in (runs at startup)",
-  "Sign.AutoKuroDaily": "Auto-run KuroBBS daily tasks",
   "Sign.AutoPending": "Not run today; runs automatically at next launch",
   "Sign.GameSignIn": "In-Game Sign-in",
   "Sign.GoLogin": "Go to \"Account\" to sign in",

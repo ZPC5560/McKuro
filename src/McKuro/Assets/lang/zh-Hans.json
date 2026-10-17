@@ -751,7 +751,6 @@
   "Settings.VideoSource.Desc": "自定义模式可加载本地视频或 Wallpaper Engine 视频壁纸作为启动页动态壁纸",
   "Sign.AutoDone": "今日自动任务已完成",
   "Sign.AutoGame": "自动游戏签到(启动后自动执行)",
-  "Sign.AutoKuroDaily": "自动执行库街区每日任务",
   "Sign.AutoPending": "今日尚未执行,下次启动软件后自动执行",
   "Sign.GameSignIn": "游戏签到",
   "Sign.GoLogin": "前往「账号」页登录",

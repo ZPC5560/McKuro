@@ -550,7 +550,9 @@ public sealed class VideoBackgroundControl : Grid
 
         try
         {
-            _mpv = new BackgroundMpvContext(ShouldLoop);
+            // 循环与否由**类型**决定,不能传进构造器存字段:基类构造器会在派生字段赋值前
+            // 调用 OnPreInitialize,读字段必然拿到默认值 false(详见 BackgroundMpvContext 注释)。
+            _mpv = ShouldLoop ? new LoopingMpvContext() : new OneShotMpvContext();
             ApplyMuteIfConfigured(_mpv);
 
             // 播放结束 / 错误 → 回退静态图或标记结束态
@@ -1527,16 +1529,26 @@ public sealed class VideoBackgroundControl : Grid
     }
 
     /// <summary>
-    /// 带预初始化选项的 libmpv 上下文。基类构造顺序:mpv_create → <see cref="OnPreInitialize"/>
+    /// 带封面播放选项的 libmpv 上下文基类。基类构造顺序:mpv_create → <see cref="OnPreInitialize"/>
     /// (设置必须在 mpv_initialize 之前的核心选项)→ mpv_initialize → 事件循环。
     /// <c>vo=libmpv</c> 必须在此设置,render API 才能接管输出;其余为后台封面播放的合理默认。
+    /// <para>
+    /// <b>为什么循环与否用两个子类表达,而不是构造器传 bool 存进字段</b>:
+    /// <c>MpvContextBase</c> 的构造器会在<b>派生类构造器体执行之前</b>调用本方法(虚方法),
+    /// 所以此刻"在构造器里赋值的实例字段"仍然是默认值 <c>false</c>。把 loop 存进字段再在
+    /// <see cref="OnPreInitialize"/> 里读它,<c>loop-file</c> 就会恒被写成 <c>"no"</c>
+    /// —— 背景视频永远不循环,播完一遍即停在末帧(用户报告的"视频卡住/不循环";
+    /// 实测:传入 loop=true 时 <c>options/loop-file</c> 实际为 <c>"no"</c>)。
+    /// 因此这里要求子类用<b>字面常量</b>提供选项值,与构造顺序无关。
+    /// </para>
     /// </summary>
-    private sealed class BackgroundMpvContext : MpvContext
+    private abstract class BackgroundMpvContext : MpvContext
     {
-        private readonly bool _loop;
-
-        /// <summary>构造。<paramref name="loop"/> = false 时播完停在末帧(技能演示等)。</summary>
-        public BackgroundMpvContext(bool loop = true) => _loop = loop;
+        /// <summary>
+        /// <c>loop-file</c> 选项值。<b>必须是字面常量,绝不能读构造器里赋值的实例字段</b>
+        /// (字段此刻尚未赋值,原因见类注释)。
+        /// </summary>
+        protected abstract string LoopFileOption { get; }
 
         protected override void OnPreInitialize()
         {
@@ -1547,8 +1559,8 @@ public sealed class VideoBackgroundControl : Grid
             // Windows d3d11va / Linux vaapi-nvdec;失败自动回退软件解码。
             // GL 渲染路径下解码帧留在 GPU 侧直接互操作;软件渲染路径下 mpv 自动降级软解。
             SetOptionString("hwdec", "auto-safe");
-            // 循环:背景封面视频需要 (inf);技能演示设 no —— 播完停在末帧等用户重播
-            SetOptionString("loop-file", _loop ? "inf" : "no");
+            // 循环:背景封面视频需要 inf;技能演示设 no —— 播完停在末帧等用户重播
+            SetOptionString("loop-file", LoopFileOption);
             SetOptionString("volume", "0");
             // 网络缓冲:CDN 视频首次缓冲耗尽后卡住"只动了一下",增大 demuxer 缓冲
             SetOptionString("demuxer-max-bytes", "50M");
@@ -1559,6 +1571,18 @@ public sealed class VideoBackgroundControl : Grid
             SetOptionString("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
             SetOptionString("referrer", "https://kurogame.com");
         }
+    }
+
+    /// <summary>循环播放上下文:启动页封面 / 资讯页轮播 / 设置页壁纸预览等"一直循环"场景。</summary>
+    private sealed class LoopingMpvContext : BackgroundMpvContext
+    {
+        protected override string LoopFileOption => "inf";
+    }
+
+    /// <summary>单次播放上下文:技能演示等"播完停在末帧、由用户点重播"场景。</summary>
+    private sealed class OneShotMpvContext : BackgroundMpvContext
+    {
+        protected override string LoopFileOption => "no";
     }
 
     /// <summary>
