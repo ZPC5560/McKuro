@@ -121,7 +121,7 @@ McKuro/
 │   ├── Services/                   # Update(自更新) / Launcher / Notification / Redeem / Settings 等其余服务
 │   └── Infrastructure/             # SQLite (Microsoft.Data.Sqlite)
 ├── src/ThirdParty/Sparkle.Live2DView/  # vendored Live2D 渲染控件 (MIT)
-└── tests/McKuro.Tests/             # xUnit 单元测试 (1276 个用例)
+└── tests/McKuro.Tests/             # xUnit 单元测试 (1307 个用例)
 ```
 
 ## 使用说明
@@ -191,7 +191,7 @@ ISCC.exe installer\setup.iss /DMyAppVersion=1.3.5
 
 ## 测试与 CI
 
-- `tests/McKuro.Tests`:xUnit 单元测试 **1276 个用例**(覆盖日志解密、抽卡分析、卡池统计、更新链路、通知、多语言等)。
+- `tests/McKuro.Tests`:xUnit 单元测试 **1307 个用例**(覆盖日志解密、抽卡分析、卡池统计、更新链路、通知、多语言等)。
 - `build-and-test.yml`:push/PR 在 Linux 构建 + 测试;发布 tag 或手动触发时进行全平台 AOT 构建并附加 Release 资产。
 - `website.yml`:`website/` 或 `website-src/` 变更时重新构建并部署官网。
 

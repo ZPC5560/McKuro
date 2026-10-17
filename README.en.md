@@ -121,7 +121,7 @@ McKuro/
 │   ├── Services/                   # Update (self-update) / Launcher / Notification / Redeem / Settings and the rest
 │   └── Infrastructure/             # SQLite (Microsoft.Data.Sqlite)
 ├── src/ThirdParty/Sparkle.Live2DView/  # vendored Live2D rendering control (MIT)
-└── tests/McKuro.Tests/             # xUnit unit tests (1276 cases)
+└── tests/McKuro.Tests/             # xUnit unit tests (1307 cases)
 ```
 
 ## Usage Guide
@@ -191,7 +191,7 @@ Settings checks GitHub Releases (default repository `ZPC5560/McKuro`); the updat
 
 ## Testing & CI
 
-- `tests/McKuro.Tests`: **1276 xUnit unit tests** (log decryption, gacha analysis, banner statistics, update pipeline, notifications, i18n, and more).
+- `tests/McKuro.Tests`: **1307 xUnit unit tests** (log decryption, gacha analysis, banner statistics, update pipeline, notifications, i18n, and more).
 - `build-and-test.yml`: build + test on Linux for every push/PR; release tags or manual dispatch run the full-platform AOT publishes and attach Release assets.
 - `website.yml`: rebuilds and deploys the website whenever `website/` or `website-src/` changes, failing on any drift between built output and committed artifacts.
 
