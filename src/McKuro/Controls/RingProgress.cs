@@ -35,6 +35,17 @@ public sealed class RingProgress : Control
     public static readonly StyledProperty<IBrush?> TextBrushProperty =
         AvaloniaProperty.Register<RingProgress, IBrush?>(nameof(TextBrush));
 
+    /// <summary>
+    /// 不确定态:不画进度弧与百分比,改为一段绕圈旋转的弧。
+    /// <para>
+    /// 用于「任务已开始但还不知道总量」的阶段(对齐 Haiyu 1.4.5 的 <c>IsTransferPreparing</c>):
+    /// 弱网下「获取资源列表」可能耗时十几秒到几分钟,此时 <see cref="Value"/> 恒为 0,
+    /// 若仍画成 0% 的死环,用户会以为程序卡死。
+    /// </para>
+    /// </summary>
+    public static readonly StyledProperty<bool> IsIndeterminateProperty =
+        AvaloniaProperty.Register<RingProgress, bool>(nameof(IsIndeterminate));
+
     /// <summary>进度 0-100。</summary>
     public double Value
     {
@@ -82,11 +93,19 @@ public sealed class RingProgress : Control
         set => SetValue(TextBrushProperty, value);
     }
 
+    /// <summary>是否为不确定态(见 <see cref="IsIndeterminateProperty"/>)。</summary>
+    public bool IsIndeterminate
+    {
+        get => GetValue(IsIndeterminateProperty);
+        set => SetValue(IsIndeterminateProperty, value);
+    }
+
     static RingProgress()
     {
         AffectsRender<RingProgress>(
             ValueProperty, ThicknessProperty, TrackBrushProperty,
-            ForegroundBrushProperty, ShowTextProperty, FontSizeProperty, TextBrushProperty);
+            ForegroundBrushProperty, ShowTextProperty, FontSizeProperty, TextBrushProperty,
+            IsIndeterminateProperty);
         ClipToBoundsProperty.OverrideDefaultValue<RingProgress>(true);
     }
 
@@ -124,6 +143,40 @@ public sealed class RingProgress : Control
             _trackPenThickness = Thickness;
         }
         context.DrawEllipse(null, _trackPen, center, radius, radius);
+
+        // ---------- 不确定态:绕圈旋转的弧,不显示百分比 ----------
+        // 弱网「获取资源列表」阶段总量未知(Value 恒 0),死画一个 0% 环会像卡死。
+        if (IsIndeterminate)
+        {
+            EnsureIndeterminateAnimation();
+            if (_fgPen is null || !ReferenceEquals(_fgPenBrush, ForegroundBrush) || _fgPenThickness != Thickness)
+            {
+                _fgPen = new Pen(ForegroundBrush, Thickness);
+                _fgPenBrush = ForegroundBrush;
+                _fgPenThickness = Thickness;
+            }
+
+            // 固定 90° 弧长,整体绕圈匀速旋转(与轨道同色圆环形成"正在转"的观感)
+            const double spinnerSweep = 90.0;
+            var spinnerStart = _spinnerAngle;
+            var spinnerEnd = spinnerStart + spinnerSweep;
+            var spinnerGeo = new StreamGeometry();
+            using (var g = spinnerGeo.Open())
+            {
+                g.BeginFigure(PointOnCircle(center, radius, spinnerStart), false);
+                g.ArcTo(
+                    PointOnCircle(center, radius, spinnerEnd),
+                    new Size(radius, radius),
+                    0,
+                    spinnerSweep > 180,
+                    SweepDirection.Clockwise);
+                g.EndFigure(false);
+            }
+            context.DrawGeometry(null, _fgPen, spinnerGeo);
+            return;
+        }
+
+        StopIndeterminateAnimation();
 
         // 前景弧(从顶部 12 点方向顺时针,按 Value 0-100 画弧)
         var value = Math.Clamp(Value, 0, 100);
@@ -191,5 +244,55 @@ public sealed class RingProgress : Control
         return new Point(
             center.X + radius * Math.Cos(rad),
             center.Y + radius * Math.Sin(rad));
+    }
+
+    // ---------- 不确定态旋转驱动 ----------
+    // 用一个仅在不确定态期间存活的 DispatcherTimer 推进角度;
+    // 离开不确定态必须停掉,否则控件被卸载后仍在无效重绘。
+    private DispatcherTimer? _spinnerTimer;
+    private double _spinnerAngle = -90;
+
+    /// <summary>每帧旋转角度(60ms/帧 × 6° ≈ 100°/秒,足够醒目又不晃眼)。</summary>
+    private const double SpinnerStepDegrees = 6.0;
+
+    private void EnsureIndeterminateAnimation()
+    {
+        if (_spinnerTimer is not null)
+        {
+            return;
+        }
+
+        _spinnerTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(60),
+        };
+        _spinnerTimer.Tick += (_, _) =>
+        {
+            _spinnerAngle += SpinnerStepDegrees;
+            if (_spinnerAngle >= 360)
+            {
+                _spinnerAngle -= 360;
+            }
+            InvalidateVisual();
+        };
+        _spinnerTimer.Start();
+    }
+
+    private void StopIndeterminateAnimation()
+    {
+        if (_spinnerTimer is null)
+        {
+            return;
+        }
+
+        _spinnerTimer.Stop();
+        _spinnerTimer = null;
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        // 控件被移出可视树时停表,避免"看不见还在转"的白耗 CPU。
+        StopIndeterminateAnimation();
+        base.OnDetachedFromVisualTree(e);
     }
 }

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Security.Cryptography;
 using McKuro.Core.Models.Game;
 
@@ -138,6 +139,111 @@ public static class FastVerify
     }
 
     /// <summary>
+    /// 分片是否<b>完整且连续地覆盖整个文件</b>(从 0 开始、首尾相接、末端正好等于
+    /// <see cref="GameFileEntry.Size"/>,且每片都带哈希)。
+    /// <para>
+    /// <b>用途:消除「刚下完又整份复算一遍 MD5」的重复读盘。</b>
+    /// 分片下载路径对<b>每一个</b>分片都做过哈希复核(命中即跳过、写完再复核),
+    /// 因此当分片完整覆盖时,文件内容已经被逐字节验证过,再算一遍整文件 MD5 是纯粹重复读盘。
+    /// </para>
+    /// <para>
+    /// <b>实测依据(鸣潮 CN 3.7.1 主清单):</b>带分片的条目共 <b>76 个 / 78.54 GB</b>,
+    /// 且 <b>76 个全部</b>同时带整文件 md5、<b>全部</b>满足本判定。
+    /// 也就是说每次安装都有 78.54 GB 被多读一遍 —— 按 577 MiB/s 计约合两分多钟纯等待。
+    /// </para>
+    /// <para>
+    /// <b>这个函数只回答「能不能跳过」,不回答「文件是否正确」</b>;调用方在返回 true 时
+    /// 仍必须校验最终文件长度(分片覆盖已含末端,但 SetLength 之类的截断仍需兜一次)。
+    /// 分片不完整(有空洞/末端不足/<see cref="GameFileEntry.Size"/> 未知)时一律返回 false,
+    /// 交回整文件 MD5 —— 宁可多读一遍,也不能放过未验证的字节。
+    /// </para>
+    /// </summary>
+    public static bool HasCompleteChunkCoverage(GameFileEntry entry)
+    {
+        if (entry.Size <= 0 || entry.ChunkInfos.Count == 0)
+        {
+            return false;
+        }
+
+        long next = 0;
+        foreach (var chunk in entry.ChunkInfos.OrderBy(c => c.Start))
+        {
+            // 必须首尾相接(起点正好是上一个的终点 +1)、区间合法、且带哈希。
+            if (chunk.Start != next
+                || chunk.End < chunk.Start
+                || chunk.End >= entry.Size
+                || string.IsNullOrWhiteSpace(chunk.Md5))
+            {
+                return false;
+            }
+
+            next = chunk.End + 1;
+        }
+
+        return next == entry.Size;
+    }
+
+    /// <summary>
+    /// 用分片哈希校验<b>整个文件</b>(要求 <see cref="HasCompleteChunkCoverage"/> 为 true)。
+    /// <para>
+    /// <b>为什么校验侧也要走这里(而不是直接算整文件 MD5):</b>
+    /// 下载侧在分片完整覆盖时<b>不再</b>算整文件 MD5(见 <see cref="FileDownloader"/> 的分片收尾),
+    /// 若校验侧仍用整文件 MD5,两侧就用了<b>不同判据</b> —— 一旦清单里的整文件 md5 与分片哈希
+    /// 自相矛盾,就会出现「校验说无需下载、下载器却拒绝跳过」的反复横跳。
+    /// 本方法让两侧对同一个文件用<b>同一份证据</b>,结论必然一致。
+    /// </para>
+    /// <para>
+    /// <b>性能上不亏:</b>完整覆盖时分片校验本身就要读完整个文件,与整文件 MD5 的读盘量相同
+    /// (都是顺序一遍),因此这是一次纯粹的「一致性」改进,不是折衷。
+    /// 需要<b>少读</b>时应改用采样式的 <see cref="VerifyFileFast"/>(那是另一个开关与取舍)。
+    /// </para>
+    /// </summary>
+    /// <returns>文件完好时 true;覆盖判定不成立、文件缺失或任一分片不符时 false。</returns>
+    public static bool VerifyAllChunks(string path, GameFileEntry entry, CancellationToken ct = default)
+    {
+        if (!HasCompleteChunkCoverage(entry) || !File.Exists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                BufferSize,
+                FileOptions.SequentialScan);
+            if (stream.Length != entry.Size)
+            {
+                return false;
+            }
+
+            // 覆盖判定已保证首尾相接,按序校验即可。
+            foreach (var chunk in entry.ChunkInfos.OrderBy(c => c.Start))
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!ChunkHashMatches(stream, chunk, ct))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // 读盘失败(被占用/无权限)按"需要下载"处理,与 VerifyFileFast 的处置一致。
+            return false;
+        }
+    }
+
+    /// <summary>
     /// 快速判定本地文件是否与清单一致:文件存在、长度<b>精确等于</b>
     /// <see cref="GameFileEntry.Size"/>,且所有采样分片哈希一致。
     /// <para>
@@ -235,24 +341,33 @@ public static class FastVerify
 
         file.Position = chunk.Start;
         using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
-        var buffer = new byte[BufferSize];
-        var remaining = chunk.Length;
-        while (remaining > 0)
+        // 从 ArrayPool 租借而非 new byte[]:本方法按分片调用,快速校验又是 8 路并行,
+        // 每个分片都新分配 128 KiB 属于纯粹的无谓分配(大文件百余个分片时可达数十 MB)。
+        var buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
+        try
         {
-            ct.ThrowIfCancellationRequested();
-            var read = file.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
-            if (read == 0)
+            var remaining = chunk.Length;
+            while (remaining > 0)
             {
-                return false;
+                ct.ThrowIfCancellationRequested();
+                var read = file.Read(buffer, 0, (int)Math.Min(BufferSize, remaining));
+                if (read == 0)
+                {
+                    return false;
+                }
+
+                md5.AppendData(buffer, 0, read);
+                remaining -= read;
             }
 
-            md5.AppendData(buffer, 0, read);
-            remaining -= read;
+            return string.Equals(
+                Convert.ToHexStringLower(md5.GetHashAndReset()),
+                chunk.Md5,
+                StringComparison.OrdinalIgnoreCase);
         }
-
-        return string.Equals(
-            Convert.ToHexStringLower(md5.GetHashAndReset()),
-            chunk.Md5,
-            StringComparison.OrdinalIgnoreCase);
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 }

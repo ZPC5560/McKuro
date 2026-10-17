@@ -278,13 +278,26 @@ public class ResourceLevelServiceTests : IDisposable
         try { Directory.Delete(_root, recursive: true); } catch { /* ignore */ }
     }
 
+    /// <summary>
+    /// 写官方格式的安装标记(带 version)。
+    /// <para>
+    /// 必须带 version:官方标记本来就是 <c>{"packName":"hd","version":"3.7.0"}</c> 这个形状
+    /// (实测本机 D:\Wuthering Waves\launcherDownloadConfig\hd.json 即是),
+    /// 而"是否已安装"的判据已改为<b>版本一致</b>——只写 packName 的标记会被判为版本未知→需重装。
+    /// </para>
+    /// </summary>
     private void MarkInstalled(params string[] packs)
     {
         foreach (var p in packs)
         {
-            File.WriteAllText(Path.Combine(_root, "launcherDownloadConfig", p + ".json"), $"{{\"packName\":\"{p}\"}}");
+            File.WriteAllText(
+                Path.Combine(_root, "launcherDownloadConfig", p + ".json"),
+                $$"""{"packName":"{{p}}","version":"{{TestPackVersion}}"}""");
         }
     }
+
+    /// <summary>测试清单里所有包的版本(见 <see cref="IndexJson"/>)。</summary>
+    private const string TestPackVersion = "3.7.0";
 
     private static string PackManifestJson(params (string Dest, long Size)[] files)
     {
@@ -315,7 +328,10 @@ public class ResourceLevelServiceTests : IDisposable
     }
     """;
 
-    private ResourceLevelService CreateService(Dictionary<string, string> responses, AppSettings? settings = null)
+    private ResourceLevelService CreateService(
+        Dictionary<string, string> responses,
+        AppSettings? settings = null,
+        string? installedGameVersion = null)
     {
         var handler = new StubHandler(responses);
         var http = new HttpClient(handler);
@@ -328,7 +344,8 @@ public class ResourceLevelServiceTests : IDisposable
             paths,
             settings: settings is null ? null : new StubSettings(settings),
             indexUrlProvider: _ => IndexUrl,
-            logger: NullLogger<ResourceLevelService>.Instance);
+            logger: NullLogger<ResourceLevelService>.Instance,
+            installedVersionProvider: installedGameVersion is null ? null : () => installedGameVersion);
         return svc;
     }
 
@@ -666,5 +683,264 @@ public class ResourceLevelServiceTests : IDisposable
         Assert.Equal(0, result.InstalledFiles);
         // 用户选择必须落盘,避免"选了却不生效"
         Assert.Equal("sd", settings.ResourceLevel);
+    }
+
+    // ---------- 分包版本比对(对齐 Haiyu 1.4.5「材质分包更新游戏问题」) ----------
+
+    /// <summary>写一条版本被篡改的标记,模拟"服务端已升版本、本地仍是旧版本"。</summary>
+    private void MarkInstalledAtVersion(string pack, string version)
+    {
+        File.WriteAllText(
+            Path.Combine(_root, "launcherDownloadConfig", pack + ".json"),
+            $$"""{"packName":"{{pack}}","version":"{{version}}"}""");
+    }
+
+    /// <summary>common + hd 的 indexFile 响应(任一新测试需要真的加载包清单时必须提供)。</summary>
+    private Dictionary<string, string> CommonAndHdManifests() => new()
+    {
+        [IndexUrl] = IndexJson(),
+        [Cdn + "c/common/indexFile.json"] = PackManifestJson(("Client/Binaries/Win64/a.exe", 10)),
+        [Cdn + "c/hd/indexFile.json"] = PackManifestJson(("Client/Content/HD/p.pak", 20)),
+    };
+
+    /// <summary>
+    /// <b>核心回归:材质包只提升版本(主版本号不变)时必须判为"需要更新"。</b>
+    /// <para>
+    /// 这是 Haiyu 1.4.5 修的那个问题,而 McKuro 原本更严重:标记只判文件存在,
+    /// 于是服务端只改材质包 version 时该包被永久判为已装好,永远不再更新。
+    /// 实测线上 3.7.1 四个包 version 全部变动,而主版本比较完全看不出差异。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Plan_Treats_Stale_Pack_Version_As_Not_Installed()
+    {
+        // 标记存在、但版本落后一个 patch —— 旧实现只看 File.Exists,会误判为已装好。
+        MarkInstalledAtVersion("common", "3.6.0");
+        MarkInstalledAtVersion("hd", "3.6.0");
+        var svc = CreateService(CommonAndHdManifests());
+
+        var plan = await svc.PlanAsync(GameServerType.Official, "hd");
+
+        Assert.NotNull(plan);
+        Assert.False(plan.AlreadyInstalled);
+        Assert.True(plan.HasWork);
+        // common 与 hd 都要重装
+        Assert.Equal(["common", "hd"], plan.Packages.Select(p => p.PackName));
+    }
+
+    /// <summary>版本一致时必须仍然判为已装好,不能因为新逻辑而无谓重下几十 GB。</summary>
+    [Fact]
+    public async Task Plan_Treats_Matching_Pack_Version_As_Installed()
+    {
+        MarkInstalled("common", "hd");
+        var svc = CreateService(new Dictionary<string, string> { [IndexUrl] = IndexJson() });
+
+        var plan = await svc.PlanAsync(GameServerType.Official, "hd");
+
+        Assert.NotNull(plan);
+        Assert.True(plan.AlreadyInstalled);
+        Assert.False(plan.HasWork);
+    }
+
+    /// <summary>
+    /// 标记缺 version 字段(旧版 McKuro 或第三方工具写的)时按"版本未知"处理 → 需重新校核。
+    /// 方向保守:宁可多下一次,也不能把旧包当成新包。
+    /// </summary>
+    [Fact]
+    public async Task Plan_Treats_Versionless_Marker_As_Not_Installed()
+    {
+        File.WriteAllText(Path.Combine(_root, "launcherDownloadConfig", "hd.json"), """{"packName":"hd"}""");
+        File.WriteAllText(Path.Combine(_root, "launcherDownloadConfig", "common.json"), """{"packName":"common"}""");
+        var svc = CreateService(CommonAndHdManifests());
+
+        var plan = await svc.PlanAsync(GameServerType.Official, "hd");
+
+        Assert.NotNull(plan);
+        Assert.False(plan.AlreadyInstalled);
+        Assert.Equal(["common", "hd"], plan.Packages.Select(p => p.PackName));
+    }
+
+    /// <summary>损坏的标记(非 JSON)不得让整个流程崩溃,按版本未知处理。</summary>
+    [Fact]
+    public async Task Plan_Survives_Corrupt_Marker()
+    {
+        File.WriteAllText(Path.Combine(_root, "launcherDownloadConfig", "hd.json"), "<not-json>");
+        var svc = CreateService(CommonAndHdManifests());
+
+        var plan = await svc.PlanAsync(GameServerType.Official, "hd");
+
+        Assert.NotNull(plan);
+        Assert.False(plan.AlreadyInstalled);
+    }
+
+    /// <summary>版本号比较必须忽略大小写与首尾空白,避免服务端格式微调导致无谓重下。</summary>
+    [Fact]
+    public void IsPackInstalledAtVersion_Normalizes_Whitespace_And_Case()
+    {
+        MarkInstalledAtVersion("hd", " 3.7.0 ");
+
+        Assert.True(ResourceLevelService.IsPackInstalledAtVersion(_root, "hd", "3.7.0"));
+        Assert.False(ResourceLevelService.IsPackInstalledAtVersion(_root, "hd", "3.7.1"));
+        Assert.False(ResourceLevelService.IsPackInstalledAtVersion(_root, "sd", "3.7.0"));
+    }
+
+    /// <summary>服务端没给版本(清单异常)时不谎报落后:有版本记录的标记即视为已装。</summary>
+    [Fact]
+    public void IsPackInstalledAtVersion_With_Unknown_Expected_Accepts_Recorded()
+    {
+        MarkInstalledAtVersion("hd", "3.7.0");
+
+        Assert.True(ResourceLevelService.IsPackInstalledAtVersion(_root, "hd", null));
+        Assert.True(ResourceLevelService.IsPackInstalledAtVersion(_root, "hd", ""));
+    }
+
+    /// <summary>已安装列表也必须按版本判定,版本落后不该被算作可用包。</summary>
+    [Fact]
+    public async Task GetInstalledPacks_Excludes_Stale_Version()
+    {
+        MarkInstalledAtVersion("common", TestPackVersion);
+        MarkInstalledAtVersion("hd", "3.6.0");   // 版本落后
+        MarkInstalledAtVersion("uhd", TestPackVersion);
+        var svc = CreateService(new Dictionary<string, string> { [IndexUrl] = IndexJson() });
+
+        var packs = await svc.GetInstalledPacksAsync(GameServerType.Official);
+
+        var names = packs.Select(p => p.PackName).ToList();
+        Assert.Contains("common", names);
+        Assert.Contains("uhd", names);
+        Assert.DoesNotContain("hd", names);
+    }
+
+    // ---------- 老用户误报抑制(用户明确要求:已更新过版本的不要再提醒) ----------
+
+    /// <summary>
+    /// <b>核心需求:老用户的标记停在旧版本、但主版本已经追平时,不得再提示材质包更新。</b>
+    /// <para>
+    /// 场景来由:McKuro 早先只有「切换画质」会写标记,用主流程一路更新上来的用户标记会永久停在
+    /// 他们上次切画质时的版本(实测本机:主版本 3.7.1,而 hd.json 仍记着 3.7.0)。
+    /// 若不做抑制,这些老用户会被提示重新下载 45 GB —— 而文件其实早已是新的。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Plan_Does_Not_Report_Stale_Marker_When_Main_Version_Caught_Up()
+    {
+        // 标记停在 3.6.0,但本地主版本已经是 3.7.0(= 线上包版本)
+        MarkInstalledAtVersion("common", "3.6.0");
+        MarkInstalledAtVersion("hd", "3.6.0");
+        var svc = CreateService(
+            new Dictionary<string, string> { [IndexUrl] = IndexJson() },
+            installedGameVersion: TestPackVersion);
+
+        var plan = await svc.PlanAsync(GameServerType.Official, "hd");
+
+        Assert.NotNull(plan);
+        Assert.True(plan.AlreadyInstalled);
+        Assert.False(plan.HasWork);
+        Assert.Empty(plan.Packages);
+    }
+
+    /// <summary>
+    /// 老用户方案下,"是否已安装"面板同样要显示为已安装(不能一边说没问题、一边显示未安装)。
+    /// </summary>
+    [Fact]
+    public async Task GetLevelOptions_Marks_Installed_When_Main_Version_Caught_Up()
+    {
+        MarkInstalledAtVersion("common", "3.6.0");
+        MarkInstalledAtVersion("hd", "3.6.0");
+        var svc = CreateService(
+            new Dictionary<string, string> { [IndexUrl] = IndexJson() },
+            installedGameVersion: TestPackVersion);
+
+        var options = await svc.GetLevelOptionsAsync(GameServerType.Official);
+
+        Assert.True(options.Single(o => o.Value == "hd").Installed);
+    }
+
+    /// <summary>
+    /// <b>抑制不能过头:主版本还落后时,标记落后仍然要判为需要更新。</b>
+    /// 否则就退化成"永远不更新材质包",和修复前的 bug 一模一样。
+    /// </summary>
+    [Fact]
+    public async Task Plan_Still_Reports_Stale_Marker_When_Main_Version_Behind()
+    {
+        MarkInstalledAtVersion("common", "3.6.0");
+        MarkInstalledAtVersion("hd", "3.6.0");
+        var svc = CreateService(
+            IntHd(),
+            installedGameVersion: "3.6.0"); // 主版本也还是旧的
+
+        var plan = await svc.PlanAsync(GameServerType.Official, "hd");
+
+        Assert.NotNull(plan);
+        Assert.False(plan.AlreadyInstalled);
+        Assert.True(plan.HasWork);
+        Assert.Equal(["common", "hd"], plan.Packages.Select(p => p.PackName));
+    }
+
+    /// <summary>
+    /// 抑制只作用于"标记陈旧"。标记<b>缺失</b>(从未装过该包)时必须照常下载,
+    /// 不能因为主版本追平就认为材质包存在。
+    /// </summary>
+    [Fact]
+    public async Task Plan_Still_Downloads_Pack_When_Marker_Missing()
+    {
+        // 只标了 common,hd 从未安装过
+        MarkInstalledAtVersion("common", "3.6.0");
+        var svc = CreateService(
+            new Dictionary<string, string>
+            {
+                [IndexUrl] = IndexJson(),
+                [Cdn + "c/hd/indexFile.json"] = PackManifestJson(("Client/Content/HD/p.pak", 20)),
+            },
+            installedGameVersion: TestPackVersion);
+
+        var plan = await svc.PlanAsync(GameServerType.Official, "hd");
+
+        Assert.NotNull(plan);
+        Assert.False(plan.AlreadyInstalled);
+        Assert.Equal(["hd"], plan.Packages.Select(p => p.PackName));
+    }
+
+    /// <summary>主版本未知(读取失败)时不启用抑制,保持保守判定。</summary>
+    [Fact]
+    public async Task Plan_Does_Not_Suppress_When_Installed_Version_Unknown()
+    {
+        MarkInstalledAtVersion("common", "3.6.0");
+        MarkInstalledAtVersion("hd", "3.6.0");
+        var svc = CreateService(IntHd(), installedGameVersion: null);
+
+        var plan = await svc.PlanAsync(GameServerType.Official, "hd");
+
+        Assert.NotNull(plan);
+        Assert.False(plan.AlreadyInstalled);
+    }
+
+    /// <summary>common + hd 的 indexFile。</summary>
+    private Dictionary<string, string> IntHd() => new()
+    {
+        [IndexUrl] = IndexJson(),
+        [Cdn + "c/common/indexFile.json"] = PackManifestJson(("Client/Binaries/Win64/a.exe", 10)),
+        [Cdn + "c/hd/indexFile.json"] = PackManifestJson(("Client/Content/HD/p.pak", 20)),
+    };
+
+    [Theory]
+    [InlineData("3.7.0", "3.7.0", 0)]
+    [InlineData("3.7.1", "3.7.0", 1)]
+    [InlineData("3.7.0", "3.7.1", -1)]
+    [InlineData("3.7", "3.7.0", 0)]      // 缺失段按 0 补齐(不能用 Version 类的 -1 语义)
+    [InlineData("3.7.1", "3.7", 1)]
+    [InlineData("3.10.0", "3.9.0", 1)]   // 数值比较而非字符串比较
+    public void ComparePackVersions_Is_Numeric(string left, string right, int expected)
+    {
+        Assert.Equal(expected, Math.Sign(ResourceLevelService.ComparePackVersions(left, right)));
+    }
+
+    [Fact]
+    public void ComparePackVersions_Falls_Back_To_String_For_Unparsable()
+    {
+        // 解析不了时退化成字符串比较,不崩
+        Assert.Equal(0, ResourceLevelService.ComparePackVersions("abc", "abc"));
+        Assert.NotEqual(0, Math.Sign(ResourceLevelService.ComparePackVersions("abc", "abd")));
+        Assert.Equal(0, ResourceLevelService.ComparePackVersions(null, ""));
     }
 }

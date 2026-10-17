@@ -501,6 +501,136 @@ public sealed class FastVerifyTests : IDisposable
         Assert.Empty(diff.ToDownload);
     }
 
+    // ---------- 分片完整覆盖(对齐 Haiyu 1.4.5) ----------
+
+    /// <summary>
+    /// 完整覆盖:分片从 0 起首尾相接、末端正好等于文件大小、每片都带哈希。
+    /// 这是"可以跳过整文件 MD5"的唯一前提。
+    /// </summary>
+    [Fact]
+    public void 覆盖判定_连续且末端吻合时为真()
+    {
+        var data = new byte[32];
+        var entry = Entry("a.bin", data.Length);
+        entry.ChunkInfos.AddRange(Chunks(4, chunkSize: 8, data: data));
+
+        Assert.True(FastVerify.HasCompleteChunkCoverage(entry));
+    }
+
+    /// <summary>中间有空洞(不连续)时不算完整覆盖 —— 有字节没被验证过。</summary>
+    [Fact]
+    public void 覆盖判定_存在空洞时为假()
+    {
+        var data = new byte[32];
+        var entry = Entry("a.bin", data.Length);
+        var chunks = Chunks(4, chunkSize: 8, data: data);
+        // 去掉中间一片,制造 8..15 的空洞
+        chunks.RemoveAt(1);
+        entry.ChunkInfos.AddRange(chunks);
+
+        Assert.False(FastVerify.HasCompleteChunkCoverage(entry));
+    }
+
+    /// <summary>末端不足(分片只到 size-2)不算完整覆盖。</summary>
+    [Fact]
+    public void 覆盖判定_末端不足时为假()
+    {
+        var data = new byte[32];
+        var entry = Entry("a.bin", data.Length);
+        var chunks = Chunks(4, chunkSize: 8, data: data);
+        var last = chunks[^1];
+        chunks[^1] = new GameChunkInfo { Start = last.Start, End = last.End - 2, Md5 = last.Md5 };
+        entry.ChunkInfos.AddRange(chunks);
+
+        Assert.False(FastVerify.HasCompleteChunkCoverage(entry));
+    }
+
+    /// <summary>任一分片缺哈希时不能算完整覆盖(那片内容没被验证)。</summary>
+    [Fact]
+    public void 覆盖判定_分片缺哈希时为假()
+    {
+        var data = new byte[32];
+        var entry = Entry("a.bin", data.Length);
+        entry.ChunkInfos.AddRange(WithoutHash(Chunks(4, chunkSize: 8, data: data), 2));
+
+        Assert.False(FastVerify.HasCompleteChunkCoverage(entry));
+    }
+
+    /// <summary>没有分片信息 / size 未知时一律不算覆盖(交回整文件 MD5)。</summary>
+    [Fact]
+    public void 覆盖判定_无分片或大小未知时为假()
+    {
+        Assert.False(FastVerify.HasCompleteChunkCoverage(Entry("a.bin", 32)));
+
+        var unknownSize = Entry("b.bin", 0);
+        unknownSize.ChunkInfos.AddRange(Chunks(4, chunkSize: 8, data: new byte[32]));
+        Assert.False(FastVerify.HasCompleteChunkCoverage(unknownSize));
+    }
+
+    /// <summary>分片顺序打乱不影响覆盖判定(内部按 Start 排序)。</summary>
+    [Fact]
+    public void 覆盖判定_乱序分片仍判为完整()
+    {
+        var data = new byte[32];
+        var entry = Entry("a.bin", data.Length);
+        var chunks = Chunks(4, chunkSize: 8, data: data);
+        chunks.Reverse();
+        entry.ChunkInfos.AddRange(chunks);
+
+        Assert.True(FastVerify.HasCompleteChunkCoverage(entry));
+    }
+
+    /// <summary>
+    /// <b>核心:完整覆盖时用分片校验能判出内容损坏</b>(不依赖整文件 md5),
+    /// 且内容正确时返回 true —— 证明跳过整文件 MD5 没有放宽判定。
+    /// </summary>
+    [Fact]
+    public void 全分片校验_内容不符时判为损坏()
+    {
+        var data = Encoding.UTF8.GetBytes("0123456789abcdefghijklmnopqrstuv");
+        var path = WriteFile("cover/ok.bin", data);
+
+        var good = Entry("ok.bin", data.Length);
+        good.ChunkInfos.AddRange(Chunks(4, chunkSize: 8, data: data));
+        Assert.True(FastVerify.HasCompleteChunkCoverage(good));
+        Assert.True(FastVerify.VerifyAllChunks(path, good));
+
+        // 篡改中间一个字节:分片哈希必须发现,且不依赖整文件 md5(这里是空)
+        var corrupted = (byte[])data.Clone();
+        corrupted[10] ^= 0xFF;
+        var bad = WriteFile("cover/bad.bin", corrupted);
+        var badEntry = Entry("bad.bin", corrupted.Length);
+        badEntry.ChunkInfos.AddRange(Chunks(4, chunkSize: 8, data: data)); // 用正确内容的哈希
+
+        Assert.False(FastVerify.VerifyAllChunks(bad, badEntry));
+    }
+
+    /// <summary>不满足完整覆盖时 <see cref="FastVerify.VerifyAllChunks"/> 必须拒绝,交由整文件 MD5。</summary>
+    [Fact]
+    public void 全分片校验_覆盖不完整时拒绝()
+    {
+        var data = new byte[32];
+        var path = WriteFile("cover/partial.bin", data);
+        var entry = Entry("partial.bin", data.Length);
+        var chunks = Chunks(4, chunkSize: 8, data: data);
+        chunks.RemoveAt(0);
+        entry.ChunkInfos.AddRange(chunks);
+
+        Assert.False(FastVerify.VerifyAllChunks(path, entry));
+    }
+
+    /// <summary>文件长度与 size 不符时立即判损坏,不白读整份文件。</summary>
+    [Fact]
+    public void 全分片校验_长度不符时判为损坏()
+    {
+        var data = new byte[32];
+        var path = WriteFile("cover/short.bin", data[..16]);
+        var entry = Entry("short.bin", data.Length);
+        entry.ChunkInfos.AddRange(Chunks(4, chunkSize: 8, data: data));
+
+        Assert.False(FastVerify.VerifyAllChunks(path, entry));
+    }
+
     // ---------- 辅助 ----------
 
     private GameManifest Manifest(string path, byte[] data)

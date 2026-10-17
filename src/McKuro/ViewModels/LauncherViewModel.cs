@@ -48,6 +48,22 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isDownloading;
 
+    /// <summary>
+    /// 任务已启动但还在「获取资源列表」阶段(清单/索引尚未回来,总量未知)。
+    /// <para>
+    /// <b>为什么需要它:</b>预下载/安装/修复一进来就 <see cref="IsDownloading"/>=true、
+    /// 进度置 0,而真正的进度要等 index.json + 清单加载完才有;弱网下这段可能十几秒到几分钟,
+    /// 期间界面是一个恒定的 0% 死环,用户会以为卡死(对齐 Haiyu 1.4.5 的 IsTransferPreparing)。
+    /// </para>
+    /// </summary>
+    [ObservableProperty]
+    private bool _isPreparing;
+
+    partial void OnIsPreparingChanged(bool value) => OnPropertyChanged(nameof(ShowIndeterminateProgress));
+
+    /// <summary>进度环是否显示为不确定态(准备阶段 + 还没有任何真实进度)。</summary>
+    public bool ShowIndeterminateProgress => IsPreparing;
+
     /// <summary>下载是否处于暂停(对齐 Haiyu DownloadState.IsPaused)。</summary>
     public bool DownloadPaused => AppServices.Downloader.IsPaused;
 
@@ -854,6 +870,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
         ProgressPercent = 0;
         ProgressText = LanguageService.Format("Launcher.Predownloading");
         StatusText = LanguageService.Format("Launcher.PredownloadStatus");
+        // 清单回来之前总量未知:进度环转圈而不是死画 0%(弱网下这段可能很久)。
+        IsPreparing = true;
 
         var progress = new Progress<DownloadProgress>(p => HandleProgress(p));
 
@@ -881,6 +899,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
         finally
         {
+            // 无论成功/失败/异常都必须退出准备态,否则环会一直转下去。
+            IsPreparing = false;
             IsDownloading = false;
             ProgressText = "";
         }
@@ -918,6 +938,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
         StatusText = LanguageService.Format("Launcher.Installing");
         // 安装阶段以补丁合成/校验/落位为主,先按不可暂停起步,进下载阶段后由回调打开。
         CanPauseCurrentPhase = false;
+        // 与预下载同理:清单/索引回来之前总量未知,进度环转圈。
+        IsPreparing = true;
 
         var progress = new Progress<DownloadProgress>(p => HandleProgress(p));
 
@@ -935,6 +957,10 @@ public sealed partial class LauncherViewModel : ViewModelBase
         {
             StatusText = LanguageService.Format("Launcher.InstallFailedWith", ex.Message);
         }
+        finally
+        {
+            IsPreparing = false;
+        }
     }
 
     /// <summary>
@@ -945,6 +971,13 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// </summary>
     private void HandleProgress(DownloadProgress p)
     {
+        // 一收到任何真实进度就退出准备态:此后进度条有实际含义,继续转圈会误导。
+        // (准备态只在"清单还没回来、什么都还不知道"的窗口里有效。)
+        if (IsPreparing)
+        {
+            IsPreparing = false;
+        }
+
         // 可暂停性以 Core 的显式契约为准:非下载阶段暂停是空操作,必须隐藏按钮。
         CanPauseCurrentPhase = p.CanPause;
 
@@ -1021,6 +1054,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
         ProgressPercent = 0;
         ProgressText = LanguageService.Format("Launcher.Repairing");
         StatusText = LanguageService.Format("Launcher.RepairStatus");
+        // 修复同样要先拉清单再逐文件校验,准备阶段总量未知。
+        IsPreparing = true;
 
         var progress = new Progress<DownloadProgress>(p => HandleProgress(p));
 
@@ -1044,6 +1079,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
         finally
         {
+            IsPreparing = false;
             IsDownloading = false;
             ProgressText = "";
         }

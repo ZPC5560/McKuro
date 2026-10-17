@@ -297,7 +297,11 @@ public static class AppServices
             sp.GetRequiredService<DownloadEngine>(),
             sp.GetRequiredService<GamePathResolver>(),
             settings: sp.GetRequiredService<ISettingsService>(),
-            logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<ResourceLevelService>()));
+            logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<ResourceLevelService>(),
+            // 材质包版本判定需要"本地已安装主版本":主版本已追平的老用户不应被提示重下材质包。
+            // 惰性取值(而不是构造时取),避免 DI 构建期就读库/读盘。
+            installedVersionProvider: () =>
+                sp.GetRequiredService<IGameUpdater>().GetInstalledVersion()));
 
         // ---- 抽卡 ----
         services.AddSingleton<GachaApiClient>(sp => new GachaApiClient(

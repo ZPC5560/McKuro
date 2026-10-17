@@ -314,6 +314,7 @@
                                           HorizontalAlignment="Left" VerticalAlignment="Center">
                                         <controls:RingProgress Width="56" Height="56"
                                                                Value="{Binding ProgressPercent}"
+                                                               IsIndeterminate="{Binding ShowIndeterminateProgress}"
                                                                Thickness="5"
                                                                ShowText="True"
                                                                FontSize="13" />

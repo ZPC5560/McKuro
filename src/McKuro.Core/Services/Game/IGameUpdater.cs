@@ -41,6 +41,15 @@ public interface IGameUpdater
     IReadOnlyList<LocalFileVersion> GetLocalGraphicsComponentVersions();
 
     /// <summary>
+    /// 读取本地已安装的游戏主版本(未设置目录/无记录时返回 null)。
+    /// <para>
+    /// 只读、不触网、不做校验。供材质包版本判定使用:主版本已追平服务端时,
+    /// 说明材质包是被那次安装一并带上的,不应因为标记陈旧而重复下载几十 GB。
+    /// </para>
+    /// </summary>
+    string? GetInstalledVersion();
+
+    /// <summary>
     /// 手动指定本地已装版本(场景:用官方启动器等外部渠道更新后,本地版本记录滞后)。
     /// 只写版本记录、不触碰任何游戏文件(即「跳过校验」);格式非法或未设置游戏目录返回 false。
     /// </summary>

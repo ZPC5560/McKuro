@@ -42,13 +42,23 @@ public sealed class ResourceLevelService
     private readonly Func<GameServerType, string?>? _indexUrlProvider;
     private readonly ILogger<ResourceLevelService> _logger;
 
+    /// <summary>
+    /// 读取「本地已安装的游戏主版本」(由 DI 注入,通常是 GameUpdater 的版本记录)。
+    /// <para>
+    /// 用于<b>版本落后判定</b>:见 <see cref="IsPackInstalledAtVersion(string, string, string?, string?)"/>。
+    /// 为 null 时退化为"只比标记里的包版本"(旧行为)。
+    /// </para>
+    /// </summary>
+    private readonly Func<string?>? _installedVersionProvider;
+
     public ResourceLevelService(
         GameManifestLoader loader,
         DownloadEngine downloader,
         GamePathResolver paths,
         ISettingsService? settings = null,
         Func<GameServerType, string?>? indexUrlProvider = null,
-        ILogger<ResourceLevelService>? logger = null)
+        ILogger<ResourceLevelService>? logger = null,
+        Func<string?>? installedVersionProvider = null)
     {
         _loader = loader;
         _downloader = downloader;
@@ -56,6 +66,7 @@ public sealed class ResourceLevelService
         _settings = settings;
         _indexUrlProvider = indexUrlProvider;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ResourceLevelService>.Instance;
+        _installedVersionProvider = installedVersionProvider;
     }
 
     /// <summary>当前渠道是否支持资源等级切换(仅国服官方提供新版协议端点)。</summary>
@@ -107,7 +118,8 @@ public sealed class ResourceLevelService
 
                     // 包清单未加载时,回退 index.json 声明的 size(够 UI 展示)
                     total += ResourceLevelPlanner.PackBytes(pack);
-                    if (!HasInstalledMarker(root, packName))
+                    // 版本一致才算已安装:只判标记存在会把"材质包只更版本"的情形永久漏掉。
+                    if (!IsPackInstalled(root, packName, pack.Version))
                     {
                         installed = false;
                     }
@@ -136,17 +148,198 @@ public sealed class ResourceLevelService
     }
 
     /// <summary>官方已安装标记:&lt;游戏目录&gt;/launcherDownloadConfig/{packName}.json。</summary>
-    private static bool HasInstalledMarker(string gameRoot, string packName)
+    private static string MarkerPath(string gameRoot, string packName) =>
+        Path.Combine(gameRoot, "launcherDownloadConfig", packName.ToLowerInvariant() + ".json");
+
+    /// <summary>
+    /// 读取官方标记里记录的包版本(文件不存在/损坏/无 version 字段返回 null)。
+    /// <para>
+    /// 标记是官方启动器的文件,内容形如 <c>{"packName":"hd","version":"3.7.0"}</c>。
+    /// 这里用 <see cref="System.Text.Json.JsonDocument"/> 只取 version,不引入序列化契约 ——
+    /// 官方随时可能加字段,按需读数比反序列化成固定类型更耐改。
+    /// </para>
+    /// </summary>
+    internal static string? ReadInstalledMarkerVersion(string gameRoot, string packName)
     {
         try
         {
-            return File.Exists(Path.Combine(gameRoot, "launcherDownloadConfig", packName.ToLowerInvariant() + ".json"));
+            var path = MarkerPath(gameRoot, packName);
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            return document.RootElement.TryGetProperty("version", out var version)
+                && version.ValueKind == System.Text.Json.JsonValueKind.String
+                ? version.GetString()
+                : null;
         }
         catch (Exception)
         {
-            return false;
+            // 标记损坏/被占用:当作"未知版本",由调用方按需重新下载(保守方向)。
+            return null;
         }
     }
+
+    /// <summary>
+    /// 标记是否表明该包<b>已安装且版本与期望一致</b>。
+    /// <para>
+    /// <b>这里为什么要比版本,而不是只判文件存在:</b>
+    /// 早先只判 <c>File.Exists</c>,后果是服务端<b>只提升材质包版本、主版本号不变</b>时
+    /// (鸣潮 3.7.0 → 3.7.1 即为典型:四个包 version 全变 3.7.1,而检查更新的主版本比较根本看不出差异),
+    /// 该包会被永久判定为"已装好",此后永远不再更新。
+    /// </para>
+    /// <para>
+    /// 标记缺失版本字段(旧版 McKuro 或第三方工具写的)时按"版本未知"处理 → 需重新校核,
+    /// 方向是保守的(宁可多下一次,也不把旧包当成新包)。
+    /// </para>
+    /// </summary>
+    /// <param name="installedGameVersion">
+    /// 本地已安装的游戏<b>主版本</b>;用于抑制"老用户被重复提醒"的误报,见
+    /// <see cref="IsPackInstalled(string, string, string?, string?)"/>。为 null 时不做该抑制。
+    /// </param>
+    internal static bool IsPackInstalledAtVersion(
+        string gameRoot,
+        string packName,
+        string? expectedVersion,
+        string? installedGameVersion = null)
+    {
+        var recorded = ReadInstalledMarkerVersion(gameRoot, packName);
+        if (recorded is null)
+        {
+            return false;
+        }
+
+        // 服务端没给版本(清单异常)时,只认"标记存在且有版本",不谎报落后。
+        if (string.IsNullOrWhiteSpace(expectedVersion))
+        {
+            return true;
+        }
+
+        if (string.Equals(recorded.Trim(), expectedVersion.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // 走到这里 = 标记版本落后于服务端。但对"主版本已经追平"的老用户来说,
+        // 这几乎总是<b>标记陈旧</b>而不是文件陈旧 —— 主版本是用手头这份清单升上来的,
+        // 材质包随之一起更新过,只是当时没回写标记。详见 IsSupersededByInstalledGameVersion。
+        return IsSupersededByInstalledGameVersion(expectedVersion, installedGameVersion);
+    }
+
+    /// <summary>
+    /// 「老用户主版本已追上、但材质包标记停在旧版本」的判定。
+    /// <para>
+    /// <b>要解决的误报:</b>McKuro 在本次改动之前从不回写材质包标记(只有「切换画质」才写),
+    /// 所以用主流程一路更新上来的老用户,标记会停在他们上次切画质的版本。
+    /// 引入版本比对后,这些用户会看到"材质包需要重新下载"——而实际几十 GB 文件早就是新的。
+    /// </para>
+    /// <para>
+    /// <b>判据:本地已安装主版本 ≥ 材质包提供的版本。</b>
+    /// 依据是厂商的发布方式:材质包 version 始终与生产版本号同步(实测 3.7.1 的
+    /// common/hd/sd/uhd 四个包 version 全是 3.7.1)。因此"主版本已经 3.7.1 及以上"
+    /// 就说明本地是用 ≥3.7.1 的清单装出来的,其中当然包含 3.7.1 的材质包。
+    /// </para>
+    /// <para>
+    /// <b>为什么这个放宽不会退化成"永不更新材质包":</b>
+    /// <list type="number">
+    /// <item>它需要本地主版本<b>真的追平</b>才生效;主版本只要还落后,仍按"标记落后 → 需更新"处理
+    ///       (见 <c>Plan_Still_Reports_Stale_Marker_When_Main_Version_Behind</c>);</item>
+    /// <item>标记<b>缺失</b>时根本走不到这里(前面已返回 false),真没装的包照常下载;</item>
+    /// <item>"只提升材质包版本、主版本不变"时,服务端包版本会<b>高于</b>本地主版本,
+    ///       条件不成立 → 正确要求更新(这正是上游要修的那个 bug)。</item>
+    /// </list>
+    /// </para>
+    /// </summary>
+    private static bool IsSupersededByInstalledGameVersion(
+        string expectedVersion,
+        string? installedGameVersion)
+    {
+        if (string.IsNullOrWhiteSpace(installedGameVersion))
+        {
+            return false;
+        }
+
+        // 本地主版本必须 >= 材质包版本,才认为材质包是被那次安装一并带上的。
+        if (ComparePackVersions(installedGameVersion, expectedVersion) < 0)
+        {
+            return false;
+        }
+
+        // 版本必须可解析,否则无法判断"是标记陈旧"还是"文件真的没装",保守起见要求重装。
+        return TryParseVersion(installedGameVersion, out _) && TryParseVersion(expectedVersion, out _);
+    }
+
+    /// <summary>
+    /// 版本比较(数值逐段,缺失段按 0 补齐)。任一侧解析失败时回退字符串比较。
+    /// <para>
+    /// 与 <c>GameUpdater.CompareVersionStrings</c> 同语义,但这里只需要符号,
+    /// 且必须能解析"3.7.1"这类三段版本 —— <see cref="Version"/> 会把缺失段当 -1,
+    /// 直接比较 "3.7.1" 与 "3.7.1.0" 会得出错误结论,所以自己按段比较。
+    /// </para>
+    /// </summary>
+    internal static int ComparePackVersions(string? left, string? right)
+    {
+        if (!TryParseVersion(left, out var l) || !TryParseVersion(right, out var r))
+        {
+            return string.Compare(
+                (left ?? "").Trim(),
+                (right ?? "").Trim(),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        var max = Math.Max(l.Length, r.Length);
+        for (var i = 0; i < max; i++)
+        {
+            var lv = i < l.Length ? l[i] : 0;
+            var rv = i < r.Length ? r[i] : 0;
+            if (lv != rv)
+            {
+                return lv < rv ? -1 : 1;
+            }
+        }
+        return 0;
+    }
+
+    /// <summary>把 "3.7.1" 解析成数值段数组;含非数字段时失败。</summary>
+    internal static bool TryParseVersion(string? text, out int[] segments)
+    {
+        segments = [];
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var parts = text.Trim().Split('.');
+        if (parts.Length is < 1 or > 4)
+        {
+            return false;
+        }
+
+        var result = new int[parts.Length];
+        for (var i = 0; i < parts.Length; i++)
+        {
+            if (!int.TryParse(parts[i], out var value) || value < 0)
+            {
+                return false;
+            }
+            result[i] = value;
+        }
+
+        segments = result;
+        return true;
+    }
+
+    /// <summary>
+    /// 实例版判定:在 <see cref="IsPackInstalledAtVersion"/> 基础上带上本地主版本抑制。
+    /// </summary>
+    private bool IsPackInstalled(string gameRoot, string packName, string? expectedVersion) =>
+        IsPackInstalledAtVersion(
+            gameRoot,
+            packName,
+            expectedVersion,
+            _installedVersionProvider?.Invoke());
 
     /// <summary>
     /// 计算切换到目标等级需要下载的内容。已安装则返回 <see cref="ResourceLevelPlan.HasWork"/> = false。
@@ -210,7 +403,8 @@ public sealed class ResourceLevelService
                 continue;
             }
 
-            if (HasInstalledMarker(root, packName))
+            // 版本一致才算已装好:服务端只提升材质包版本时,标记里的旧版本会让这里判成"落后"。
+            if (IsPackInstalled(root, packName, pack.Version))
             {
                 continue;
             }
@@ -308,7 +502,28 @@ public sealed class ResourceLevelService
                 installed += success;
                 downloaded += manifest.Files.Where(f => f.Size > 0).Sum(f => f.Size);
 
-                // 安装完成即写官方标记文件,与官方启动器的「已安装」判据保持一致
+                // 只要有文件没装成功就不能写标记。
+                // 旧行为是"部分失败也照写":标记一旦落盘,该包就被永久判为已安装,
+                // 而版本比对又只看标记,于是残缺包再也无法自愈(只能删客户端重下)。
+                // 这里直接失败返回,让用户重试;已下的文件由 LocalFileMatches 复用,不会重下。
+                if (failures.Count > 0)
+                {
+                    return new ResourceLevelResult
+                    {
+                        Success = false,
+                        InstalledFiles = installed,
+                        DownloadedBytes = downloaded,
+                        Message = CoreStrings.F(
+                            "Launcher.LevelInstallPartial",
+                            $"画质包 {packName} 有 {failures.Count} 个文件未安装成功,已放弃标记该包(可重试,已下载的文件会被复用): {failures[0]}",
+                            packName,
+                            failures.Count,
+                            failures[0]),
+                    };
+                }
+
+                // 安装完成即写官方标记文件,与官方启动器的「已安装」判据保持一致。
+                // 版本取自<b>清单声明的包版本</b>而非文件名:下一次 PlanAsync 靠它判断是否需要更新。
                 WriteInstalledMarker(root, packName, manifest.Version);
             }
 
@@ -434,8 +649,14 @@ public sealed class ResourceLevelService
         return [.. result.OrderByDescending(p => p.SizeBytes)];
     }
 
-    /// <summary>已安装的包名集合(依据官方 launcherDownloadConfig 标记)。</summary>
-    private static HashSet<string> GetInstalledPackNames(string gameRoot, KuroResourcePackIndex index)
+    /// <summary>
+    /// 已安装的包名集合(依据官方 launcherDownloadConfig 标记)。
+    /// <para>
+    /// 判据含<b>版本一致</b>(见 <see cref="IsPackInstalledAtVersion"/>):这里用于"能删哪些包"的
+    /// 安全判定,把版本落后的包算作未安装是保守方向 —— 不会让用户误以为某个包仍在正常提供资源。
+    /// </para>
+    /// </summary>
+    private HashSet<string> GetInstalledPackNames(string gameRoot, KuroResourcePackIndex index)
     {
         var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (index.ResourcePacks is null)
@@ -443,9 +664,9 @@ public sealed class ResourceLevelService
             return installed;
         }
 
-        foreach (var (packName, _) in index.ResourcePacks)
+        foreach (var (packName, pack) in index.ResourcePacks)
         {
-            if (HasInstalledMarker(gameRoot, packName))
+            if (IsPackInstalled(gameRoot, packName, pack.Version))
             {
                 installed.Add(packName);
             }

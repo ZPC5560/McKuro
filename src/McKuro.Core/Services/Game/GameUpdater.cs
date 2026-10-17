@@ -122,6 +122,76 @@ public sealed class GameUpdater : IGameUpdater
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<GameUpdater>.Instance;
     }
 
+    /// <summary>
+    /// 安装/更新成功后,把当前生效等级的材质包标记刷新到线上版本。
+    /// <para>
+    /// <b>这是「老用户被重复提醒材质包更新」的根因修复:</b>早先只有「切换画质」会写
+    /// <c>launcherDownloadConfig/{pack}.json</c>,用主流程一路更新上来的用户标记会永远停在他们
+    /// 上次切画质时的版本。引入版本比对后,这些人就会被提示重新下载几十 GB 材质包 —— 而文件早是新的。
+    /// </para>
+    /// <para>
+    /// <b>为什么在这里做而不是调 ResourceLevelService:</b>那会造成 GameUpdater ↔ ResourceLevelService
+    /// 的循环依赖;而本类已持有 <see cref="GameManifestLoader"/>/<see cref="GamePathResolver"/>,
+    /// 读一次 resourcePacks 索引就够了。
+    /// </para>
+    /// <para>
+    /// 主清单本身包含当前等级的全部文件(实测 default 主清单 = common ∪ hd),所以安装成功后
+    /// 把标记对齐到线上包版本是<b>事实上成立的</b>。任何失败都只记日志:标记是元数据缓存,
+    /// 不能让它把"更新成功"变成"更新失败"。
+    /// </para>
+    /// </summary>
+    private async Task RefreshResourcePackMarkersAsync(GameServerType serverType)
+    {
+        try
+        {
+            var root = _paths.GameRootDir;
+            if (string.IsNullOrEmpty(root))
+            {
+                return;
+            }
+
+            var indexUrl = KuroEndpoints.ResourcePackIndexForServerType(serverType);
+            if (indexUrl is null)
+            {
+                return; // 该渠道没有资源包协议(仅国服官方提供)
+            }
+
+            var index = await _loader.LoadResourcePackIndexAsync(indexUrl).ConfigureAwait(false);
+            if (index?.ResourcePacks is null)
+            {
+                return;
+            }
+
+            var bundle = ResourceLevelPlanner.LevelToBundleName(_settings?.Current.ResourceLevel);
+            var markerDir = Path.Combine(root, "launcherDownloadConfig");
+            Directory.CreateDirectory(markerDir);
+
+            var refreshed = 0;
+            foreach (var packName in ResourceLevelPlanner.ResolvePackNames(index, bundle))
+            {
+                if (!index.ResourcePacks.TryGetValue(packName, out var pack)
+                    || string.IsNullOrWhiteSpace(pack.Version))
+                {
+                    continue;
+                }
+
+                // 与官方启动器同格式(官方也会读这个文件),只写 packName + version。
+                var payload = $"{{\"packName\":\"{packName.ToLowerInvariant()}\",\"version\":\"{pack.Version}\"}}";
+                await File.WriteAllTextAsync(
+                    Path.Combine(markerDir, packName.ToLowerInvariant() + ".json"),
+                    payload).ConfigureAwait(false);
+                refreshed++;
+            }
+
+            _logger.LogInformation("已刷新材质包标记 {Count} 个(组合 {Bundle})", refreshed, bundle);
+        }
+        catch (Exception ex)
+        {
+            // 标记只是元数据:刷新失败不影响已完成的安装。
+            _logger.LogWarning(ex, "刷新材质包标记失败(不影响安装结果)");
+        }
+    }
+
     /// <summary>获取预下载清单的下载体积与所需磁盘空间(供 UI 显示下载/磁盘预估,参考 Haiyu Config.Size/UnCompressSize)。</summary>
     public async Task<(long DownloadBytes, long DiskBytes)> GetPredownloadEstimateAsync(
         GameServerType serverType,
@@ -692,6 +762,7 @@ public sealed class GameUpdater : IGameUpdater
                 {
                     DeletePatchFiles(root, patchLoad.Manifest.PatchPlan.DeleteFiles, manifest);
                     WriteInstalledVersion(root, manifest.Version);
+                    await RefreshResourcePackMarkersAsync(serverType).ConfigureAwait(false);
                     TryDeleteDirectory(stagingDir);
                     return (true, CoreStrings.F("Core.Updater.PatchInstalled", $"补丁安装完成,版本 {manifest.Version}", manifest.Version));
                 }
@@ -712,6 +783,7 @@ public sealed class GameUpdater : IGameUpdater
             return fullResult;
         }
         WriteInstalledVersion(root, manifest.Version);
+        await RefreshResourcePackMarkersAsync(serverType).ConfigureAwait(false);
         return (true, fullResult.Message ?? CoreStrings.F("Core.Updater.Updated", $"更新完成,版本 {manifest.Version}", manifest.Version));
     }
 
@@ -1561,8 +1633,14 @@ public sealed class GameUpdater : IGameUpdater
         }
     }
 
-    private string? ReadInstalledVersion(string gameRoot)
+    /// <inheritdoc/>
+    public string? GetInstalledVersion()
     {
+        var root = _paths.GameRootDir;
+        return string.IsNullOrEmpty(root) ? null : ReadInstalledVersion(root);
+    }
+
+    private string? ReadInstalledVersion(string gameRoot)    {
         gameRoot = NormalizeRoot(gameRoot);
         if (_database is not null)
         {
