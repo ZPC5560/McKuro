@@ -1,0 +1,178 @@
+{
+  "Version": 3,
+  "Parameters": [
+    {
+      "Id": "ParamPL_param_head_yaw_80184865e1e5",
+      "GroupId": "GroupPuppetLoomHead",
+      "Name": "Head Yaw"
+    },
+    {
+      "Id": "ParamPL_param_head_pitch_8dedbfee3591",
+      "GroupId": "GroupPuppetLoomHead",
+      "Name": "Head Pitch"
+    },
+    {
+      "Id": "ParamPL_param_head_roll_a14ac09ff14a",
+      "GroupId": "GroupPuppetLoomHead",
+      "Name": "Head Roll"
+    },
+    {
+      "Id": "ParamPL_param_body_sway_236bb03fd820",
+      "GroupId": "GroupPuppetLoomBody",
+      "Name": "Body Sway"
+    },
+    {
+      "Id": "ParamPL_param_body_pitch_3a4139a82bc5",
+      "GroupId": "GroupPuppetLoomBody",
+      "Name": "Body Pitch"
+    },
+    {
+      "Id": "ParamPL_param_body_roll_4df13af85c9a",
+      "GroupId": "GroupPuppetLoomBody",
+      "Name": "Body Roll"
+    },
+    {
+      "Id": "ParamPL_param_gaze_x_55eed3e96610",
+      "GroupId": "GroupPuppetLoomEyes",
+      "Name": "Gaze X"
+    },
+    {
+      "Id": "ParamPL_param_gaze_y_b8cd88c8b40e",
+      "GroupId": "GroupPuppetLoomEyes",
+      "Name": "Gaze Y"
+    },
+    {
+      "Id": "ParamPL_param_breath_fe85afa832bc",
+      "GroupId": "GroupPuppetLoomBody",
+      "Name": "Breath"
+    },
+    {
+      "Id": "ParamPL_param_blink_left_215b222e3679",
+      "GroupId": "GroupPuppetLoomEyes",
+      "Name": "Blink"
+    },
+    {
+      "Id": "ParamPL_param_blink_right_b2203085a552",
+      "GroupId": "GroupPuppetLoomEyes",
+      "Name": "Blink"
+    },
+    {
+      "Id": "ParamPL_param_mouth_open_7831396b8360",
+      "GroupId": "GroupPuppetLoomMouth",
+      "Name": "Mouth Open"
+    },
+    {
+      "Id": "ParamPL_param_blink_left_215b222e3679",
+      "GroupId": "GroupPuppetLoomEyes",
+      "Name": "Blink Left"
+    },
+    {
+      "Id": "ParamPL_param_blink_right_b2203085a552",
+      "GroupId": "GroupPuppetLoomEyes",
+      "Name": "Blink Right"
+    },
+    {
+      "Id": "ParamPL_param_brow_left_ee5ecc765437",
+      "GroupId": "GroupPuppetLoomFace",
+      "Name": "Brow Left"
+    },
+    {
+      "Id": "ParamPL_param_brow_right_7bb5e349cd77",
+      "GroupId": "GroupPuppetLoomFace",
+      "Name": "Brow Right"
+    },
+    {
+      "Id": "ParamPL_param_smile_1a5f523fb6c1",
+      "GroupId": "GroupPuppetLoomFace",
+      "Name": "Smile"
+    },
+    {
+      "Id": "ParamPL_param_cheek_puff_6e12d3308d6b",
+      "GroupId": "GroupPuppetLoomFace",
+      "Name": "Cheek Puff"
+    },
+    {
+      "Id": "ParamPL_param_mouth_a_b7529a7639da",
+      "GroupId": "GroupPuppetLoomVisemes",
+      "Name": "Mouth A"
+    },
+    {
+      "Id": "ParamPL_param_mouth_i_9e772df5eb76",
+      "GroupId": "GroupPuppetLoomVisemes",
+      "Name": "Mouth I"
+    },
+    {
+      "Id": "ParamPL_param_mouth_u_f2e2f210903a",
+      "GroupId": "GroupPuppetLoomVisemes",
+      "Name": "Mouth U"
+    },
+    {
+      "Id": "ParamPL_param_mouth_e_b949db18ea97",
+      "GroupId": "GroupPuppetLoomVisemes",
+      "Name": "Mouth E"
+    },
+    {
+      "Id": "ParamPL_param_mouth_o_4334e4066e62",
+      "GroupId": "GroupPuppetLoomVisemes",
+      "Name": "Mouth O"
+    },
+    {
+      "Id": "ParamPL_limb_idle_arm_L_ece39ae0ef68",
+      "GroupId": "GroupPuppetLoomParameter",
+      "Name": "手臂轻摆-L"
+    },
+    {
+      "Id": "ParamPL_limb_idle_arm_R_85a096270b5f",
+      "GroupId": "GroupPuppetLoomParameter",
+      "Name": "手臂轻摆-R"
+    },
+    {
+      "Id": "ParamPL_limb_idle_leg_L_cf3b06ab1d7d",
+      "GroupId": "GroupPuppetLoomParameter",
+      "Name": "脚尖轻摆-L"
+    },
+    {
+      "Id": "ParamPL_limb_idle_leg_R_c30012812403",
+      "GroupId": "GroupPuppetLoomParameter",
+      "Name": "脚尖轻摆-R"
+    }
+  ],
+  "ParameterGroups": [
+    {
+      "Id": "GroupPuppetLoomHead",
+      "GroupId": "",
+      "Name": "Head"
+    },
+    {
+      "Id": "GroupPuppetLoomBody",
+      "GroupId": "",
+      "Name": "Body"
+    },
+    {
+      "Id": "GroupPuppetLoomEyes",
+      "GroupId": "",
+      "Name": "Eyes"
+    },
+    {
+      "Id": "GroupPuppetLoomMouth",
+      "GroupId": "",
+      "Name": "Mouth"
+    },
+    {
+      "Id": "GroupPuppetLoomFace",
+      "GroupId": "",
+      "Name": "Face"
+    },
+    {
+      "Id": "GroupPuppetLoomVisemes",
+      "GroupId": "",
+      "Name": "Visemes"
+    },
+    {
+      "Id": "GroupPuppetLoomParameter",
+      "GroupId": "",
+      "Name": "轻微手脚待机"
+    }
+  ],
+  "Parts": []
+}

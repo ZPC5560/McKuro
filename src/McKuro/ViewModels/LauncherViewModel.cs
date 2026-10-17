@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Core.Models.Game;
 using McKuro.Core.Services.Game;
+using McKuro.Core.Services.Settings;
 using McKuro.Services;
 
 namespace McKuro.ViewModels;
@@ -322,6 +323,28 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>最近一次加载官方背景时使用的背景视频开关(导航时据此判断是否需要重新加载背景)。</summary>
     private bool _lastLoadedVideoSetting;
 
+    /// <summary>
+    /// 官方侧最近一次成功取到的背景视频 URL(空 = 官方无视频或尚未加载成功)。
+    /// 「自定义 → 官方」的撤回路径靠它就地恢复:没有这份缓存就只能等下一次网络加载,
+    /// 而用户切换来源时并不会触发加载(见 <see cref="OnNavigatedTo"/>)。
+    /// </summary>
+    private string _officialBackgroundVideoUrl = "";
+
+    /// <summary>官方背景是否为视频(backgroundFileType == 2 且 URL 非空)。</summary>
+    private bool _officialBackgroundHasVideo;
+
+    /// <summary>官方首帧占位图 URL(撤回官方时就地恢复)。</summary>
+    private string _officialBackgroundImageUrl = "";
+
+    /// <summary>官方背景是否已成功加载过一次(未加载过时不覆盖当前静态图,避免白屏)。</summary>
+    private bool _officialBackgroundKnown;
+
+    /// <summary>
+    /// 最近一次应用视频来源时的设置指纹(开关 + 来源 + 自定义路径),见 <see cref="VideoSourceFingerprint"/>。
+    /// 只比「开关」会漏掉「开关不变、只把来源从自定义改回官方」这一整类变化。
+    /// </summary>
+    private string _lastAppliedVideoSource = "";
+
     public LauncherViewModel()
     {
         SelectedServerIndex = AppServices.Settings.Current.ServerType switch
@@ -335,6 +358,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
         RefreshState();
         VideoEnabled = AppServices.Settings.Current.BackgroundVideoEnabled;
         _lastLoadedVideoSetting = AppServices.Settings.Current.BackgroundVideoEnabled;
+        _lastAppliedVideoSource = VideoSourceFingerprint(AppServices.Settings.Current);
         _ = LoadLauncherInfoAsync();
 
         // 游戏进程监控:状态驱动启动按钮文案(启动中→游戏中→启动游戏)与游戏结束动作
@@ -370,7 +394,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
     }
 
-    /// <summary>导航到启动页时调用:同步渠道/背景视频开关,配置变化时重新加载官方背景(无需重启)。</summary>
+    /// <summary>导航到启动页时调用:同步渠道/背景视频来源,配置变化时重新加载官方背景(无需重启)。</summary>
     public void OnNavigatedTo()
     {
         var s = AppServices.Settings.Current;
@@ -390,10 +414,16 @@ public sealed partial class LauncherViewModel : ViewModelBase
             SelectedServerIndex = wantServer;
         }
 
-        // 背景视频开关(用户可能在设置页切换):重新进启动页立即反映
-        var wantVideo = s.BackgroundVideoEnabled;
+        // 视频来源指纹(开关 + 官方/自定义 + 自定义路径)可能在设置页变更
+        var wantSource = VideoSourceFingerprint(s);
+        var sourceChanged = wantSource != _lastAppliedVideoSource;
+        _lastAppliedVideoSource = wantSource;
 
-        // 视频开关或渠道变化 → 重新加载官方背景(视频 URL/首帧图/轮播),无需重启
+        // 视频开关开/关变化 → 重新加载官方背景(视频 URL/首帧图/轮播),无需重启。
+        // 注意:仅「来源」变化(自定义 ⇄ 官方,开关不变)不足以重新加载 ——
+        // 官方 URL 往往与上次一致(LocalLauncherInfo 有缓存),重载不产生可观察变化,
+        // 撤回官方要靠 ApplyCustomVideoOverride 就地恢复缓存的官方 URL 与首帧图。
+        var wantVideo = s.BackgroundVideoEnabled;
         if (wantVideo != _lastLoadedVideoSetting || serverChanged)
         {
             _lastLoadedVideoSetting = wantVideo;
@@ -404,6 +434,16 @@ public sealed partial class LauncherViewModel : ViewModelBase
         if (VideoEnabled != wantVideo)
         {
             VideoEnabled = wantVideo;
+        }
+
+        // 来源变化(尤其自定义 → 官方)必须在这里收敛到最终状态:
+        // 旧实现只在 customActive 时改动视频,撤回官方时不碰 BackgroundVideoUrl,
+        // 于是自定义路径一直留着 —— 只有「关掉再打开视频」触发 LoadLauncherInfoAsync
+        // (其间把 BackgroundVideoUrl 清空重设)才会恢复官方视频(用户报告的现象)。
+        // 官方背景若尚未成功加载过(没有可恢复的缓存),则补一次加载。
+        if (sourceChanged && !_officialBackgroundKnown)
+        {
+            _ = LoadLauncherInfoAsync();
         }
         ApplyCustomVideoOverride();
 
@@ -417,29 +457,112 @@ public sealed partial class LauncherViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 自定义动态壁纸覆盖:mode=1 且文件存在 → 用本地/Wallpaper Engine 视频替代官方 URL;
-    /// 文件被移动或删除时保持官方背景(不白屏)。官方背景异步加载完成后与页面刷新时各应用一次。
+    /// 背景视频最终状态(由 <see cref="ResolveBackgroundState"/> 计算,<see cref="ApplyCustomVideoOverride"/> 落地)。
+    /// </summary>
+    /// <param name="VideoUrl">应播放的视频 URL(空串 = 无视频,显示首帧图);<c>null</c> = 保持当前值不动。</param>
+    /// <param name="ImageUrl">首帧占位图 URL;<c>null</c> = 保持当前值不动。</param>
+    /// <param name="VideoEnabled">视频控件开关。</param>
+    /// <param name="IsCustomActive">自定义壁纸是否生效(官方版本标语据此隐藏)。</param>
+    public readonly record struct BackgroundState(
+        string? VideoUrl, string? ImageUrl, bool VideoEnabled, bool IsCustomActive);
+
+    /// <summary>
+    /// 依据设置与官方背景缓存算出背景最终状态(<b>生产判定点</b>,供启动页与回归测试共用)。
+    /// <para>
+    /// 关键契约:<b>自定义失效时必须回落到官方</b>。旧实现在 mode≠1 时什么都不做,
+    /// 于是「自定义 → 官方」切换后 <c>BackgroundVideoUrl</c> 仍是自定义路径,
+    /// 只有「关掉再打开视频」触发一次完整重载才会恢复 —— 这就是用户报障的根因。
+    /// </para>
+    /// </summary>
+    /// <param name="s">当前设置。</param>
+    /// <param name="customFileExists">自定义视频文件是否存在(生产传 File.Exists)。</param>
+    /// <param name="officialKnown">官方背景是否已成功加载过一次;false 时不动当前静态图(避免白屏)。</param>
+    /// <param name="officialVideoUrl">官方视频 URL(空 = 官方无视频)。</param>
+    /// <param name="officialImageUrl">官方首帧图 URL。</param>
+    /// <param name="officialHasVideo">官方背景是否为视频。</param>
+    public static BackgroundState ResolveBackgroundState(
+        AppSettings s,
+        bool customFileExists,
+        bool officialKnown,
+        string officialVideoUrl,
+        string officialImageUrl,
+        bool officialHasVideo)
+    {
+        var customActive = s.BackgroundVideoEnabled && s.BackgroundVideoMode == 1 && customFileExists;
+        if (customActive)
+        {
+            return new BackgroundState(
+                VideoUrl: s.CustomBackgroundVideoPath ?? "",
+                ImageUrl: null, // 自定义视频没有官方首帧图:保持当前值不动
+                VideoEnabled: true,
+                IsCustomActive: true);
+        }
+
+        if (!officialKnown)
+        {
+            // 官方背景尚未加载过:只保证开关反映设置,不动 URL(等异步加载落地)
+            return new BackgroundState(
+                VideoUrl: null,
+                ImageUrl: null,
+                VideoEnabled: s.BackgroundVideoEnabled && officialHasVideo,
+                IsCustomActive: false);
+        }
+
+        return new BackgroundState(
+            VideoUrl: officialVideoUrl,
+            ImageUrl: officialImageUrl,
+            VideoEnabled: s.BackgroundVideoEnabled && officialHasVideo,
+            IsCustomActive: false);
+    }
+
+    /// <summary>
+    /// 自定义动态壁纸覆盖(双向收敛):mode=1 且文件存在 → 用本地/Wallpaper Engine 视频替代官方 URL;
+    /// 否则 → 就地恢复官方背景(视频 URL / 首帧图 / 视频开关)。
+    /// <para>
+    /// <b>必须在「撤回官方」方向上也生效</b>:旧实现只在 customActive 时改动视频属性,
+    /// 用户把来源从「自定义」改回「官方」时 BackgroundVideoUrl 仍是自定义路径,
+    /// 而 OnNavigatedTo 只按「视频开关」判断是否重载官方背景 —— 开关没变就不重载,
+    /// 于是官方视频迟迟不出现,必须「关掉视频再打开」触发一次 LoadLauncherInfoAsync
+    /// (其间清空并重设 BackgroundVideoUrl)才恢复。版本标语(VersionLogoUrl 的 IsVisible)
+    /// 走 IsCustomVideoActive,同一路径里立即翻转,所以文本立刻生效而视频不生效。
+    /// </para>
+    /// 官方背景异步加载完成后与页面刷新时各应用一次。
     /// </summary>
     private void ApplyCustomVideoOverride()
     {
         var s = AppServices.Settings.Current;
-        var customActive = s.BackgroundVideoEnabled
-                           && s.BackgroundVideoMode == 1
-                           && File.Exists(s.CustomBackgroundVideoPath);
-        if (customActive)
+        var state = ResolveBackgroundState(
+            s,
+            customFileExists: !string.IsNullOrWhiteSpace(s.CustomBackgroundVideoPath)
+                              && File.Exists(s.CustomBackgroundVideoPath),
+            officialKnown: _officialBackgroundKnown,
+            officialVideoUrl: _officialBackgroundVideoUrl,
+            officialImageUrl: _officialBackgroundImageUrl,
+            officialHasVideo: _officialBackgroundHasVideo);
+
+        // 顺序:先静态图,再视频 URL,最后开关 —— 保证最后一次属性变更即最终状态
+        if (state.ImageUrl is { Length: > 0 } img && BackgroundImageUrl != img)
         {
-            // 先开视频开关再换 URL:保证最后一次属性变更即最终状态,只触发一次 TryStartVideo
-            if (!VideoEnabled)
-            {
-                VideoEnabled = true;
-            }
-            if (BackgroundVideoUrl != s.CustomBackgroundVideoPath)
-            {
-                BackgroundVideoUrl = s.CustomBackgroundVideoPath;
-            }
+            BackgroundImageUrl = img;
         }
-        IsCustomVideoActive = customActive;
+        if (state.VideoUrl is { } url && BackgroundVideoUrl != url)
+        {
+            BackgroundVideoUrl = url;
+        }
+        if (VideoEnabled != state.VideoEnabled)
+        {
+            VideoEnabled = state.VideoEnabled;
+        }
+        IsCustomVideoActive = state.IsCustomActive;
     }
+
+    /// <summary>
+    /// 视频来源指纹(<b>生产判定点</b>,供启动页与回归测试共用):
+    /// 开关 + 来源模式 + 自定义路径。只比较开关会漏掉「开关不变、只把来源从自定义改回官方」
+    /// 这一类切换 —— 正是"官方视频要关掉再打开才生效"的漏判入口。
+    /// </summary>
+    public static string VideoSourceFingerprint(AppSettings s) =>
+        $"{(s.BackgroundVideoEnabled ? 1 : 0)}|{s.BackgroundVideoMode}|{s.CustomBackgroundVideoPath ?? ""}";
 
     private GameServerType SelectedServerType => SelectedServerIndex switch
     {
@@ -519,6 +642,14 @@ public sealed partial class LauncherViewModel : ViewModelBase
             var background = await AppServices.LauncherInfo.GetLauncherBackgroundAsync(server);
             if (background is not null)
             {
+                // 先记录官方侧真相(与是否 customActive 无关):撤回官方时 ApplyCustomVideoOverride
+                // 要就地恢复这份数据,不能因为当前自定义生效就把官方 URL 丢掉
+                _officialBackgroundVideoUrl = "";
+                _officialBackgroundImageUrl = string.IsNullOrWhiteSpace(background.FirstFrameImage)
+                    ? ""
+                    : background.FirstFrameImage;
+                _officialBackgroundHasVideo = false;
+
                 BackgroundVideoUrl = "";
                 if (!string.IsNullOrWhiteSpace(background.FirstFrameImage))
                 {
@@ -530,15 +661,29 @@ public sealed partial class LauncherViewModel : ViewModelBase
                     if (background.BackgroundFileType == 2 && !string.IsNullOrWhiteSpace(background.BackgroundFile))
                     {
                         BackgroundVideoUrl = background.BackgroundFile;
+                        _officialBackgroundVideoUrl = background.BackgroundFile;
+                        _officialBackgroundHasVideo = true;
                     }
                     else if (background.BackgroundFileType == 1 && !string.IsNullOrWhiteSpace(background.BackgroundFile))
                     {
                         // 官方接口偶尔只返回静态背景文件，仍然作为封面显示。
                         BackgroundImageUrl = background.BackgroundFile;
+                        _officialBackgroundImageUrl = background.BackgroundFile;
+                    }
+                }
+                else
+                {
+                    // 自定义生效时也要把官方视频 URL 记下来(供之后撤回官方用)
+                    if (background.BackgroundFileType == 2 && !string.IsNullOrWhiteSpace(background.BackgroundFile))
+                    {
+                        _officialBackgroundVideoUrl = background.BackgroundFile;
+                        _officialBackgroundHasVideo = true;
                     }
                 }
 
-                VideoEnabled = !customActive && background.BackgroundFileType == 2
+                _officialBackgroundKnown = true;
+
+                VideoEnabled = !customActive && _officialBackgroundHasVideo
                     && AppServices.Settings.Current.BackgroundVideoEnabled;
 
                 if (!string.IsNullOrWhiteSpace(background.Slogan))

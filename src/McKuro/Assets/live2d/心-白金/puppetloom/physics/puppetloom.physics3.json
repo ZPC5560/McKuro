@@ -1,0 +1,156 @@
+{
+  "Version": 3,
+  "Meta": {
+    "PhysicsSettingCount": 2,
+    "TotalInputCount": 2,
+    "TotalOutputCount": 2,
+    "VertexCount": 4,
+    "Fps": 30,
+    "EffectiveForces": {
+      "Gravity": {
+        "X": 0,
+        "Y": -1
+      },
+      "Wind": {
+        "X": 0,
+        "Y": 0
+      }
+    },
+    "PhysicsDictionary": [
+      {
+        "Id": "PhysicsSettingPuppetLoomagent-tail-physics",
+        "Name": "尾巴 Lag and Rebound",
+        "Position": 0
+      },
+      {
+        "Id": "PhysicsSettingPuppetLoomagent-ears-physics",
+        "Name": "耳朵 Lag and Rebound",
+        "Position": 1
+      }
+    ]
+  },
+  "PhysicsSettings": [
+    {
+      "Id": "PhysicsSettingPuppetLoomagent-tail-physics",
+      "Input": [
+        {
+          "Source": {
+            "Target": "Parameter",
+            "Id": "ParamPL_param_body_sway_236bb03fd820"
+          },
+          "Weight": 100,
+          "Type": "X",
+          "Reflect": false
+        }
+      ],
+      "Output": [
+        {
+          "Destination": {
+            "Target": "Parameter",
+            "Id": "ParamPL_param_agent_tail_follow_e332720f9a41"
+          },
+          "VertexIndex": 1,
+          "Scale": 1,
+          "Weight": 100,
+          "Type": "X",
+          "Reflect": false
+        }
+      ],
+      "Vertices": [
+        {
+          "Position": {
+            "X": 0,
+            "Y": 0
+          },
+          "Mobility": 0,
+          "Delay": 0,
+          "Acceleration": 0,
+          "Radius": 0
+        },
+        {
+          "Position": {
+            "X": 0,
+            "Y": 1
+          },
+          "Mobility": 0.283333,
+          "Delay": 0.09,
+          "Acceleration": 1,
+          "Radius": 1
+        }
+      ],
+      "Normalization": {
+        "Position": {
+          "Minimum": -100,
+          "Default": 0,
+          "Maximum": 100
+        },
+        "Angle": {
+          "Minimum": -30,
+          "Default": 0,
+          "Maximum": 30
+        }
+      }
+    },
+    {
+      "Id": "PhysicsSettingPuppetLoomagent-ears-physics",
+      "Input": [
+        {
+          "Source": {
+            "Target": "Parameter",
+            "Id": "ParamPL_param_head_yaw_80184865e1e5"
+          },
+          "Weight": 100,
+          "Type": "X",
+          "Reflect": false
+        }
+      ],
+      "Output": [
+        {
+          "Destination": {
+            "Target": "Parameter",
+            "Id": "ParamPL_param_agent_ears_follow_f650c1753e88"
+          },
+          "VertexIndex": 1,
+          "Scale": 1,
+          "Weight": 100,
+          "Type": "X",
+          "Reflect": false
+        }
+      ],
+      "Vertices": [
+        {
+          "Position": {
+            "X": 0,
+            "Y": 0
+          },
+          "Mobility": 0,
+          "Delay": 0,
+          "Acceleration": 0,
+          "Radius": 0
+        },
+        {
+          "Position": {
+            "X": 0,
+            "Y": 1
+          },
+          "Mobility": 0.333333,
+          "Delay": 0.092,
+          "Acceleration": 1,
+          "Radius": 1
+        }
+      ],
+      "Normalization": {
+        "Position": {
+          "Minimum": -100,
+          "Default": 0,
+          "Maximum": 100
+        },
+        "Angle": {
+          "Minimum": -30,
+          "Default": 0,
+          "Maximum": 30
+        }
+      }
+    }
+  ]
+}

@@ -201,6 +201,11 @@ public sealed class Live2DModelHost : Panel
                          && Live2DLocator.IsSupported
                          && !string.IsNullOrWhiteSpace(ModelDirectory)
                          && !string.IsNullOrWhiteSpace(ModelName);
+        // 诊断:首页"没有模型"时,必须能一眼看出是哪个闸门没通过。
+        // Release/AOT 下 Debug.WriteLine 被编译掉,故走 stderr(与 MCKURO-* 约定一致)。
+        System.Console.Error.WriteLine(
+            $"[L2D-DBG] Update Show={Show} supported={Live2DLocator.IsSupported} " +
+            $"dir=[{ModelDirectory}] name=[{ModelName}] core={Live2DLocator.IsCoreAvailable} shouldShow={shouldShow}");
         if (!shouldShow)
         {
             Teardown();
@@ -218,25 +223,70 @@ public sealed class Live2DModelHost : Panel
                 FramesPerSecond = FramesPerSecond,
                 AutoPauseWhenHidden = true,
             };
+            _view.ModelLoaded += (_, _) =>
+            {
+                // 与下面的失败诊断对称:加载成功也要有痕迹,否则"首页没模型"无法区分
+                // 「没加载」和「加载了但没渲染出来(被遮挡/尺寸为 0)」。
+                System.Console.Error.WriteLine(
+                    $"[L2D-OK] 模型加载成功 name={ModelName} loaded={_view.IsModelLoaded} " +
+                    $"bounds={_view.Bounds.Width:0}x{_view.Bounds.Height:0}");
+            };
             _view.ModelLoadFailed += (_, e) =>
             {
-                System.Diagnostics.Debug.WriteLine($"[Live2D] {e.ModelName} 加载失败: {e.Exception.Message}");
+                // 必须走 Console.Error 而不是 Debug.WriteLine:后者在 Release/AOT 下被编译掉,
+                // 模型加载失败会完全静默(用户只看到"首页没有模型",日志里什么都没有,无从排查)。
+                // MCKURO-* 诊断一律直写 stderr 是本项目既有约定。
+                System.Console.Error.WriteLine(
+                    $"[L2D-ERR] 模型加载失败 name={e.ModelName} dir={ModelDirectory} ex={e.Exception.GetType().Name}: {e.Exception.Message}");
                 ModelLoadFailed?.Invoke(this, e.Exception);
             };
             Children.Add(_view);
         }
+
+        // 开启「无动作时自动播放 Idle」:Sparkle 的 _automaticIdle 默认 false,
+        // 加载时会把 SDK LAppModel.RandomMotion 的默认 true 覆盖掉,于是 _motionManager
+        // 恒为空、model3.json 里的 Idle 动作永不自动起播 —— 模型完全静止(只剩呼吸等参数效果)。
+        // 首页/设置页里的「心」与 Hiyori 都依赖 model3.json 的 Idle 组,必须显式打开。
+        _view.SetAutomaticIdle(true);
 
         _view.FramesPerSecond = FramesPerSecond;
         if (_loadedDir != ModelDirectory || _loadedName != ModelName)
         {
             _loadedDir = ModelDirectory;
             _loadedName = ModelName;
-            _ = _view.LoadModelAsync(ModelDirectory, ModelName);
+            _ = LoadAndReportAsync();
         }
         _view.Zoom = Zoom;
         _view.PositionX = PositionX;
         _view.PositionY = PositionY;
         _view.ModelOpacity = ModelOpacity;
+    }
+
+    /// <summary>
+    /// 加载模型并把结果写到 stderr(成功/失败都要有痕迹)。
+    /// <para>
+    /// 为什么不直接 <c>_ = _view.LoadModelAsync(...)</c>:那样失败只经 <c>ModelLoadFailed</c>,
+    /// 而该回调原先用 <c>Debug.WriteLine</c> —— Release/AOT 下被编译掉,用户只看到"首页没有模型"、
+    /// 日志里一片空白。排查该问题必须能区分三类原因:没加载 / 加载失败 / 加载了但被遮挡或尺寸为 0。
+    /// </para>
+    /// </summary>
+    private async Task LoadAndReportAsync()
+    {
+        var dir = _loadedDir;
+        var name = _loadedName;
+        try
+        {
+            await _view!.LoadModelAsync(dir, name).ConfigureAwait(true);
+            System.Console.Error.WriteLine(
+                $"[L2D-OK] 加载完成 name={name} loaded={_view.IsModelLoaded} " +
+                $"bounds={_view.Bounds.Width:0}x{_view.Bounds.Height:0} visible={_view.IsVisible}");
+        }
+        catch (Exception ex)
+        {
+            // ModelLoadFailed 已上报时这里会重复一条,但带类型的异常对定位问题更直接。
+            System.Console.Error.WriteLine(
+                $"[L2D-ERR] 加载抛出 name={name} dir={dir} ex={ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private void Teardown()

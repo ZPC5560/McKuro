@@ -1,0 +1,375 @@
+{
+	"Version": 3,
+	"Parameters": [
+		{
+			"Id": "ParamPL_param_head_yaw_80184865e1e5",
+			"GroupId": "",
+			"Name": "Head Yaw"
+		},
+		{
+			"Id": "ParamPL_param_head_pitch_8dedbfee3591",
+			"GroupId": "",
+			"Name": "Head Pitch"
+		},
+		{
+			"Id": "ParamPL_param_head_roll_a14ac09ff14a",
+			"GroupId": "",
+			"Name": "Head Roll"
+		},
+		{
+			"Id": "ParamPL_param_body_sway_236bb03fd820",
+			"GroupId": "",
+			"Name": "Body Sway"
+		},
+		{
+			"Id": "ParamPL_param_body_pitch_3a4139a82bc5",
+			"GroupId": "",
+			"Name": "Body Pitch"
+		},
+		{
+			"Id": "ParamPL_param_body_roll_4df13af85c9a",
+			"GroupId": "",
+			"Name": "Body Roll"
+		},
+		{
+			"Id": "ParamPL_param_gaze_x_55eed3e96610",
+			"GroupId": "",
+			"Name": "Gaze X"
+		},
+		{
+			"Id": "ParamPL_param_gaze_y_b8cd88c8b40e",
+			"GroupId": "",
+			"Name": "Gaze Y"
+		},
+		{
+			"Id": "ParamPL_param_breath_fe85afa832bc",
+			"GroupId": "",
+			"Name": "Breath"
+		},
+		{
+			"Id": "ParamPL_param_blink_3211d72191ad",
+			"GroupId": "",
+			"Name": "Blink"
+		},
+		{
+			"Id": "ParamPL_param_mouth_open_7831396b8360",
+			"GroupId": "",
+			"Name": "Mouth Open"
+		},
+		{
+			"Id": "ParamPL_param_blink_left_215b222e3679",
+			"GroupId": "",
+			"Name": "Blink Left"
+		},
+		{
+			"Id": "ParamPL_param_blink_right_b2203085a552",
+			"GroupId": "",
+			"Name": "Blink Right"
+		},
+		{
+			"Id": "ParamPL_param_brow_left_ee5ecc765437",
+			"GroupId": "",
+			"Name": "Brow Left"
+		},
+		{
+			"Id": "ParamPL_param_brow_right_7bb5e349cd77",
+			"GroupId": "",
+			"Name": "Brow Right"
+		},
+		{
+			"Id": "ParamPL_param_smile_1a5f523fb6c1",
+			"GroupId": "",
+			"Name": "Smile"
+		},
+		{
+			"Id": "ParamPL_param_cheek_puff_6e12d3308d6b",
+			"GroupId": "",
+			"Name": "Cheek Puff"
+		},
+		{
+			"Id": "ParamPL_param_mouth_a_b7529a7639da",
+			"GroupId": "",
+			"Name": "Mouth A"
+		},
+		{
+			"Id": "ParamPL_param_mouth_i_9e772df5eb76",
+			"GroupId": "",
+			"Name": "Mouth I"
+		},
+		{
+			"Id": "ParamPL_param_mouth_u_f2e2f210903a",
+			"GroupId": "",
+			"Name": "Mouth U"
+		},
+		{
+			"Id": "ParamPL_param_mouth_e_b949db18ea97",
+			"GroupId": "",
+			"Name": "Mouth E"
+		},
+		{
+			"Id": "ParamPL_param_mouth_o_4334e4066e62",
+			"GroupId": "",
+			"Name": "Mouth O"
+		},
+		{
+			"Id": "ParamPL_limb_idle_arm_L_ece39ae0ef68",
+			"GroupId": "",
+			"Name": "手臂轻摆-L"
+		},
+		{
+			"Id": "ParamPL_limb_idle_arm_R_85a096270b5f",
+			"GroupId": "",
+			"Name": "手臂轻摆-R"
+		},
+		{
+			"Id": "ParamPL_limb_idle_leg_L_cf3b06ab1d7d",
+			"GroupId": "",
+			"Name": "脚尖轻摆-L"
+		},
+		{
+			"Id": "ParamPL_limb_idle_leg_R_c30012812403",
+			"GroupId": "",
+			"Name": "脚尖轻摆-R"
+		}
+	],
+	"ParameterGroups": [],
+	"Parts": [],
+	"Drawables": [
+		{
+			"Id": "ArtMeshPL_layer_000_______native_source_componen_52b1f8aaa8b8",
+			"Name": "tail"
+		},
+		{
+			"Id": "ArtMeshPL_layer_001_______native_source_componen_3d7d4640903f",
+			"Name": "back-hair-cap"
+		},
+		{
+			"Id": "ArtMeshPL_layer_002_______native_source_componen_7de12d8f855a",
+			"Name": "back-hair-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_003_______native_source_componen_d9498b3b36cb",
+			"Name": "outer-drape-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_005_______native_source_componen_66f59d56ef90",
+			"Name": "tail-accessories"
+		},
+		{
+			"Id": "ArtMeshPL_layer_006_______native_source_componen_8627fb518493",
+			"Name": "hip-base"
+		},
+		{
+			"Id": "ArtMeshPL_layer_007_______native_source_componen_e3501bba52c3",
+			"Name": "leg-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_008_______native_source_componen_d7ae963fec74",
+			"Name": "leg-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_009_______native_source_componen_c96325aaf579",
+			"Name": "neck-shoulders"
+		},
+		{
+			"Id": "ArtMeshPL_layer_010_______native_source_componen_499897cdf956",
+			"Name": "bodice-drape-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_011_______native_source_componen_d337ad521898",
+			"Name": "bodice-drape-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_012_______native_source_componen_2d4bf0094636",
+			"Name": "bodice"
+		},
+		{
+			"Id": "ArtMeshPL_layer_016_______native_source_componen_4e51b56c72d4",
+			"Name": "skirt-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_017_______native_source_componen_2f47e6d71527",
+			"Name": "skirt-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_018_______native_source_componen_119ff0a076a4",
+			"Name": "front-skirt"
+		},
+		{
+			"Id": "ArtMeshPL_layer_019_______native_source_componen_576e64ca0469",
+			"Name": "sleeve-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_020_______native_source_componen_ad8834fc5300",
+			"Name": "sleeve-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_021_______native_source_componen_e288161ecece",
+			"Name": "sleeve-fur-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_022_______native_source_componen_58be10f1f560",
+			"Name": "sleeve-fur-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_023_______native_source_componen_6dc48f4b9747",
+			"Name": "arm-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_024_______native_source_componen_618ef566284e",
+			"Name": "arm-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_025_______native_source_componen_ea2c3739995d",
+			"Name": "hand-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_026_______native_source_componen_a55538cb13d2",
+			"Name": "hand-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_027_______native_source_componen_a0e015463cc9",
+			"Name": "head-accessory-M"
+		},
+		{
+			"Id": "ArtMeshPL_layer_028_______native_source_componen_9fecb6e1859c",
+			"Name": "face"
+		},
+		{
+			"Id": "ArtMeshPL_layer_029_______native_source_componen_da7be28c32e3",
+			"Name": "mouth"
+		},
+		{
+			"Id": "ArtMeshPL_layer_030_______native_source_componen_791440e2f16e",
+			"Name": "iris-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_031_______native_source_componen_67ac9b810928",
+			"Name": "iris-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_032_______native_source_componen_1c8f621374ba",
+			"Name": "eyelash-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_033_______native_source_componen_027bfdbe0cd0",
+			"Name": "eyelash-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_034_______native_source_componen_d08f4e6887ec",
+			"Name": "brow-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_035_______native_source_componen_875e10fc85ef",
+			"Name": "brow-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_036_______native_source_componen_7439e54485dd",
+			"Name": "ear-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_037_______native_source_componen_211cc80326f7",
+			"Name": "ear-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_038_______native_source_componen_fac83ac9cf7f",
+			"Name": "ear-fur-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_039_______native_source_componen_dd0e26a52710",
+			"Name": "ear-fur-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_040_______native_source_componen_dbd287ee43e1",
+			"Name": "side-hair-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_041_______native_source_componen_01a2a7434335",
+			"Name": "side-hair-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_042_______native_source_componen_5adcf14f37d3",
+			"Name": "front-hair-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_043_______native_source_componen_82da8e3c8319",
+			"Name": "front-hair-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_044_______native_source_componen_ae003c230576",
+			"Name": "front-hair-M"
+		},
+		{
+			"Id": "ArtMeshPL_layer_045_______native_source_componen_6a62b83408df",
+			"Name": "hair-ornament-R"
+		},
+		{
+			"Id": "ArtMeshPL_layer_046_______native_source_componen_5a775fd3ff0d",
+			"Name": "head-accessory-L"
+		},
+		{
+			"Id": "ArtMeshPL_layer_047_______native_source_componen_df8c7fcf4bca",
+			"Name": "head-accessory-R"
+		},
+		{
+			"Id": "ArtMeshPL_native_eye_face_01_185c1091f56c",
+			"Name": "原模型眼睑表情 1/8"
+		},
+		{
+			"Id": "ArtMeshPL_native_eye_face_02_ed6b21787986",
+			"Name": "原模型眼睑表情 2/8"
+		},
+		{
+			"Id": "ArtMeshPL_native_eye_face_03_25ac9a2e7ff5",
+			"Name": "原模型眼睑表情 3/8"
+		},
+		{
+			"Id": "ArtMeshPL_native_eye_face_04_0fbcb609bc58",
+			"Name": "原模型眼睑表情 4/8"
+		},
+		{
+			"Id": "ArtMeshPL_native_eye_face_05_d8ade72cacc9",
+			"Name": "原模型眼睑表情 5/8"
+		},
+		{
+			"Id": "ArtMeshPL_native_eye_face_06_35e69e229795",
+			"Name": "原模型眼睑表情 6/8"
+		},
+		{
+			"Id": "ArtMeshPL_native_eye_face_07_6cb9cc197960",
+			"Name": "原模型眼睑表情 7/8"
+		},
+		{
+			"Id": "ArtMeshPL_native_eye_face_08_0db05c20ac85",
+			"Name": "原模型眼睑表情 8/8"
+		},
+		{
+			"Id": "ArtMeshPL_native_attachment_outer_drape_r_head_d821cc196c2e",
+			"Name": "outer-drape-R-head"
+		},
+		{
+			"Id": "ArtMeshPL_native_attachment_outer_drape_r_body_12ba54cfc459",
+			"Name": "outer-drape-R-body"
+		},
+		{
+			"Id": "ArtMeshPL_native_attachment_body_accessory_l_bod_42abbc7d62fd",
+			"Name": "body-accessory-L-body"
+		},
+		{
+			"Id": "ArtMeshPL_native_attachment_body_accessory_r_hea_db12358f767a",
+			"Name": "body-accessory-R-head"
+		},
+		{
+			"Id": "ArtMeshPL_native_attachment_body_accessory_r_bod_3ad1878427fc",
+			"Name": "body-accessory-R-body"
+		},
+		{
+			"Id": "ArtMeshPL_native_attachment_body_accessory_m_hea_4d55b83109cc",
+			"Name": "body-accessory-M-head"
+		},
+		{
+			"Id": "ArtMeshPL_native_attachment_body_accessory_m_bod_4e2c715f4e81",
+			"Name": "body-accessory-M-body"
+		}
+	]
+}

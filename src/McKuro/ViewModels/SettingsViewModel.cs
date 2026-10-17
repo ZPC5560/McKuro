@@ -377,18 +377,25 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>
     /// 生效的模型目录:已导入用导入目录;未导入时在首选 live2d 目录树中按选中模型名
     /// 定位实际所在子目录(模型可放在任意层级,加载不递归),与首页默认发现一致。
+    /// 已导入目录同样要按名字解析 —— 导入的是根目录而模型在子目录时,直接返回根目录会
+    /// 让预览按「根目录/模型名.model3.json」找文件而加载失败。
     /// </summary>
     public string EffectiveLive2DModelDir
     {
         get
         {
-            if (!string.IsNullOrWhiteSpace(Live2DModelDir))
-            {
-                return Live2DModelDir;
-            }
-            var root = Live2DLocator.EnsurePreferredDir();
             var name = SelectedLive2DModelName;
-            return string.IsNullOrWhiteSpace(name) ? root : Live2DLocator.FindModelDir(root, name) ?? root;
+            if (string.IsNullOrWhiteSpace(Live2DModelDir))
+            {
+                // 未导入:在全部发现根里找(随包模型在程序目录,装到 Program Files 时那里不可写)
+                return string.IsNullOrWhiteSpace(name)
+                    ? Live2DLocator.EnsurePreferredDir()
+                    : Live2DLocator.ResolveModelDirAnywhere(name) ?? Live2DLocator.EnsurePreferredDir();
+            }
+            var root = Live2DModelDir;
+            return string.IsNullOrWhiteSpace(name)
+                ? root
+                : Live2DLocator.ResolveModelDir(root, name) ?? root;
         }
     }
 
@@ -474,7 +481,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         RefreshLive2DStatus();
     }
 
-    /// <summary>打开 Live2D 官方 SDK 下载页(Cubism Core 需从官方 SDK 获取,许可原因不随包分发)。</summary>
+    /// <summary>
+    /// 打开 Live2D 官方 SDK 下载页 —— 供用户获取更新版本的 Cubism Core。
+    /// (Core 已随包内置且允许再分发,见 Assets/live2d/NOTICE.txt;此入口用于手动替换/升级。)
+    /// </summary>
     [RelayCommand]
     private void OpenCoreDownload()
     {
@@ -521,20 +531,24 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private void ScanLive2DModels()
     {
         Live2DModelOptions.Clear();
-        // 未导入模型目录时,默认扫描首选 live2d 目录(与首页默认模型发现保持一致)
-        var dir = string.IsNullOrWhiteSpace(Live2DModelDir) ? Live2DLocator.EnsurePreferredDir() : Live2DModelDir;
-        if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
-        {
-            OnPropertyChanged(nameof(IsLive2DPreviewVisible));
-            return;
-        }
+        // 用户导入过目录:只扫那个目录(尊重用户意图)。
+        // 未导入:扫【全部发现根】—— 随包模型在程序目录 live2d\ 下,而装到 Program Files 时
+        // 那里不可写(EnsurePreferredDir 会回退用户数据目录),只扫首选目录会漏掉随包模型。
+        var importedRoot = string.IsNullOrWhiteSpace(Live2DModelDir) ? null : Live2DModelDir;
+        var roots = importedRoot is null
+            ? Live2DLocator.DiscoveryRoots().ToList()
+            : [importedRoot];
         try
         {
-            var models = Directory.EnumerateFiles(dir, "*.model3.json", SearchOption.AllDirectories)
+            var models = roots
+                .Where(Directory.Exists)
+                .SelectMany(dir => Directory.EnumerateFiles(dir, "*.model3.json", SearchOption.AllDirectories))
                 .Select(f => Live2DLocator.NormalizeModelName(Path.GetFileName(f)))
                 .Where(n => !string.IsNullOrEmpty(n))
                 .Distinct(StringComparer.Ordinal)
-                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                // 内置主形态排在前面,方便用户一眼看到随包模型
+                .OrderBy(n => n == Live2DLocator.BundledDefaultName ? 0 : 1)
+                .ThenBy(n => n, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             foreach (var name in models)
             {
@@ -548,8 +562,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var idx = Live2DModelOptions.IndexOf(saved);
         if (idx < 0 && string.IsNullOrWhiteSpace(AppServices.Settings.Current.Live2DModelName))
         {
-            // 从未选择过模型:选中与首页一致的默认模型(Hiyori 优先,否则字典序第一个)
-            idx = Live2DModelOptions.IndexOf(Live2DLocator.FindDefaultModel(dir)?.Name ?? "");
+            // 从未选择过模型:选中与首页一致的默认模型(Hiyori 优先 → 内置形态 → 字典序)
+            var defaultName = importedRoot is null
+                ? Live2DLocator.FindDefaultModelAnywhere()?.Name
+                : Live2DLocator.FindDefaultModel(importedRoot)?.Name;
+            idx = Live2DModelOptions.IndexOf(defaultName ?? "");
         }
         SelectedLive2DModelIndex = idx >= 0 ? idx : (Live2DModelOptions.Count > 0 ? 0 : -1);
         Live2DScanStatus = Live2DModelOptions.Count > 0
@@ -683,7 +700,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Save();
     }
 
-    // 签到设置(AutoSignEnabled/AutoKuroClientTaskEnabled)已迁移至「签到」页管理,
+    // 签到设置(AutoSignEnabled)已迁移至「签到」页管理,
     // 此处不再持有副本:避免保存其他设置时用启动时的旧值回滚签到页的新值
     [ObservableProperty]
     private string _appUpdateStatusText = "";

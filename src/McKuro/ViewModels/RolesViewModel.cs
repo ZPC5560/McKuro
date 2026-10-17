@@ -875,8 +875,16 @@ public sealed partial class RolesViewModel : ViewModelBase
     /// <summary>
     /// 拉取当前选中角色的 mcguide 官方达成度与攻略列表(默认点赞最高)。
     /// </summary>
-    private async Task LoadGuideAchievementAsync()
+    /// <param name="forceRefresh">
+    /// true = 跳过 24h 本地缓存强制走网络。手动「同步」用 true:同步的语义就是"把攻略站的数据拉过来",
+    /// 旧实现完全依赖本地缓存,缓存新鲜时同一次点击不会向攻略站发任何请求,
+    /// 表现为"点了同步攻略数据没反应/没同步过来"。
+    /// </param>
+    private async Task LoadGuideAchievementAsync(bool forceRefresh = false)
     {
+        // 手动同步登记的"强制刷新"标记:由本次(或 ApplyRoles 触发的)拉取消费,保证恰好生效一次
+        var force = forceRefresh || _forceGuideRefreshPending;
+        _forceGuideRefreshPending = false;
         var role = SelectedRole;
         if (role is null)
         {
@@ -904,7 +912,7 @@ public sealed partial class RolesViewModel : ViewModelBase
         try
         {
             // 1. 攻略列表(点赞降序) → 填充切换下拉
-            var list = await AppServices.Guide.GetIntroductionListAsync(role.RoleName, cardRoleId);
+            var list = await AppServices.Guide.GetIntroductionListAsync(role.RoleName, cardRoleId, ct: default, forceRefresh: force);
             if (role != SelectedRole || requestId != _guideRequestId)
             {
                 return;
@@ -929,7 +937,7 @@ public sealed partial class RolesViewModel : ViewModelBase
                 ? cachedEntry.SelectedId
                 : list.FirstOrDefault()?.Id ?? 0;
             var info = targetId > 0
-                ? await AppServices.Guide.GetAchievementByIdAsync(role.RoleName, cardRoleId, targetId)
+                ? await AppServices.Guide.GetAchievementByIdAsync(role.RoleName, cardRoleId, targetId, ct: default, forceRefresh: force)
                 : (cachedEntry?.Detail is { } cachedDetail && list.Count == 0 ? cachedDetail : null);
             if (role != SelectedRole || requestId != _guideRequestId)
             {
@@ -969,6 +977,15 @@ public sealed partial class RolesViewModel : ViewModelBase
 
     /// <summary>攻略拉取请求序号(丢弃过期响应;见 LoadGuideAchievementAsync)。</summary>
     private int _guideRequestId;
+
+    /// <summary>
+    /// 「手动同步」登记的强制刷新意图:置位后由下一次攻略拉取消费(恰好生效一次),
+    /// 使同步触发的这次 <see cref="LoadGuideAchievementAsync"/> 跳过 24h 本地缓存直连攻略站。
+    /// <para>用"意图登记 + 一次性消费"而不是把参数一路透传:同步走的是
+    /// <c>ApplyRoles → SelectedRole 变化 → OnSelectedRoleChanged</c> 这条间接链路,
+    /// 无法把参数交给终点方法。</para>
+    /// </summary>
+    private bool _forceGuideRefreshPending;
 
     /// <summary>
     /// 正在拉取攻略的 cardRoleId 集合(按需拉取登记;后台预取据此跳过同一角色,
@@ -1937,7 +1954,20 @@ public sealed partial class RolesViewModel : ViewModelBase
                     .Where(id => id > 0)
                     .ToHashSet();
 
+                // 手动同步同样要求攻略站数据"真的去拉一次"(强制跳过 24h 本地缓存)。
+                // 旧实现只同步角色列表,攻略区完全靠 ApplyRoles 里"选中角色变化"这个副作用顺带触发,
+                // 而那条链路命中缓存时不开网络请求 —— 用户点同步看到攻略数据毫无变化,
+                // 必须切走再切回(OnNavigatedTo 补拉)才刷新。
+                _forceGuideRefreshPending = true;
                 ApplyRoles(result);
+                // ApplyRoles 重建列表项实例 → SelectedRole 变化 → OnSelectedRoleChanged 已经把上面的
+                // 登记消费掉了(同步同步执行到首个 await 之前)。若选中项恰好没变,那次拉取不会发生,
+                // 这里补一次,保证"点同步 = 攻略数据也拉一次"始终成立。
+                if (_forceGuideRefreshPending)
+                {
+                    _forceGuideRefreshPending = false;
+                    _ = LoadGuideAchievementAsync(forceRefresh: true);
+                }
                 StatusText = result.Message ?? LanguageService.Format("Roles.Synced", result.Roles.Count);
                 if (result.Roles is { Count: > 0 } && SelectedRole is { } first && first.IsDetailComplete)
                 {
@@ -2063,6 +2093,12 @@ public sealed partial class RolesViewModel : ViewModelBase
 
     private void ApplyRoles(RoleDataLoadResult result)
     {
+        // 记住刷新前选中的角色 cardRoleId:ApplyRoles 会重建整份列表项实例,
+        // 而 "同步" 复用同一条路径 —— 旧实现无条件把选中项设回排序第一个,
+        // 用户正在看某个角色时点同步会被顶回列表首位(实测:看卡卡罗点同步 → 跳到丽贝卡),
+        // 于是刚拉的攻略/详情数据全落在别的角色上,看起来就是"同步的数据没过来"。
+        var previousCardRoleId = SelectedRole?.Role?.RoleId ?? 0;
+
         Roles.Clear();
         foreach (var role in result.Roles)
         {
@@ -2109,8 +2145,33 @@ public sealed partial class RolesViewModel : ViewModelBase
         }
         OnPropertyChanged(nameof(AttributeFilterSummary));
 
+        // 列表项整份重建 → 旧选中实例已不在集合里。这里显式清空选中再重建:
+        // 否则 RebuildFilteredRoles 末尾的"选中项被过滤掉 → 回退第一个"分支会抢先
+        // 把选中项设成排序首位,既多触发一次攻略拉取,也会让"同步"登记的强制刷新
+        // 落在错误角色上(用户正在看的角色的攻略数据反而没刷新)。
+        SelectedRole = null;
         RebuildFilteredRoles();
-        SelectedRole = FilteredRoles.FirstOrDefault();
+        SelectedRole = PickRolePreservingSelection(FilteredRoles, previousCardRoleId);
+    }
+
+    /// <summary>
+    /// 列表刷新后要选中的角色:优先沿用刷新前的选中角色(按 cardRoleId 匹配重建后的新实例),
+    /// 该角色已不在列表中(被移除/被当前筛选排除)时才回退到排序第一个。
+    /// <para>抽成公开静态纯函数便于单测(与 HomeViewModel.ClassifyRefresh 同一约定);调用点是 <see cref="ApplyRoles"/>。</para>
+    /// </summary>
+    public static RoleDetail? PickRolePreservingSelection(IReadOnlyList<RoleDetail> ordered, int previousCardRoleId)
+    {
+        if (previousCardRoleId > 0)
+        {
+            foreach (var role in ordered)
+            {
+                if (role.Role?.RoleId == previousCardRoleId)
+                {
+                    return role;
+                }
+            }
+        }
+        return ordered.Count > 0 ? ordered[0] : null;
     }
 
     partial void OnSelectedSortChanged(string value) => RebuildFilteredRoles();

@@ -25,8 +25,15 @@ website-src/**/*.js   text eol=lf
 *.png   binary
 *.fbx   binary
 *.uemodel binary
+*.moc3  binary
+*.dll   binary
 website/vendor/** binary
 website/models/** binary
 website-src/vendor/** binary
 website-src/models/** binary
 website-src/font-src/** binary
+# 随包 Live2D 模型:整个目录按二进制对待。
+# 其中 .json 是文本(motion3/cdi3/physics3),但同一个目录下混着 moc3 与 png;
+# 逐类列容易漏,而 .moc3 一旦被 autocrlf 改写换行就会直接损坏(模型加载失败)。
+Assets/live2d/** binary
+src/McKuro/Assets/live2d/** binary

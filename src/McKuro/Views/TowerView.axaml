@@ -798,12 +798,15 @@
                             <StackPanel Spacing="0">
                                 <!-- ① boss 大图:通栏封面,直接贴住卡片的上/左/右边缘
                                      (无边框、无外边距)—— 由外层 Border 的 CornerRadius + ClipToBounds 收圆角。
-                                     随难度切换而换图(每个难度一张独立立绘)。 -->
+                                     随难度切换而换图(每个难度一张独立立绘)。
+                                     用 Uniform + 不设固定高度:让图按**自身宽高比**完整铺满列宽 ——
+                                     立绘是约 3:2 的横图(实测 696×468=1.49 / 242×156=1.55,各 boss 略有差异),
+                                     固定高度 + UniformToFill 会裁掉上下约 17%(看着像被切过的横条),
+                                     而写死高度又无法同时匹配所有 boss 的比例。 -->
                                 <controls:AsyncImage ImageUrl="{Binding HologramHeroIcon}"
-                                                     Height="140"
-                                                     Stretch="UniformToFill"
+                                                     Stretch="Uniform"
                                                      HorizontalAlignment="Stretch"
-                                                     VerticalAlignment="Stretch" />
+                                                     VerticalAlignment="Top" />
 
                                 <StackPanel Margin="12,10,12,12" Spacing="10">
                                 <!-- ② 标题行(名称 + 等级) -->

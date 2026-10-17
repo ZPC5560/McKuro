@@ -151,10 +151,11 @@ public sealed class AppSettings
     /// <summary>自动游戏签到(默认开启;每次启动软件后自动执行一次,当天去重)。</summary>
     public bool AutoSignEnabled { get; set; } = true;
 
-    /// <summary>库街区每日任务(签到+浏览+点赞+分享,默认关闭,可在签到页手动执行)。</summary>
-    public bool AutoKuroClientTaskEnabled { get; set; }
-
-    /// <summary>最近一次每日自动执行日期("yyyy-MM-dd";防止同一天反复重启重复执行,手动一键完成后也会记录)。</summary>
+    /// <summary>最近一次自动游戏签到执行日期("yyyy-MM-dd";防止同一天反复重启重复执行)。</summary>
+    /// <remarks>
+    /// 该字段历史上同时为「自动库街区每日任务」去重;后者已移出自动调度(只能在签到页手动执行),
+    /// 保留字段名是为了不破坏已有用户 settings.json 的去重状态,升级当天不会被重复签到。
+    /// </remarks>
     public string LastDailyAutoRunDate { get; set; } = "";
 
     /// <summary>活动页已忽略临期提醒的活动 Key(标题+起止时间;版本活动刷新后仅保留仍存在的 Key)。</summary>

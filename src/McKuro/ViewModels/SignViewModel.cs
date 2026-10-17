@@ -52,9 +52,6 @@ public sealed partial class SignViewModel : ViewModelBase
     [ObservableProperty]
     private bool _autoSignEnabled;
 
-    [ObservableProperty]
-    private bool _autoKuroClientTaskEnabled;
-
     /// <summary>今日自动任务状态(已完成 / 待执行)。</summary>
     [ObservableProperty]
     private string _autoRunStatusText = "";
@@ -78,7 +75,6 @@ public sealed partial class SignViewModel : ViewModelBase
     public SignViewModel()
     {
         _autoSignEnabled = AppServices.Settings.Current.AutoSignEnabled;
-        _autoKuroClientTaskEnabled = AppServices.Settings.Current.AutoKuroClientTaskEnabled;
         RefreshAutoRunStatusText();
         RefreshAccount();
 
@@ -92,12 +88,6 @@ public sealed partial class SignViewModel : ViewModelBase
     partial void OnAutoSignEnabledChanged(bool value)
     {
         AppServices.Settings.Current.AutoSignEnabled = value;
-        AppServices.Settings.Save();
-    }
-
-    partial void OnAutoKuroClientTaskEnabledChanged(bool value)
-    {
-        AppServices.Settings.Current.AutoKuroClientTaskEnabled = value;
         AppServices.Settings.Save();
     }
 
