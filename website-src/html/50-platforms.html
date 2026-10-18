@@ -14,8 +14,8 @@
             </thead>
             <tbody>
               <tr><th scope="row">Windows x64</th><td>安装包 / 绿色包</td><td class="yes">内置 libmpv</td><td class="yes">支持</td></tr>
-              <tr><th scope="row">macOS arm64 / x64</th><td>zip / .app / dmg</td><td class="part">arm64 内置，x64 回退首帧</td><td class="no">暂不支持</td></tr>
-              <tr><th scope="row">Linux x64</th><td>tar.gz / deb / rpm</td><td class="part">需系统 libmpv</td><td class="no">暂不支持</td></tr>
+              <tr><th scope="row">macOS arm64 / x64</th><td>zip / .app / dmg</td><td class="part">arm64 内置，x64 回退首帧</td><td class="yes">支持 <span class="muted">（arm64 实测，x64 未实机验证）</span></td></tr>
+              <tr><th scope="row">Linux x64</th><td>tar.gz / deb / rpm</td><td class="part">需系统 libmpv</td><td class="part">已随包内置，未实机验证</td></tr>
             </tbody>
           </table>
         </div>
@@ -32,8 +32,8 @@
         </div>
       </div>
       <dl class="facts">
-        <div><dt>单元测试</dt><dd class="mono" data-count="768">768</dd></div>
-        <div><dt>语言键</dt><dd class="mono" data-count="841">841</dd></div>
+        <div><dt>单元测试</dt><dd class="mono" data-count="1311">1311</dd></div>
+        <div><dt>语言键</dt><dd class="mono" data-count="919">919</dd></div>
         <div><dt>功能模块</dt><dd class="mono" data-count="11">11</dd></div>
         <div><dt>提醒类别</dt><dd class="mono" data-count="5">5</dd></div>
         <div><dt>发布平台</dt><dd class="mono" data-count="3">3</dd></div>
@@ -58,7 +58,7 @@
         </details>
         <details>
           <summary>Live2D 模型从哪里来？</summary>
-          <p>McKuro 不附带模型和 Cubism Core。请从 Live2D 官网下载 Cubism Core，并使用你有权使用的模型文件，在设置页导入即可。</p>
+          <p>McKuro 已内置 Cubism Core 运行时和「心」的双形态模型，装好即可在首页看到，无需另行下载。如果你想换成自己的模型，把 Cubism 模型放进 <code>live2d</code> 目录，或在设置页导入即可；请确保你有权使用该模型。</p>
         </details>
         <details>
           <summary>会影响游戏本身吗？</summary>

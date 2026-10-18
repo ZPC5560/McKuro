@@ -14,7 +14,7 @@ A desktop launcher for *Wuthering Waves*, built with **.NET 10 + Avalonia 12 + S
 
 | Page | One-liner |
 | --- | --- |
-| Home | Account profile card (incl. "day-one player" badge) + daily stats grid (Stamina / Crystallize Bundle with full-recovery countdown), dual data sources, Live2D showcase (Windows x64) |
+| Home | Account profile card (incl. "day-one player" badge) + daily stats grid (Stamina / Crystallize Bundle with full-recovery countdown), dual data sources, Live2D showcase (Windows / macOS / Linux) |
 | Launcher | Update check, pre-download, streaming install, repair, speed limit, launch options, DLSS/XeSS detection; libmpv GPU background video and custom animated wallpaper; tri-state start button + process monitor |
 | System Materials | Nav/content background follows native desktop materials: Win11 Mica / Win10 Acrylic / macOS frosted & liquid glass / Linux transparent tinting; liquid-glass navigation with sliding pill |
 | Gacha Analysis | Dual-channel sync (Cloud API first, local log fallback); per-banner stats (pity, soft-pity miss rate, luck score, and more); ring chart + daily-pull area chart; multi-account aggregation, deduplicated in local SQLite |
@@ -121,7 +121,7 @@ McKuro/
 │   ├── Services/                   # Update (self-update) / Launcher / Notification / Redeem / Settings and the rest
 │   └── Infrastructure/             # SQLite (Microsoft.Data.Sqlite)
 ├── src/ThirdParty/Sparkle.Live2DView/  # vendored Live2D rendering control (MIT)
-└── tests/McKuro.Tests/             # xUnit unit tests (1307 cases)
+└── tests/McKuro.Tests/             # xUnit unit tests (1311 cases)
 ```
 
 ## Usage Guide
@@ -148,16 +148,18 @@ Every API account (KuroBBS / Cloud Wuthering Waves / Official Guide Site) signs 
 - **Auto-detection**: identified from the KRSDK directory inside the game folder (Bilibili / WeGame / Global / Mainland).
 - Manual override available when detection fails.
 
-### Live2D Model (Windows x64 only)
+### Live2D Model (Windows / macOS / Linux)
+
+The Cubism Core runtime and the two forms of 心 ship with the installer, so the model is on the Home page out of the box — no manual runtime placement or model import needed.
 
 In the **Live2D Model** block of Settings:
 
-1. **Place the Cubism runtime**: `Live2DCubismCore.dll` carries its own Live2D license and is not redistributed — download **Cubism SDK for Native** from the [Live2D website](https://www.live2d.com/sdk/download/native/) and put `Live2DCubismCore.dll` into the directory opened by the "Open Model Directory" button (`%AppData%/McKuro/live2d`) or the app install directory; the status badge should show "ready".
-2. **Import a model**: click "Import Model Folder" and pick a folder containing a Cubism 3+ `.model3.json` (scanned recursively), then select the model from the dropdown.
+1. **Runtime is bundled**: three copies of Core ship in the `live2d/` folder next to the app — `Live2DCubismCore.dll` (Windows), `libLive2DCubismCore.dylib` (macOS, universal), `libLive2DCubismCore.so` (Linux); the status badge shows "ready".
+2. **Import a model**: to bring your own, click "Import Model Folder" and pick a folder containing a Cubism 3+ `.model3.json` (scanned recursively), then select the model from the dropdown.
 3. **Configure**: scale (0.5–3x) / horizontal / vertical position / opacity sliders; the settings preview supports drag and wheel zoom written back in real time, applied to the Home page instantly.
 4. Turn on "Show Live2D model on Home"; the model overlays above the home wallpaper and below the content cards (display-only, never blocks interaction).
 
-Not yet supported on macOS/Linux (the rendering control currently targets Windows x64 only; the settings block is greyed out). Cubism Core and model files have their own license terms — confirm your usage scope.
+Verification status: **Windows x64 and macOS arm64 are verified rendering on real hardware**; macOS x64 and Linux x64 ship a bundled Core with correct symbols but have not been verified on a real machine yet. Cubism Core and model files have their own license terms — confirm your usage scope; the basis for redistribution is documented in `src/McKuro/Assets/live2d/NOTICE.txt`.
 
 ### UI Language
 
@@ -191,7 +193,7 @@ Settings checks GitHub Releases (default repository `ZPC5560/McKuro`); the updat
 
 ## Testing & CI
 
-- `tests/McKuro.Tests`: **1307 xUnit unit tests** (log decryption, gacha analysis, banner statistics, update pipeline, notifications, i18n, and more).
+- `tests/McKuro.Tests`: **1311 xUnit unit tests** (log decryption, gacha analysis, banner statistics, update pipeline, notifications, i18n, and more).
 - `build-and-test.yml`: build + test on Linux for every push/PR; release tags or manual dispatch run the full-platform AOT publishes and attach Release assets.
 - `website.yml`: rebuilds and deploys the website whenever `website/` or `website-src/` changes, failing on any drift between built output and committed artifacts.
 
@@ -228,7 +230,7 @@ Project website (GitHub Pages, currently Chinese-only): <https://zpc5560.github.
 - McKuro source code is licensed under the **[MIT License](LICENSE)** (Copyright © 2026 ZPC5560).
 - Third-party assets keep their original licenses and are not covered by MIT:
   - The app icon (Shorekeeper) is official artwork shared under **CC BY-NC-SA** — non-commercial use only.
-  - [Sparkle.Live2DView](https://github.com/Mozi216/Sparkle.Live2DView) and [Live2DCSharpSDK](https://github.com/Coloryr/Live2DCSharpSDK) are **MIT**; `Live2DCubismCore.dll` is under the **Live2D Open Software License** — placed by users, never redistributed in the installers.
+  - [Sparkle.Live2DView](https://github.com/Mozi216/Sparkle.Live2DView) and [Live2DCSharpSDK](https://github.com/Coloryr/Live2DCSharpSDK) are **MIT**; `Live2DCubismCore.dll` / `libLive2DCubismCore.dylib` / `libLive2DCubismCore.so` are under the **Live2D Proprietary Software License Agreement**, whose `RedistributableFiles.txt` permits redistribution with the application — which is the basis for bundling them; see `src/McKuro/Assets/live2d/NOTICE.txt` for the full notice.
   - Website icons (Phosphor) are **MIT**; the bundled `hpatchz` component follows its upstream license (`Assets/HpatchzResource/LICENSE.txt`).
 - The names "Wuthering Waves" / 鸣潮, game data endpoints and related content belong to Kuro Games / KuroBBS and their respective rights holders; this project is unaffiliated (see [Disclaimer](#disclaimer)).
 

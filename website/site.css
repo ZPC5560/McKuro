@@ -1106,6 +1106,10 @@ html:not(.js) .tab span { max-width: 120px; opacity: 1; margin-right: 6px; }
 .ptable td.yes::before { background: var(--ok); }
 .ptable td.part::before { background: var(--warn); }
 .ptable td.no::before { background: rgba(27, 36, 51, .25); }
+/* Secondary qualifier inside a cell (e.g. "支持（arm64 实测，x64 未实机验证）").
+   It has to sit clearly below the primary value, otherwise a caveat reads as part of
+   the claim it is qualifying. */
+.ptable .muted { color: var(--ink-3); font-size: 12.5px; }
 .chain { padding: 24px; border-radius: var(--r-lg); background: rgba(255, 255, 255, .7); border: 1px solid #fff; box-shadow: 0 0 0 1px var(--line); }
 .chain h3 { font: 600 17px/1.4 var(--sans); }
 .chain > p { margin-top: 6px; font-size: 14px; color: var(--ink-2); }

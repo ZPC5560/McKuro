@@ -14,7 +14,7 @@
 
 | 页面 | 一句话说明 |
 | --- | --- |
-| 主页 | 账号资料卡(含开服玩家徽章)+ 每日数据网格(体力/结晶单质带恢复倒计时),双数据源,Live2D 展示(Windows x64) |
+| 主页 | 账号资料卡(含开服玩家徽章)+ 每日数据网格(体力/结晶单质带恢复倒计时),双数据源,Live2D 展示(Windows / macOS / Linux) |
 | 启动器 | 检查更新、预下载、流式安装、修复、限速、启动参数、DLSS/XeSS 检测;libmpv GPU 背景视频与自定义动态壁纸;三态启动按钮 + 进程监控 |
 | 系统材质 | 导航栏/背景跟随原生桌面材质:Win11 Mica / Win10 Acrylic / macOS 毛玻璃·液态玻璃 / Linux 透明染色;液态玻璃导航 + 滑动胶囊 |
 | 抽卡分析 | 云鸣潮接口优先、本地日志回退的双通道同步;保底/歪率/欧气评分等逐池统计;环形图 + 每日抽数图;多账号聚合,SQLite 本地去重 |
@@ -121,7 +121,7 @@ McKuro/
 │   ├── Services/                   # Update(自更新) / Launcher / Notification / Redeem / Settings 等其余服务
 │   └── Infrastructure/             # SQLite (Microsoft.Data.Sqlite)
 ├── src/ThirdParty/Sparkle.Live2DView/  # vendored Live2D 渲染控件 (MIT)
-└── tests/McKuro.Tests/             # xUnit 单元测试 (1307 个用例)
+└── tests/McKuro.Tests/             # xUnit 单元测试 (1311 个用例)
 ```
 
 ## 使用说明
@@ -148,16 +148,18 @@ McKuro/
 - **自动检测**:根据游戏目录内 KRSDK 目录识别(Bilibili/WeGame/Global/Mainland)
 - 自动检测失败时可手动指定
 
-### Live2D 模型(仅 Windows x64)
+### Live2D 模型(Windows / macOS / Linux)
+
+Cubism Core 运行环境与「心」的双形态模型已随安装包内置,装好即可在首页看到,无需手动放置运行时或导入模型。
 
 设置页「Live2D 模型」区块:
 
-1. **放置 Cubism 运行时**:`Live2DCubismCore.dll` 有 Live2D 独立许可,不随安装包分发——从 [Live2D 官网](https://www.live2d.com/sdk/download/native/) 下载 **Cubism SDK for Native**,把其中的 `Live2DCubismCore.dll` 放入「打开模型目录」按钮打开的目录(`%AppData%/McKuro/live2d`)或程序安装目录;状态徽标显示"已就绪"即可
-2. **导入模型**:点「导入模型文件夹」选择包含 Cubism 3+ `.model3.json` 的文件夹(递归扫描),下拉选择模型
+1. **运行时已内置**:Windows(`Live2DCubismCore.dll`)、macOS(`libLive2DCubismCore.dylib`,universal)、Linux(`libLive2DCubismCore.so`)三份 Core 随包分发在程序目录的 `live2d/` 下,状态徽标显示"已就绪"
+2. **导入模型**:想换成自己的模型时,点「导入模型文件夹」选择包含 Cubism 3+ `.model3.json` 的文件夹(递归扫描),下拉选择模型
 3. **配置**:缩放(0.5~3x)/水平/垂直位置/不透明度滑条,设置页预览可拖动与滚轮缩放并实时写回,首页即时应用
 4. 开启「首页显示 Live2D 模型」开关;模型叠加在首页壁纸上方、内容卡片下层(纯展示,不挡交互)
 
-macOS/Linux 暂不支持(渲染控件当前仅面向 Windows x64),设置页相应灰显;Cubism Core 与模型文件有各自的许可协议,请自行确认使用范围。
+平台验证情况:**Windows x64 与 macOS arm64 已实机验证渲染**;macOS x64 与 Linux x64 的 Core 已随包内置且符号正确,但尚未实机验证。Cubism Core 与模型文件有各自的许可协议,请自行确认使用范围——随包分发的依据见 `src/McKuro/Assets/live2d/NOTICE.txt`。
 
 ### 界面语言
 
@@ -191,7 +193,7 @@ ISCC.exe installer\setup.iss /DMyAppVersion=1.3.5
 
 ## 测试与 CI
 
-- `tests/McKuro.Tests`:xUnit 单元测试 **1307 个用例**(覆盖日志解密、抽卡分析、卡池统计、更新链路、通知、多语言等)。
+- `tests/McKuro.Tests`:xUnit 单元测试 **1311 个用例**(覆盖日志解密、抽卡分析、卡池统计、更新链路、通知、多语言等)。
 - `build-and-test.yml`:push/PR 在 Linux 构建 + 测试;发布 tag 或手动触发时进行全平台 AOT 构建并附加 Release 资产。
 - `website.yml`:`website/` 或 `website-src/` 变更时重新构建并部署官网。
 
@@ -236,7 +238,7 @@ ISCC.exe installer\setup.iss /DMyAppVersion=1.3.5
 - 本项目源代码以 **[MIT License](LICENSE)** 授权(Copyright © 2026 ZPC5560)。
 - 第三方资产各自遵循其原始许可,不随 MIT 授权:
   - 应用图标(守岸人 / Shorekeeper)为官方素材,依 **CC BY-NC-SA** 共享,仅限非商业用途。
-  - [Sparkle.Live2DView](https://github.com/Mozi216/Sparkle.Live2DView) 与 [Live2DCSharpSDK](https://github.com/Coloryr/Live2DCSharpSDK) 为 **MIT**;`Live2DCubismCore.dll` 遵循 **Live2D Open Software License**,需自行放置且不随安装包分发。
+  - [Sparkle.Live2DView](https://github.com/Mozi216/Sparkle.Live2DView) 与 [Live2DCSharpSDK](https://github.com/Coloryr/Live2DCSharpSDK) 为 **MIT**;`Live2DCubismCore.dll` / `libLive2DCubismCore.dylib` / `libLive2DCubismCore.so` 遵循 **Live2D Proprietary Software License Agreement**,官方 `RedistributableFiles.txt` 允许随应用再分发,本项目据此内置;完整声明见 `src/McKuro/Assets/live2d/NOTICE.txt`。
   - 官网图标 Phosphor 为 **MIT**;`hpatchz` 差分组件遵循其上游许可。
 - `鸣潮` / `Wuthering Waves` 名称、游戏数据接口及相关内容权利归库洛游戏 / 库街区等权利人所有,本项目与其无关联(详见[免责声明](#免责声明))。
 
