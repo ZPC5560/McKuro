@@ -4,16 +4,34 @@ Live2D Cubism Core / Live2D Cubism SDK
 本目录包含随 McKuro 分发的 Live2D Cubism 运行环境与示例模型资源。
 
 --------------------------------------------------------------------------
-1. Live2DCubismCore.dll
+1. Live2DCubismCore.dll / libLive2DCubismCore.dylib / libLive2DCubismCore.so
 --------------------------------------------------------------------------
 
-来源:  Live2D Cubism SDK for Native (Core)
+来源:  Live2D Cubism SDK for Native (Core), R5
         https://www.live2d.com/sdk/download/native/
 版权:  (c) Live2D Inc. All rights reserved.
+
+三个文件按平台提供同一份 Cubism Core 运行时:
+    Live2DCubismCore.dll        Windows x86_64(官方 SDK 原样)
+    libLive2DCubismCore.dylib   macOS(universal:x86_64 + arm64)
+    libLive2DCubismCore.so      Linux x86_64
+
+macOS / Linux 两份是基于官方 SDK 静态库的兼容构建,说明见下:
+    本项目使用的 C# 绑定(Live2DCSharpSDK.Framework)按 Cubism 4 的 API 名调用
+    csmGetDrawableRenderOrders;而随包的「心」模型是 moc3 version 5,只有 Cubism 5
+    的 Core 才能读取(Cubism 5 已把该 API 改名为 csmGetRenderOrders)。
+    为此我们把官方 Cubism 5 的静态库 libLive2DCubismCore.a 原样链入一个 dylib/so,
+    并额外导出一个转发符号 csmGetDrawableRenderOrders(内部维护稳定缓冲以保证
+    调用方写入跨帧保留)。Cubism 5 本体的代码未做任何修改,仅新增一个包装函数。
+    构建脚本与源码:live2d/shim/(build-live2d-shim.sh、shim.c)。
+    静态库 lib/macos/{arm64,x86_64}/libLive2DCubismCore.a 与
+    lib/linux/x86_64/libLive2DCubismCore.a 同样在官方可再分发清单内。
 
 允许再分发的依据:官方 SDK 附带的 `Core/RedistributableFiles.txt` 明确列出
 
     dll/windows/x86_64/Live2DCubismCore.dll
+    dll/macos/libLive2DCubismCore.dylib
+    dll/linux/x86_64/libLive2DCubismCore.so
 
 为 "available for redistribution under the terms of the Live2D Proprietary
 Software License Agreement"(该协议第 5 条「Redistributable Code」)。
@@ -24,7 +42,7 @@ Software License Agreement"(该协议第 5 条「Redistributable Code」)。
 按该协议第 5.2 条,再分发须满足:
   · 在本应用中提供使用该二进制的主要功能(本应用用它渲染 Live2D 模型);
   · 使用户受等效保护条款约束;
-  · 不对该二进制做修改,原样分发(本仓库不改动该文件);
+  · 不对该二进制做修改,原样分发(本仓库不改动这些文件);
   · 不暗示本应用由 Live2D Inc. 制作、认证或推荐。
 
 Live2D、Cubism 是 Live2D Inc. 在日本及其他国家的注册商标或商标。

@@ -4,22 +4,56 @@ namespace McKuro.Services;
 
 /// <summary>
 /// Live2D 运行环境定位:
-/// - 平台支持:Sparkle.Live2DView(OpenGL 渲染 Cubism)当前仅面向 Windows x64;
-/// - Cubism Core(<c>Live2DCubismCore.dll</c>)随包内置在程序目录的 <c>live2d\</c> 下
-///   (官方 SDK 的 <c>Core/RedistributableFiles.txt</c> 把 <c>dll/windows/x86_64/Live2DCubismCore.dll</c>
-///   列为可再分发,依据 Live2D Proprietary Software License Agreement 第 5 条;
-///   许可声明见 <c>Assets/live2d/NOTICE.txt</c>)。用户自备的副本同样可用,
-///   按以下顺序探测:① 程序目录根 → ② 程序目录 live2d\ → ③ 用户数据目录 live2d\。
-///   命中非程序目录时通过 AddDllDirectory 加入 DLL 搜索路径;
-///   首选「可写」放置目录见 <see cref="EnsurePreferredDir"/>(程序目录可写即用程序目录)。
+/// - 平台支持:Sparkle.Live2DView 用 Avalonia 的 <c>OpenGlControlBase</c> 渲染 Cubism,
+///   本身不绑定 Windows。Windows x64 / macOS(arm64、x64)/ Linux x64 均在支持范围内;
+/// - Cubism Core 随包内置在程序目录的 <c>live2d/</c> 下,文件名按平台不同:
+///   Windows <c>Live2DCubismCore.dll</c>、macOS <c>libLive2DCubismCore.dylib</c>、
+///   Linux <c>libLive2DCubismCore.so</c>。三者都在官方 SDK 的
+///   <c>Core/RedistributableFiles.txt</c> 可再分发清单内(依据 Live2D Proprietary
+///   Software License Agreement 第 5 条;许可声明见 <c>Assets/live2d/NOTICE.txt</c>)。
+///   用户自备的副本同样可用,按以下顺序探测:① 程序目录根 → ② 程序目录 live2d/ →
+///   ③ 用户数据目录 live2d/。命中非程序目录时通过 AddDllDirectory 加入 DLL 搜索路径
+///   (仅 Windows 需要);首选「可写」放置目录见 <see cref="EnsurePreferredDir"/>。
 /// </summary>
 public static class Live2DLocator
 {
     private const string CoreDll = "Live2DCubismCore.dll";
+    private const string CoreDylib = "libLive2DCubismCore.dylib";
+    private const string CoreSo = "libLive2DCubismCore.so";
 
-    /// <summary>当前平台是否支持 Live2D 渲染。</summary>
-    public static bool IsSupported => OperatingSystem.IsWindows()
-        && System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.X64;
+    /// <summary>
+    /// 当前平台的 Cubism Core 文件名。
+    /// <para>必须与 DllImport("Live2DCubismCore") 的解析结果一致:运行时会依次尝试
+    /// <c>libLive2DCubismCore.dylib</c>/<c>.so</c>/<c>Live2DCubismCore.dll</c> 等变体,
+    /// 探测阶段用同名文件才能判断「Core 是否真的可加载」。</para>
+    /// </summary>
+    public static string CoreFileName =>
+        OperatingSystem.IsWindows() ? CoreDll
+        : OperatingSystem.IsMacOS() ? CoreDylib
+        : CoreSo;
+
+    /// <summary>当前平台是否支持 Live2D 渲染(Avalonia OpenGL 可用的桌面平台)。</summary>
+    public static bool IsSupported
+    {
+        get
+        {
+            var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture;
+            if (OperatingSystem.IsWindows())
+            {
+                return arch == System.Runtime.InteropServices.Architecture.X64;
+            }
+            if (OperatingSystem.IsMacOS())
+            {
+                return arch is System.Runtime.InteropServices.Architecture.Arm64
+                    or System.Runtime.InteropServices.Architecture.X64;
+            }
+            if (OperatingSystem.IsLinux())
+            {
+                return arch == System.Runtime.InteropServices.Architecture.X64;
+            }
+            return false;
+        }
+    }
 
     /// <summary>程序目录下的 live2d 目录(便携优先:与 exe 同级,绿色安装可直接放置模型与 Core)。</summary>
     public static string ProgramDir => Path.Combine(AppContext.BaseDirectory, "live2d");
@@ -278,16 +312,16 @@ public static class Live2DLocator
     /// <summary>随包内置模型的默认形态(红黑)。随包时用作未指定模型时的首选。</summary>
     public const string BundledDefaultName = "心-红黑";
 
-    /// <summary>探测 Cubism Core 路径;未找到返回 null。</summary>
+    /// <summary>探测 Cubism Core 路径;未找到返回 null。文件名按平台区分(见 <see cref="CoreFileName"/>)。</summary>
     public static string? FindCore()
     {
-        if (!OperatingSystem.IsWindows())
+        if (!IsSupported)
         {
             return null;
         }
         foreach (var dir in SearchDirs())
         {
-            var path = Path.Combine(dir, CoreDll);
+            var path = Path.Combine(dir, CoreFileName);
             if (File.Exists(path))
             {
                 return path;
@@ -296,7 +330,7 @@ public static class Live2DLocator
         return null;
     }
 
-    /// <summary>Core 候选目录:程序目录根(live2dcubismcore.dll 直接放安装根)→ 程序目录 live2d\ → 用户数据 live2d\。</summary>
+    /// <summary>Core 候选目录:程序目录根 → 程序目录 live2d/ → 用户数据 live2d/。</summary>
     public static IEnumerable<string> SearchDirs()
     {
         yield return AppContext.BaseDirectory;

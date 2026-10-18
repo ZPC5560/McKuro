@@ -110,26 +110,39 @@
   </ItemGroup>
 
   <!--
-    内置 Live2D 运行环境与「心」双形态模型:随包分发到输出目录的 live2d\ 子目录,
+    内置 Live2D 运行环境与「心」双形态模型:随包分发到输出目录的 live2d/ 子目录,
     正是 Live2DLocator.ProgramDir 探测的位置,因此用户零配置即可在首页看到模型。
 
+    平台范围:Windows / macOS / Linux 都随包分发。渲染控件是 Avalonia 的
+    OpenGlControlBase(不绑定 Windows),Cubism Core 三平台各有官方产物:
+    Live2DCubismCore.dll(Windows)、libLive2DCubismCore.dylib(macOS universal)、
+    libLive2DCubismCore.so(Linux x64)。三个文件同名目录并列存放,
+    运行时由 Live2DLocator.CoreFileName 按平台挑名字。
+    (dylib 的 .so 对其它平台是无害的多余文件,体积各约 120~270KB。)
+
     为什么可以随包分发 Cubism Core:官方 SDK 的 Core/RedistributableFiles.txt 明确把
-    dll/windows/x86_64/Live2DCubismCore.dll 列为 "available for redistribution"
+    dll/windows/x86_64/Live2DCubismCore.dll、dll/macos/libLive2DCubismCore.dylib、
+    dll/linux/x86_64/libLive2DCubismCore.so 都列为 "available for redistribution"
     (依据 Live2D Proprietary Software License Agreement 第 5 条)。分发时须保留
     许可声明并让用户同意等效条款 —— 见 Assets/live2d/NOTICE.txt。
 
     必须 Remove + Include(而不是只 Update):
     · 默认 glob <None Include="**/*"> 已收下这些文件,且它的 %(RecursiveDir) 是相对
-      【项目根】的整段路径(Assets\live2d\心-红黑\),直接拿来拼 Link 会得到
-      live2d\Assets\live2d\... 的错位路径。
-    · 先 Remove 掉默认项,再用 <None Include="Assets\live2d\**\*"> 重新收一遍,
-      此时 %(RecursiveDir) 才是相对该 glob 的 <模型>\<子目录>\,Link 结果正好是
-      live2d\<模型>\... ,与 Live2DLocator.ProgramDir 一致。
+      【项目根】的整段路径(Assets/live2d/心-红黑/),直接拿来拼 Link 会得到
+      live2d/Assets/live2d/... 的错位路径。
+    · 先 Remove 掉默认项,再用 <None Include="Assets/live2d/**/*"> 重新收一遍,
+      此时 %(RecursiveDir) 才是相对该 glob 的 <模型>/<子目录>/,Link 结果正好是
+      live2d/<模型>/... ,与 Live2DLocator.ProgramDir 一致。
     · 不 Remove 会因同一文件被收两次而报 NETSDK1022。
+
+    shim/ 子目录是**构建工具**(shim.c + build-live2d-shim.sh),不是运行时资源:
+    macOS/Linux 的 Core 已按平台预编译好放在 live2d/ 下,用户无需这些源码。
+    故显式 Exclude 掉,避免给安装包平白多出源码文件。
   -->
-  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x64' Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')">
+  <ItemGroup>
     <None Remove="Assets\live2d\**\*" />
     <None Include="Assets\live2d\**\*"
+          Exclude="Assets\live2d\shim\**\*"
           CopyToOutputDirectory="PreserveNewest"
           Link="live2d\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>

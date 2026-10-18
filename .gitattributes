@@ -37,3 +37,9 @@ website-src/font-src/** binary
 # 逐类列容易漏,而 .moc3 一旦被 autocrlf 改写换行就会直接损坏(模型加载失败)。
 Assets/live2d/** binary
 src/McKuro/Assets/live2d/** binary
+
+# 例外:live2d/shim/ 是构建工具(源码 + 脚本),不是模型资源。
+# 必须放在上面两条通配之后,后写的规则优先。
+# build-live2d-shim.sh 必须保持 LF —— CRLF 会让 bash 在 macOS/Linux 上直接报错;
+# shim.c 作为源码也应正常参与 diff。
+src/McKuro/Assets/live2d/shim/** text eol=lf
