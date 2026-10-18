@@ -242,8 +242,14 @@ public sealed class AppSettings
 
     // ---------- 应用自更新(对齐 Haiyu UpdateAppViewModel) ----------
 
-    /// <summary>GitHub 仓库("owner/repo",空 = 禁用应用自更新)。</summary>
-    public string AppUpdateRepo { get; set; } = "ZPC5560/McKuro";
+    /// <summary>默认自更新仓库。设置页已不提供输入框,仓库只能来自此默认值或手改 JSON。</summary>
+    public const string DefaultAppUpdateRepo = "ZPC5560/McKuro";
+
+    /// <summary>
+    /// GitHub 仓库("owner/repo")。空值会被 <see cref="SettingsService"/> 的迁移回填为
+    /// <see cref="DefaultAppUpdateRepo"/> —— 详见 SettingsService.MigrateAppUpdateRepo。
+    /// </summary>
+    public string AppUpdateRepo { get; set; } = DefaultAppUpdateRepo;
 
     /// <summary>跳过的应用版本(不再提示该版本更新)。</summary>
     public string SkipAppVersion { get; set; } = "";
@@ -430,13 +436,41 @@ public sealed class SettingsService : ISettingsService
     /// 1) 早期版本把资源等级写在自定义参数里手工填写(如 <c>-krqlv=uhd</c>),迁移到
     ///    结构化的 <see cref="AppSettings.ResourceLevel"/>,避免用户升级后画质被静默改回默认 hd;
     /// 2) 云鸣潮早期只支持单账号(CloudLoginDataJson/Name/Phone),迁移为多账号列表,
-    ///    避免升级后已登录会话丢失。
+    ///    避免升级后已登录会话丢失;
+    /// 3) 自更新仓库空串回填(见 <see cref="MigrateAppUpdateRepo"/>)。
     /// </summary>
     private static AppSettings Migrate(AppSettings settings)
     {
         MigrateResourceLevel(settings);
         MigrateCloudAccounts(settings);
+        MigrateAppUpdateRepo(settings);
         return settings;
+    }
+
+    /// <summary>
+    /// 自更新仓库空串回填。
+    ///
+    /// <para><b>为什么必须迁移</b>:<see cref="AppSettings.AppUpdateRepo"/> 的默认值是
+    /// <c>ZPC5560/McKuro</c>,但 JSON 反序列化会用存量值覆盖默认值 —— 早期版本该字段默认
+    /// 就是空串,且设置页已移除输入框(用户无法自行改回)。于是这些用户的 settings.json 里
+    /// 永久留着 <c>"AppUpdateRepo": ""</c>,每次启动都命中
+    /// <c>SettingsViewModel.CheckAppUpdateCoreAsync</c> 的「未配置更新仓库」分支,
+    /// 自更新功能静默失效且无法自愈。</para>
+    ///
+    /// <para><b>只回填空,不覆盖非空</b>:手改 JSON 的用户可能有意指向自己的 fork,
+    /// 非空值一律原样保留。</para>
+    /// </summary>
+    private static void MigrateAppUpdateRepo(AppSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.AppUpdateRepo))
+        {
+            settings.AppUpdateRepo = AppSettings.DefaultAppUpdateRepo;
+        }
+        else
+        {
+            // 容忍手改 JSON 时带入的多余空白(如 " ZPC5560/McKuro "),避免 Trim 前就去请求
+            settings.AppUpdateRepo = settings.AppUpdateRepo.Trim();
+        }
     }
 
     private static void MigrateResourceLevel(AppSettings settings)

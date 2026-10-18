@@ -102,6 +102,54 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal(4, s.Current.DownloadConcurrency);
     }
 
+    /// <summary>
+    /// 存量 settings.json 里的空 AppUpdateRepo 必须回填默认仓库。
+    /// 回归背景:设置页已移除仓库输入框,空串会让自更新永久显示「未配置更新仓库」
+    /// 且用户无法自行改回 —— 旧版本默认值就是空串,属必然踩到的存量数据。
+    /// </summary>
+    [Fact]
+    public void Empty_AppUpdateRepo_Is_Backfilled_From_Default()
+    {
+        File.WriteAllText(Path.Combine(_dir, "settings.json"),
+            """{"AppUpdateRepo":""}""");
+
+        var s = new SettingsService(_dir, NullLogger<SettingsService>.Instance);
+
+        Assert.Equal(AppSettings.DefaultAppUpdateRepo, s.Current.AppUpdateRepo);
+        Assert.False(string.IsNullOrWhiteSpace(s.Current.AppUpdateRepo));
+    }
+
+    /// <summary>字段完全缺失时同样落到默认仓库(不能因为迁移把默认值变成空)。</summary>
+    [Fact]
+    public void Missing_AppUpdateRepo_Falls_Back_To_Default()
+    {
+        File.WriteAllText(Path.Combine(_dir, "settings.json"), """{"GameRootDir":"/games"}""");
+
+        var s = new SettingsService(_dir, NullLogger<SettingsService>.Instance);
+
+        Assert.Equal(AppSettings.DefaultAppUpdateRepo, s.Current.AppUpdateRepo);
+    }
+
+    /// <summary>非空值(如用户手改 JSON 指向自己的 fork)必须原样保留,迁移只补空。</summary>
+    [Fact]
+    public void Custom_AppUpdateRepo_Is_Preserved_And_Trimmed()
+    {
+        File.WriteAllText(Path.Combine(_dir, "settings.json"),
+            """{"AppUpdateRepo":"  someone/fork  "}""");
+
+        var s = new SettingsService(_dir, NullLogger<SettingsService>.Instance);
+
+        Assert.Equal("someone/fork", s.Current.AppUpdateRepo);
+    }
+
+    /// <summary>默认值本身必须非空,否则迁移无从回填。</summary>
+    [Fact]
+    public void Default_AppUpdateRepo_Is_Not_Empty()
+    {
+        Assert.False(string.IsNullOrWhiteSpace(new AppSettings().AppUpdateRepo));
+        Assert.Equal(AppSettings.DefaultAppUpdateRepo, new AppSettings().AppUpdateRepo);
+    }
+
     [Fact]
     public async Task SaveAsync_Writes_Latest_Value()
     {
