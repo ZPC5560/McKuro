@@ -29,12 +29,15 @@
 .faq { display: grid; gap: 10px; }
 .faq details { border-radius: var(--r); background: rgba(255, 255, 255, .7); border: 1px solid #fff; box-shadow: 0 0 0 1px var(--line); transition: background .2s; }
 .faq details[open] { background: #fff; }
-.faq summary { position: relative; padding: 18px 52px 18px 20px; cursor: pointer; list-style: none; font-weight: 500; }
+.faq summary {
+  position: relative; display: flex; align-items: center; min-height: 56px;
+  padding: 18px 52px 18px 20px; cursor: pointer; list-style: none; font-weight: 500;
+}
 .faq summary::-webkit-details-marker { display: none; }
 .faq summary::after { content: ""; position: absolute; right: 22px; top: 50%; width: 9px; height: 9px; margin-top: -7px; border-right: 2px solid var(--ink-3); border-bottom: 2px solid var(--ink-3); transform: rotate(45deg); transition: transform .25s var(--ease); }
 .faq details[open] summary::after { transform: translateY(4px) rotate(-135deg); }
 .faq summary:focus-visible { outline-offset: -2px; border-radius: var(--r); }
-.faq details p { padding: 0 20px 18px; color: var(--ink-2); font-size: 15px; }
+.faq details > p { padding: 0 20px 18px; color: var(--ink-2); font-size: 15px; }
 
 /* ---------- download ---------- */
 .dl { padding: 40px 0 120px; }
@@ -51,10 +54,12 @@
 .btn { display: inline-flex; align-items: center; gap: 10px; border-radius: 999px; font: 600 15px/1 var(--sans); transition: background .2s, transform .2s var(--ease), box-shadow .2s; }
 .btn--lg { height: 52px; padding: 0 8px 0 22px; }
 .btn--primary { background: var(--accent-ink); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 10px 24px -10px rgba(42, 91, 192, .8); }
-.btn--primary:hover { background: #2350AB; transform: translateY(-1px); }
 .btn__end { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: rgba(255, 255, 255, .18); }
 .btn--ghost { padding: 0 22px 0 18px; background: #fff; color: var(--ink); box-shadow: 0 0 0 1px var(--line-2); }
-.btn--ghost:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px var(--line-2), var(--shadow); }
+@media (hover: hover) and (pointer: fine) {
+  .btn--primary:hover { background: #2350AB; transform: translateY(-1px); }
+  .btn--ghost:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px var(--line-2), var(--shadow); }
+}
 
 /* ---------- footer ---------- */
 .foot { padding: 48px 0 56px; border-top: 1px solid var(--line); }
@@ -63,58 +68,130 @@
 .foot__brand img { border-radius: 50%; }
 .foot__brand .mono { font-size: 12px; color: var(--ink-3); }
 .foot__links { display: flex; flex-wrap: wrap; gap: 4px 20px; justify-content: flex-end; font-size: 14px; color: var(--ink-2); }
-.foot__links a:hover, .foot__credits a:hover { color: var(--accent-ink); }
 .foot__credits { grid-column: 1 / -1; display: grid; gap: 8px; font-size: 13px; color: var(--ink-3); }
 .foot__credits a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-2); }
+@media (hover: hover) and (pointer: fine) {
+  .foot__links a:hover, .foot__credits a:hover { color: var(--accent-ink); }
+}
 
-/* ---------- responsive ---------- */
-@media (max-width: 1180px) { .float { display: none; } }
-@media (max-width: 940px) {
-  .nav__links, .nav__end { display: none; }
-  .nav__burger { display: block; }
-  .sec { padding: 88px 0; }
-  .stage { padding: 28px 16px 20px; border-radius: 24px; }
-  .app__body { grid-template-columns: 1fr; }
-  .app__rail { display: none; }
-  .pools, .daily, .floors { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .roles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .pulls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .mods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .mod--wide, .mod--wide:nth-child(2) { grid-column: span 2; }
-  .looks, .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .plat, .dl__card { grid-template-columns: 1fr; }
-  .dl__card { padding: 36px 28px; }
+/* ---------- breakpoints: 1100 / 900 / 720 / 520 ----------
+   This replaces the retired cross-file responsive dump (1180 / 940 / 600). Only the blocks
+   owned by this file are rebuilt here; .stage / .app__* / .pools / .daily / .floors / .roles /
+   .pulls / .composer__* / .detail__dl / .sea__row / .acct belong to 20-demo.css now, and
+   .wrap / .sec / .sec__head / .float / html{scroll-behavior} to 00-base.css.
+   Column ladders:
+     .plat   2 -> 1 (1100)
+     .ptable table -> stacked cards (720)
+     .facts  5 -> 3 (1100) -> 2 (720)
+     .dl__card 2 -> 1 (1100), buttons full-bleed (520)
+     .foot__in 2 -> 1 (720)            */
+
+@media (max-width: 1100px) {
+  /* the table would be squeezed to ~420px next to the chain card, so it takes the full width */
+  .plat { grid-template-columns: 1fr; }
+  .dl__card { grid-template-columns: 1fr; padding: 40px; gap: 24px; }
   .dl__acts { justify-content: flex-start; }
   .dl__hint { text-align: left; }
+  /* 3 + 2: the 3rd column starts row 2, so kill the left border on 3n+1 and draw tops on n+4 */
   .facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .facts > div:nth-child(4) { border-left: 0; }
-  .facts > div:nth-child(n+4) { border-top: 1px solid var(--line); }
-  .win { --w: 220px; --R: 640px; height: 170px; }
-  .wall { height: 260px; }
+  .facts > div:nth-child(3n + 1) { border-left: 0; }
+  .facts > div:nth-child(n + 4) { border-top: 1px solid var(--line); }
 }
-@media (max-width: 600px) {
-  .wrap { width: calc(100% - 32px); }
-  .hero { padding-top: 120px; }
-  .hero__sub { font-size: 16px; }
-  .composer__gap { display: none; }
-  .composer__go { width: 100%; justify-content: center; margin-top: 4px; }
-  .pools, .daily, .floors, .mods, .looks, .steps { grid-template-columns: 1fr; }
-  .mod--wide, .mod--wide:nth-child(2) { grid-column: auto; }
-  .detail__dl { grid-template-columns: repeat(2, 1fr); }
-  .sea__row { grid-template-columns: 56px 1fr 48px; }
-  .sea__row .tag { display: none; }
-  .acct { grid-template-columns: 34px 1fr auto; }
-  .acct__id { display: none; }
+
+@media (max-width: 900px) {
+  .chain { padding: 20px; }
+  .ptable th, .ptable td { padding: 14px 16px; }
+  .dl { padding: 24px 0 88px; }
+  .dl__card { padding: 36px 32px; }
+  .faq summary { padding: 16px 48px 16px 18px; font-size: 15px; }
+  .faq details > p { padding: 0 18px 16px; font-size: 14.5px; }
+  .foot { padding: 40px 0 48px; }
+}
+
+/* Mobile table: the 520px min-width horizontal scroller is gone. Each <tr> becomes a card:
+   the row <th> is the card title and every cell carries a generated column label, so the
+   reader never has to line a value up against a header that scrolled off screen. The table
+   semantics stay intact (thead is clipped, not removed) so AT still announces real headers;
+   CSS grid/flex reordering does not affect reading order. */
+@media (max-width: 720px) {
+  .ptable-wrap { overflow-x: visible; }
+  .ptable { min-width: 0; font-size: 14px; display: block; }
+  .ptable thead {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+  .ptable tbody { display: block; }
+  .ptable tbody tr { display: block; padding: 14px 16px; }
+  .ptable tbody tr + tr { border-top: 1px solid var(--line); }
+  .ptable tbody tr:last-child > * { border-bottom: 0; }
+  .ptable th, .ptable td { padding: 0; border: 0; }
+  .ptable tbody th { font-size: 15px; white-space: normal; }
+  .ptable td {
+    display: flex; align-items: baseline; gap: 0 10px;
+    margin-top: 7px; font-size: 13.5px; line-height: 1.55;
+  }
+  /* the label rides on ::after (the status dot already owns ::before) and is ordered first */
+  .ptable td::after {
+    content: ""; order: -1; flex: none; width: 84px;
+    font: 400 12px/1.6 var(--sans); color: var(--ink-3);
+  }
+  .ptable td:nth-of-type(1)::after { content: "下载"; }
+  .ptable td:nth-of-type(2)::after { content: "视频与壁纸"; }
+  .ptable td:nth-of-type(3)::after { content: "Live2D"; }
+  .ptable td.yes::before, .ptable td.part::before, .ptable td.no::before { margin-right: 0; }
+
   .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .facts > div { padding: 18px 12px; }
+  /* 2-up: clear every left border first (the base `> div + div` draws one on all but the
+     first cell, which would leave a dangling line at the start of row 2), then redraw it
+     only on the even cells, i.e. the second column. */
   .facts > div:nth-child(n) { border-left: 0; border-top: 1px solid var(--line); }
-  .facts > div:nth-child(-n+2) { border-top: 0; }
+  .facts > div:nth-child(-n + 2) { border-top: 0; }
   .facts > div:nth-child(even) { border-left: 1px solid var(--line); }
-  .foot__in { grid-template-columns: 1fr; }
-  .foot__links { justify-content: flex-start; }
-  .win { --w: 180px; --R: 520px; height: 140px; }
-  .wall { height: 210px; margin-bottom: 40px; }
+  /* five items in a 2-up grid leave the last cell alone next to a hole; spanning it turns
+     the odd count into a deliberate closing figure instead of a ragged row 3 */
+  .facts > div:last-child { grid-column: 1 / -1; border-left: 0; }
+  .facts dd { font-size: 26px; }
+
+  .dl { padding: 16px 0 72px; }
+  .dl__card { padding: 28px 20px; border-radius: 24px; }
+  .dl__acts { gap: 8px; }
+  .dl__hint { font-size: 12.5px; line-height: 1.6; }
+
+  .foot { padding: 32px 0 40px; }
+  .foot__in { grid-template-columns: 1fr; gap: 14px; align-items: start; }
+  .foot__links { justify-content: flex-start; gap: 4px 18px; font-size: 13.5px; }
+  .foot__credits { gap: 10px; line-height: 1.7; }
 }
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+
+@media (max-width: 520px) {
+  .chain { padding: 16px; }
+  .chain__list { margin: 12px 0; }
+  .ptable tbody tr { padding: 13px 14px; }
+  .ptable td { margin-top: 6px; font-size: 13px; }
+  .ptable td::after { width: 74px; font-size: 11.5px; }
+
+  .facts > div { padding: 14px 8px; }
+  .facts dt { font-size: 12px; }
+  .facts dd { font-size: 22px; }
+
+  .faq { gap: 8px; }
+  .faq summary { padding: 14px 44px 14px 16px; font-size: 14.5px; min-height: 52px; }
+  .faq details > p { padding: 0 16px 14px; font-size: 14px; line-height: 1.7; }
+
+  .dl { padding: 12px 0 64px; }
+  .dl__card { padding: 24px 16px; gap: 20px; border-radius: 20px; }
+  .dl__acts { gap: 8px; }
+  /* full-bleed buttons: the row is 342px wide here and the pair will not fit side by side */
+  .dl__acts .btn { flex: 1 1 100%; width: 100%; justify-content: center; padding: 0 16px; }
+  .dl__acts .btn--primary { padding-right: 8px; }
+  .dl__acts .btn--lg { height: 50px; }
+  .dl__hint { font-size: 12px; line-height: 1.65; }
+
+  .foot__links { gap: 2px 16px; }
+  .foot__credits { font-size: 12px; line-height: 1.7; }
 }
+
+/* The reduced-motion stop moved to 00-base.css so it is declared once, before every
+   component rule it has to override. Kept here as a pointer, not as a duplicate: two
+   copies of a `!important` wildcard drift apart the moment one of them is edited. */

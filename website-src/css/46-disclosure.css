@@ -1,0 +1,40 @@
+/* ---------- disclosure: FAQ + CHANGELOG share one open/close motion ----------
+   A `<details>` element opens instantly: the content box appears at its full height in
+   one frame, which reads as a page jump rather than as an answer being revealed. Both
+   the FAQ and the release log are full of them, so one shared rule is worth the
+   complexity.
+
+   `::details-content` with `interpolate-size` is the correct modern answer: it lets
+   `content-visibility` and the block size animate without knowing the content height.
+   Browsers without it simply keep today's instant open — the markup is a native
+   `<details>`, so nothing regresses and nothing depends on JS.
+
+   `transition-behavior: allow-discrete` is what allows `content-visibility: hidden` to
+   be transitioned at all; without it the box is removed immediately and only the
+   second half of the animation would be visible. */
+@supports (interpolate-size: allow-keywords) {
+  :root { interpolate-size: allow-keywords; }
+
+  .faq details::details-content,
+  .cl::details-content {
+    block-size: 0;
+    overflow: hidden;
+    transition:
+      block-size var(--t-ui) var(--ease-enter),
+      content-visibility var(--t-ui) allow-discrete,
+      opacity var(--t-ui) var(--ease);
+    opacity: 0;
+  }
+  .faq details[open]::details-content,
+  .cl[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
+}
+
+/* Reduced motion keeps the native instant open: an animated height is spatial travel,
+   which is exactly what this preference asks us to remove. */
+@media (prefers-reduced-motion: reduce) {
+  .faq details::details-content,
+  .cl::details-content { transition: none; opacity: 1; block-size: auto; }
+}

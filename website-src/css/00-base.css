@@ -32,6 +32,20 @@
   --shadow: 0 1px 2px rgba(20, 30, 50, .05), 0 8px 28px -10px rgba(20, 30, 50, .16);
   --shadow-lg: 0 2px 4px rgba(20, 30, 50, .04), 0 30px 70px -28px rgba(20, 30, 50, .32);
   --ease: cubic-bezier(.22, .8, .24, 1);
+
+  /* Motion scale. One place to change the feel of the whole page: every transition
+     either uses one of these or is a deliberate one-off next to the thing it animates.
+     `--ease-enter` is the curve entrances and transform-hovers settle on (fast start,
+     long tail = reads responsive); `--ease-move` is for elements that travel across the
+     screen. Durations stay under 300ms for anything the user drives, because a control
+     that lags the finger reads as broken rather than as polished. */
+  --ease-enter: cubic-bezier(.22, 1, .36, 1);
+  --ease-move: cubic-bezier(.25, 1, .5, 1);
+  --t-press: 120ms;
+  --t-hover: 180ms;
+  --t-ui: 240ms;
+  --t-reveal: 620ms;
+
   --wrap: 1180px;
 }
 
@@ -62,17 +76,23 @@ b { font-weight: 600; }
 .ico--xs { width: 14px; height: 14px; }
 
 :focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 3px; border-radius: 6px; }
+/* The skip link slides in with `top`, which is a layout property — a deliberate
+   exception: it is one element, it moves exactly once, and it only exists while
+   focused, so the layout cost never lands during normal scrolling or interaction. */
 .skip {
   position: fixed; left: 16px; top: -60px; z-index: 100;
   padding: 10px 16px; border-radius: var(--r-sm);
   background: var(--ink); color: #fff; font-weight: 500;
-  transition: top .2s var(--ease);
+  transition: top 160ms var(--ease-enter);
 }
 .skip:focus { top: 16px; }
 
 .wrap { width: min(var(--wrap), 100% - 48px); margin-inline: auto; }
 .wrap--narrow { width: min(760px, 100% - 48px); }
 
+/* Sections. Every section owns its vertical rhythm, so a narrow screen must not keep
+   the desktop 120px band: at 390px that is 240px of empty page per section, which on
+   a phone reads as "the content stopped loading". */
 .sec { padding: 120px 0; }
 .sec__head { text-align: center; max-width: 720px; margin: 0 auto 56px; }
 .sec__h2 {
@@ -102,6 +122,69 @@ b { font-weight: 600; }
 .tag--off { background: #FBEBD6; color: #8F5300; }
 .tag--keep { background: var(--accent-soft); color: var(--accent-ink); }
 
-/* reveal: only when JS is on and motion allowed (site.js adds .reveal) */
-.reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s var(--ease), transform .7s var(--ease); transition-delay: var(--d, 0ms); }
+/* ---------------------------------------------------------------------------
+   Scroll reveal — started by site.js only, never by CSS alone.
+
+   The un-animated state is VISIBLE: `.reveal` is added by JS in the same frame it
+   starts observing, so a broken script can never leave the page blank. Only a
+   handful of moments earn a reveal (see the comment in site.js); staggering every
+   section would make the page feel like a slideshow instead of a document.
+
+   `--d` is the per-item stagger delay. It is set by JS so the delay stays tied to
+   actual sibling order.
+   --------------------------------------------------------------------------- */
+.reveal {
+  opacity: 0;
+  transform: translate3d(0, 16px, 0);
+  transition:
+    opacity var(--t-reveal) var(--ease-enter) var(--d, 0ms),
+    transform var(--t-reveal) var(--ease-enter) var(--d, 0ms);
+}
 .reveal.is-in { opacity: 1; transform: none; }
+
+/* A heading that leads its block gets a shorter travel than its supporting cards:
+   the thing that carries meaning settles first, the furniture follows. */
+.reveal--lead { transform: translate3d(0, 10px, 0); }
+
+/* ---------------------------------------------------------------------------
+   Shared responsive shell. Per-component breakpoints live next to their component;
+   these three are the ones every section depends on.
+   --------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .sec { padding: 88px 0; }
+  .sec__head { margin-bottom: 40px; }
+}
+@media (max-width: 720px) {
+  .wrap, .wrap--narrow { width: min(var(--wrap), 100% - 40px); }
+  .sec { padding: 68px 0; }
+  .sec__head { margin-bottom: 32px; }
+  .sec__sub { margin-top: 12px; font-size: 16px; }
+}
+@media (max-width: 520px) {
+  .wrap, .wrap--narrow { width: min(var(--wrap), 100% - 32px); }
+  .sec { padding: 56px 0; }
+  .sec__head { margin-bottom: 26px; }
+}
+
+/* ---------------------------------------------------------------------------
+   Reduced motion — the one global stop.
+
+   Spatial travel becomes an immediate swap; fades stay (an instant cut between two
+   nearly identical states is more jarring than a 1ms fade). Explicit user-driven
+   feedback such as the tap highlight still works, because it is not motion.
+
+   Kept last so it wins over every component rule above it without !important
+   gymnastics beyond the wildcard cap.
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Anything that is only hidden *because* it is waiting to travel in must not be
+     left at zero opacity when the animation that would reveal it is disabled. */
+  .reveal { opacity: 1; transform: none; }
+}

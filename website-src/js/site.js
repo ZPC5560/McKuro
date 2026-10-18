@@ -10,8 +10,30 @@
 
   /* ---------- 1. nav: stuck state + mobile drawer ---------- */
   var nav = $("#nav"), burger = $("#burger"), drawer = $("#drawer");
+
+  /* Hide-on-scroll-down, reveal-on-scroll-up. Only meaningful while the burger nav is
+     active (the CSS gates it to <=900px), but the class is harmless on desktop.
+     The last few pixels of scroll-down are ignored so a stray wheel tick or the
+     rubber-band at the top of a touch scroll cannot flap the bar. */
+  var lastY = window.scrollY || 0, navTick = false;
+  function onNavScroll() {
+    var y = Math.max(window.scrollY || 0, 0);
+    var dy = y - lastY;
+    if (Math.abs(dy) < 6) { return; }
+    var open = burger && burger.getAttribute("aria-expanded") === "true";
+    if (open) { nav.classList.remove("is-hidden"); }
+    else if (dy > 0 && y > 140) { nav.classList.add("is-hidden"); }
+    else if (dy < 0) { nav.classList.remove("is-hidden"); }
+    lastY = y;
+  }
   if (nav) {
-    var onScroll = function () { nav.classList.toggle("is-stuck", window.scrollY > 8); };
+    var onScroll = function () {
+      nav.classList.toggle("is-stuck", window.scrollY > 8);
+      if (!navTick) {
+        navTick = true;
+        requestAnimationFrame(function () { navTick = false; onNavScroll(); });
+      }
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
   }
@@ -20,30 +42,59 @@
       burger.setAttribute("aria-expanded", String(open));
       burger.setAttribute("aria-label", open ? "关闭菜单" : "打开菜单");
       if (open) { drawer.removeAttribute("hidden"); } else { drawer.setAttribute("hidden", ""); }
+      /* An open menu must never be off screen. */
+      if (open && nav) { nav.classList.remove("is-hidden"); }
     };
     burger.addEventListener("click", function () { setDrawer(burger.getAttribute("aria-expanded") !== "true"); });
     drawer.addEventListener("click", function (e) { if (e.target.tagName === "A") { setDrawer(false); } });
     window.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && burger.getAttribute("aria-expanded") === "true") { setDrawer(false); burger.focus(); }
     });
-    window.matchMedia("(min-width: 941px)").addEventListener("change", function (e) { if (e.matches) { setDrawer(false); } });
+    window.matchMedia("(min-width: 901px)").addEventListener("change", function (e) { if (e.matches) { setDrawer(false); } });
+    /* Tapping outside closes it: on a phone the drawer covers most of the screen and
+       the burger is the only obvious way back. */
+    document.addEventListener("pointerdown", function (e) {
+      if (burger.getAttribute("aria-expanded") !== "true") { return; }
+      if (drawer.contains(e.target) || burger.contains(e.target)) { return; }
+      setDrawer(false);
+    }, { passive: true });
   }
 
-  /* ---------- 2. reveal on scroll ---------- */
+  /* ---------- 2. reveal on scroll ----------
+     Deliberately narrow. A landing page that animates every section turns reading
+     into waiting, and each extra reveal devalues the next one. The moments kept:
+       - each section's heading block (once, on arrival)
+       - the module grid and the step list (their only entrance)
+       - the download card (the page's final call to action)
+     Cards inside a grid get a small stagger so the group reads as one gesture
+     rather than five independent fades.
+
+     Everything else is simply there. The un-animated state is visible: `.reveal`
+     is added by this script in the same tick it starts observing, so a failed
+     script or a browser without IntersectionObserver shows the page, not a blank. */
   if (!reduce && "IntersectionObserver" in window) {
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (en) {
         if (!en.isIntersecting) { return; }
         en.target.classList.add("is-in");
-        io.unobserve(en.target);
+        io.unobserve(en.target);            // reveal once; never replay on scroll-up
       });
-    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
-    [".mods", ".looks", ".steps", ".facts", ".faq"].forEach(function (sel) {
+    }, { rootMargin: "0px 0px -12% 0px", threshold: 0.06 });
+
+    var groups = { ".mods": 60, ".steps": 70, ".looks": 60 };
+    Object.keys(groups).forEach(function (sel) {
       var g = $(sel);
       if (!g) { return; }
-      Array.prototype.forEach.call(g.children, function (c, i) { c.style.setProperty("--d", Math.min(i, 8) * 55 + "ms"); });
+      Array.prototype.forEach.call(g.children, function (c, i) {
+        c.style.setProperty("--d", Math.min(i, 6) * groups[sel] + "ms");
+      });
     });
-    $$(".sec__head, .stage, .mod, .looks li, .steps li, .plat > *, .facts, .faq details, .dl__card, .wall").forEach(function (el) {
+
+    $$(".sec__head").forEach(function (h) {
+      h.classList.add("reveal", "reveal--lead");
+      io.observe(h);
+    });
+    $$(".mod, .steps li, .looks li, .dl__card, .stage").forEach(function (el) {
       el.classList.add("reveal");
       io.observe(el);
     });
@@ -104,10 +155,19 @@
       var p = Math.min(Math.max((pinned - r.top) / travel, 0), 1);
       p = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // easeInOutQuad
 
+      // The window reaches full size early, but its CONTENTS wait until the cards are
+      // basically home (0.82). Fading it open at 0.22 showed an empty shell with a
+      // title bar while the cards were still in flight, which read as a cut rather than
+      // as the cards filling it.
+      var shell = Math.min(p / 0.22, 1);
+      var filled = Math.min(Math.max((p - 0.82) / 0.18, 0), 1);
       if (win) {
-        win.style.opacity = String(Math.min(p / 0.22, 1));
-        win.style.transform = "translate(-50%, -50%) scale(" + (0.9 + 0.1 * Math.min(p / 0.22, 1)).toFixed(4) + ")";
+        win.style.opacity = String(shell);
+        win.style.transform = "translate(-50%, -50%) scale(" + (0.9 + 0.1 * shell).toFixed(4) + ")";
       }
+      // data-filled drives the title bar + slot grid fade (see 11-intake.css)
+      if (filled > 0.5) { intake.setAttribute("data-filled", ""); } else { intake.removeAttribute("data-filled"); }
+
       cards.forEach(function (c, i) {
         var start = i * 0.06;
         var cp = Math.min(Math.max((p - start) / (1 - start), 0), 1);
@@ -125,13 +185,23 @@
     function onScroll() { if (!ticking) { ticking = true; requestAnimationFrame(paint); } }
 
     if (reduce) {
-      // no staging: light every slot and park the cards in place
-      cards.forEach(function (c, i) { c.style.display = "none"; if (slots[i]) { slots[i].classList.add("is-lit"); } });
-      if (win) { win.style.opacity = "1"; win.style.transform = "translate(-50%, -50%)"; }
+      /* No staging at all: the section degrades to the five cards as a plain grid
+         (11-intake.css). The cards must NOT be hidden here — the empty window they
+         would leave behind is exactly the blank panel this branch is supposed to
+         avoid. The window itself is decorative once nothing travels into it. */
+      if (win) { win.style.display = "none"; }
+      intake.setAttribute("data-filled", "");
+      intake.setAttribute("data-done", "");
     } else {
       layout();
       window.addEventListener("resize", function () { layout(); paint(); });
       window.addEventListener("scroll", onScroll, { passive: true });
+      /* The first measurement can land before the web fonts have swapped, which changes
+         every card's height and therefore every target offset. Re-measure once the
+         fonts are ready and once the hero staged its first paint. */
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(function () { layout(); paint(); });
+      }
       paint();
     }
   }

@@ -1,0 +1,135 @@
+
+/* ==========================================================================
+   INTAKE / HERO CARDS: scrolling folds the five data cards into the app window.
+   Lives here, not in 20-demo.css, because the section sits directly under the
+   hero and shares its layout budget; the demo window's responsive work must not
+   collide with this scrollytelling.
+   ========================================================================== */
+
+/* the section must be taller than the sticky stage, otherwise it never pins and
+   there is no scroll travel to drive the intake animation */
+.intake { position: relative; min-height: 165vh; padding: 0 0 40px; }
+.intake__sticky {
+  position: sticky; top: 96px; height: 560px;
+  width: min(var(--wrap), 100% - 48px); margin-inline: auto;
+  border-radius: var(--r-xl);
+  background: linear-gradient(170deg, #F4F8FD 0%, #E1E9F6 100%);
+  border: 1px solid #fff; box-shadow: 0 0 0 1px var(--line), var(--shadow-lg);
+  overflow: hidden;
+}
+.intake__hint { position: absolute; inset: 22px 0 auto; text-align: center; font: 500 13px/1 var(--sans); color: var(--ink-3); transition: opacity var(--t-ui) var(--ease); }
+.intake__sticky[data-done] .intake__hint { opacity: 0; }
+
+/* desk holds the loose cards before they fly in. Cards must sit ABOVE the window
+   so they visibly travel into it rather than passing behind it. */
+.intake__desk { position: absolute; inset: 0; z-index: 2; }
+.dcard {
+  position: absolute; width: 214px; display: grid; gap: 3px; padding: 13px 15px;
+  border-radius: var(--r); background: #fff; box-shadow: 0 0 0 1px var(--line), var(--shadow);
+  will-change: transform, opacity;
+}
+.dcard__mid { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dcard__mid b { font-size: 21px; font-weight: 600; line-height: 1.15; }
+.dcard__mid b i { font-style: normal; font-size: 12px; font-weight: 400; color: var(--ink-3); }
+.dcard__mid em { font-style: normal; font-size: 11.5px; color: var(--ink-3); }
+.dcard__bar { height: 5px; border-radius: 3px; background: rgba(27, 36, 51, .07); overflow: hidden; margin: 4px 0 2px; }
+.dcard__bar b { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.dcard__note { font-size: 11.5px; color: var(--ink-3); }
+
+/* scattered start positions */
+.dcard[data-i="0"] { left: 7%;  top: 27%; }
+.dcard[data-i="1"] { left: 32%; top: 16%; }
+.dcard[data-i="2"] { right: 7%; top: 25%; }
+.dcard[data-i="3"] { left: 13%; bottom: 17%; }
+.dcard[data-i="4"] { right: 14%; bottom: 15%; }
+
+/* the window they land in: centred, hidden until the cards arrive */
+.intake__win {
+  position: absolute; left: 50%; top: 50%; width: min(720px, 86%); height: 264px;
+  transform: translate(-50%, -50%); border-radius: var(--r-lg);
+  background: #FAFBFD; border: 1px solid #fff;
+  box-shadow: 0 0 0 1px var(--line-2), var(--shadow-lg);
+  opacity: 0; will-change: transform, opacity;
+  z-index: 1;
+  /* The cards finish travelling INTO this box, so its content must not be visible
+     ahead of them: the title bar and the empty slot grid appear only at the end of
+     the move. Without this the window reads as "already built" while the cards are
+     still flying at it. */
+  transition: opacity var(--t-ui) var(--ease);
+}
+.intake__bar, .intake__slots { opacity: 0; transition: opacity var(--t-ui) var(--ease); }
+.intake[data-filled] .intake__bar,
+.intake[data-filled] .intake__slots { opacity: 1; }
+.intake__bar { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-bottom: 1px solid var(--line); background: #F2F5F9; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+.intake__bar i { width: 9px; height: 9px; border-radius: 50%; background: rgba(27, 36, 51, .14); }
+.intake__bar b { margin-left: 8px; font: 500 12px/1 var(--sans); color: var(--ink-2); }
+/* Slots are measuring guides only: the cards themselves become the window's
+   content, so nothing should ever show as an empty box. */
+.intake__slots { position: absolute; inset: 32px 0 0; padding: 16px; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 12px; }
+.intake__slots i { border-radius: 12px; background: none; box-shadow: none; }
+
+/* no JS: show the cards laid out in a plain grid, skip the staging entirely */
+html:not(.js) .intake__sticky { position: static; height: auto; padding: 22px; }
+html:not(.js) .intake__desk { position: static; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+html:not(.js) .dcard { position: static; width: auto; }
+html:not(.js) .intake__win, html:not(.js) .intake__hint { position: static; opacity: 1; transform: none; margin-top: 16px; }
+
+/* ==========================================================================
+   Below 900px the stage is a phone, not a desktop window, and the five desktops'
+   worth of choreography stops working: the cards are 214px wide against a 342px
+   stage, so any scatter makes them overlap, and a radial flight to the centre
+   makes them pile up on top of each other mid-transit (measured: five cards
+   within one card-width of the centre at p≈0.6).
+
+   So the mobile staging changes KIND, not just size. Cards are pre-aligned to
+   the column they will land in (0/2/4 left, 1/3 right) and start above or below
+   the window's band, so the travel is almost purely vertical: they are swallowed
+   from both sides and never cross each other. The landing slots are the window's
+   real 2-column grid, so a card's rest position is exactly where the app draws
+   it — no scale correction needed.
+   ========================================================================== */
+@media (max-width: 900px) {
+  .intake { min-height: 180vh; padding-bottom: 24px; }
+  .intake__sticky { top: 76px; height: min(72svh, 540px); width: min(var(--wrap), 100% - 24px); border-radius: var(--r-lg); }
+  .intake__hint { inset: 14px 0 auto; font-size: 12px; }
+
+  .dcard { width: 154px; padding: 10px 12px; gap: 2px; }
+  .dcard__mid b { font-size: 18px; }
+  .dcard__note { font-size: 10.5px; }
+  .dcard__top { font-size: 11.5px; }
+
+  /* Above the window, in the card's own future column. */
+  .dcard[data-i="0"] { left: 4%;   top: 11%; bottom: auto; right: auto; }
+  .dcard[data-i="1"] { right: 4%;  top: 11%; bottom: auto; left: auto; }
+  .dcard[data-i="2"] { left: 4%;   top: 30%; bottom: auto; right: auto; }
+  .dcard[data-i="3"] { right: 4%;  top: 30%; bottom: auto; left: auto; }
+  .dcard[data-i="4"] { left: 4%;   bottom: 9%; top: auto; right: auto; }
+
+  .intake__win { width: min(560px, 88%); height: min(58svh, 336px); border-radius: var(--r); }
+  .intake__slots { inset: 30px 0 0; padding: 12px; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(3, 1fr); gap: 8px; }
+}
+@media (max-width: 520px) {
+  /* Card width is chosen so the cards rest at their slot size: the 2-column grid
+     inside a 94%-wide window gives ~141px slots, so a 140px card needs almost no
+     scale correction. Height is trimmed the same way (measured 89.6px before) so the
+     five of them tile the window exactly instead of overhanging their rows. */
+  .dcard { width: 140px; padding: 7px 11px; }
+  .dcard__mid b { font-size: 16.5px; line-height: 1.05; }
+  .dcard__mid b i { font-size: 11px; }
+  .dcard__bar { margin: 3px 0 1px; }
+  .dcard__note { font-size: 10px; line-height: 1.35; }
+  .intake__win { width: min(560px, 94%); height: min(56svh, 336px); }
+  .intake__slots { inset: 28px 0 0; padding: 10px; gap: 6px; }
+}
+
+/* Reduced motion: the section is not a story any more, it is a list. site.js hides the
+   (now decorative) window and leaves the cards alone; this keeps the stage from
+   reserving a screen and a half of empty scroll for an animation that will never run. */
+@media (prefers-reduced-motion: reduce) {
+  .intake { min-height: 0; }
+  .intake__sticky { position: static; height: auto; padding: 20px; }
+  .intake__desk { position: static; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .dcard { position: static; width: auto; }
+  .intake__hint { display: none; }
+  .intake__win { display: none; }
+}

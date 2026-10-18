@@ -12,7 +12,7 @@ Layout (all paths relative to this file, so a fresh clone works):
 Icon SVGs come from src/icons (Phosphor, MIT). Font sources come from
 font-src/ and are subset to exactly the glyphs the page renders.
 
-Usage:  python build.py [--font-src DIR]
+Usage:  python build.py [--font-src DIR] [--out DIR]
 
 If a font source is missing the build stops before touching the output, so an
 incomplete checkout can never half-overwrite a working site.
@@ -88,6 +88,34 @@ def changelog_section():
     return cl.to_html(text, open_recent=2)
 
 
+def latest_release():
+    """(version, date) of the newest CHANGELOG entry, e.g. ('1.3.6.2', '2026-10-18').
+
+    The page bakes a version into three places as the no-JS / offline fallback for
+    the live value fetched from the GitHub API. Those literals drifted two releases
+    behind because nobody remembers to edit them, so they are derived here instead:
+    CHANGELOG.md is already the single source of truth for releases, and the build
+    already refuses to run without a valid newest section.
+    """
+    sections = cl.parse(read(os.path.join(REPO, "CHANGELOG.md")))
+    version, date = sections[0][0], sections[0][1]
+    if not version or not date:
+        raise SystemExit("newest CHANGELOG section needs a version and a date")
+    return version.lstrip("v"), date
+
+
+def stamp_release(html, version, date):
+    """Replace the baked-in fallback version/date markers with the real release.
+
+    Markers are explicit (`<!--VER-->` / `<!--DATE-->`) rather than a regex over any
+    `vX.Y.Z`-looking string, so a version number that appears in prose (a changelog
+    entry, a download filename) can never be rewritten by accident.
+    """
+    if "<!--VER-->" not in html or "<!--DATE-->" not in html:
+        raise SystemExit("html partials must keep the <!--VER--> / <!--DATE--> markers")
+    return html.replace("<!--VER-->", "v" + version).replace("<!--DATE-->", date)
+
+
 def subset(py, src, dst, chars):
     """Subset one font to `chars`; raises if fontTools is unavailable."""
     tmp = os.path.join(HERE, ".charset.tmp")
@@ -112,12 +140,19 @@ def main():
     ap.add_argument("--font-src", default=os.path.join(HERE, "font-src"),
                     help="directory holding the full Noto Sans/Serif SC and Geist woff2 files")
     ap.add_argument("--python", default=sys.executable)
+    ap.add_argument("--out", default=OUT,
+                    help="output directory; defaults to <repo>/website. Point it elsewhere "
+                         "to preview a change without touching the committed site.")
     args = ap.parse_args()
+    out = os.path.abspath(args.out)
 
     html = concat("html", ".html").replace("<!--SPRITE-->", sprite())
     if "<!--CHANGELOG-->" not in html:
         raise SystemExit("html partials must keep the <!--CHANGELOG--> placeholder")
+    version, date = latest_release()
+    html = stamp_release(html, version, date)
     html = html.replace("<!--CHANGELOG-->", changelog_section())
+    print(f"release stamped: v{version} ({date})")
     css = concat("css", ".css")
     js_names = sorted(n for n in os.listdir(os.path.join(HERE, "js")) if n.endswith(".js"))
     js = "".join(read(os.path.join(HERE, "js", n)) for n in js_names)
@@ -172,14 +207,22 @@ def main():
         )
 
     # ---- write page + scripts ----
-    write(os.path.join(OUT, "index.html"), html)
-    write(os.path.join(OUT, "site.css"), css)
+    # assets/ (app icon, social card) is hand-made and lives only in the committed site,
+    # so it is not generated. A preview build into another directory still needs it,
+    # otherwise the page shows broken icons and a layout bug cannot be told from a
+    # missing file.
+    assets_src = os.path.join(OUT, "assets")
+    if out != OUT and os.path.isdir(assets_src):
+        shutil.copytree(assets_src, os.path.join(out, "assets"), dirs_exist_ok=True)
+
+    write(os.path.join(out, "index.html"), html)
+    write(os.path.join(out, "site.css"), css)
     for n in js_names:
-        shutil.copy2(os.path.join(HERE, "js", n), os.path.join(OUT, n))
+        shutil.copy2(os.path.join(HERE, "js", n), os.path.join(out, n))
 
     # vendor/ is copied wholesale: three.module.min.js is imported by name from the
     # importmap in the page head, so the path has to stay ./vendor/three.module.min.js.
-    vd = os.path.join(OUT, "vendor")
+    vd = os.path.join(out, "vendor")
     if os.path.isdir(vd):
         shutil.rmtree(vd)
     os.makedirs(vd, exist_ok=True)
@@ -187,7 +230,7 @@ def main():
         shutil.copy2(os.path.join(vendored, r), os.path.join(vd, r))
 
     # ---- the hero character: rebuilt from scratch so a removed asset cannot linger ----
-    l2d_out = os.path.join(OUT, "live2d")
+    l2d_out = os.path.join(out, "live2d")
     if os.path.isdir(l2d_out):
         shutil.rmtree(l2d_out)
     shutil.copytree(live2d_src, l2d_out)
@@ -202,7 +245,7 @@ def main():
     )
     serif_chars = set(serif_src) | set("0123456789·，。、：“”「」")
 
-    fd = os.path.join(OUT, "fonts")
+    fd = os.path.join(out, "fonts")
     os.makedirs(fd, exist_ok=True)
     print("fonts:")
     for w in (400, 500, 700):
@@ -217,7 +260,7 @@ def main():
               ("Noto Serif SC", 600, "noto-serif-sc-latin-600.woff2", LAT)]
     faces += [("Geist", w, f"geist-latin-{w}.woff2", LAT) for w in (400, 500, 600, 700)]
     faces += [("Geist Mono", w, f"geistmono-latin-{w}.woff2", LAT) for w in (400, 500)]
-    write(os.path.join(OUT, "fonts.css"),
+    write(os.path.join(out, "fonts.css"),
           "/* Generated by website-src/build.py. Self-hosted, subset to this page's glyphs. */\n"
           + "\n".join(
               f"@font-face{{font-family:'{f}';font-style:normal;font-weight:{w};font-display:swap;"
@@ -225,8 +268,8 @@ def main():
               for f, w, n, r in faces) + "\n")
 
     total = sum(os.path.getsize(os.path.join(r, f))
-                for r, _, files in os.walk(OUT) for f in files)
-    print(f"output {OUT}  ({total/1024:.0f} KB, {len(used)} icons used)")
+                for r, _, files in os.walk(out) for f in files)
+    print(f"output {out}  ({total/1024:.0f} KB, {len(used)} icons used)")
 
 
 if __name__ == "__main__":

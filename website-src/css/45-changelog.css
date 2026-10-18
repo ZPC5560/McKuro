@@ -12,10 +12,10 @@
   display: flex; align-items: baseline; gap: 14px;
   padding: 16px 20px;
   cursor: pointer; list-style: none;
-  transition: background .2s var(--ease);
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  transition: background var(--t-hover) var(--ease);
 }
 .cl > summary::-webkit-details-marker { display: none; }
-.cl > summary:hover { background: rgba(90, 141, 238, .06); }
 .cl[open] > summary { border-bottom: 1px solid var(--line); }
 .cl__ver {
   font-size: 17px; font-weight: 500; color: var(--accent-ink);
@@ -25,9 +25,22 @@
 .cl > summary::after {
   content: ""; order: 3; width: 9px; height: 9px; margin-left: 4px; align-self: center;
   border-right: 2px solid var(--ink-3); border-bottom: 2px solid var(--ink-3);
-  transform: rotate(45deg); transition: transform .2s var(--ease);
+  transform: rotate(45deg);
+  transition: transform var(--t-ui) var(--ease-enter);
 }
 .cl[open] > summary::after { transform: rotate(225deg); }
+
+/* Hover is a colour change only, and only where a pointer can actually hover. */
+@media (hover: hover) and (pointer: fine) {
+  .cl > summary:hover { background: rgba(90, 141, 238, .06); }
+}
+@media (max-width: 520px) {
+  .cl > summary { padding: 15px 16px; gap: 10px; }
+  .cl__ver { font-size: 16px; }
+  .cl__date { font-size: 11.5px; }
+  .cl__body { padding: 10px 16px 16px; }
+  .cl__list li { font-size: 14.5px; padding-left: 16px; }
+}
 
 .cl__body { padding: 10px 20px 18px; }
 .cl__group {
@@ -51,6 +64,14 @@
 .cl__list a { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
 .cl__foot { margin-top: 28px; text-align: center; color: var(--ink-2); font-size: 14.5px; }
 .cl__link { color: var(--accent-ink); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+
+/* The list itself is long (every release), so the first screen of each entry gets a
+   slightly tighter leading than body copy would. */
+@media (max-width: 720px) {
+  .cl__list li { line-height: 1.65; }
+  .cl__group { margin: 12px 0 5px; }
+  .cl__foot { margin-top: 22px; font-size: 14px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .cl > summary, .cl > summary::after { transition: none; }

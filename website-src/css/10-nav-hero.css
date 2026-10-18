@@ -1,5 +1,13 @@
 
-/* ---------- nav: floating glass pill ---------- */
+/* ---------- nav: floating glass pill ----------
+   The pill hides on scroll-down and returns on scroll-up. On a phone the fixed bar
+   costs ~90px of a 844px viewport at all times, and the page is 15k pixels tall: the
+   reader loses a tenth of the screen to a menu they are not using. Reading down is the
+   default intent, so down hides it; any scroll up says "I'm looking for something",
+   which is exactly when the nav earns its space back.
+
+   The rule is deliberately NOT applied on desktop: there the pill is small, sits over
+   generous margins, and constant presence reads as part of the chrome. */
 .nav { position: fixed; inset: 16px 0 auto; z-index: 50; display: flex; flex-direction: column; align-items: center; padding: 0 16px; pointer-events: none; }
 .nav__pill {
   pointer-events: auto;
@@ -11,9 +19,18 @@
   box-shadow: 0 0 0 1px var(--line), 0 10px 30px -14px rgba(20, 30, 50, .28);
   backdrop-filter: blur(18px) saturate(1.4);
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  transition: box-shadow .3s var(--ease), background .3s var(--ease);
+  transition: box-shadow var(--t-ui) var(--ease), background var(--t-ui) var(--ease);
 }
 .nav.is-stuck .nav__pill { background: rgba(255, 255, 255, .8); box-shadow: 0 0 0 1px var(--line), 0 14px 36px -14px rgba(20, 30, 50, .36); }
+
+/* Hide-on-scroll-down, reveal-on-scroll-up. Applied only where the bar would cost a
+   meaningful slice of the viewport (see site.js, which toggles `.is-hidden`).
+   `translateY` keeps it off the compositor thread; the drawer rides along because it
+   is a sibling inside the same fixed `.nav`. */
+@media (max-width: 900px) {
+  .nav { transition: transform var(--t-ui) var(--ease-move); }
+  .nav.is-hidden:not(:focus-within) { transform: translateY(calc(-100% - 20px)); }
+}
 .brand { display: flex; align-items: center; gap: 10px; padding: 2px 10px 2px 2px; border-radius: 999px; }
 .brand__mark { width: 34px; height: 34px; border-radius: 50%; box-shadow: 0 0 0 3px #fff, 0 2px 8px rgba(20, 30, 50, .18); }
 .brand__name { font: 600 16px/1 var(--sans); letter-spacing: -.01em; }
@@ -21,36 +38,72 @@
 .nav__links a {
   padding: 8px 12px; border-radius: 999px;
   font: 500 14px/1 var(--sans); color: var(--ink-2);
-  transition: background .2s, color .2s;
+  transition: background var(--t-hover) var(--ease), color var(--t-hover) var(--ease);
 }
-.nav__links a:hover { background: rgba(27, 36, 51, .06); color: var(--ink); }
 .nav__end { display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 999px; background: #fff; box-shadow: 0 0 0 1px var(--line); }
-.nav__src { padding: 8px 14px; font: 500 14px/1 var(--sans); border-radius: 999px; }
-.nav__src:hover { background: rgba(27, 36, 51, .05); }
+.nav__src { padding: 8px 14px; font: 500 14px/1 var(--sans); border-radius: 999px; transition: background var(--t-hover) var(--ease); }
 .nav__dl {
   padding: 9px 18px; border-radius: 999px;
   background: var(--accent-ink); color: #fff; font: 600 14px/1 var(--sans);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 4px 12px -4px rgba(42, 91, 192, .6);
-  transition: background .2s;
+  transition: background var(--t-hover) var(--ease);
 }
-.nav__dl:hover { background: #2350AB; }
-.nav__burger { display: none; margin-left: auto; width: 44px; height: 44px; border: 0; border-radius: 50%; background: #fff; cursor: pointer; position: relative; box-shadow: 0 0 0 1px var(--line); }
-.nav__burger span { position: absolute; left: 14px; right: 14px; height: 2px; border-radius: 2px; background: var(--ink); transition: transform .25s var(--ease); }
+.nav__burger { display: none; margin-left: auto; width: 44px; height: 44px; border: 0; border-radius: 50%; background: #fff; cursor: pointer; position: relative; box-shadow: 0 0 0 1px var(--line); touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.nav__burger span { position: absolute; left: 14px; right: 14px; height: 2px; border-radius: 2px; background: var(--ink); transition: transform var(--t-ui) var(--ease-enter); }
 .nav__burger span:first-child { top: 18px; }
 .nav__burger span:last-child { top: 25px; }
 .nav__burger[aria-expanded="true"] span:first-child { transform: translateY(3.5px) rotate(45deg); }
 .nav__burger[aria-expanded="true"] span:last-child { transform: translateY(-3.5px) rotate(-45deg); }
+
+/* Drawer. It is a plain show/hide today; the two rules below give the panel the same
+   "emerges from the trigger it came out of" origin the rest of the page uses, and
+   keep the closing tap from feeling like the panel was yanked away.
+   `@starting-style` is the modern path; the [hidden] fallback keeps browsers that
+   lack it (and the no-JS case) on the instant version rather than a broken one. */
 .drawer {
   pointer-events: auto; margin-top: 8px; width: min(880px, 100%);
   display: grid; gap: 2px; padding: 8px; border-radius: var(--r-lg);
   background: rgba(255, 255, 255, .94); box-shadow: 0 0 0 1px var(--line), var(--shadow-lg);
   backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  transform-origin: top center;
 }
 .drawer[hidden] { display: none; }
-.drawer a { padding: 12px 14px; border-radius: var(--r-sm); font-weight: 500; }
-.drawer a:hover { background: rgba(27, 36, 51, .05); }
+.drawer a {
+  padding: 12px 14px; border-radius: var(--r-sm); font-weight: 500;
+  touch-action: manipulation;
+  transition: background var(--t-hover) var(--ease);
+}
 .drawer__cta { margin-top: 4px; text-align: center; background: var(--accent-ink); color: #fff; }
-.drawer a.drawer__cta:hover { background: #2350AB; }
+@media (hover: hover) and (pointer: fine) {
+  .nav__links a:hover { background: rgba(27, 36, 51, .06); color: var(--ink); }
+  .nav__src:hover { background: rgba(27, 36, 51, .05); }
+  .nav__dl:hover { background: #2350AB; }
+  .drawer a:hover { background: rgba(27, 36, 51, .05); }
+  .drawer a.drawer__cta:hover { background: #2350AB; }
+}
+
+/* Below the desktop nav breakpoint the links and the GitHub/Download pair no longer
+   fit on one pill: they wrap into a vertical stack of single characters, which is what
+   a `flex` row does when its items cannot shrink. They are replaced by the burger, and
+   the drawer carries the same destinations plus the download CTA. */
+@media (max-width: 900px) {
+  .nav__links, .nav__end { display: none; }
+  .nav__burger { display: block; }
+  .nav__pill { width: min(880px, 100%); }
+}
+@media (max-width: 520px) {
+  .nav { inset: 10px 0 auto; padding: 0 12px; }
+  .nav__pill { padding: 5px 5px 5px 6px; gap: 4px; }
+  .brand { padding: 2px 6px 2px 2px; }
+  .brand__mark { width: 30px; height: 30px; }
+  .brand__name { font-size: 15px; }
+  .nav__burger { width: 40px; height: 40px; }
+  .nav__burger span { left: 12px; right: 12px; }
+  .nav__burger span:first-child { top: 16px; }
+  .nav__burger span:last-child { top: 23px; }
+  .drawer { border-radius: var(--r); }
+  .drawer a { padding: 14px 14px; }
+}
 
 /* ---------- hero ---------- */
 .hero { position: relative; min-height: max(760px, 100svh); display: flex; align-items: center; padding: 140px 0 80px; overflow: hidden; isolation: isolate; }
@@ -137,13 +190,25 @@
 .hero__forms[hidden] { display: none; }
 .hero__form {
   border: 0; background: transparent; cursor: pointer;
-  padding: 8px 15px; border-radius: 999px;
-  font: 500 13px/1 var(--sans); color: var(--ink-2);
-  transition: background .25s var(--ease), color .25s var(--ease);
+  min-height: 38px; padding: 8px 15px; border-radius: 999px;
+  font: 500 13px/1 var(--sans); color: var(--ink-2); touch-action: manipulation;
+  transition: background var(--t-ui) var(--ease), color var(--t-ui) var(--ease);
 }
-.hero__form:hover { background: rgba(27, 36, 51, .05); color: var(--ink); }
 .hero__form[aria-pressed="true"] { background: var(--accent-ink); color: #fff; }
+@media (hover: hover) and (pointer: fine) {
+  .hero__form:hover { background: rgba(27, 36, 51, .05); color: var(--ink); }
+  .hero__form[aria-pressed="true"]:hover { background: var(--accent-ink); color: #fff; }
+}
+/* `display: none` is not enough anymore: hero-figure.js measures `clientWidth` to
+   decide whether it is worth downloading her. Keep the switch on the same
+   `display` value it has always used so that contract cannot drift. */
 @media (max-width: 1099px) { .hero__figure, .hero__forms { display: none; } }
+
+/* ---------- hero copy ----------
+   The copy is centred and the character lives in the right margin, so the only thing
+   that changes on a phone is scale. What DOES change is the meta line: at 390px
+   "Windows / macOS / Linux" wraps onto a second line and the mono tracking makes it
+   look like a broken sentence. It becomes two deliberate lines instead. */
 .hero__in { text-align: center; display: flex; flex-direction: column; align-items: center; }
 .hero__h1 {
   margin-top: 26px;
@@ -155,7 +220,38 @@
 .hero__sub { margin-top: 22px; max-width: 620px; color: var(--ink-2); font-size: 18px; text-wrap: pretty; }
 .hero__sub .nw { white-space: nowrap; }
 .hero__cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 34px; }
-.hero__meta { margin-top: 22px; font-size: 12.5px; color: var(--ink-3); }
+/* `display: flex` rather than inline text: the separators are real elements (they are
+   hidden on narrow screens), so the spacing has to come from `gap` instead of the
+   literal spaces the old single-string markup carried. */
+.hero__meta {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center;
+  gap: 0 7px;
+  margin-top: 22px; font-size: 12.5px; color: var(--ink-3);
+}
 .hero__meta b { color: var(--ink-2); font-weight: 500; }
+.hero__meta .meta__pair { display: inline-flex; align-items: baseline; gap: 7px; }
 [data-typing]::after { content: "▍"; margin-left: 1px; color: var(--accent); animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
+
+@media (max-width: 900px) {
+  .hero { min-height: max(660px, 92svh); padding: 118px 0 64px; }
+  .hero__h1 { margin-top: 20px; font-size: clamp(34px, 8.4vw, 48px); line-height: 1.14; }
+  .hero__sub { margin-top: 18px; font-size: 16.5px; max-width: 34em; }
+  .hero__cta { margin-top: 28px; }
+  .hero__meta { margin-top: 18px; }
+}
+@media (max-width: 520px) {
+  .hero { padding: 108px 0 52px; }
+  /* The two CTAs stack and fill the width: side by side at 390px they each get ~160px
+     and "查看源码" starts truncating. Full-width buttons also put the primary action
+     under the thumb. */
+  .hero__cta { flex-direction: column; align-items: stretch; gap: 10px; width: 100%; max-width: 340px; }
+  .hero__cta .btn { justify-content: center; width: 100%; }
+  /* Version + date stay on one line (they belong together); the platform list drops to
+     its own line. Breaking all three apart put a lone "2026-10-17" in the middle of the
+     block, which reads as a typo rather than as metadata. */
+  .hero__meta { display: grid; justify-items: center; gap: 2px; line-height: 1.5; }
+  .hero__meta .meta__pair { display: inline-flex; align-items: baseline; gap: 6px; flex-wrap: nowrap; }
+  .hero__meta .meta__sep--os { display: none; }
+  .hero__meta .meta__os { color: var(--ink-2); }
+}
