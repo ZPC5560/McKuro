@@ -80,8 +80,34 @@ public sealed class LauncherFunctionCode
     [JsonPropertyName("background")] public string Background { get; set; } = "";
 }
 
+/// <summary>
+/// 启动器 index.json 的 config 节(启动器 3.0 改版后新增,functionCode 被收进这一层)。
+/// 旧版 index.json 的 functionCode 在顶层,新版在 <c>config.functionCode</c> —— 两种都要认。
+/// </summary>
+public sealed class LauncherIndexConfig
+{
+    [JsonPropertyName("functionCode")] public LauncherFunctionCode? FunctionCode { get; set; }
+}
+
 /// <summary>启动器 index.json(取 functionCode.background 编码)。</summary>
 public sealed class LauncherIndex
 {
     [JsonPropertyName("functionCode")] public LauncherFunctionCode? FunctionCode { get; set; }
+
+    /// <summary>新版 index.json 的 config 节(旧版没有该字段)。</summary>
+    [JsonPropertyName("config")] public LauncherIndexConfig? Config { get; set; }
+
+    /// <summary>
+    /// 背景 functionCode:新版优先取 <c>config.functionCode.background</c>,旧版取顶层 <c>functionCode.background</c>。
+    /// 空串表示这份 index 没有可用的背景编码。
+    /// </summary>
+    public string ResolveBackgroundCode()
+    {
+        var code = Config?.FunctionCode?.Background;
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            code = FunctionCode?.Background;
+        }
+        return code ?? "";
+    }
 }

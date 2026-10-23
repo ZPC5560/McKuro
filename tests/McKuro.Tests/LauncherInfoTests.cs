@@ -1,6 +1,7 @@
 using System.Text.Json;
 using McKuro.Core.Models.Gacha;
 using McKuro.Core.Models.Game;
+using McKuro.Core.Services.Game;
 using McKuro.Core.Services.Launcher;
 using Xunit;
 
@@ -134,5 +135,128 @@ public class LauncherInfoTests
 
         Assert.NotNull(index);
         Assert.Equal("PTj45kPbFHV7O3FHrxK8CaRjsTlV6DHX", index!.FunctionCode!.Background);
+        Assert.Equal("PTj45kPbFHV7O3FHrxK8CaRjsTlV6DHX", index.ResolveBackgroundCode());
+    }
+
+    /// <summary>
+    /// 启动器 3.0 改版后 index.json 把 functionCode 收进了 config 层:
+    /// 只认顶层 functionCode 会取不到背景编码,启动页背景视频直接不播。
+    /// </summary>
+    [Fact]
+    public void Deserialize_LauncherIndex_NewConfigLayer_GetsBackgroundCode()
+    {
+        const string json = """
+        {
+          "cdnList": [],
+          "config": {
+            "commandSwitch": 1,
+            "functionCode": { "background": "e4ea009e702a4961be86c815d87dbe68" }
+          }
+        }
+        """;
+
+        var index = JsonSerializer.Deserialize(json, LauncherInfoJsonContext.Default.LauncherIndex);
+
+        Assert.NotNull(index);
+        Assert.Equal("e4ea009e702a4961be86c815d87dbe68", index!.ResolveBackgroundCode());
+    }
+
+    /// <summary>新版 config 层优先;两层同时存在时不取旧值。</summary>
+    [Fact]
+    public void LauncherIndex_ResolveBackgroundCode_PrefersNewLayer()
+    {
+        const string json = """
+        {
+          "functionCode": { "background": "OLD" },
+          "config": { "functionCode": { "background": "NEW" } }
+        }
+        """;
+
+        var index = JsonSerializer.Deserialize(json, LauncherInfoJsonContext.Default.LauncherIndex);
+
+        Assert.Equal("NEW", index!.ResolveBackgroundCode());
+    }
+
+    /// <summary>
+    /// 官服必须走新接口 /launcher/app/.../{serverCode}/information/... :
+    /// 旧接口已停更(实测轮播图只剩 2 张,新接口 4 张),路径拼错就退回旧数据。
+    /// </summary>
+    [Fact]
+    public void BuildInformationUrl_Official_UsesNewAppEndpoint()
+    {
+        Assert.True(LauncherInfoService.HasNewApi(GameServerType.Official));
+
+        var url = LauncherInfoService.BuildInformationUrl(
+            "https://cdn", GameServerType.Official, "zh-Hans", 1700000000);
+
+        Assert.Equal(
+            "https://cdn/launcher/app/10003_oLNgHF1CESo51DGHN2odtp40e3oI1HfZ/G152/official/information/zh-Hans.json?_t=1700000000",
+            url);
+    }
+
+    /// <summary>旧接口地址仍要能拼出来(新接口全挂时的兜底)。</summary>
+    [Fact]
+    public void BuildLegacyInformationUrl_Official_KeepsOldShape()
+    {
+        var url = LauncherInfoService.BuildLegacyInformationUrl(
+            "https://cdn", GameServerType.Official, "zh-Hans", 1700000000);
+
+        Assert.Equal(
+            "https://cdn/launcher/10003_Y8xXrXk65DqFHEDgApn3cpK5lfczpFx5/G152/information/zh-Hans.json?_t=1700000000",
+            url);
+    }
+
+    /// <summary>
+    /// 三个渠道各自有<b>不同</b>的新 appKey 与 serverCode(都在各自启动器包 KRApp.conf 里):
+    /// 国际服包的 serverCode 也是 official —— 按渠道名硬猜(global/bilibili)会 404。
+    /// </summary>
+    [Theory]
+    [InlineData(GameServerType.Official, "10003_oLNgHF1CESo51DGHN2odtp40e3oI1HfZ", "G152", "official", "zh-Hans")]
+    [InlineData(GameServerType.Bilibili, "10004_IY6xmlAusbImBjWrpPj1OwNuirXEO44x", "G152", "bilibili", "zh-Hans")]
+    [InlineData(GameServerType.Global, "50004_P7xcUZnEr1AXIGON25E6KjpOgTlVrg6e", "G153", "official", "zh-Hant")]
+    public void BuildInformationUrl_AllChannels_UseNewAppEndpoint(
+        GameServerType serverType, string appSegment, string gameId, string serverCode, string language)
+    {
+        Assert.True(LauncherInfoService.HasNewApi(serverType));
+
+        var url = LauncherInfoService.BuildInformationUrl("https://cdn", serverType, language, 1);
+
+        Assert.Equal(
+            $"https://cdn/launcher/app/{appSegment}/{gameId}/{serverCode}/information/{language}.json?_t=1",
+            url);
+    }
+
+    /// <summary>旧接口地址(各渠道各自的旧 appKey)仍要能拼出来:新接口全挂时是唯一兜底。</summary>
+    [Theory]
+    [InlineData(GameServerType.Bilibili, "10004_j5GWFuUFlb8N31Wi2uS3ZAVHcb7ZGN7y", "G152", "zh-Hans")]
+    [InlineData(GameServerType.Global, "50004_obOHXFrFanqsaIEOmuKroCcbZkQRBC7c", "G153", "zh-Hant")]
+    public void BuildLegacyInformationUrl_AllChannels_KeepOldShape(
+        GameServerType serverType, string legacySegment, string gameId, string language)
+    {
+        var url = LauncherInfoService.BuildLegacyInformationUrl("https://cdn", serverType, language, 1);
+
+        Assert.Equal($"https://cdn/launcher/{legacySegment}/{gameId}/information/{language}.json?_t=1", url);
+    }
+
+    /// <summary>新老接口的背景链路路径不同(新接口没有 launcher 层、多一个 serverCode)。</summary>
+    [Fact]
+    public void BuildBackgroundUrls_Official_DifferBetweenApiGenerations()
+    {
+        var newIndex = LauncherInfoService.BuildGameIndexUrl("https://cdn", GameServerType.Official, useNewApi: true);
+        var oldIndex = LauncherInfoService.BuildGameIndexUrl("https://cdn", GameServerType.Official, useNewApi: false);
+        var newBg = LauncherInfoService.BuildBackgroundUrl(
+            "https://cdn", GameServerType.Official, "CODE", "zh-Hans", useNewApi: true);
+        var oldBg = LauncherInfoService.BuildBackgroundUrl(
+            "https://cdn", GameServerType.Official, "CODE", "zh-Hans", useNewApi: false);
+
+        Assert.Equal(
+            "https://cdn/launcher/game/10003_oLNgHF1CESo51DGHN2odtp40e3oI1HfZ/G152/official/index.json", newIndex);
+        Assert.Equal(
+            "https://cdn/launcher/launcher/10003_Y8xXrXk65DqFHEDgApn3cpK5lfczpFx5/G152/index.json", oldIndex);
+        Assert.Equal(
+            "https://cdn/launcher/game/10003_oLNgHF1CESo51DGHN2odtp40e3oI1HfZ/G152/official/background/CODE/zh-Hans.json",
+            newBg);
+        Assert.Equal(
+            "https://cdn/launcher/10003_Y8xXrXk65DqFHEDgApn3cpK5lfczpFx5/G152/background/CODE/zh-Hans.json", oldBg);
     }
 }
