@@ -832,21 +832,6 @@
         </StackPanel>
         <Border Classes="section">
             <StackPanel>
-                <!-- 游戏签到提醒 -->
-                <Border Classes="subRow">
-                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                        <ic:FluentIcon Icon="CalendarCheckmark" IconVariant="Regular" IconSize="Size16"
-                                       VerticalAlignment="Center" Foreground="{DynamicResource SemiColorText2}" />
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                            <TextBlock FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource SemiColorText1}"
-                                       Text="{loc:Localize Key=Notif.SignToggle}" />
-                            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.SignToggleDesc}" />
-                        </StackPanel>
-                        <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
-                                      IsChecked="{Binding NotifSignEnabled, Mode=TwoWay}" />
-                    </Grid>
-                </Border>
                 <!-- 活动临期提醒 -->
                 <Border Classes="subRow">
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">

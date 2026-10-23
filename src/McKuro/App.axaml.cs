@@ -50,7 +50,8 @@ public partial class App : Application
         }
 
         // 异步探测出口 IP(数据中心 Devcode 头需要;避免库街区风控)
-        _ = AppServices.Kuro.InitAsync();
+        // 提醒首轮会等它完成(带上限),确保库街区接口的 ip 头不为空
+        var networkInit = AppServices.Kuro.InitAsync();
 
         // 界面语言(重启后生效;首次启动默认 zh-Hans)
         LanguageService.Load(AppServices.Settings.Current.Language);
@@ -74,24 +75,25 @@ public partial class App : Application
         _scheduler = new DailyTaskScheduler();
         _scheduler.Start();
 
-        // 提醒调度(签到状态/活动临期/登录状态/周本/每日活跃度;冒烟模式不启动,保持无网络副作用)
+        // 提醒调度(活动临期/登录状态/周本/每日活跃度;冒烟模式不启动,保持无网络副作用)
         if (Environment.GetEnvironmentVariable("McKuro_SMOKE") != "1")
         {
-            // 首轮提醒与自动签到同期(15 秒):把"等自动签到结束"显式注入,
-            // 避免签到进行中就把账号报成"未签到"(原实现靠首轮延迟 75 秒错峰)
-            var dailyScheduler = _scheduler;
-            _reminderScheduler = new ReminderScheduler(
-                timeout => dailyScheduler is null ? Task.CompletedTask : dailyScheduler.WaitForFirstRunAsync(timeout));
-            _reminderScheduler.Start();
+            // 首轮不再盲等 15 秒:窗口就绪后再 Start(见下方窗口 Opened),只等出口 IP 探测完成
+            _reminderScheduler = new ReminderScheduler(networkInit);
         }
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var vm = new MainWindowViewModel();
-            desktop.MainWindow = new MainWindow
+            var window = new MainWindow
             {
                 DataContext = vm,
             };
+            desktop.MainWindow = window;
+
+            // 主窗口显示后才跑首轮提醒:此时通知卡片层已可渲染,首条消息无需再等布局/首帧;
+            // Start 幂等,重复触发无副作用。
+            window.Opened += (_, _) => _reminderScheduler?.Start();
 
             // 单实例:主窗口就绪后开始监听「唤起」信号(次实例启动→本实例显示并聚焦)。
             SingleInstanceGuard.StartActivationListener();
@@ -153,6 +155,11 @@ public partial class App : Application
                 DispatcherTimer.RunOnce(() => desktop.Shutdown(),
                     TimeSpan.FromSeconds(geetestSmoke == "1" ? 4 : 15));
             }
+        }
+        else
+        {
+            // 非桌面生命周期(理论路径):没有窗口可等,直接开始首轮提醒
+            _reminderScheduler?.Start();
         }
 
         base.OnFrameworkInitializationCompleted();

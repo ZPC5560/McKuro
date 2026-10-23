@@ -6,7 +6,7 @@ namespace McKuro.Tests;
 /// <summary>
 /// 通知门控测试(总开关 × 类别开关)。
 /// <para>
-/// 「通知」在设置页是二级菜单:总开关之下才是五类具体提醒。判定集中在
+/// 「通知」在设置页是二级菜单:总开关之下才是四类具体提醒。判定集中在
 /// <see cref="NotificationPreferences"/> 一处,提醒链路有两处独立入口
 /// (ReminderScheduler 轮询门控 + ReminderNotifier 出口门控),
 /// 任何一处漏掉总开关都会表现为"总开关关了但某一类还在弹",故逐一覆盖。
@@ -14,10 +14,9 @@ namespace McKuro.Tests;
 /// </summary>
 public class NotificationPreferencesTests
 {
-    /// <summary>五类提醒(与设置页二级菜单里的开关一一对应)。</summary>
+    /// <summary>四类提醒(与设置页二级菜单里的开关一一对应)。</summary>
     public static TheoryData<NotificationKind> AllKinds =>
     [
-        NotificationKind.Sign,
         NotificationKind.ActivityEnding,
         NotificationKind.AccountSession,
         NotificationKind.WeeklyBoss,
@@ -48,11 +47,10 @@ public class NotificationPreferencesTests
     [Fact]
     public void MasterSwitchOff_TakesPrecedenceOverEnabledCategories()
     {
-        // 总开关关闭、五类全开:仍全部不允许(短路优先于类别判定)
+        // 总开关关闭、四类全开:仍全部不允许(短路优先于类别判定)
         var settings = new AppSettings
         {
             NotifEnabled = false,
-            NotifSignEnabled = true,
             NotifActivityEnabled = true,
             NotifLoginEnabled = true,
             NotifWeeklyEnabled = true,
@@ -76,11 +74,11 @@ public class NotificationPreferencesTests
     {
         // 总开关只做门控,不修改类别开关:关掉再打开总开关,各类别原样恢复
         var settings = new AppSettings { NotifEnabled = false };
-        DisableCategory(settings, NotificationKind.Sign);
+        DisableCategory(settings, NotificationKind.ActivityEnding);
 
         settings.NotifEnabled = true;
-        Assert.False(NotificationPreferences.IsEnabled(settings, NotificationKind.Sign));
-        Assert.True(NotificationPreferences.IsEnabled(settings, NotificationKind.ActivityEnding));
+        Assert.False(NotificationPreferences.IsEnabled(settings, NotificationKind.ActivityEnding));
+        Assert.True(NotificationPreferences.IsEnabled(settings, NotificationKind.DailyLiveness));
     }
 
     [Fact]
@@ -109,7 +107,6 @@ public class NotificationPreferencesTests
 
     private static IEnumerable<NotificationKind> Kinds() =>
     [
-        NotificationKind.Sign,
         NotificationKind.ActivityEnding,
         NotificationKind.AccountSession,
         NotificationKind.WeeklyBoss,
@@ -120,7 +117,6 @@ public class NotificationPreferencesTests
     {
         switch (kind)
         {
-            case NotificationKind.Sign: settings.NotifSignEnabled = false; break;
             case NotificationKind.ActivityEnding: settings.NotifActivityEnabled = false; break;
             case NotificationKind.AccountSession: settings.NotifLoginEnabled = false; break;
             case NotificationKind.WeeklyBoss: settings.NotifWeeklyEnabled = false; break;

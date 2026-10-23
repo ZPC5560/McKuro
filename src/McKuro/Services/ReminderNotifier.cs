@@ -7,8 +7,6 @@ namespace McKuro.Services;
 /// <summary>提醒类别(同时用于推导悬浮通知卡片的图标与强调色)。</summary>
 public enum NotificationKind
 {
-    /// <summary>游戏签到状态。</summary>
-    Sign,
     /// <summary>版本/卡池活动临期。</summary>
     ActivityEnding,
     /// <summary>接口登录会话状态(库街区/云鸣潮/攻略站)。</summary>
@@ -130,7 +128,6 @@ public sealed class NotificationKindIconConverter : Avalonia.Data.Converters.IVa
         => value is NotificationKind kind
             ? kind switch
             {
-                NotificationKind.Sign => FluentIcons.Common.Icon.CalendarCheckmark,
                 NotificationKind.ActivityEnding => FluentIcons.Common.Icon.CalendarStar,
                 NotificationKind.AccountSession => FluentIcons.Common.Icon.PersonCircle,
                 NotificationKind.WeeklyBoss => FluentIcons.Common.Icon.Trophy,
@@ -153,7 +150,6 @@ public sealed class NotificationKindBrushConverter : Avalonia.Data.Converters.IV
         var color = value is NotificationKind kind
             ? kind switch
             {
-                NotificationKind.Sign => Avalonia.Media.Color.Parse("#3B82F6"),
                 NotificationKind.ActivityEnding => Avalonia.Media.Color.Parse("#F59E0B"),
                 NotificationKind.AccountSession => Avalonia.Media.Color.Parse("#EF4444"),
                 NotificationKind.WeeklyBoss => Avalonia.Media.Color.Parse("#8B5CF6"),

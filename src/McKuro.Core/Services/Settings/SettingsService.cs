@@ -169,9 +169,6 @@ public sealed class AppSettings
     /// </summary>
     public bool NotifEnabled { get; set; } = true;
 
-    /// <summary>游戏签到提醒(角色当日未签到)。</summary>
-    public bool NotifSignEnabled { get; set; } = true;
-
     /// <summary>活动临期提醒(版本/卡池活动结束前 3 天内)。</summary>
     public bool NotifActivityEnabled { get; set; } = true;
 

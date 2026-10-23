@@ -645,7 +645,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     // ---- 消息通知(悬浮提醒类别开关;触发时除设置页外全局弹出) ----
 
-    /// <summary>通知总开关(二级菜单的父开关:关闭后不弹任何提醒,下面五类开关状态原样保留)。</summary>
+    /// <summary>通知总开关(二级菜单的父开关:关闭后不弹任何提醒,下面四类开关状态原样保留)。</summary>
     [ObservableProperty]
     private bool _notifEnabled = true;
 
@@ -654,9 +654,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Current.NotifEnabled = value;
         AppServices.Settings.Save();
     }
-
-    [ObservableProperty]
-    private bool _notifSignEnabled;
 
     [ObservableProperty]
     private bool _notifActivityEnabled;
@@ -669,12 +666,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _notifLivenessEnabled;
-
-    partial void OnNotifSignEnabledChanged(bool value)
-    {
-        AppServices.Settings.Current.NotifSignEnabled = value;
-        AppServices.Settings.Save();
-    }
 
     partial void OnNotifActivityEnabledChanged(bool value)
     {
@@ -1070,7 +1061,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         ScanLive2DModels();
         _autoSkipVerifyDelete = s.AutoSkipVerifyDelete;
         _notifEnabled = s.NotifEnabled;
-        _notifSignEnabled = s.NotifSignEnabled;
         _notifActivityEnabled = s.NotifActivityEnabled;
         _notifLoginEnabled = s.NotifLoginEnabled;
         _notifWeeklyEnabled = s.NotifWeeklyEnabled;

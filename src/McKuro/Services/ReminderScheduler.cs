@@ -9,10 +9,9 @@ using McKuro.ViewModels;
 namespace McKuro.Services;
 
 /// <summary>
-/// 提醒调度器:后台周期检查五类提醒,经 <see cref="ReminderNotifier.Raise"/> 弹出悬浮通知
+/// 提醒调度器:后台周期检查四类提醒,经 <see cref="ReminderNotifier.Raise"/> 弹出悬浮通知
 /// (除设置页外全局显示;同 Key 当日只弹一次,类别可在设置页关闭)——
 /// <list type="bullet">
-/// <item>游戏签到状态:全部账号逐角色查询,未签到聚合提醒(每 2 小时,按天去重)</item>
 /// <item>活动临期:版本活动 + 换取活动(卡池)距结束 ≤3 天提醒,与活动页忽略名单互通(每 6 小时,按天去重)</item>
 /// <item>登录状态:库街区/云鸣潮/攻略站会话校验,失效提醒「前往账号页」(每 2 小时,按天去重)</item>
 /// <item>周本:本周最后一天(周日/周一 4 点前)仍未打满提醒(每小时,按周去重)</item>
@@ -23,7 +22,6 @@ namespace McKuro.Services;
 public sealed class ReminderScheduler : IDisposable
 {
     private static readonly TimeSpan Cycle = TimeSpan.FromMinutes(30);
-    private static readonly TimeSpan SignInterval = TimeSpan.FromHours(2);
     private static readonly TimeSpan LoginInterval = TimeSpan.FromHours(2);
     private static readonly TimeSpan ActivityInterval = TimeSpan.FromHours(6);
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromHours(1);
@@ -31,24 +29,23 @@ public sealed class ReminderScheduler : IDisposable
     /// <summary>活动临期阈值(与活动页 <c>ExpiringSoonDays</c> 一致:距结束 ≤3 天)。</summary>
     private static readonly TimeSpan ExpiringWindow = TimeSpan.FromDays(3);
 
-    /// <summary>等自动签到结束的上限:超过就照常检查签到状态(宁可偶发误报也不让提醒卡住)。</summary>
-    private static readonly TimeSpan AutoSignWaitTimeout = TimeSpan.FromSeconds(60);
+    /// <summary>等出口 IP 探测完成的上限:超时照常检查(单次失败静默,下一轮再试)。</summary>
+    private static readonly TimeSpan NetworkInitTimeout = TimeSpan.FromSeconds(5);
 
     private readonly CancellationTokenSource _cts = new();
     private Task? _loop;
-    private DateTime _lastSign;
     private DateTime _lastLogin;
     private DateTime _lastActivity;
     private DateTime _lastProgress;
 
     /// <summary>
-    /// 等本次启动的自动签到结束的回调(可为 null = 不等)。由 App 注入 DailyTaskScheduler 的等待方法:
-    /// 首轮提醒已提前到 15 秒(与自动签到同期),靠这个显式依赖避免"签到进行中就被报未签到"。
+    /// 启动时的出口 IP 探测任务(可为 null = 不等)。库街区接口的 ip 头未就绪时可能触发风控,
+    /// 首轮检查前最多等它 <see cref="NetworkInitTimeout"/>;探测失败/超时照常检查。
     /// </summary>
-    private readonly Func<TimeSpan, Task>? _waitForAutoSign;
+    private readonly Task? _networkInit;
 
-    public ReminderScheduler(Func<TimeSpan, Task>? waitForAutoSign = null)
-        => _waitForAutoSign = waitForAutoSign;
+    public ReminderScheduler(Task? networkInit = null)
+        => _networkInit = networkInit;
 
     public void Start()
     {
@@ -63,10 +60,13 @@ public sealed class ReminderScheduler : IDisposable
     {
         try
         {
-            // 启动 15 秒后首轮(与 DailyTaskScheduler 同期)。原来靠"首轮 75 秒"错开自动签到,
-            // 现在改为显式依赖:签到状态检查前先等自动签到跑完(见 CheckSignAsync),
-            // 因此首轮可以提前到 15 秒,不必再用固定偏移错峰。
-            await Task.Delay(TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
+            // 首轮由 App 在主窗口 Opened 之后再 Start:此时通知层已可渲染,不必再盲等 15 秒。
+            // 这里只等出口 IP 探测(库街区接口的 ip 头)完成,带超时兜底;签到提醒已取消,
+            // 原先「等自动签到结束再判定未签到」的依赖一并移除。
+            if (_networkInit is not null)
+            {
+                await Task.WhenAny(_networkInit, Task.Delay(NetworkInitTimeout, ct)).ConfigureAwait(false);
+            }
             using var timer = new PeriodicTimer(Cycle);
             while (true)
             {
@@ -97,14 +97,9 @@ public sealed class ReminderScheduler : IDisposable
             return;
         }
         var settings = AppServices.Settings.Current;
-        // 各项检查彼此独立:并发执行,避免某一项(如签到状态要等自动签到结束)拖慢其它提醒
-        var due = new List<Task>(4);
+        // 各项检查彼此独立:并发执行,避免某一项的网络耗时拖慢其它提醒
+        var due = new List<Task>(3);
         // 各项检查独立吞异常:单项失败(网络抖动)不影响其他提醒
-        if (settings.NotifSignEnabled && now - _lastSign >= SignInterval)
-        {
-            _lastSign = now;
-            due.Add(SafeAsync(() => CheckSignAsync(ct)));
-        }
         if (settings.NotifLoginEnabled && now - _lastLogin >= LoginInterval)
         {
             _lastLogin = now;
@@ -139,54 +134,6 @@ public sealed class ReminderScheduler : IDisposable
         catch (Exception)
         {
             // 单项检查失败静默
-        }
-    }
-
-    /// <summary>游戏签到状态:全部账号逐角色查询,未签到聚合为一条提醒(按天去重)。
-    /// 先等本次启动的自动签到结束(最多见 <see cref="AutoSignWaitTimeout"/>,超时则照常检查),
-    /// 否则刚签完的账号会被误报「未签到」。</summary>
-    private async Task CheckSignAsync(CancellationToken ct)
-    {
-        if (_waitForAutoSign is not null)
-        {
-            await _waitForAutoSign(AutoSignWaitTimeout).ConfigureAwait(false);
-        }
-
-        var accounts = AppServices.KuroAccounts.GetAccounts();
-        var unsigned = new List<string>();
-        foreach (var account in accounts)
-        {
-            ct.ThrowIfCancellationRequested();
-            var gamer = await AppServices.Kuro.GetGamerAsync(account, (int)KuroGameType.Waves, ct).ConfigureAwait(false);
-            // 拉取失败(网络/风控/token 失效)不告警:登录状态由专项检查负责
-            if (gamer is not { Code: 200, Data: not null })
-            {
-                continue;
-            }
-            foreach (var role in gamer.Data)
-            {
-                if (string.IsNullOrEmpty(role.RoleId))
-                {
-                    continue;
-                }
-                var info = await AppServices.Kuro.GetSignInDataAsync(account, role, ct).ConfigureAwait(false);
-                if (info is { Code: 200 } && info.Data?.IsSigIn != true)
-                {
-                    unsigned.Add(string.IsNullOrWhiteSpace(role.RoleName)
-                        ? LanguageService.Format("Sign.UnknownRole")
-                        : role.RoleName!);
-                }
-            }
-        }
-
-        if (unsigned.Count > 0)
-        {
-            AppServices.Reminders.Raise(
-                $"sign:{DateTime.Now:yyyyMMdd}",
-                NotificationKind.Sign,
-                LanguageService.Format("Notif.SignTitle"),
-                LanguageService.Format("Notif.SignMessage", unsigned.Count, string.Join("、", unsigned)),
-                NavigationKeys.Sign);
         }
     }
 

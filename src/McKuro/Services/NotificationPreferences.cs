@@ -5,7 +5,7 @@ namespace McKuro.Services;
 /// <summary>
 /// 提醒类别的唯一判定入口(通知总开关 × 类别开关)。
 /// <para>
-/// 设置页把「通知」拆成二级菜单:总开关 <see cref="AppSettings.NotifEnabled"/> 之下才是五类具体提醒。
+/// 设置页把「通知」拆成二级菜单:总开关 <see cref="AppSettings.NotifEnabled"/> 之下才是四类具体提醒。
 /// 判定必须集中在这里 —— 提醒链路有两处独立入口(<see cref="ReminderScheduler"/> 的轮询门控与
 /// <see cref="ReminderNotifier.Raise"/> 的出口门控),各写一份 <c>&amp;&amp;</c> 早晚会漏掉总开关,
 /// 出现"总开关关了但某一类还在弹"的漏网。
@@ -24,7 +24,6 @@ public static class NotificationPreferences
         }
         return kind switch
         {
-            NotificationKind.Sign => settings.NotifSignEnabled,
             NotificationKind.ActivityEnding => settings.NotifActivityEnabled,
             NotificationKind.AccountSession => settings.NotifLoginEnabled,
             NotificationKind.WeeklyBoss => settings.NotifWeeklyEnabled,
