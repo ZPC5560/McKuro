@@ -32,6 +32,10 @@ public sealed class ReminderScheduler : IDisposable
     /// <summary>等出口 IP 探测完成的上限:超时照常检查(单次失败静默,下一轮再试)。</summary>
     private static readonly TimeSpan NetworkInitTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>首轮提醒在窗口打开后至少再等 2 秒:窗口 Opened 时首屏数据仍在加载,
+    /// 立刻弹卡片会盖在还没初始化完的界面上。</summary>
+    private static readonly TimeSpan FirstRoundDelay = TimeSpan.FromSeconds(2);
+
     private readonly CancellationTokenSource _cts = new();
     private Task? _loop;
     private DateTime _lastLogin;
@@ -60,13 +64,16 @@ public sealed class ReminderScheduler : IDisposable
     {
         try
         {
-            // 首轮由 App 在主窗口 Opened 之后再 Start:此时通知层已可渲染,不必再盲等 15 秒。
-            // 这里只等出口 IP 探测(库街区接口的 ip 头)完成,带超时兜底;签到提醒已取消,
-            // 原先「等自动签到结束再判定未签到」的依赖一并移除。
+            // 首轮由 App 在主窗口 Opened 之后再 Start。窗口 Opened 只是窗口可渲染,
+            // 首屏数据(主页/启动页)仍在加载 —— 立刻弹卡片会盖在没初始化完的界面上,
+            // 所以先等固定 2 秒让界面稳定;同时等出口 IP 探测(库街区接口的 ip 头)完成,
+            // 带超时兜底。签到提醒已取消,原先「等自动签到结束」的依赖一并移除。
+            var settle = Task.Delay(FirstRoundDelay, ct);
             if (_networkInit is not null)
             {
                 await Task.WhenAny(_networkInit, Task.Delay(NetworkInitTimeout, ct)).ConfigureAwait(false);
             }
+            await settle.ConfigureAwait(false);
             using var timer = new PeriodicTimer(Cycle);
             while (true)
             {

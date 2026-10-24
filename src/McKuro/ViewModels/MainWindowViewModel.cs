@@ -120,7 +120,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ReminderCards.RemoveAt(0);
         }
         card.DismissRequested += () => RemoveReminderCard(card);
-        card.GoRequested += _ => RemoveReminderCard(card);
+        card.GoRequested += navKey =>
+        {
+            // 「前往」= 按卡片携带的页面 key 切页,再移除卡片。
+            // 此前写成 `_ => RemoveReminderCard(card)`,navKey 被丢掉、页面不动,点了没有任何效果。
+            RemoveReminderCard(card);
+            if (!string.IsNullOrWhiteSpace(navKey))
+            {
+                NavigateToKey(navKey);
+            }
+        };
         ReminderCards.Add(card);
         OnPropertyChanged(nameof(IsReminderOverlayVisible));
 
