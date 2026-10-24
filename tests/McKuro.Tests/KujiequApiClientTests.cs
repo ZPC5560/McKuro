@@ -22,9 +22,24 @@ public class KujiequApiClientTests
     {
         var receivedBodies = new List<string>();
         var listener = new HttpListener();
-        var prefix = $"http://127.0.0.1:{GetFreePort()}/";
-        listener.Prefixes.Add(prefix);
-        listener.Start();
+        // GetFreePort 到 Start 之间存在竞态(另一个测试类可能刚好抢到同一个端口),
+        // 表现为 HttpListenerException「已注册相同前缀」。并发跑整个套件时偶发,故重试换端口。
+        string prefix = "";
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            prefix = $"http://127.0.0.1:{GetFreePort()}/";
+            listener.Prefixes.Clear();
+            listener.Prefixes.Add(prefix);
+            try
+            {
+                listener.Start();
+                break;
+            }
+            catch (HttpListenerException) when (attempt < 4)
+            {
+                // 换一个端口再试
+            }
+        }
         _ = Task.Run(async () =>
         {
             while (listener.IsListening)
@@ -626,6 +641,109 @@ public class KujiequApiClientTests
             var index = await client.GetChallengeIndexAsync("at-1", DeviceId, RoleId);
             Assert.NotNull(index);
             Assert.True(index!.IsUnlock);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task GetExploreIndexAsync_Posts_Role_Params_And_Parses_Data_String()
+    {
+        var (baseUrl, listener, bodies) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/exploreIndex"] =
+                """
+                {"code":200,"msg":"请求成功","success":true,"data":"{\"open\":true,\"exploreList\":[{\"country\":{\"countryId\":1,\"countryName\":\"朔原\",\"homePageImage\":\"https://img/hl.png\"},\"countryProgress\":\"68.40\",\"areaInfoList\":[{\"areaId\":2,\"areaName\":\"云陵谷\",\"areaPic\":\"https://img/area-46.png\",\"areaProgress\":72.5,\"itemList\":[{\"icon\":\"https://img/i-1.png\",\"name\":\"奇藏\",\"progress\":80.0,\"type\":1}]}]}]}"}
+                """,
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var explore = await client.GetExploreIndexAsync("at-1", DeviceId, RoleId);
+
+            Assert.NotNull(explore);
+            Assert.True(explore!.Open);
+            var country = Assert.Single(explore.ExploreList!);
+            Assert.Equal("朔原", country.Country?.CountryName);
+            Assert.Equal("68.40", country.CountryProgress); // 字符串原样保留,由 ExploreParser 解析
+            var area = Assert.Single(country.AreaInfoList!);
+            Assert.Equal(72.5, area.AreaProgress);
+            var item = Assert.Single(area.ItemList!);
+            Assert.Equal("奇藏", item.Name);
+
+            // body 只带 gameId/serverId/roleId(不传 countryCode:该接口一次返回全部国家)
+            var body = Assert.Single(bodies);
+            Assert.Contains("roleId=" + RoleId, body);
+            Assert.Contains("gameId=" + KujiequApiClient.ParamGameId, body);
+            Assert.Contains("serverId=" + KujiequApiClient.ParamServerId, body);
+            Assert.DoesNotContain("countryCode=", body);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task GetExploreIndexAsync_Accepts_Soft_Success_Code_10902()
+    {
+        // 与深塔/海墟同一约定:10902 是"软状态",响应里仍带可解析 data
+        var (baseUrl, listener, _) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/exploreIndex"] =
+                """{"code":10902,"msg":"暂无数据","success":true,"data":"{\"open\":true,\"exploreList\":[]}"}""",
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var explore = await client.GetExploreIndexAsync("at-1", DeviceId, RoleId);
+            Assert.NotNull(explore);
+            Assert.Empty(explore!.ExploreList!); // 空列表不是失败:界面显示「暂无探索数据」
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task GetExploreIndexAsync_Returns_Null_On_Broken_Payload()
+    {
+        // data 是字符串,里面不是合法 JSON:反序列化失败要退化成 null(页签显示「暂不可用」),
+        // 不能把异常抛给调用方 —— 探索度只是附加页签。
+        var (baseUrl, listener, _) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/exploreIndex"] =
+                """{"code":200,"msg":"请求成功","success":true,"data":"{not-a-json"}""",
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var explore = await client.GetExploreIndexAsync("at-1", DeviceId, RoleId);
+            Assert.Null(explore);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task GetExploreIndexAsync_Returns_Null_When_Data_Missing()
+    {
+        // 未登录/风控时 data 为 null:返回 null 而不是抛异常(探索度只是页签的附加数据)
+        var (baseUrl, listener, _) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/exploreIndex"] =
+                """{"code":10903,"msg":"登录状态失效","data":null,"success":false}""",
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            var explore = await client.GetExploreIndexAsync("at-1", DeviceId, RoleId);
+            Assert.Null(explore);
         }
         finally
         {

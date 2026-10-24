@@ -268,13 +268,13 @@ public sealed class HologramTierItem
 }
 
 /// <summary>
-/// 深塔/海墟页:四个页签展示逆境深塔(towerDataDetail)、终焉矩阵(newTowerDetail)、
-/// 再生海域(slashDetail)与全息战略(challengeIndex + challengeDetails),
+/// 深塔/海墟页:五个页签展示逆境深塔(towerDataDetail)、终焉矩阵(newTowerDetail)、
+/// 再生海域(slashDetail)、全息战略(challengeIndex + challengeDetails)与地图探索(exploreIndex),
 /// 解析对齐 Java 版 WutheringWavesTool(TowerViewModel / NewTowerViewModel / SlashViewModel)。
 /// </summary>
 public sealed partial class TowerViewModel : ViewModelBase
 {
-    /// <summary>页签:0=逆境深塔,1=终焉矩阵,2=海墟,3=全息战略。</summary>
+    /// <summary>页签:0=逆境深塔,1=终焉矩阵,2=海墟,3=全息战略,4=地图探索度。</summary>
     [ObservableProperty]
     private int _selectedTabIndex;
 
@@ -1014,6 +1014,7 @@ public sealed partial class TowerViewModel : ViewModelBase
             HologramBossLevelText = "";
             HologramBossName = "";
             HologramHeroIcon = null;
+            ResetExplore();
             if (!string.IsNullOrEmpty(error))
             {
                 StatusText = error;
@@ -1196,6 +1197,9 @@ public sealed partial class TowerViewModel : ViewModelBase
                 SelectedHologramRegion = HologramRegions.FirstOrDefault(r => r.HasBosses);
             }
 
+            // ---- 地图探索(exploreIndex;附加页签,失败时只会让 ExploreShowUnavailable 亮起) ----
+            ApplyExplore(data.Explore);
+
             HasData = TowerDifficulties.Count > 0 || TowerModes.Count > 0
                 || SlashChallenges.Count > 0 || HologramHasData;
             // 全息页签自己一旦有"可展示的状态"(解锁与否/有无 boss)就撑起整页 TabControl:
@@ -1203,9 +1207,12 @@ public sealed partial class TowerViewModel : ViewModelBase
             // HasData 为 false 时连 TabControl 一起隐藏,用户只会看到通用提示
             // (实测无效路径:账号无深塔/矩阵/海墟数据时)。
             HasData = HasData || HologramLoaded;
+            // 探索度是账号级数据,与深塔战绩无关:一个还没打深塔的账号也应该能看探索度,
+            // 故它同样参与"整页有没有内容"的判定。
+            HasData = HasData || ExploreHasData;
             StatusText = LanguageService.Format(
                 "Tower.StatusLoaded", TowerDifficulties.Count, TowerModes.Count,
-                SlashChallenges.Count, HologramRegions.Sum(r => r.BossCount));
+                SlashChallenges.Count, HologramRegions.Sum(r => r.BossCount), ExploreCountries.Count);
         }
         catch (Exception ex)
         {

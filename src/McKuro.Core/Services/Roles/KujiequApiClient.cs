@@ -35,6 +35,7 @@ public sealed class KujiequApiClient
     public const string ChallengeDetailsUrl = BaseUrl + "/aki/roleBox/akiBox/challengeDetails";
     public const string DailyDataUrl = BaseUrl + "/gamer/widget/game3/getData";
     public const string BaseDataUrl = BaseUrl + "/aki/roleBox/akiBox/baseData";
+    public const string ExploreIndexUrl = BaseUrl + "/aki/roleBox/akiBox/exploreIndex";
 
     // 固定参数(对齐 WutheringWavesTool ApiConfig.PARAM_SERVER_ID / PARAM_GAME_ID)
     public const string ParamServerId = "76402e5b20be2c39f095a152090afddc";
@@ -100,6 +101,9 @@ public sealed class KujiequApiClient
 
     /// <summary>baseData(数据中心玩家基础资料)端点。</summary>
     public string BaseDataUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/akiBox/baseData";
+
+    /// <summary>exploreIndex(地图探索数据)端点。</summary>
+    public string ExploreIndexUrlValue => _baseUrl.TrimEnd('/') + "/aki/roleBox/akiBox/exploreIndex";
 
     /// <summary>外层响应信封(data 类型随接口而异:字符串或布尔)。</summary>
     public sealed class KujiequEnvelope
@@ -610,6 +614,63 @@ public sealed class KujiequApiClient
             return null;
         }
         return JsonSerializer.Deserialize(dataStr, UserJsonContext.Default.GamerBaseData);
+    }
+
+    /// <summary>
+    /// 获取地图探索数据(akiBox/exploreIndex,即官方「数据终端-探索数据」):
+    /// 各国总探索度 + 各区域探索度 + 区域内探索物(奇藏/信标/声匣…)进度;失败返回 null。
+    /// <para>
+    /// body 只用 gameId/serverId/roleId 三个字段(对齐 Haiyu GetGamerExploreIndexDataAsync)——
+    /// 该接口一次返回<b>全部国家</b>,<c>countryCode</c> 对返回内容无影响,故不传:
+    /// 多传一个无用参数只会给风控多一个变量。
+    /// </para>
+    /// </summary>
+    public async Task<ExploreIndexData?> GetExploreIndexAsync(
+        string accessToken,
+        string deviceId,
+        string roleId,
+        string? source = null,
+        CancellationToken ct = default)
+    {
+        var headers = BuildWebHeader(accessToken, deviceId);
+        var body = $"gameId={ParamGameId}&serverId={ParamServerId}&roleId={roleId}";
+        KujiequEnvelope? env;
+        try
+        {
+            // 与深塔/海墟同一约定:10902(本期无记录等软状态)也可能带可解析 data,不能当错误丢掉
+            env = await SendEnvelopeAsync(
+                ExploreIndexUrlValue, headers, body, ct,
+                extraSuccessCodes: KujiequSoftSuccessCodes).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // 探索度是深塔页的"附加"页签:这里失败不能连累整页(深塔/海墟/全息照常显示)
+            _logger.LogWarning(ex, "exploreIndex 请求异常: roleId={RoleId}", roleId);
+            return null;
+        }
+        var dataStr = GetDataString(env);
+        if (dataStr is null)
+        {
+            _logger.LogWarning("exploreIndex 返回空 data: roleId={RoleId} code={Code} msg={Msg}",
+                roleId, env?.Code, env?.Msg);
+            return null;
+        }
+        _logger.LogInformation("exploreIndex 返回: code={Code} msg={Msg} dataLen={Len}",
+            env?.Code, env?.Msg, dataStr.Length);
+        try
+        {
+            var parsed = JsonSerializer.Deserialize(dataStr, ExploreJsonContext.Default.ExploreIndexData);
+            // 诊断"页签空白":区分"接口没给国家"与"给了国家但没有区域"
+            _logger.LogInformation("exploreIndex 解析: 国家{Countries}个 区域{Areas}个",
+                parsed?.ExploreList?.Count ?? -1,
+                parsed?.ExploreList?.Sum(c => c.AreaInfoList?.Count ?? 0) ?? -1);
+            return parsed;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "exploreIndex 反序列化失败: roleId={RoleId}", roleId);
+            return null;
+        }
     }
 
     /// <summary>构造数据中心请求头(对齐 Haiyu GetWebHeader:WebView UA + Origin +

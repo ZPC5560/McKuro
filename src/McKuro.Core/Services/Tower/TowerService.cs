@@ -22,6 +22,7 @@ namespace McKuro.Core.Services.Tower;
 /// <param name="Slash">再生海域(slashDetail)。</param>
 /// <param name="HologramIndex">全息战略总览(challengeIndex)。</param>
 /// <param name="HologramDetails">全息战略各难度记录(challengeDetails)。</param>
+/// <param name="Explore">地图探索(exploreIndex;页签是附加的,失败不影响其余页签)。</param>
 /// <param name="Error">整体失败原因;空串表示成功。</param>
 /// <param name="RoleId">本次解析出的库街区角色条目 ID(矩阵历史按它落库)。</param>
 public sealed record TowerDataResult(
@@ -30,6 +31,7 @@ public sealed record TowerDataResult(
     SlashData? Slash,
     HologramIndexData? HologramIndex,
     HologramDetailData? HologramDetails,
+    ExploreIndexData? Explore,
     string Error,
     string RoleId);
 
@@ -105,6 +107,7 @@ public sealed class TowerService
         SlashData? slash = null;
         HologramIndexData? hologramIndex = null;
         HologramDetailData? hologramDetails = null;
+        ExploreIndexData? explore = null;
         try
         {
             tower = await _api.GetTowerAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
@@ -161,8 +164,25 @@ public sealed class TowerService
         {
             _logger.LogWarning(ex, "拉取全息战略挑战记录失败");
         }
+        // 地图探索(exploreIndex):与上面四个接口同一个 accessToken。
+        // 中间再留一次间隔——同一账号在短时间内串行请求 6 个数据中心接口,密集时容易触发极验;
+        // 探索度只是本页的附加页签,宁可慢半秒,也不要因为它把整页拖进风控。
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(600), ct).ConfigureAwait(false);
+            explore = await _api.GetExploreIndexAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "拉取地图探索数据失败");
+        }
 
-        if (tower is null && newTower is null && slash is null && hologramIndex is null && hologramDetails is null)
+        if (tower is null && newTower is null && slash is null && hologramIndex is null && hologramDetails is null
+            && explore is null)
         {
             return Failed(CoreStrings.T("Core.Tower.EmptyData", "接口返回空数据(可能受风控)"), roleId);
         }
@@ -196,12 +216,16 @@ public sealed class TowerService
         _logger.LogInformation(
             "Tower: 原始时间字段 | 深塔.seasonEndTime={TSE} | 矩阵.endTime={NTE} | 海墟.seasonEndTime={SSE}",
             RawMs(tower?.SeasonEndTime), RawMs(newTower?.EndTime), RawMs(slash?.SeasonEndTime));
-        return new TowerDataResult(tower, newTower, slash, hologramIndex, hologramDetails, "", roleId);
+        _logger.LogInformation(
+            "Tower: 地图探索 国家{EC}个 区域{EA}个(接口无数据时该页签显示「暂无探索数据」)",
+            explore?.ExploreList?.Count ?? -1,
+            explore?.ExploreList?.Sum(c => c.AreaInfoList?.Count ?? 0) ?? -1);
+        return new TowerDataResult(tower, newTower, slash, hologramIndex, hologramDetails, explore, "", roleId);
     }
 
     /// <summary>整体失败结果(各数据成员为 null,只带原因)。</summary>
     private static TowerDataResult Failed(string error, string roleId = "")
-        => new(null, null, null, null, null, error, roleId);
+        => new(null, null, null, null, null, null, error, roleId);
 
     /// <summary>
     /// 终焉矩阵本期有记录时落库一期历史(key=roleId+赛季结束时间,对齐 WutheringWavesTool saveToDB)。

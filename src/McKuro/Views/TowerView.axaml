@@ -31,6 +31,75 @@
             </Border>
         </DataTemplate>
 
+        <!-- 地图探索度-区域卡片(一行两张,行内等高、行高只由这一行决定 → 行间距恒为 12px)。
+             主图通栏在上(Padding 归零让图贴边),数据在下;主图高度固定 150,
+             所以同一行的两张卡区域名/进度条/探索物标签都落在同一水平线上。 -->
+        <DataTemplate x:Key="ExploreAreaCard" x:DataType="vm:ExploreAreaItem">
+            <Border CornerRadius="12" Background="{DynamicResource SemiColorBg3}" ClipToBounds="True">
+                <Grid RowDefinitions="Auto,Auto">
+                    <!-- 区域主图(接口是 2.1:1 的 688×328 风景图,UniformToFill 只轻微裁上下) -->
+                    <Border Height="150" Background="{DynamicResource SemiColorBg2}">
+                        <controls:AsyncImage ImageUrl="{Binding PicUrl}"
+                                             Stretch="UniformToFill"
+                                             IsVisible="{Binding HasPic}" />
+                    </Border>
+                    <StackPanel Grid.Row="1" Spacing="8" Margin="14,12,14,14">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                            <TextBlock Text="{Binding Name}" FontSize="16.5"
+                                       FontWeight="Bold" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding Name}" />
+                            <TextBlock Grid.Column="1" Text="{Binding ProgressText}"
+                                       FontSize="17" FontWeight="Bold"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource McKuroAccent}" />
+                        </Grid>
+                        <ProgressBar Minimum="0" Maximum="100"
+                                     Value="{Binding ProgressPercent}"
+                                     Height="5" CornerRadius="2.5" />
+                        <!-- 探索物进度:图标 + 名称 + 百分比的小标签(奇藏/信标/声匣…) -->
+                        <ItemsControl ItemsSource="{Binding Items}" IsVisible="{Binding HasItems}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel ItemSpacing="6" LineSpacing="6" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ExploreItemProgressItem">
+                                    <Border CornerRadius="8"
+                                            Background="{DynamicResource SemiColorBg2}"
+                                            Padding="7,4"
+                                            ToolTip.Tip="{Binding TooltipText}">
+                                        <StackPanel Orientation="Horizontal" Spacing="5"
+                                                    VerticalAlignment="Center">
+                                            <Border Width="18" Height="18" CornerRadius="4"
+                                                    ClipToBounds="True" Background="#9BA0AE"
+                                                    IsVisible="{Binding HasIcon}">
+                                                <controls:AsyncImage ImageUrl="{Binding IconUrl}"
+                                                                     Width="18" Height="18"
+                                                                     Stretch="UniformToFill" />
+                                            </Border>
+                                            <TextBlock Text="{Binding Name}" FontSize="12.5"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource SemiColorText2}" />
+                                            <TextBlock Text="{Binding ProgressText}"
+                                                       FontSize="12.5" FontWeight="Bold"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource SemiColorText1}" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{loc:Localize Key=Tower.Explore.NoItems}"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText3}"
+                                   IsVisible="{Binding !HasItems}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -120,6 +189,28 @@
         <Style Selector="ListBox.holoTiers ListBoxItem">
             <Setter Property="Padding" Value="6,5" />
             <Setter Property="MinHeight" Value="0" />
+        </Style>
+        <!-- 地图探索-国家菜单项(左栏一列)。与全息战略的地区徽章同一套交互语言:
+             选中 = 强调色描边 + 底色提亮,而不是换图标颜色(国家图标是整块彩色图,着色会偏)。 -->
+        <Style Selector="Button.exploreCountry">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="8,6" />
+            <!-- 内容撑满整行:否则右对齐的百分比贴着文字而不是贴着卡片右边 -->
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Button.exploreCountry:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
+        </Style>
+        <Style Selector="Button.exploreCountry.active">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipSelectedFill}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorPrimary}" />
+        </Style>
+        <!-- 选中项悬停时保持选中底色,避免"一悬停就把选中高亮冲掉" -->
+        <Style Selector="Button.exploreCountry.active:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipSelectedFill}" />
         </Style>
     </UserControl.Styles>
 
@@ -931,6 +1022,182 @@
                             </StackPanel>
                         </ScrollViewer>
                       </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- 地图探索度(exploreIndex:国家总探索度 + 各地区探索度 + 区域探索物进度)。
+                 主从布局与全息战略一致:左栏国家菜单,右栏选中国家的总览 + 区域卡片网格。
+                 国家菜单与区域卡片都是"一眼看进度"的密度,故数值统一走强调色 + 细进度条。 -->
+            <TabItem Header="{loc:Localize Key=Tower.TabExplore}">
+                <Grid Margin="8,8,8,8" RowDefinitions="Auto,*">
+
+                    <!-- 空态:接口成功但没有探索记录(与"这次没取到"区分开) -->
+                    <StackPanel Grid.Row="0" Grid.RowSpan="2" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Spacing="8" IsVisible="{Binding ExploreShowEmpty}">
+                        <TextBlock Text="{loc:Localize Key=Tower.Explore.Empty}" FontSize="17" FontWeight="Bold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="{loc:Localize Key=Tower.Explore.EmptyDesc}"
+                                   FontSize="13" Foreground="{DynamicResource SemiColorText2}"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- 兜底:接口没返回(未登录/令牌失效/风控)。与上面的空态文案分开写,
+                         否则会把"这次没取到"说成"你没探索过"。 -->
+                    <StackPanel Grid.Row="0" Grid.RowSpan="2" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Spacing="8" IsVisible="{Binding ExploreShowUnavailable}">
+                        <TextBlock Text="{loc:Localize Key=Tower.Explore.Unavailable}" FontSize="17" FontWeight="Bold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="{loc:Localize Key=Tower.Explore.UnavailableDesc}"
+                                   FontSize="13" Foreground="{DynamicResource SemiColorText2}"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <Grid Grid.Row="0" Grid.RowSpan="2" IsVisible="{Binding ExploreHasData}"
+                          ColumnDefinitions="224,*" ColumnSpacing="14">
+
+                        <!-- 左栏:两级地区菜单(拍平成一列:一级项带地区主图,二级项缩进 + 竖线标记)。
+                             行高固定(缩略图 44 / 文字区三行同高)→ 名称、百分比、进度条在各行之间成一列;
+                             一级项在"有子地区"时也保留,点它看该地区全部区域。 -->
+                        <Border Grid.Column="0" CornerRadius="12" Background="{DynamicResource SemiColorBg3}"
+                                Padding="10">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl ItemsSource="{Binding ExploreNodes}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Spacing="2" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ExploreNodeItem">
+                                            <!-- AutomationProperties.Name:左栏行只有一个 Grid,不加就取不到 UIA 可访问名
+                                                 (Avalonia 不会从子 TextBlock 推导),读屏/自动化只能读到"按钮"。 -->
+                                            <Button Classes="exploreCountry"
+                                                    Classes.active="{Binding IsSelected}"
+                                                    Command="{Binding $parent[ItemsControl].((vm:TowerViewModel)DataContext).SelectExploreNodeCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip.Tip="{Binding TooltipText}"
+                                                    AutomationProperties.Name="{Binding HeaderText}">
+                                                <!-- 两行:上面是"缩进 / 主图 / 文字",下面是**通栏**的探索度装饰条。
+                                                     装饰条单独占一行并跨满三列:它的左端永远等于整行的左内边距,
+                                                     不会因为某行多了缩进或没显示主图而错开(之前放在文字列里,
+                                                     每行的起点都不一样,看起来像没对齐)。 -->
+                                                <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,*">
+                                                    <!-- 二级项缩进 -->
+                                                    <Border Width="12" IsVisible="{Binding IsSubRegion}" />
+                                                    <!-- 一级项:地区主图缩略图(透明 PNG,Uniform 保证徽章不被裁) -->
+                                                    <Border Grid.Column="1" Width="44" Height="44"
+                                                            CornerRadius="8" ClipToBounds="True"
+                                                            Padding="3"
+                                                            Background="{DynamicResource SemiColorBg2}"
+                                                            IsVisible="{Binding !IsSubRegion}">
+                                                        <controls:AsyncImage ImageUrl="{Binding ImageUrl}"
+                                                                             Stretch="Uniform"
+                                                                             IsVisible="{Binding HasImage}" />
+                                                    </Border>
+                                                    <!-- 二级项:缩进竖线(树形引导线) -->
+                                                    <Border Grid.Column="1" Width="3" Height="18" CornerRadius="1.5"
+                                                            VerticalAlignment="Center"
+                                                            Background="{DynamicResource McKuroSwitchChipSelectedStroke}"
+                                                            IsVisible="{Binding IsSubRegion}" />
+                                                    <StackPanel Grid.Column="2" Spacing="3"
+                                                                VerticalAlignment="Center" Margin="8,0,0,0">
+                                                        <!-- 名称(左)+ 探索度(右):同一基线,多行之间数值成一列 -->
+                                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                            <TextBlock Text="{Binding Name}" FontSize="14"
+                                                                       FontWeight="Bold"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       ToolTip.Tip="{Binding HeaderText}" />
+                                                            <TextBlock Grid.Column="1"
+                                                                       Text="{Binding ProgressText}"
+                                                                       FontSize="13" FontWeight="Bold"
+                                                                       VerticalAlignment="Center"
+                                                                       Foreground="{DynamicResource McKuroAccent}" />
+                                                        </Grid>
+                                                        <TextBlock Text="{Binding AreaCountText}" FontSize="11"
+                                                                   Foreground="{DynamicResource SemiColorText3}" />
+                                                    </StackPanel>
+                                                    <!-- 探索度装饰条(一级项才有:接口给的是官方总探索度;二级项的百分比是推算值) -->
+                                                    <ProgressBar Grid.Row="1" Grid.ColumnSpan="3"
+                                                                 Minimum="0" Maximum="100"
+                                                                 Value="{Binding ProgressPercent}"
+                                                                 Height="3" CornerRadius="1.5"
+                                                                 Margin="0,5,0,0" />
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
+
+                        <!-- 右栏:选中项的探索度 + 区域卡片(每张卡 = 该区域的探索度与探索物进度) -->
+                        <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="10">
+                            <StackPanel Grid.Row="0" Spacing="6">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                    <TextBlock Text="{Binding SelectedExploreNode.HeaderText}" FontSize="19"
+                                               FontWeight="Bold" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                                VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Localize Key=Tower.Explore.Total}" FontSize="12.5"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource SemiColorText2}" />
+                                        <TextBlock Text="{Binding SelectedExploreNode.ProgressText}"
+                                                   FontSize="19" FontWeight="Bold" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource McKuroAccent}" />
+                                    </StackPanel>
+                                </Grid>
+                                <ProgressBar Minimum="0" Maximum="100"
+                                             Value="{Binding SelectedExploreNode.ProgressPercent}"
+                                             Height="5" CornerRadius="2.5" />
+                                <TextBlock Text="{Binding ExploreSummaryText}" FontSize="12"
+                                           Foreground="{DynamicResource SemiColorText2}" />
+                            </StackPanel>
+
+                            <ScrollViewer Grid.Row="1" x:Name="AreaScroll"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <!-- 区域卡片:按行渲染(VM 侧按列数分好组)。行内卡片等高、行高只由本行决定,
+                                     所以"某张卡探索物特别多"不会把整张网格撑高,上下行之间就只剩 12px。
+                                     列数由代码后置按可用宽度回调(见 TowerView.axaml.cs):
+                                     窗口拉宽时多分列,而不是把卡片拉宽 —— 否则 150px 高的通栏主图会被裁成一条。 -->
+                                <ItemsControl ItemsSource="{Binding ExploreAreaRows}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Spacing="12" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ExploreAreaRowItem">
+                                            <ItemsControl ItemsSource="{Binding Cells}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <UniformGrid Columns="{Binding Columns}" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.Styles>
+                                                    <Style Selector="ItemsControl > ContentPresenter">
+                                                        <Setter Property="Margin" Value="0,0,12,0" />
+                                                    </Style>
+                                                </ItemsControl.Styles>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:ExploreAreaItem">
+                                                        <!-- ContentControl 默认按内容"居中/靠左"摆放,必须显式 Stretch:
+                                                             否则卡片拿不到整列宽,通栏主图会被挤窄。 -->
+                                                        <ContentControl Content="{Binding}"
+                                                                        ContentTemplate="{StaticResource ExploreAreaCard}"
+                                                                        HorizontalContentAlignment="Stretch"
+                                                                        VerticalContentAlignment="Stretch" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
                     </Grid>
                 </Grid>
             </TabItem>
