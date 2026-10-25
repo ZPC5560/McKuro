@@ -61,11 +61,18 @@ internal static class CubismRuntime
         if (_resolverRegistered) return;
         _resolverRegistered = true;
 
+        // 两个程序集都要注册:csm* 的 DllImport 在 Live2DCSharpSDK.Framework 里,
+        // 而本库自己新增的 csm 兼容层调用(mckuroForgetRenderOrderCache)声明在 Sparkle.Live2DView,
+        // 解析器按程序集生效,漏注册会让本库的 P/Invoke 在 macOS 上 DllNotFoundException。
+        RegisterCoreResolver(typeof(CubismFramework).Assembly);
+        RegisterCoreResolver(typeof(CubismRuntime).Assembly);
+    }
+
+    private static void RegisterCoreResolver(Assembly assembly)
+    {
         try
         {
-            // Core 类型的宿主程序集就是 DllImport 的声明处
-            var coreAssembly = typeof(CubismFramework).Assembly;
-            NativeLibrary.SetDllImportResolver(coreAssembly, ResolveCore);
+            NativeLibrary.SetDllImportResolver(assembly, ResolveCore);
         }
         catch (Exception)
         {

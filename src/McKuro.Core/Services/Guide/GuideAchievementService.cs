@@ -314,6 +314,21 @@ public sealed partial class GuideAchievementService
     /// <summary>清理孤儿攻略缓存(换攻略账号/删角色后的残留;只保留当前账号 + 当前角色列表)。</summary>
     public void PruneGuideCache(IReadOnlyCollection<int> keepCardRoleIds) => _cache?.PruneExcept(GuideCacheAccountKey, keepCardRoleIds);
 
+    /// <summary>
+    /// 清理孤儿攻略缓存 —— <b>账号键由调用方快照后传入</b>。
+    /// <para>
+    /// 后台线程清理时必须用这个重载:若在 <c>Task.Run</c> 里调用上面那个重载,
+    /// 账号键取的是「任务真正执行那一刻」的设置值 —— 用户在调度与执行之间换了账号,
+    /// 就会用<b>新账号键 + 旧账号的角色 id 集合</b>执行删除,把新账号刚缓存的攻略行一并清掉
+    /// (可再拉,但白跑网络,且频繁请求容易踩攻略站风控)。
+    /// </para>
+    /// </summary>
+    public void PruneGuideCache(string accountKeySnapshot, IReadOnlyCollection<int> keepCardRoleIds)
+        => _cache?.PruneExcept(accountKeySnapshot, keepCardRoleIds);
+
+    /// <summary>当前攻略缓存账号键的快照(供后台线程清理前先行取值)。</summary>
+    public string CurrentGuideCacheAccountKey => GuideCacheAccountKey;
+
     // ==================== 官方推荐判定(角色详情页展示用) ====================
 
     /// <summary>武器是否为攻略推荐档(status=1 首选 / 2 备选;items 数组内标记)。</summary>

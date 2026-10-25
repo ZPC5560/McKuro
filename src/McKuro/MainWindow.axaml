@@ -266,7 +266,7 @@
                             BorderBrush="{DynamicResource McKuroCardStroke}" BorderThickness="1"
                             BoxShadow="{DynamicResource McKuroCardShadow}">
                         <Grid Margin="14,12" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="11">
-                                <!-- 类别图标(签到蓝/活动橙/登录红/周本紫/活跃度橙红) -->
+                                <!-- 类别图标(签到蓝/活动橙/登录红/战歌同奏紫/活跃度橙红) -->
                                 <Border Width="32" Height="32" CornerRadius="16" VerticalAlignment="Top"
                                         Background="{Binding Kind, Converter={x:Static svc:NotificationKindBrushConverter.Instance}}">
                                     <ic:FluentIcon Icon="{Binding Kind, Converter={x:Static svc:NotificationKindIconConverter.Instance}}"

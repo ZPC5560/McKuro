@@ -12,7 +12,7 @@ using McKuro.Services;
 
 namespace McKuro.ViewModels;
 
-/// <summary>首页每日数据项(体力/结晶单质/活跃度/周本/终焉矩阵/冥歌海墟/千道门扉/周度游历/战令)。</summary>
+/// <summary>首页每日数据项(体力/结晶单质/活跃度/战歌同奏/终焉矩阵/冥歌海墟/千道门扉/周度游历/战令)。</summary>
 public sealed class DailyItem : System.ComponentModel.INotifyPropertyChanged
 {
     public required Icon Icon { get; init; }
@@ -342,7 +342,7 @@ public sealed partial class HomeViewModel : ViewModelBase
         Live2DShow = IsLive2DSupported && s.Live2DEnabled && valid && Live2DLocator.IsCoreAvailable;
     }
 
-    /// <summary>每日数据项(体力/结晶单质/活跃度/周本/终焉矩阵/冥歌海墟/千道门扉/周度游历/战令)。</summary>
+    /// <summary>每日数据项(体力/结晶单质/活跃度/战歌同奏/终焉矩阵/冥歌海墟/千道门扉/周度游历/战令)。</summary>
     public ObservableCollection<DailyItem> DailyItems { get; } = [];
 
     /// <summary>默认头像(对齐 Haiyu GameRoilDataWrapper:库街区未绑定头像时的官方默认图)。</summary>
@@ -888,7 +888,8 @@ public sealed partial class HomeViewModel : ViewModelBase
         // 活跃度满 100:接口无总量时回退 100(数据中心 livenessMaxCount)
         AddItem(data.LivenessData, Icon.Fire, LanguageService.Format("Home.ItemLiveness"), iconFile: "activity.png",
             totalFallback: data.LivenessLimit > 0 ? data.LivenessLimit : 100);
-        // 周本每周 3 次:接口无总量时回退 3(数据中心 weeklyInstCountLimit)
+        // 战歌同奏(周本):数据服务层已把接口的"剩余次数"换算为已完成(Cur=已完成/Total=上限);
+        // 接口无总量时回退 3(数据中心 weeklyInstCountLimit)
         AddItem(data.WeeklyData, Icon.Trophy, LanguageService.Format("Home.ItemWeekly"), iconFile: "weeklyInst.png", forcedUrl: data.WeeklyIconUrl,
             totalFallback: data.WeeklyLimit > 0 ? data.WeeklyLimit : 3);
         AddItem(data.NewTowerData, Icon.BuildingSkyscraper, LanguageService.Format("Tower.TabMatrix"));

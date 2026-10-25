@@ -452,12 +452,16 @@ public sealed class LocalGameDailyDataService
                 Total = b.LivenessMaxCount,
                 Value = $"{b.Liveness}/{b.LivenessMaxCount}",
             },
+            // 战歌重奏(周本):SDK 的 Base.WeeklyInstCount 是本周剩余次数(打完=0,没打=3),
+            // 换算为已完成次数供进度展示;上限 SDK 不提供,用兜底 3(与数据中心/提醒一致)。
+            // Name 留空:首页 AddItem 会回退到本地化文案(Home.ItemWeekly)。
+            // 口径差异(已知,可接受):库街区链路用数据中心 weeklyInstCountLimit(实测出现过 2),
+            // 本链路固定兜底 3 —— 同一账号在两条链路下分母可能不同,提醒的"还剩 N 次"最多多报一次。
             WeeklyData = b is null ? null : new RoleDailyDetail
             {
-                Name = "周本",
-                Cur = b.WeeklyInstCount,
-                Total = 3,
-                Value = $"{b.WeeklyInstCount}/3",
+                Cur = UserProfile.WeeklyRemainingToDone(b.WeeklyInstCount, UserProfile.WeeklyFallbackLimit),
+                Total = UserProfile.WeeklyFallbackLimit,
+                Value = $"{UserProfile.WeeklyRemainingToDone(b.WeeklyInstCount, UserProfile.WeeklyFallbackLimit)}/{UserProfile.WeeklyFallbackLimit}",
             },
             BattlePassData = role?.BattlePass is null ? null :
             [

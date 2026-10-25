@@ -11,6 +11,74 @@ public sealed class AppDatabase : IDisposable
     private readonly string _dbPath;
     private readonly SqliteConnection _connection;
 
+    /// <summary>
+    /// 共享连接的串行化闸门(<b>必须</b>在每次使用 <see cref="Connection"/> 时持有)。
+    /// <para>
+    /// 为什么需要:Microsoft.Data.Sqlite 的 <c>SqliteConnection</c> <b>不是</b>线程安全的
+    /// (官方文档明确 SingleThread)。本程序会在 UI 线程(角色页/抽卡页/塔历史)与后台线程
+    /// (<c>Task.Run</c> 里的攻略缓存清理、历史详情读取)同时访问同一条连接 —— 并发时
+    /// 可能抛 <c>InvalidOperationException</c>("connection is busy")或 SQLITE_BUSY,
+    /// 而多数调用点会静默吞掉异常,表现为"偶尔读不到数据"。锁是可重入的,
+    /// 服务之间相互调用(同一线程)不会自锁。
+    /// </para>
+    /// <para>
+    /// 注意:<b>不得</b>在持有本锁期间 <c>await</c>(会让其它线程长时间阻塞)。
+    /// 现有命令块都是同步执行,故安全。
+    /// </para>
+    /// </summary>
+    public object SyncRoot { get; } = new();
+
+    /// <summary>在连接闸门下执行数据库操作(推荐服务层统一走这里,不要直接碰 <see cref="Connection"/>)。</summary>
+    public T Execute<T>(Func<SqliteConnection, T> work)
+    {
+        lock (SyncRoot)
+        {
+            return work(_connection);
+        }
+    }
+
+    /// <summary>在连接闸门下执行数据库操作(无返回值)。</summary>
+    public void Execute(Action<SqliteConnection> work)
+    {
+        lock (SyncRoot)
+        {
+            work(_connection);
+        }
+    }
+
+    /// <summary>
+    /// 取得连接闸门的租约(配合 <c>using var gate = _db.Enter();</c> 使用)。
+    /// <para>
+    /// 适用于「方法体里已有多段 using 命令块、不想为包装而整体重排」的既有方法:
+    /// 在方法开头取一次租约,方法结束自动释放,期间所有 <see cref="Connection"/> 访问都是串行的。
+    /// Monitor 可重入,同一线程内服务互相调用不会自锁。
+    /// </para>
+    /// <para>不要跨 <c>await</c> 持有(见 <see cref="SyncRoot"/> 的说明)。</para>
+    /// </summary>
+    public IDisposable Enter() => new GateLease(SyncRoot);
+
+    private sealed class GateLease : IDisposable
+    {
+        private readonly object _gate;
+        private bool _released;
+
+        internal GateLease(object gate)
+        {
+            _gate = gate;
+            Monitor.Enter(gate);
+        }
+
+        public void Dispose()
+        {
+            if (_released)
+            {
+                return;
+            }
+            _released = true;
+            Monitor.Exit(_gate);
+        }
+    }
+
     public AppDatabase(string dataDirectory)
     {
         Directory.CreateDirectory(dataDirectory);
@@ -271,74 +339,79 @@ public sealed class AppDatabase : IDisposable
 
     /// <summary>保存终焉矩阵一期历史(同角色同期 UPSERT,对齐 WutheringWavesTool GameNewTowerService.saveToDB)。</summary>
     public void UpsertNewTowerHistory(string roleId, long endTimeMillis, string json)
-    {
-        using var cmd = _connection.CreateCommand();
-        cmd.CommandText =
-            """
-            INSERT INTO new_tower_history (role_id, end_time, json, update_time)
-            VALUES ($role, $end, $json, $time)
-            ON CONFLICT(role_id, end_time) DO UPDATE SET
-                json = excluded.json,
-                update_time = excluded.update_time
-            """;
-        cmd.Parameters.AddWithValue("$role", roleId);
-        cmd.Parameters.AddWithValue("$end", endTimeMillis);
-        cmd.Parameters.AddWithValue("$json", json);
-        cmd.Parameters.AddWithValue("$time", DateTime.Now.ToString("O"));
-        cmd.ExecuteNonQuery();
-    }
+        => Execute(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                """
+                INSERT INTO new_tower_history (role_id, end_time, json, update_time)
+                VALUES ($role, $end, $json, $time)
+                ON CONFLICT(role_id, end_time) DO UPDATE SET
+                    json = excluded.json,
+                    update_time = excluded.update_time
+                """;
+            cmd.Parameters.AddWithValue("$role", roleId);
+            cmd.Parameters.AddWithValue("$end", endTimeMillis);
+            cmd.Parameters.AddWithValue("$json", json);
+            cmd.Parameters.AddWithValue("$time", DateTime.Now.ToString("O"));
+            cmd.ExecuteNonQuery();
+        });
 
     /// <summary>某角色的终焉矩阵历史赛季结束时间列表(降序,对齐 getEndTimesByRoleId)。</summary>
     public List<long> GetNewTowerHistoryEndTimes(string roleId)
-    {
-        var result = new List<long>();
-        using var cmd = _connection.CreateCommand();
-        cmd.CommandText = "SELECT end_time FROM new_tower_history WHERE role_id = $role ORDER BY end_time DESC";
-        cmd.Parameters.AddWithValue("$role", roleId);
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
+        => Execute(conn =>
         {
-            result.Add(reader.GetInt64(0));
-        }
-        return result;
-    }
+            var result = new List<long>();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT end_time FROM new_tower_history WHERE role_id = $role ORDER BY end_time DESC";
+            cmd.Parameters.AddWithValue("$role", roleId);
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                result.Add(reader.GetInt64(0));
+            }
+            return result;
+        });
 
     /// <summary>读取某角色某期的终焉矩阵模式详情 JSON(无记录返回 null)。</summary>
     public string? GetNewTowerHistory(string roleId, long endTimeMillis)
-    {
-        using var cmd = _connection.CreateCommand();
-        cmd.CommandText = "SELECT json FROM new_tower_history WHERE role_id = $role AND end_time = $end LIMIT 1";
-        cmd.Parameters.AddWithValue("$role", roleId);
-        cmd.Parameters.AddWithValue("$end", endTimeMillis);
-        return cmd.ExecuteScalar() as string;
-    }
+        => Execute(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT json FROM new_tower_history WHERE role_id = $role AND end_time = $end LIMIT 1";
+            cmd.Parameters.AddWithValue("$role", roleId);
+            cmd.Parameters.AddWithValue("$end", endTimeMillis);
+            return cmd.ExecuteScalar() as string;
+        });
 
     /// <summary>读取某游戏目录的已安装版本(无记录返回 null)。</summary>
     public string? GetInstalledVersion(string gameRoot)
-    {
-        using var cmd = _connection.CreateCommand();
-        cmd.CommandText = "SELECT version FROM installed_versions WHERE game_root = $root";
-        cmd.Parameters.AddWithValue("$root", NormalizeRoot(gameRoot));
-        return cmd.ExecuteScalar() as string;
-    }
+        => Execute(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT version FROM installed_versions WHERE game_root = $root";
+            cmd.Parameters.AddWithValue("$root", NormalizeRoot(gameRoot));
+            return cmd.ExecuteScalar() as string;
+        });
 
     /// <summary>记录(或更新)某游戏目录的已安装版本。单条 UPSERT,原子提交。</summary>
     public void SetInstalledVersion(string gameRoot, string version)
-    {
-        using var cmd = _connection.CreateCommand();
-        cmd.CommandText =
-            """
-            INSERT INTO installed_versions (game_root, version, update_time)
-            VALUES ($root, $version, $time)
-            ON CONFLICT(game_root) DO UPDATE SET
-                version = excluded.version,
-                update_time = excluded.update_time
-            """;
-        cmd.Parameters.AddWithValue("$root", NormalizeRoot(gameRoot));
-        cmd.Parameters.AddWithValue("$version", version);
-        cmd.Parameters.AddWithValue("$time", DateTime.Now.ToString("O"));
-        cmd.ExecuteNonQuery();
-    }
+        => Execute(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                """
+                INSERT INTO installed_versions (game_root, version, update_time)
+                VALUES ($root, $version, $time)
+                ON CONFLICT(game_root) DO UPDATE SET
+                    version = excluded.version,
+                    update_time = excluded.update_time
+                """;
+            cmd.Parameters.AddWithValue("$root", NormalizeRoot(gameRoot));
+            cmd.Parameters.AddWithValue("$version", version);
+            cmd.Parameters.AddWithValue("$time", DateTime.Now.ToString("O"));
+            cmd.ExecuteNonQuery();
+        });
 
     /// <summary>规范化目录 key:绝对路径 + 去尾部斜杠 + 统一大小写(消除路径漂移导致记录失效)。</summary>
     internal static string NormalizeRoot(string root)

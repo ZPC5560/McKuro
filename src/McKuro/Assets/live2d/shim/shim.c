@@ -30,6 +30,13 @@
  * 适用范围:
  *   仅当 Core 缺少 C4 老符号时使用。Windows 那份定制 Core 自带
  *   csmGetDrawableRenderOrders,不走本层。
+ *
+ * 导出清单(C# 侧对应 Sparkle.Live2DView/Live2DCoreShim.cs):
+ *   csmGetDrawableRenderOrders      —— C4 兼容转发 + 稳定缓冲
+ *   mckuroForgetRenderOrderCache    —— 模型释放时丢弃该模型的稳定缓冲(防地址复用串味)
+ *
+ * ⚠ 修改本文件后必须用 build-live2d-shim.sh 在 macOS/Linux 上重建随包的
+ *   libLive2DCubismCore.dylib / .so,否则新增导出不会生效(C# 侧会自动降级为 no-op)。
  */
 
 #include <stddef.h>
@@ -70,6 +77,31 @@ static ShimEntry* FindEntry(const csmModel* model)
         }
     }
     return NULL;
+}
+
+/*
+ * 丢弃某个 model 的缓存条目(C# 在模型释放后调用)。
+ *
+ * 为什么必须显式丢弃:缓存以 model 指针为键且永不失效,而 malloc 会在模型销毁后
+ * 复用同一块地址 —— 新模型若恰好落在旧地址上,FindEntry 会命中旧条目并直接返回
+ * 旧缓冲(连"首次复制 Core 初值"都跳过),于是新模型继承上一个模型的 renderOrder。
+ * 表现是换模型后图层顺序错乱(极端情况下出现越界下标),且只在地址复用时出现,极难定位。
+ */
+SHIM_EXPORT void mckuroForgetRenderOrderCache(const csmModel* model)
+{
+    ShimEntry** link = &g_entries;
+    while (*link != NULL)
+    {
+        ShimEntry* entry = *link;
+        if (entry->model == model)
+        {
+            *link = entry->next;
+            free(entry->buffer);
+            free(entry);
+            return;
+        }
+        link = &entry->next;
+    }
 }
 
 SHIM_EXPORT const int* csmGetDrawableRenderOrders(const csmModel* model)

@@ -11,7 +11,7 @@ public enum NotificationKind
     ActivityEnding,
     /// <summary>接口登录会话状态(库街区/云鸣潮/攻略站)。</summary>
     AccountSession,
-    /// <summary>周本(战歌重奏)本周收尾。</summary>
+    /// <summary>战歌同奏(周本)本周收尾。</summary>
     WeeklyBoss,
     /// <summary>每日活跃度。</summary>
     DailyLiveness,
@@ -140,7 +140,7 @@ public sealed class NotificationKindIconConverter : Avalonia.Data.Converters.IVa
         => throw new NotSupportedException();
 }
 
-/// <summary>提醒类别 → 强调色(状态语义:签到蓝/活动橙/登录红/周本紫/活跃度橙红)。</summary>
+/// <summary>提醒类别 → 强调色(状态语义:签到蓝/活动橙/登录红/战歌同奏紫/活跃度橙红)。</summary>
 public sealed class NotificationKindBrushConverter : Avalonia.Data.Converters.IValueConverter
 {
     public static readonly NotificationKindBrushConverter Instance = new();

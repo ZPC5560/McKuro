@@ -552,7 +552,7 @@ public sealed class KujiequApiClient
     }
 
     /// <summary>
-    /// 获取角色每日数据(体力/活跃度/周本等,getData 接口,对齐 WutheringWavesTool UserDailyDataTask)。
+    /// 获取角色每日数据(体力/活跃度/战歌同奏(周本)等,getData 接口,对齐 WutheringWavesTool UserDailyDataTask)。
     /// 参数走 query,data 为对象(非字符串)。
     /// </summary>
     public async Task<RoleDailyData?> GetRoleDailyDataAsync(
@@ -585,7 +585,7 @@ public sealed class KujiequApiClient
 
     /// <summary>
     /// 获取数据中心玩家基础资料(akiBox/baseData,对齐 Haiyu GetGamerBassDataAsync):
-    /// 游玩天数/注册时间/等级/周本(战歌重奏)图标等;失败返回 null。
+    /// 游玩天数/注册时间/等级/战歌同奏(周本)图标等;失败返回 null。
     /// </summary>
     public async Task<GamerBaseData?> GetGamerBaseDataAsync(
         string accessToken,

@@ -4,7 +4,7 @@ namespace McKuro.Core.Models.User;
 
 /// <summary>
 /// 角色每日数据(gamer/widget/game3/getData,对齐 WutheringWavesTool RoleDailyData)。
-/// 含体力/活跃度/周本(战歌重奏)/电台(千道门扉的异想)/周度游历等。
+/// 含体力/活跃度/战歌同奏(周本)/电台(千道门扉的异想)/周度游历等。
 /// </summary>
 public sealed class RoleDailyData
 {
@@ -28,13 +28,13 @@ public sealed class RoleDailyData
     /// <summary>角色注册时间(unix 毫秒,0 表示未知)。</summary>
     public long CreatTime { get; set; }
 
-    /// <summary>周本(战歌重奏)官方图标 URL(数据中心 weeklyInstIconUrl)。</summary>
+    /// <summary>战歌重奏(周本)官方图标 URL(数据中心 weeklyInstIconUrl)。</summary>
     public string? WeeklyIconUrl { get; set; }
 
     /// <summary>活跃度上限(数据中心 livenessMaxCount,如 100);0 表示未知。</summary>
     public int LivenessLimit { get; set; }
 
-    /// <summary>周本(战歌重奏)每周次数上限(数据中心 weeklyInstCountLimit,如 3);0 表示未知。</summary>
+    /// <summary>战歌重奏(周本)每周次数上限(数据中心 weeklyInstCountLimit,如 3);0 表示未知。</summary>
     public int WeeklyLimit { get; set; }
 
     /// <summary>体力。</summary>
@@ -43,7 +43,12 @@ public sealed class RoleDailyData
     /// <summary>活跃度。</summary>
     [JsonPropertyName("livenessData")] public RoleDailyDetail? LivenessData { get; set; }
 
-    /// <summary>周本(战歌重奏)。</summary>
+    /// <summary>
+    /// 战歌重奏(周本,首页原「周本」)。注意:两个数据源(PC 启动器 SDK / 库街区 getData)的原始值
+    /// 都是本周<b>剩余</b>次数(2026-10 实测:打完=0、没打=3,对齐参考实现 WutheringWavesTool 的
+    /// 「周本剩余」文案与周日提醒判断 remaining != 0),服务层已统一换算为<b>已完成</b> ——
+    /// 这里 Cur=已完成、Total=上限,剩余 = Total - Cur。
+    /// </summary>
     [JsonPropertyName("weeklyData")] public RoleDailyDetail? WeeklyData { get; set; }
 
     /// <summary>电台(千道门扉的异想,rouge)。</summary>
@@ -79,7 +84,7 @@ public sealed class RoleDailyDetail
 
 /// <summary>
 /// 数据中心玩家基础数据(aki/roleBox/akiBox/baseData,对齐 Haiyu GamerBassData)。
-/// 提供游玩天数/注册时间/周本(战歌重奏)图标等资料字段。
+/// 提供游玩天数/注册时间/战歌同奏(周本)图标等资料字段。
 /// </summary>
 public sealed class GamerBaseData
 {
@@ -106,7 +111,11 @@ public sealed class GamerBaseData
     [JsonPropertyName("weeklyInstCount")] public int WeeklyInstCount { get; set; }
     [JsonPropertyName("weeklyInstCountLimit")] public int WeeklyInstCountLimit { get; set; }
 
-    /// <summary>周本(战歌重奏)图标 URL。</summary>
+    /// <summary>周本原始计数(PC SDK Base.WeeklyInstCount / 数据中心 weeklyInstCount)。
+    /// 两处都是本周<b>剩余</b>次数,换算逻辑统一收敛在 WeeklyRemainingToDone。</summary>
+    public int WeeklyRawCount { get; set; }
+
+    /// <summary>战歌重奏(周本,数据中心 weeklyInstCount)图标 URL。</summary>
     [JsonPropertyName("weeklyInstIconUrl")] public string? WeeklyInstIconUrl { get; set; }
 
     [JsonPropertyName("weeklyInstTitle")] public string? WeeklyInstTitle { get; set; }
@@ -125,6 +134,21 @@ public static class UserProfile
 {
     /// <summary>国服公测开服日期(2024-05-23)。</summary>
     public static readonly DateTime CnLaunchDate = new(2024, 5, 23);
+
+    /// <summary>战歌重奏(周本)每周次数上限的兜底值(数据中心 weeklyInstCountLimit 缺失时;与首页/提醒一致)。</summary>
+    public const int WeeklyFallbackLimit = 3;
+
+    /// <summary>
+    /// 把接口的周本<b>剩余次数</b>换算为<b>已完成次数</b>(进度语义)。
+    /// weeklyInstCount/PC SDK Base.WeeklyInstCount 的原始语义都是剩余
+    /// (2026-10 实测:打完=0、没打=上限),未打满时 已完成 = 上限 - 剩余;
+    /// 剩余为 0(或负,防御)即全部完成。上限未知(≤0)时用兜底 3。
+    /// </summary>
+    public static int WeeklyRemainingToDone(int remaining, int limit)
+    {
+        var total = limit > 0 ? limit : WeeklyFallbackLimit;
+        return Math.Clamp(total - Math.Max(0, remaining), 0, total);
+    }
 
     /// <summary>
     /// 是否为开服玩家:注册时间落在开服当日及之后 10 天内(对齐 Haiyu StaminaWrapper.IsShowTime)。

@@ -14,7 +14,7 @@ namespace McKuro.Services;
 /// <list type="bullet">
 /// <item>活动临期:版本活动 + 换取活动(卡池)距结束 ≤3 天提醒,与活动页忽略名单互通(每 6 小时,按天去重)</item>
 /// <item>登录状态:库街区/云鸣潮/攻略站会话校验,失效提醒「前往账号页」(每 2 小时,按天去重)</item>
-/// <item>周本:本周最后一天(周日/周一 4 点前)仍未打满提醒(每小时,按周去重)</item>
+/// <item>战歌同奏(周本):本周最后一天(周日/周一 4 点前)仍有剩余次数提醒(每小时,按周去重)</item>
 /// <item>每日活跃度:19 点后仍为 0 提醒(每小时,按天去重)</item>
 /// </list>
 /// 检查失败静默(网络异常/风控不告警,避免误报);每日进度本地 SDK 数据优先,失败回退库街区接口。
@@ -266,7 +266,7 @@ public sealed class ReminderScheduler : IDisposable
         }
     }
 
-    /// <summary>每日进度:活跃度 19 点后为 0 / 周本最后一天未打满(本地 SDK 数据优先,省接口)。</summary>
+    /// <summary>每日进度:活跃度 19 点后为 0 / 战歌同奏(周本)最后一天仍有剩余(本地 SDK 数据优先,省接口)。</summary>
     private static async Task CheckDailyProgressAsync(CancellationToken ct)
     {
         var now = DateTime.Now;
@@ -296,26 +296,31 @@ public sealed class ReminderScheduler : IDisposable
                 NavigationKeys.Home);
         }
 
-        // 周本(战歌重奏):本周最后一天仍未打满提醒(按周去重)
+        // 战歌同奏(周本):本周最后一天仍有剩余次数提醒(按周去重)。
+        // 数据服务层已把接口的"剩余次数"换算为已完成:Cur=已完成、Total=上限,
+        // 剩余 = Total - Cur;剩余 > 0 才算没打完(Cur==Total 即完成,不再打扰)。
         var weekly = data.WeeklyData;
         if (weekly is not null
             && AppServices.Settings.Current.NotifWeeklyEnabled
-            && ReminderWindows.IsWeeklyLastDay(now)
-            && weekly.Cur < ResolveWeeklyTotal(data, weekly))
+            && ReminderWindows.IsWeeklyLastDay(now))
         {
-            var remaining = ResolveWeeklyTotal(data, weekly) - weekly.Cur;
-            AppServices.Reminders.Raise(
-                $"progress:weekly:{ReminderWindows.WeekKey(now)}",
-                NotificationKind.WeeklyBoss,
-                LanguageService.Format("Notif.WeeklyTitle"),
-                LanguageService.Format("Notif.WeeklyMessage", remaining),
-                NavigationKeys.Home);
+            var weeklyTotal = ResolveWeeklyTotal(data, weekly);
+            var remaining = weeklyTotal - weekly.Cur;
+            if (remaining > 0)
+            {
+                AppServices.Reminders.Raise(
+                    $"progress:weekly:{ReminderWindows.WeekKey(now)}",
+                    NotificationKind.WeeklyBoss,
+                    LanguageService.Format("Notif.WeeklyTitle"),
+                    LanguageService.Format("Notif.WeeklyMessage", remaining),
+                    NavigationKeys.Home);
+            }
         }
     }
 
-    /// <summary>周本次数上限:接口 total → 数据中心 weeklyInstCountLimit → 回退 3(与主页一致)。</summary>
+    /// <summary>战歌同奏(周本)次数上限:项自身 total → 数据中心 weeklyInstCountLimit → 回退 3(与首页一致)。</summary>
     private static int ResolveWeeklyTotal(RoleDailyData data, RoleDailyDetail weekly)
-        => weekly.Total > 0 ? weekly.Total : data.WeeklyLimit > 0 ? data.WeeklyLimit : 3;
+        => weekly.Total > 0 ? weekly.Total : data.WeeklyLimit > 0 ? data.WeeklyLimit : UserProfile.WeeklyFallbackLimit;
 
     private static bool TryParseRange(IReadOnlyList<string> range, out DateTime start, out DateTime end)
     {
@@ -333,7 +338,17 @@ public sealed class ReminderScheduler : IDisposable
 
     public void Dispose()
     {
-        _cts.Cancel();
-        _cts.Dispose();
+        // 只取消,不立即 Dispose:后台循环此刻可能仍在 WaitForNextTickAsync / 网络请求里
+        // 使用这个 token,释放 CTS 后再触到 token 会抛 ObjectDisposedException(竞态窗口内偶发),
+        // 虽然循环里吞掉了异常,但那类异常会掩盖真实的关闭问题。
+        // 进程退出时 CTS 由 GC 回收;等到循环真正结束再释放没有收益,故这里不做 Dispose。
+        try
+        {
+            _cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 重复 Dispose:忽略
+        }
     }
 }

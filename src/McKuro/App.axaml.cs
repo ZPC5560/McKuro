@@ -75,7 +75,7 @@ public partial class App : Application
         _scheduler = new DailyTaskScheduler();
         _scheduler.Start();
 
-        // 提醒调度(活动临期/登录状态/周本/每日活跃度;冒烟模式不启动,保持无网络副作用)
+        // 提醒调度(活动临期/登录状态/战歌同奏(周本)/每日活跃度;冒烟模式不启动,保持无网络副作用)
         if (Environment.GetEnvironmentVariable("McKuro_SMOKE") != "1")
         {
             // 首轮不再盲等 15 秒:窗口就绪后再 Start(见下方窗口 Opened),只等出口 IP 探测完成

@@ -585,6 +585,7 @@ public sealed class RoleDataService : IRoleDataService
     /// <summary>读缓存行(account_id, player_id);无记录返回 null。</summary>
     private List<RoleDetail>? ReadCacheRoles(string accountId, string playerId)
     {
+        using var _gate = _db.Enter();
         using var cmd = _db.Connection.CreateCommand();
         cmd.CommandText = "SELECT json FROM role_cache WHERE account_id = $account AND player_id = $playerId";
         cmd.Parameters.AddWithValue("$account", accountId ?? "");
@@ -613,6 +614,7 @@ public sealed class RoleDataService : IRoleDataService
         {
             return null;
         }
+        using var _gate = _db.Enter();
         using var cmd = _db.Connection.CreateCommand();
         cmd.CommandText =
             """
@@ -635,6 +637,7 @@ public sealed class RoleDataService : IRoleDataService
     {
         try
         {
+            using var _gate = _db.Enter();
             var json = JsonSerializer.Serialize(roles, RoleJsonContext.Default.ListRoleDetail);
             using var cmd = _db.Connection.CreateCommand();
             cmd.CommandText =

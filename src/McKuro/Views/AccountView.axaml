@@ -6,13 +6,40 @@
              xmlns:ic="using:FluentIcons.Avalonia"
              xmlns:loc="clr-namespace:McKuro.Services"
              xmlns:conv="using:Avalonia.Data.Converters"
-             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="900"
              x:Class="McKuro.Views.AccountView"
              x:DataType="vm:AccountViewModel">
     <UserControl.Resources>
         <!-- 接口登录状态点颜色:绿=登录正常,橙=异常登录,灰=未登录 -->
         <vm:LoginDotBrushConverter x:Key="LoginDotBrush" />
     </UserControl.Resources>
+    <UserControl.Styles>
+        <!-- 接口卡片(列表样式:三张卡片纵向排列同时可见,不再堆叠切换) -->
+        <Style Selector="Border.ifaceCard">
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Background" Value="{DynamicResource SemiColorBg2}" />
+            <Setter Property="Padding" Value="20,16" />
+        </Style>
+        <!-- 卡片内账号列表项:常态近乎透明,选中项强调色淡染(与首页账号切换弹窗同款令牌) -->
+        <Style Selector="Border.acctRow">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="12,9" />
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFill}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Border.acctRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
+        </Style>
+        <Style Selector="Border.acctRow.selected">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipSelectedFill}" />
+        </Style>
+        <!-- 空态文案 -->
+        <Style Selector="TextBlock.acctEmpty">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText3}" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+        </Style>
+    </UserControl.Styles>
     <ScrollViewer>
         <StackPanel Margin="25" Spacing="12" MaxWidth="820" HorizontalAlignment="Left">
             <!-- 标题(右侧:同一账号判定徽标,自动判定仅提醒不强制登出) -->
@@ -51,15 +78,20 @@
                 </Grid>
             </Grid>
 
-            <!-- 登录账号堆叠卡片:三个接口账号以标签堆叠展示,登录完自动切下一个,也可手动点击切换 -->
-            <!-- 各标签后的状态点:绿=登录正常,橙=异常登录(会话失效),灰=未登录 -->
-            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg2}" Padding="0">
-                <TabControl SelectedIndex="{Binding SelectedLoginCard}" Padding="20" Background="Transparent">
-                    <!-- 卡片 1:库街区账号(多账号切换 + 登录) -->
-                    <TabItem>
-                        <TabItem.Header>
+            <!-- 三个登录账号以列表样式纵向排列(每张卡片常显,不再堆叠切换):
+                 标题行 = 图标 + 名称 + 状态点 + 登录入口/退出登录(常态化显示);
+                 账号区 = 已保存账号列表(点选切换当前;多账号需先选中再退出) + 登录表单 -->
+            <!-- ══ 卡片 1:库街区账号 ══ -->
+            <Border Classes="ifaceCard">
+                <StackPanel Spacing="12">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                            <ic:FluentIcon Icon="Person" IconVariant="Regular" IconSize="Size20"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="{loc:Localize Key=Account.Kuro}" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Account.Kuro}" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                                 <Ellipse Width="7" Height="7" VerticalAlignment="Center"
                                          Fill="{Binding KuroLoginState, Converter={StaticResource LoginDotBrush}}">
                                     <ToolTip.Tip>
@@ -67,72 +99,96 @@
                                     </ToolTip.Tip>
                                 </Ellipse>
                             </StackPanel>
-                        </TabItem.Header>
-                        <StackPanel Spacing="12" Margin="0,12,0,0">
-                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
-                                <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
-                                    <ic:FluentIcon Icon="Person" IconVariant="Regular" IconSize="Size20"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                </Border>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-                                    <TextBlock Text="{loc:Localize Key=Account.Kuro}" FontSize="15" FontWeight="Bold" />
-                                    <TextBlock Text="{loc:Localize Key=Account.KuroDesc}" FontSize="12"
-                                               Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                            <TextBlock Text="{loc:Localize Key=Account.KuroDesc}" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <!-- 「添加账号」常态化显示(登录入口);「退出登录」仅在有账号时显示(空账号无退出对象) -->
+                            <Button Content="{loc:Localize Key=Account.KuroLoginBtn}" Classes="primary" Command="{Binding ToggleKuroLoginCommand}" />
+                            <Button Content="{loc:Localize Key=Account.Logout}" Command="{Binding LogoutCommand}"
+                                    IsVisible="{Binding HasKuroAccounts}"
+                                    IsEnabled="{Binding CanLogoutKuro}"
+                                    ToolTip.Tip="{Binding LogoutKuroTip}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 已保存账号列表:点选即切换当前账号(带强调色高亮);多账号退出需先选中 -->
+                    <StackPanel Spacing="6" IsVisible="{Binding HasKuroAccounts}">
+                        <ItemsControl ItemsSource="{Binding KuroAccountItems}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:InterfaceAccountItem">
+                                    <Border Classes="acctRow" Classes.selected="{Binding IsSelected}"
+                                            PointerPressed="OnKuroAccountPressed"
+                                            ToolTip.Tip="{loc:Localize Key=Account.ListPickTip}">
+                                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+                                                <TextBlock Text="{Binding Display}" FontSize="13" FontWeight="Bold"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Foreground="{DynamicResource SemiColorText0}" />
+                                                <TextBlock Text="{Binding SubText}" FontSize="11"
+                                                           Foreground="{DynamicResource SemiColorText2}"
+                                                           IsVisible="{Binding HasSubText}" />
+                                            </StackPanel>
+                                            <!-- 当前账号徽标(IsCurrent=服务层当前账号;行高亮另由用户点选 IsSelected 驱动) -->
+                                            <Border Grid.Column="1" CornerRadius="6" Padding="7,2"
+                                                    Background="{DynamicResource SemiColorPrimary}"
+                                                    VerticalAlignment="Center"
+                                                    IsVisible="{Binding IsCurrent}">
+                                                <TextBlock Text="{loc:Localize Key=Account.CurrentBadge}" FontSize="10" Foreground="White" />
+                                            </Border>
+                                            <Ellipse Grid.Column="2" Width="7" Height="7" VerticalAlignment="Center"
+                                                     Fill="{Binding State, Converter={StaticResource LoginDotBrush}}">
+                                                <ToolTip.Tip>
+                                                    <TextBlock Text="{loc:Localize Key=Account.KuroDotLegend}" FontSize="11" />
+                                                </ToolTip.Tip>
+                                            </Ellipse>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- 登录表单(标签 + 两列字段,避免拥挤单行;参考 Vercel 登录设计) -->
+                    <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="20,18"
+                            IsVisible="{Binding IsKuroLoginOpen}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="{loc:Localize Key=Account.KuroLoginPanel}" FontSize="12.5"
+                                       Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                                <StackPanel Spacing="7">
+                                    <TextBlock Text="{loc:Localize Key=Account.Mobile}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                        <TextBox PlaceholderText="{loc:Localize Key=Account.MobilePh}" Text="{Binding MobileInput}" />
+                                        <Button Grid.Column="1" Content="{Binding SmsButtonText}" Command="{Binding SendSmsCommand}"
+                                                IsEnabled="{Binding CanSendSms}" VerticalAlignment="Center" />
+                                    </Grid>
                                 </StackPanel>
-                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <!-- 当前账号:显示「游戏角色昵称 · 游戏角色 UID」(与首页账号卡片、抽卡页 player_id 同口径) -->
-                                    <TextBlock Text="{Binding KuroAccountDisplay}" FontSize="12" Margin="0,0,4,0" MaxWidth="260"
-                                               Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center"
-                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
-                                               IsVisible="{Binding HasKuroLogin}" />
-                                    <Button Content="{loc:Localize Key=Account.KuroLoginBtn}" Classes="primary" Command="{Binding ToggleKuroLoginCommand}" />
-                                    <Button Content="{loc:Localize Key=Account.Logout}" Command="{Binding LogoutCommand}" IsVisible="{Binding HasKuroLogin}" />
+                                <StackPanel Grid.Column="1" Spacing="7">
+                                    <TextBlock Text="{loc:Localize Key=Account.SmsCode}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                                    <TextBox PlaceholderText="{loc:Localize Key=Account.SmsPh}" Text="{Binding VerifyCodeInput}" />
                                 </StackPanel>
                             </Grid>
-
-                            <!-- 多账号切换(无已保存账号时隐藏,避免出现空下拉) -->
-                            <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding HasKuroAccounts}">
-                                <TextBlock Text="{loc:Localize Key=Account.Current}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
-                                <ComboBox Width="320"
-                                          ItemsSource="{Binding AccountOptions}"
-                                          SelectedIndex="{Binding SelectedAccountIndex, Mode=TwoWay}"
-                                          ToolTip.Tip="{loc:Localize Key=Account.SwitchTip}" />
-                            </StackPanel>
-
-                            <!-- 登录表单(标签 + 两列字段,避免拥挤单行;参考 Vercel 登录设计) -->
-                            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="20,18"
-                                    IsVisible="{Binding IsKuroLoginOpen}">
-                                <StackPanel Spacing="14">
-                                    <TextBlock Text="{loc:Localize Key=Account.KuroLoginPanel}" FontSize="12.5"
-                                               Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
-                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
-                                        <StackPanel Spacing="7">
-                                            <TextBlock Text="{loc:Localize Key=Account.Mobile}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                                                <TextBox PlaceholderText="{loc:Localize Key=Account.MobilePh}" Text="{Binding MobileInput}" />
-                                                <Button Grid.Column="1" Content="{Binding SmsButtonText}" Command="{Binding SendSmsCommand}"
-                                                        IsEnabled="{Binding CanSendSms}" VerticalAlignment="Center" />
-                                            </Grid>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" Spacing="7">
-                                            <TextBlock Text="{loc:Localize Key=Account.SmsCode}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
-                                            <TextBox PlaceholderText="{loc:Localize Key=Account.SmsPh}" Text="{Binding VerifyCodeInput}" />
-                                        </StackPanel>
-                                    </Grid>
-                                    <Button Content="{loc:Localize Key=Account.SmsLogin}" Classes="primary" Command="{Binding LoginWithSmsCommand}"
-                                            HorizontalAlignment="Stretch" />
-                                    <TextBlock Text="{Binding SmsStatusText}" FontSize="12"
-                                               Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
+                            <Button Content="{loc:Localize Key=Account.SmsLogin}" Classes="primary" Command="{Binding LoginWithSmsCommand}"
+                                    HorizontalAlignment="Stretch" />
+                            <TextBlock Text="{Binding SmsStatusText}" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
                         </StackPanel>
-                    </TabItem>
+                    </Border>
+                </StackPanel>
+            </Border>
 
-                    <!-- 卡片 2:云鸣潮账号 -->
-                    <TabItem>
-                        <TabItem.Header>
+            <!-- ══ 卡片 2:云鸣潮账号 ══ -->
+            <Border Classes="ifaceCard">
+                <StackPanel Spacing="12">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                            <ic:FluentIcon Icon="Cloud" IconVariant="Regular" IconSize="Size20"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="{loc:Localize Key=Account.Cloud}" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Account.Cloud}" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                                 <Ellipse Width="7" Height="7" VerticalAlignment="Center"
                                          Fill="{Binding CloudLoginState, Converter={StaticResource LoginDotBrush}}">
                                     <ToolTip.Tip>
@@ -140,73 +196,96 @@
                                     </ToolTip.Tip>
                                 </Ellipse>
                             </StackPanel>
-                        </TabItem.Header>
-                        <StackPanel Spacing="12" Margin="0,12,0,0">
-                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
-                                <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
-                                    <ic:FluentIcon Icon="Cloud" IconVariant="Regular" IconSize="Size20"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                </Border>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-                                    <TextBlock Text="{loc:Localize Key=Account.Cloud}" FontSize="15" FontWeight="Bold" />
-                                    <TextBlock Text="{loc:Localize Key=Account.CloudDesc}" FontSize="12"
-                                               Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                            <TextBlock Text="{loc:Localize Key=Account.CloudDesc}" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button Content="{loc:Localize Key=Account.KuroLoginBtn}" Classes="primary" Command="{Binding ToggleCloudLoginCommand}" />
+                            <!-- 退出登录:有任何已保存账号即可用;多账号时需先在列表中选中要退出的账号 -->
+                            <Button Content="{loc:Localize Key=Account.Logout}" Command="{Binding CloudLogoutCommand}"
+                                    IsVisible="{Binding HasCloudAccounts}"
+                                    IsEnabled="{Binding CanLogoutCloud}"
+                                    ToolTip.Tip="{Binding LogoutCloudTip}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 已保存账号列表:点选即切换当前账号(带强调色高亮);多账号退出需先选中 -->
+                    <StackPanel Spacing="6" IsVisible="{Binding HasCloudAccounts}">
+                        <ItemsControl ItemsSource="{Binding CloudAccountItems}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:InterfaceAccountItem">
+                                    <Border Classes="acctRow" Classes.selected="{Binding IsSelected}"
+                                            PointerPressed="OnCloudAccountPressed"
+                                            ToolTip.Tip="{loc:Localize Key=Account.ListPickTip}">
+                                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+                                                <TextBlock Text="{Binding Display}" FontSize="13" FontWeight="Bold"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Foreground="{DynamicResource SemiColorText0}" />
+                                                <TextBlock Text="{Binding SubText}" FontSize="11"
+                                                           Foreground="{DynamicResource SemiColorText2}"
+                                                           IsVisible="{Binding HasSubText}" />
+                                            </StackPanel>
+                                            <Border Grid.Column="1" CornerRadius="6" Padding="7,2"
+                                                    Background="{DynamicResource SemiColorPrimary}"
+                                                    VerticalAlignment="Center"
+                                                    IsVisible="{Binding IsCurrent}">
+                                                <TextBlock Text="{loc:Localize Key=Account.CurrentBadge}" FontSize="10" Foreground="White" />
+                                            </Border>
+                                            <Ellipse Grid.Column="2" Width="7" Height="7" VerticalAlignment="Center"
+                                                     Fill="{Binding State, Converter={StaticResource LoginDotBrush}}">
+                                                <ToolTip.Tip>
+                                                    <TextBlock Text="{loc:Localize Key=Account.CloudDotLegend}" FontSize="11" />
+                                                </ToolTip.Tip>
+                                            </Ellipse>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- 登录表单(标签 + 两列字段;可折叠,未登录时自动展开) -->
+                    <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="20,18"
+                            IsVisible="{Binding IsCloudLoginOpen}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="{loc:Localize Key=Account.CloudLoginPanel}" FontSize="12.5"
+                                       Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                                <StackPanel Spacing="7">
+                                    <TextBlock Text="{loc:Localize Key=Account.Mobile}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                        <TextBox PlaceholderText="{loc:Localize Key=Account.MobilePh}" Text="{Binding CloudMobile}" />
+                                        <Button Grid.Column="1" Content="{Binding CloudSmsButtonText}" Command="{Binding SendCloudSmsCommand}"
+                                                IsEnabled="{Binding CanSendCloudSms}" VerticalAlignment="Center" />
+                                    </Grid>
                                 </StackPanel>
-                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding CloudAccountDisplay}" FontSize="12" Margin="0,0,4,0" MaxWidth="260"
-                                               Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center"
-                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
-                                    <!-- 与库街区卡片同款:「添加账号」始终可见(已登录时用于再次登录/换号),
-                                         退出登录单独按钮(仅移除当前账号) -->
-                                    <Button Content="{loc:Localize Key=Account.KuroLoginBtn}" Classes="primary" Command="{Binding ToggleCloudLoginCommand}" />
-                                    <Button Content="{loc:Localize Key=Account.Logout}" Command="{Binding CloudLogoutCommand}"
-                                            IsVisible="{Binding IsCloudLoggedIn}" />
+                                <StackPanel Grid.Column="1" Spacing="7">
+                                    <TextBlock Text="{loc:Localize Key=Account.SmsCode}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                                    <TextBox PlaceholderText="{loc:Localize Key=Account.SmsPh}" Text="{Binding CloudCode}" />
                                 </StackPanel>
                             </Grid>
-
-                            <!-- 多账号切换(无已保存账号时隐藏,避免出现空下拉) -->
-                            <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding HasCloudAccounts}">
-                                <TextBlock Text="{loc:Localize Key=Account.Current}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
-                                <ComboBox Width="320"
-                                          ItemsSource="{Binding CloudAccountOptions}"
-                                          SelectedIndex="{Binding SelectedCloudAccountIndex, Mode=TwoWay}"
-                                          ToolTip.Tip="{loc:Localize Key=Account.CloudSwitchTip}" />
-                            </StackPanel>
-
-                            <!-- 登录表单(标签 + 两列字段;可折叠,未登录时自动展开) -->
-                            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="20,18"
-                                    IsVisible="{Binding IsCloudLoginOpen}">
-                                <StackPanel Spacing="14">
-                                    <TextBlock Text="{loc:Localize Key=Account.CloudLoginPanel}" FontSize="12.5"
-                                               Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
-                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
-                                        <StackPanel Spacing="7">
-                                            <TextBlock Text="{loc:Localize Key=Account.Mobile}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                                                <TextBox PlaceholderText="{loc:Localize Key=Account.MobilePh}" Text="{Binding CloudMobile}" />
-                                                <Button Grid.Column="1" Content="{Binding CloudSmsButtonText}" Command="{Binding SendCloudSmsCommand}"
-                                                        IsEnabled="{Binding CanSendCloudSms}" VerticalAlignment="Center" />
-                                            </Grid>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" Spacing="7">
-                                            <TextBlock Text="{loc:Localize Key=Account.SmsCode}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
-                                            <TextBox PlaceholderText="{loc:Localize Key=Account.SmsPh}" Text="{Binding CloudCode}" />
-                                        </StackPanel>
-                                    </Grid>
-                                    <Button Content="{loc:Localize Key=Account.SmsLogin}" Classes="primary" Command="{Binding CloudLoginCommand}"
-                                            HorizontalAlignment="Stretch" />
-                                    <TextBlock Text="{Binding CloudStatusText}" FontSize="12"
-                                               Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
+                            <Button Content="{loc:Localize Key=Account.SmsLogin}" Classes="primary" Command="{Binding CloudLoginCommand}"
+                                    HorizontalAlignment="Stretch" />
+                            <TextBlock Text="{Binding CloudStatusText}" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
                         </StackPanel>
-                    </TabItem>
+                    </Border>
+                </StackPanel>
+            </Border>
 
-                    <!-- 卡片 3:官方养成评级(mcguide) -->
-                    <TabItem>
-                        <TabItem.Header>
+            <!-- ══ 卡片 3:官方养成评级(mcguide) ══ -->
+            <Border Classes="ifaceCard">
+                <StackPanel Spacing="12">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+                            <!-- 官方评级 = 星级达成度:用奖章星图标(替换不贴切的问号气泡) -->
+                            <ic:FluentIcon Icon="Star" IconVariant="Regular" IconSize="Size20"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="{loc:Localize Key=Account.Guide}" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Account.Guide}" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
                                 <Ellipse Width="7" Height="7" VerticalAlignment="Center"
                                          Fill="{Binding GuideLoginState, Converter={StaticResource LoginDotBrush}}">
                                     <ToolTip.Tip>
@@ -214,69 +293,73 @@
                                     </ToolTip.Tip>
                                 </Ellipse>
                             </StackPanel>
-                        </TabItem.Header>
-                        <StackPanel Spacing="12" Margin="0,12,0,0">
-                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
-                                <Border Width="44" Height="44" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
-                                    <ic:FluentIcon Icon="ChatBubblesQuestion" IconVariant="Regular" IconSize="Size20"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                </Border>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-                                    <TextBlock Text="{loc:Localize Key=Account.Guide}" FontSize="15" FontWeight="Bold" />
-                                    <TextBlock Text="{loc:Localize Key=Account.GuideDesc}" FontSize="12"
-                                               Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                            <TextBlock Text="{loc:Localize Key=Account.GuideDesc}" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button Content="{loc:Localize Key=Account.KuroLoginBtn}" Classes="primary" Command="{Binding ToggleGuideLoginCommand}" />
+                            <!-- mcguide 单账号:已登录才有退出对象 -->
+                            <Button Content="{loc:Localize Key=Account.Logout}" Command="{Binding GuideLogoutCommand}"
+                                    IsVisible="{Binding GuideLoggedIn}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 未登录/登录中/失败:登录态详情(原因、进度),置于表单上方 -->
+                    <TextBlock Text="{Binding GuideStatusText}" FontSize="12" Margin="4,0,0,0"
+                               Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap"
+                               IsVisible="{Binding !GuideLoggedIn}" />
+
+                    <!-- 已登录账号行:与前两张卡片同款列表样式(单账号,点行不切换) -->
+                    <Border Classes="acctRow" IsVisible="{Binding GuideLoggedIn}"
+                            ToolTip.Tip="{Binding GuideStatusText}">
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="{Binding GuideAccountDisplay}" FontSize="13" FontWeight="Bold"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource SemiColorText0}" />
+                            </StackPanel>
+                            <Border Grid.Column="1" CornerRadius="6" Padding="7,2"
+                                    Background="{DynamicResource SemiColorPrimary}"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Localize Key=Account.CurrentBadge}" FontSize="10" Foreground="White" />
+                            </Border>
+                            <Ellipse Grid.Column="2" Width="7" Height="7" VerticalAlignment="Center"
+                                     Fill="{Binding GuideLoginState, Converter={StaticResource LoginDotBrush}}">
+                                <ToolTip.Tip>
+                                    <TextBlock Text="{loc:Localize Key=Account.GuideDotLegend}" FontSize="11" />
+                                </ToolTip.Tip>
+                            </Ellipse>
+                        </Grid>
+                    </Border>
+
+                    <!-- 登录表单(标签 + 两列字段;可折叠,未登录时自动展开) -->
+                    <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="20,18"
+                            IsVisible="{Binding IsGuideLoginOpen}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="{loc:Localize Key=Account.GuideLoginPanel}" FontSize="12.5"
+                                       Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                                <StackPanel Spacing="7">
+                                    <TextBlock Text="{loc:Localize Key=Account.Mobile}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                        <TextBox PlaceholderText="{loc:Localize Key=Account.MobilePh}" Text="{Binding GuideMobile}" />
+                                        <Button Grid.Column="1" Content="{Binding GuideSmsButtonText}"
+                                                Command="{Binding SendGuideSmsCommand}"
+                                                IsEnabled="{Binding CanSendGuideSms}" VerticalAlignment="Center" />
+                                    </Grid>
                                 </StackPanel>
-                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <!-- 已登录:显示账号身份「游戏角色昵称 · 游戏角色 UID」(与首页账号卡片、抽卡页 player_id 同口径);
-                                         未登录/登录中/失败:显示登录态详情(原因、进度)。
-                                         已登录时把登录态/校验详情放进悬停提示,避免错误原因不可见 -->
-                                    <TextBlock Text="{Binding GuideAccountDisplay}" FontSize="12" Margin="0,0,4,0" MaxWidth="260"
-                                               Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center"
-                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
-                                               ToolTip.Tip="{Binding GuideStatusText}"
-                                               IsVisible="{Binding GuideLoggedIn}" />
-                                    <TextBlock Text="{Binding GuideStatusText}" FontSize="12" Margin="0,0,4,0" MaxWidth="260"
-                                               Foreground="{DynamicResource SemiColorPrimary}" VerticalAlignment="Center"
-                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
-                                               IsVisible="{Binding !GuideLoggedIn}" />
-                                    <!-- 与库街区卡片同款:「添加账号」始终可见(已登录时用于再次登录/换号),
-                                         退出登录单独按钮 -->
-                                    <Button Content="{loc:Localize Key=Account.KuroLoginBtn}" Classes="primary" Command="{Binding ToggleGuideLoginCommand}" />
-                                    <Button Content="{loc:Localize Key=Account.Logout}" Command="{Binding GuideLogoutCommand}"
-                                            IsVisible="{Binding GuideLoggedIn}" />
+                                <StackPanel Grid.Column="1" Spacing="7">
+                                    <TextBlock Text="{loc:Localize Key=Account.SmsCode}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
+                                    <TextBox PlaceholderText="{loc:Localize Key=Account.SmsPh}" Text="{Binding GuideCode}" />
                                 </StackPanel>
                             </Grid>
-
-                            <!-- 登录表单(标签 + 两列字段;可折叠,未登录时自动展开) -->
-                            <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="20,18"
-                                    IsVisible="{Binding IsGuideLoginOpen}">
-                                <StackPanel Spacing="14">
-                                    <TextBlock Text="{loc:Localize Key=Account.GuideLoginPanel}" FontSize="12.5"
-                                               Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
-                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
-                                        <StackPanel Spacing="7">
-                                            <TextBlock Text="{loc:Localize Key=Account.Mobile}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                                                <TextBox PlaceholderText="{loc:Localize Key=Account.MobilePh}" Text="{Binding GuideMobile}" />
-                                                <Button Grid.Column="1" Content="{Binding GuideSmsButtonText}"
-                                                        Command="{Binding SendGuideSmsCommand}"
-                                                        IsEnabled="{Binding CanSendGuideSms}" VerticalAlignment="Center" />
-                                            </Grid>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" Spacing="7">
-                                            <TextBlock Text="{loc:Localize Key=Account.SmsCode}" FontSize="13" Foreground="{DynamicResource SemiColorText2}" />
-                                            <TextBox PlaceholderText="{loc:Localize Key=Account.SmsPh}" Text="{Binding GuideCode}" />
-                                        </StackPanel>
-                                    </Grid>
-                                    <Button Content="{loc:Localize Key=Account.SmsLogin}" Classes="primary" Command="{Binding GuideLoginCommand}"
-                                            HorizontalAlignment="Stretch" />
-                                    <TextBlock Text="{Binding GuideSmsText}" FontSize="12"
-                                               Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
+                            <Button Content="{loc:Localize Key=Account.SmsLogin}" Classes="primary" Command="{Binding GuideLoginCommand}"
+                                    HorizontalAlignment="Stretch" />
+                            <TextBlock Text="{Binding GuideSmsText}" FontSize="12"
+                                       Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
                         </StackPanel>
-                    </TabItem>
-                </TabControl>
+                    </Border>
+                </StackPanel>
             </Border>
 
             <!-- 操作状态(切换/登录/退出的结果提示) -->

@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace McKuro.Core.Services.User;
 
 /// <summary>
-/// 角色每日数据服务:拉取体力/活跃度/周本/电台(千道门扉)/周度游历。
+/// 角色每日数据服务:拉取体力/活跃度/战歌重奏(周本)/电台(千道门扉)/周度游历。
 /// (对齐 WutheringWavesTool UserDailyDataTask + RoleDailyData)
 /// </summary>
 public sealed class DailyDataService
@@ -95,6 +95,22 @@ public sealed class DailyDataService
                 {
                     daily.Level = baseData.Level;
                 }
+            }
+
+            // 战歌重奏(周本):getData 的 weeklyData 与数据中心的 weeklyInstCount 都是本周
+            // <b>剩余</b>次数(2026-10 实测:打完=0、没打=3),不是已完成 —— 原样消费会把
+            // 0 次显示成 "0/3" 空进度、提醒误报"还剩 3 次"。统一换算为已完成次数:
+            // Cur=上限-剩余、Total=上限(数据中心 weeklyInstCountLimit,缺失回退 3),
+            // 剩余次数由 Total-Cur 得出,首页与提醒消费端无需各自换算。
+            if (daily.WeeklyData is not null)
+            {
+                var weeklyLimit = baseData?.WeeklyInstCountLimit > 0
+                    ? baseData.WeeklyInstCountLimit
+                    : daily.WeeklyData.Total > 0 ? daily.WeeklyData.Total : UserProfile.WeeklyFallbackLimit;
+                var remaining = daily.WeeklyData.Cur;
+                daily.WeeklyData.Total = weeklyLimit;
+                daily.WeeklyData.Cur = UserProfile.WeeklyRemainingToDone(remaining, weeklyLimit);
+                daily.WeeklyData.Value = $"{daily.WeeklyData.Cur}/{weeklyLimit}";
             }
             return daily;
         }

@@ -1981,12 +1981,15 @@ public sealed partial class RolesViewModel : ViewModelBase
                 _ = PrefetchGuidesAsync(result.Roles.Where(r => newIds.Contains(r.Role?.RoleId ?? 0)).ToList());
                 // 清理已不在列表中的角色攻略缓存(换号/移除角色后的孤儿数据)。
                 // SQLite DELETE 是同步 I/O,放后台线程,不卡 UI(失败静默:下次同步再清)。
+                // 账号键必须在这里(UI 线程)先快照:后台执行时若用户已切号,取当时的值会
+                // 用「新账号 + 旧角色 id 集合」误删新账号刚缓存的攻略(评审发现)。
                 var pruneIds = currentIds.ToList();
+                var pruneAccountKey = AppServices.Guide.CurrentGuideCacheAccountKey;
                 _ = Task.Run(() =>
                 {
                     try
                     {
-                        AppServices.Guide.PruneGuideCache(pruneIds);
+                        AppServices.Guide.PruneGuideCache(pruneAccountKey, pruneIds);
                     }
                     catch (Exception)
                     {

@@ -301,6 +301,7 @@ public sealed partial class PlayTimeService
     {
         try
         {
+            using var _gate = _db.Enter();
             using var tx = _db.Connection.BeginTransaction();
             foreach (var r in records)
             {
@@ -342,6 +343,7 @@ public sealed partial class PlayTimeService
 
         try
         {
+            using var _gate = _db.Enter();
             // 按会话起点(role+date+start)聚合:历史版本因反复解析可能累积重复行,或游戏运行时
             // 同一进行中会话的结束时间每次解析都不同。这里按会话身份去重并保留"最完整"的一条(时长最大),
             // 避免把同一次游玩重复计入总时长。

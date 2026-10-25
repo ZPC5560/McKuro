@@ -1597,7 +1597,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
             foreach (var entry in entries)
             {
                 var target = Path.GetFullPath(Path.Combine(fullDest, entry.FullName));
-                if (!target.StartsWith(fullDest, StringComparison.Ordinal))
+                // 越界判定统一走 ArchivePathGuard:必须带末尾分隔符再比前缀,
+                // 否则兄弟目录("../app2/x.dll" → "<父>/app2/x.dll")也会通过(评审发现);
+                // 大小写敏感性也按平台走。该判定有单测锁定。
+                if (!McKuro.Core.Infrastructure.ArchivePathGuard.IsUnderRoot(fullDest, target))
                 {
                     continue; // zip-slip:跳过越界条目
                 }

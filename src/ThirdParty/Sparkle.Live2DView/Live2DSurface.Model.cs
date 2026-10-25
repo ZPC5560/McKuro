@@ -164,7 +164,7 @@ public sealed partial class Live2DSurface
         }
         finally
         {
-            DisposeModel(loaded?.Live2D);
+            DisposeModel(loaded?.Live2D, loaded?.Model);
             EndLoading();
         }
 
@@ -201,6 +201,8 @@ public sealed partial class Live2DSurface
             BGColor = new(0, 0, 0, 0)
         };
 
+        // 在 try 外声明:catch 里要按 model 的原生指针清 shim 缓存(见 DisposeModel 说明)。
+        LAppModel? model = null;
         try
         {
             CopyTransform(_live2D, live2D);
@@ -211,7 +213,7 @@ public sealed partial class Live2DSurface
                 Live2DTailSway.ReadLayerIds(ReadExportStatus(modelJson));
             live2D.SetTailDrawableIds(tailIds);
 
-            LAppModel model = live2D.Live2dManager.LoadModel(directory, modelName);
+            model = live2D.Live2dManager.LoadModel(directory, modelName);
             RepairDrawableRenderOrder(model);
 
             // 把"语义角色 → 真实参数 Id"的映射交给渲染代理,并挑出该由我们接管的角色。
@@ -236,7 +238,7 @@ public sealed partial class Live2DSurface
         }
         catch
         {
-            DisposeModel(live2D);
+            DisposeModel(live2D, model);
             throw;
         }
     }
@@ -424,7 +426,7 @@ public sealed partial class Live2DSurface
         ModelDirectory = modelDirectory;
         ModelName = modelName;
 
-        DisposeModel(previousLive2D);
+        DisposeModel(previousLive2D, previousModel);
     }
 
     private void ReleaseCurrentModel()
@@ -434,6 +436,8 @@ public sealed partial class Live2DSurface
 
         var eventArgs = new Live2DModelEventArgs(ModelDirectory, ModelName);
         InteractiveLive2DDelegate? live2D = _live2D;
+        // 先留住要释放的模型:下面会把字段清空,清空后就取不到原生指针了。
+        LAppModel? model = _model;
 
         _autoplay.Detach();
         _parameters.Detach();
@@ -443,7 +447,7 @@ public sealed partial class Live2DSurface
         _currentExpression = null;
         _nextMotion = 0;
 
-        DisposeModel(live2D);
+        DisposeModel(live2D, model);
         ModelUnloaded?.Invoke(this, eventArgs);
     }
 
@@ -505,7 +509,47 @@ public sealed partial class Live2DSurface
     }
 
     private static void DisposeModel(InteractiveLive2DDelegate? live2D)
+        => DisposeModel(live2D, IntPtr.Zero);
+
+    /// <summary>
+    /// 释放模型,并通知 Core 兼容层丢弃该模型的 renderOrder 缓存。
+    /// <para>
+    /// 必须传原生模型指针:shim 的缓存以 <c>csmModel*</c> 为键,模型销毁后分配器可能把
+    /// 同一地址复用给下一个模型 —— 不清缓存会让新模型继承上一个模型的绘制顺序
+    /// (见 <see cref="Live2DCoreShim"/> 与 <c>Assets/live2d/shim/shim.c</c>)。
+    /// </para>
+    /// <para>Windows 定制 Core 没有该导出,<see cref="Live2DCoreShim"/> 内部静默降级。</para>
+    /// </summary>
+    private static void DisposeModel(InteractiveLive2DDelegate? live2D, LAppModel? model)
+        => DisposeModel(live2D, NativeModelPointer(model));
+
+    /// <summary>取 <see cref="LAppModel"/> 的原生 <c>csmModel*</c>(缺失时为零)。</summary>
+    private static IntPtr NativeModelPointer(LAppModel? model)
     {
+        if (model is null)
+        {
+            return IntPtr.Zero;
+        }
+        try
+        {
+            CubismModel? core = model.Model;
+            return core is null ? IntPtr.Zero : core.Model;
+        }
+        catch (Exception)
+        {
+            return IntPtr.Zero;
+        }
+    }
+
+    private static void DisposeModel(InteractiveLive2DDelegate? live2D, IntPtr nativeModel)
+    {
+        if (live2D is null && nativeModel == IntPtr.Zero)
+            return;
+
+        // 先丢缓存再释放:释放后 Core 的 model 内存已失效,不能再拿去查表
+        // (shim 只比较指针值、不解引用,但先清更保守)。
+        Live2DCoreShim.ForgetRenderOrderCache(nativeModel);
+
         if (live2D is null)
             return;
 

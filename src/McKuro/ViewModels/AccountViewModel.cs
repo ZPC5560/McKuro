@@ -61,16 +61,17 @@ public sealed partial class AccountViewModel : ViewModelBase
     [ObservableProperty]
     private string _accountText = LanguageService.Format("Sign.NotLoggedIn");
 
-    [ObservableProperty]
-    private int _selectedAccountIndex = -1;
+    /// <summary>已保存的库街区账号列表(列表样式展示,点行切换当前;替代原下拉)。</summary>
+    public ObservableCollection<InterfaceAccountItem> KuroAccountItems { get; } = [];
 
-    public ObservableCollection<string> AccountOptions { get; } = [];
-
-    /// <summary>AccountOptions 每行对应的库街区 UserId(顺序一一对应;显示文案改版后不能再靠 Contains 反查)。</summary>
+    /// <summary>每行对应的库街区 UserId(顺序与 <see cref="KuroAccountItems"/> 一一对应)。</summary>
     private readonly List<string> _accountOptionKeys = [];
 
-    /// <summary>已保存的云鸣潮账号显示列表(与库街区同款多账号切换)。</summary>
-    public ObservableCollection<string> CloudAccountOptions { get; } = [];
+    /// <summary>已保存的云鸣潮账号列表(与库街区同款列表样式)。</summary>
+    public ObservableCollection<InterfaceAccountItem> CloudAccountItems { get; } = [];
+
+    /// <summary>云鸣潮列表每行的稳定 Id(顺序与 <see cref="CloudAccountItems"/> 一一对应)。</summary>
+    private readonly List<string> _cloudAccountKeys = [];
 
     // ---- 接口账号 → 游戏角色显示口径(昵称 · 游戏角色 UID) ----
     // 本地官方启动器凭证枚举出的角色;账号页三张卡片都按手机号/账号名/库街区 UID 在其中匹配,
@@ -94,15 +95,15 @@ public sealed partial class AccountViewModel : ViewModelBase
     public string GuideAccountDisplay => CurrentGuideAccountDisplay();
 
     /// <summary>
-    /// 库街区「当前账号」显示文案 = 下拉当前项(已是游戏角色身份;未登录返回未登录文案)。
+    /// 库街区「当前账号」显示文案 = 列表当前项(已是游戏角色身份;未登录返回未登录文案)。
     /// </summary>
     private string CurrentKuroAccountDisplay()
         => AppServices.KuroAccounts.Current is null ? LanguageService.Format("Sign.NotLoggedIn") : AccountText;
 
-    /// <summary>云鸣潮「当前账号」显示文案 = 云鸣潮账号下拉当前项(已是游戏角色身份)。</summary>
+    /// <summary>云鸣潮「当前账号」显示文案 = 云鸣潮列表当前项(已是游戏角色身份)。</summary>
     private string CurrentCloudAccountDisplay()
         => IsCloudLoggedIn
-            ? CloudAccountOptions.ElementAtOrDefault(SelectedCloudAccountIndex)
+            ? CloudAccountItems.ElementAtOrDefault(CloudSelectedIndex())?.Display
                 ?? (string.IsNullOrWhiteSpace(CloudAccountText) ? LanguageService.Format("Account.LoggedIn") : CloudAccountText)
             : LanguageService.Format("Sign.NotLoggedIn");
 
@@ -125,18 +126,46 @@ public sealed partial class AccountViewModel : ViewModelBase
             : LanguageService.Format("Account.GuideLoggedIn", s.GuideCName);
     }
 
-    /// <summary>云鸣潮下拉当前选中账号索引。</summary>
-    [ObservableProperty]
-    private int _selectedCloudAccountIndex = -1;
+    /// <summary>云鸣潮列表当前选中账号索引(仅内部定位用;UI 直接点列表行切换)。</summary>
+    public int CloudSelectedIndex()
+    {
+        var currentId = AppServices.CloudGacha.SavedLoginId;
+        return currentId.Length == 0 ? -1 : _cloudAccountKeys.IndexOf(currentId);
+    }
 
-    /// <summary>是否已保存云鸣潮账号(控制「当前账号」切换行显示;无账号时隐藏,避免出现空下拉)。</summary>
-    public bool HasCloudAccounts => CloudAccountOptions.Count > 0;
+    /// <summary>是否已保存云鸣潮账号(控制账号列表与「退出登录」显示;无账号时隐藏退出避免空操作)。</summary>
+    public bool HasCloudAccounts => CloudAccountItems.Count > 0;
 
-    /// <summary>是否存在当前库街区登录账号(控制「退出登录」按钮显示;未登录时隐藏避免空操作)。</summary>
+    /// <summary>是否存在当前库街区登录账号(当前账号身份文案显示用)。</summary>
     public bool HasKuroLogin => AppServices.KuroAccounts.Current is not null;
 
-    /// <summary>是否已保存库街区账号(控制「当前账号」切换行显示;无账号时隐藏,避免出现空下拉)。</summary>
-    public bool HasKuroAccounts => AccountOptions.Count > 0;
+    /// <summary>是否已保存库街区账号(控制账号列表与「退出登录」显示;无账号时隐藏退出避免空操作)。</summary>
+    public bool HasKuroAccounts => KuroAccountItems.Count > 0;
+
+    // ---- 「退出登录」的多账号门禁:多账号必须先在列表中点选(退出点选的那个),单账号直接可退 ----
+    // 点选目标单独记录(独立于"当前账号"):退出的是用户明确点中的账号,防止误退默认账号。
+
+    /// <summary>库街区列表中被点选的 UserId(退出目标;null=未点选)。</summary>
+    private string? _kuroPickedUserId;
+
+    /// <summary>云鸣潮列表中被点选的稳定 Id(退出目标;null=未点选)。</summary>
+    private string? _cloudPickedId;
+
+    /// <summary>库街区「退出登录」是否可用:仅 1 个账号直接可退;多账号需先点选列表行。</summary>
+    public bool CanLogoutKuro
+        => AccountLogoutGate.CanLogout(KuroAccountItems.Count, _kuroPickedUserId is not null);
+
+    /// <summary>库街区「退出登录」的悬停提示(多账号未点选时说明原因)。</summary>
+    public string LogoutKuroTip
+        => CanLogoutKuro ? "" : LanguageService.Format("Account.LogoutPickFirst");
+
+    /// <summary>云鸣潮「退出登录」是否可用(与库街区同款门禁)。</summary>
+    public bool CanLogoutCloud
+        => AccountLogoutGate.CanLogout(CloudAccountItems.Count, _cloudPickedId is not null);
+
+    /// <summary>云鸣潮「退出登录」的悬停提示。</summary>
+    public string LogoutCloudTip
+        => CanLogoutCloud ? "" : LanguageService.Format("Account.LogoutPickFirst");
 
     // ---- 登录状态点(每个接口账号标签后:绿=登录正常,橙=异常登录,灰=未登录) ----
     /// <summary>库街区登录状态点。</summary>
@@ -540,7 +569,8 @@ public sealed partial class AccountViewModel : ViewModelBase
 
     private void RefreshAccounts()
     {
-        AccountOptions.Clear();
+        var currentUserId = AppServices.KuroAccounts.Current?.UserId;
+        KuroAccountItems.Clear();
         _accountOptionKeys.Clear();
         foreach (var account in AppServices.KuroAccounts.GetAccounts())
         {
@@ -549,16 +579,39 @@ public sealed partial class AccountViewModel : ViewModelBase
             // 同一库街区账号下有多个角色时,优先当前应用正在使用的角色(设置里的 RoleId)。
             var gameRole = ResolveGameRole(account.Mobile, userName: null, kuroUid: account.UserId,
                 preferredRoleId: PreferredKuroRoleId(account));
-            AccountOptions.Add(gameRole is not null
-                ? LocalGameAccountLabel.Format(gameRole.RoleName, gameRole.RoleId)
-                : FallbackAccountOptionText(account));
+            string display;
+            string masked = "";
+            if (gameRole is not null)
+            {
+                display = LocalGameAccountLabel.Format(gameRole.RoleName, gameRole.RoleId);
+            }
+            else
+            {
+                display = FallbackAccountOptionText(account, out masked);
+            }
+            // 列表逐账号显示状态点:当前账号看会话校验结论,其余账号一律灰点(未校验,不编造结论)
+            var state = account.UserId == currentUserId
+                ? AccountLoginStateLogic.ResolveKuroDot(currentUserId, IsKuroSessionKnownExpired(currentUserId))
+                : InterfaceLoginState.NotLoggedIn;
+            KuroAccountItems.Add(new InterfaceAccountItem
+            {
+                Display = display,
+                SubText = masked,
+                State = state,
+                IsCurrent = account.UserId == currentUserId,
+                // 点选态跨重绘保留(重绘不丢用户已点选的退出目标);目标被移除后自动失效
+                IsSelected = _kuroPickedUserId == account.UserId,
+            });
             _accountOptionKeys.Add(account.UserId);
+        }
+        if (_kuroPickedUserId is not null && !_accountOptionKeys.Contains(_kuroPickedUserId))
+        {
+            _kuroPickedUserId = null;
         }
         var current = AppServices.KuroAccounts.Current;
         AccountText = current is null
             ? LanguageService.Format("Sign.NotLoggedIn")
-            : AccountOptions.ElementAtOrDefault(IndexByKey(_accountOptionKeys, current.UserId)) ?? LanguageService.Format("Sign.NotLoggedIn");
-        SelectedAccountIndex = current is null ? -1 : IndexByKey(_accountOptionKeys, current.UserId);
+            : KuroAccountItems.ElementAtOrDefault(IndexByKey(_accountOptionKeys, current.UserId))?.Display ?? LanguageService.Format("Sign.NotLoggedIn");
         // 登录状态点:未登录 → 灰;已保存登录 → 默认绿(会话校验失败后再转橙)。
         // ⚠️ 不能无条件写 Ok:本方法会被 RefreshGameRoleLabelsAsync 等在页面加载时反复调用,
         // 若每次都重置为 Ok,就会把 ValidateKuroSessionAsync 刚判定的「会话失效(橙)」冲掉,
@@ -569,6 +622,8 @@ public sealed partial class AccountViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasKuroLogin));
         OnPropertyChanged(nameof(HasKuroAccounts));
         OnPropertyChanged(nameof(KuroAccountDisplay));
+        OnPropertyChanged(nameof(CanLogoutKuro));
+        OnPropertyChanged(nameof(LogoutKuroTip));
         RefreshSameAccountAuto();
     }
 
@@ -611,12 +666,20 @@ public sealed partial class AccountViewModel : ViewModelBase
 
     /// <summary>
     /// 匹配不到本地游戏角色时库街区账号的回退显示文案:
-    /// 「昵称(或库街区 UID)· 掩码手机号」;手机号为空时省略尾段。
+    /// 「昵称(或库街区 UID)」;掩码手机号作为次行小字输出(<paramref name="maskedMobile"/>)。
     /// </summary>
-    private static string FallbackAccountOptionText(KuroAccount account)
+    private static string FallbackAccountOptionText(KuroAccount account, out string maskedMobile)
     {
         var name = string.IsNullOrEmpty(account.Nickname) ? account.UserId : account.Nickname;
-        return string.IsNullOrEmpty(account.Mobile) ? name : $"{name}{LocalGameAccountLabel.Separator}{MaskMobile(account.Mobile)}";
+        maskedMobile = string.IsNullOrEmpty(account.Mobile) ? "" : MaskMobile(account.Mobile);
+        return name;
+    }
+
+    /// <summary>库街区列表当前选中(= 当前账号)行下标;未登录返回 -1。</summary>
+    private int KuroSelectedIndex()
+    {
+        var currentId = AppServices.KuroAccounts.Current?.UserId;
+        return string.IsNullOrEmpty(currentId) ? -1 : _accountOptionKeys.IndexOf(currentId);
     }
 
     /// <summary>
@@ -665,35 +728,47 @@ public sealed partial class AccountViewModel : ViewModelBase
 
     private void RefreshCloudState()
     {
-        // 重建云鸣潮账号下拉:显示游戏角色身份(昵称 · 游戏角色 UID),与库街区卡片同一口径
-        CloudAccountOptions.Clear();
+        // 重建云鸣潮账号列表:显示游戏角色身份(昵称 · 游戏角色 UID),与库街区卡片同一口径
+        CloudAccountItems.Clear();
+        _cloudAccountKeys.Clear();
         var accounts = AppServices.CloudGacha.GetAccounts();
-        var currentIndex = -1;
+        var currentId = AppServices.CloudGacha.SavedLoginId;
         for (var i = 0; i < accounts.Count; i++)
         {
             var account = accounts[i];
             var gameRole = ResolveGameRole(phone: account.Phone, userName: account.Name, kuroUid: null);
-            var text = gameRole is not null
+            var display = gameRole is not null
                 ? LocalGameAccountLabel.Format(gameRole.RoleName, gameRole.RoleId)
                 : (string.IsNullOrWhiteSpace(account.Name)
                     ? (string.IsNullOrEmpty(account.Phone) ? account.Id : MaskMobile(account.Phone))
                     : account.Name);
-            CloudAccountOptions.Add(text);
-            // 当前项按稳定 Id 匹配(手机号可能为空,不能作匹配键)
-            if (AppServices.CloudGacha.HasSavedLogin && account.Id == AppServices.CloudGacha.SavedLoginId)
+            var isCurrent = AppServices.CloudGacha.HasSavedLogin && account.Id == currentId;
+            CloudAccountItems.Add(new InterfaceAccountItem
             {
-                currentIndex = i;
-            }
+                Display = display,
+                SubText = string.IsNullOrEmpty(account.Phone) || account.Phone == display ? "" : MaskMobile(account.Phone),
+                State = isCurrent ? InterfaceLoginState.Ok : InterfaceLoginState.NotLoggedIn,
+                IsCurrent = isCurrent,
+                // 点选态跨重绘保留;目标被移除后自动失效
+                IsSelected = _cloudPickedId == account.Id,
+            });
+            // 当前项按稳定 Id 匹配(手机号可能为空,不能作匹配键)
+            _cloudAccountKeys.Add(account.Id);
         }
-        SelectedCloudAccountIndex = currentIndex;
+        if (_cloudPickedId is not null && !_cloudAccountKeys.Contains(_cloudPickedId))
+        {
+            _cloudPickedId = null;
+        }
         IsCloudLoggedIn = AppServices.CloudGacha.HasSavedLogin;
         CloudAccountText = IsCloudLoggedIn
-            ? CloudAccountOptions.ElementAtOrDefault(currentIndex) ?? LanguageService.Format("Account.LoggedIn")
+            ? CloudAccountItems.ElementAtOrDefault(CloudSelectedIndex())?.Display ?? LanguageService.Format("Account.LoggedIn")
             : LanguageService.Format("Sign.NotLoggedIn");
         // 已保存登录先按绿点显示,会话校验失败再转橙点
         CloudLoginState = IsCloudLoggedIn ? InterfaceLoginState.Ok : InterfaceLoginState.NotLoggedIn;
         OnPropertyChanged(nameof(HasCloudAccounts));
         OnPropertyChanged(nameof(CloudAccountDisplay));
+        OnPropertyChanged(nameof(CanLogoutCloud));
+        OnPropertyChanged(nameof(LogoutCloudTip));
         RefreshSameAccountAuto();
     }
 
@@ -705,32 +780,45 @@ public sealed partial class AccountViewModel : ViewModelBase
         OnPropertyChanged(nameof(GuideAccountDisplay));
     }
 
-    /// <summary>下拉切换云鸣潮当前账号(按列表索引定位;抽卡同步/会话校验都随当前账号切换)。</summary>
-    partial void OnSelectedCloudAccountIndexChanged(int value)
+    /// <summary>点击云鸣潮账号行:记录为退出目标 + 切换该接口的当前账号(抽卡同步/会话校验随当前账号切换)。</summary>
+    public void SelectCloudAccountAt(int index)
     {
-        if (!AppServices.CloudGacha.SwitchToIndex(value))
+        var accounts = AppServices.CloudGacha.GetAccounts();
+        if (index < 0 || index >= accounts.Count)
         {
-            // 切换失败(索引越界/列表已变):必须回写下拉,否则 ComboBox 停在用户刚点的行,
-            // 显示与实际当前账号分叉(评审反馈)
+            RefreshCloudState();
+            return;
+        }
+        // 先记点选目标(退出登录用),再切换当前账号(点行即切换的既有语义)
+        _cloudPickedId = accounts[index].Id;
+        if (!AppServices.CloudGacha.SwitchToIndex(index))
+        {
+            // 切换失败(索引越界/列表已变):重建列表让行高亮回到实际当前账号
             RefreshCloudState();
             return;
         }
         RefreshCloudState();
-        if (value >= 0 && value < CloudAccountOptions.Count)
+        if (index >= 0 && index < CloudAccountItems.Count)
         {
             // 提示里也用游戏角色身份(与列表项同源),而不是接口账号名
-            StatusText = LanguageService.Format("Account.Switched", CloudAccountOptions[value]);
+            StatusText = LanguageService.Format("Account.Switched", CloudAccountItems[index].Display);
         }
+        // 退出按钮的门禁随点选态变化(多账号未点选时禁用)
+        OnPropertyChanged(nameof(CanLogoutCloud));
+        OnPropertyChanged(nameof(LogoutCloudTip));
     }
 
-    partial void OnSelectedAccountIndexChanged(int value)
+    /// <summary>点击库街区账号行:记录为退出目标 + 切换该接口的当前账号。</summary>
+    public void SelectKuroAccountAt(int index)
     {
         var accounts = AppServices.KuroAccounts.GetAccounts();
-        if (value < 0 || value >= accounts.Count)
+        if (index < 0 || index >= accounts.Count)
         {
             return;
         }
-        var account = accounts[value];
+        // 先记点选目标(退出登录用),再切换当前账号
+        _kuroPickedUserId = accounts[index].UserId;
+        var account = accounts[index];
         AppServices.KuroAccounts.Current = account;
         // 切到该账号视为"重新开始":清除上一次的失效判定,由本次会话校验重新确认
         ClearKuroSessionExpired(account.UserId);
@@ -741,6 +829,9 @@ public sealed partial class AccountViewModel : ViewModelBase
         StatusText = LanguageService.Format("Account.Switched", string.IsNullOrEmpty(account.Nickname) ? account.UserId : account.Nickname);
         // 通知角色数据页按新账号刷新
         WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(account.UserId));
+        // 退出按钮的门禁随点选态变化
+        OnPropertyChanged(nameof(CanLogoutKuro));
+        OnPropertyChanged(nameof(LogoutKuroTip));
         // 切换后立即校验新账号的会话(切到已失效的账号时,账号页马上显示橙点与提示)
         _ = ValidateSessionsAsync();
     }
@@ -806,23 +897,38 @@ public sealed partial class AccountViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 退出当前库街区账号登录(与原「移除」合并为同一动作:移除当前账号并切回未登录态,
-    /// 因两者功能相同,仅保留这一个入口)。
+    /// 退出库街区登录(移除<b>点选</b>的账号;单账号即该账号本身)并切回未登录态。
+    /// 门禁:无账号时按钮整体隐藏;多账号时必须先在列表中点选要退出的账号
+    /// (退出的是点选项,不再有"默认退出当前账号"的歧义)。
     /// </summary>
     [RelayCommand]
     private void Logout()
     {
         var current = AppServices.KuroAccounts.Current;
-        if (current is not null)
+        if (current is null)
         {
-            AppServices.KuroAccounts.Remove(current.UserId);
-            // 账号已移除:清掉失效标记,避免残留(重新登录同一 UserId 时不应继承旧结论)
-            ClearKuroSessionExpired(current.UserId);
-            // 通知签到/角色等页同步登出态(与登录消息同源)
-            WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(current.UserId));
+            // 无账号:按钮已隐藏,理论不可达;防御一次避免空操作
+            return;
         }
+        if (!CanLogoutKuro)
+        {
+            StatusText = LanguageService.Format("Account.LogoutPickFirst");
+            return;
+        }
+        var removedName = KuroAccountItems.ElementAtOrDefault(KuroSelectedIndex())?.Display ?? "";
+        AppServices.KuroAccounts.Remove(current.UserId);
+        // 账号已移除:清掉失效标记,避免残留(重新登录同一 UserId 时不应继承旧结论)
+        ClearKuroSessionExpired(current.UserId);
+        if (_kuroPickedUserId == current.UserId)
+        {
+            _kuroPickedUserId = null;
+        }
+        // 通知签到/角色等页同步登出态(与登录消息同源)
+        WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(current.UserId));
         RefreshAccounts();
-        StatusText = LanguageService.Format("Account.LoggedOut");
+        StatusText = string.IsNullOrEmpty(removedName)
+            ? LanguageService.Format("Account.LoggedOut")
+            : LanguageService.Format("Account.LoggedOutOf", removedName);
     }
 
     // ==================== 库街区短信登录(自签到页迁移) ====================
@@ -1192,13 +1298,30 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
     }
 
-    /// <summary>退出云鸣潮登录。</summary>
+    /// <summary>
+    /// 退出云鸣潮登录(从列表移除<b>点选</b>账号的持久化会话;其他已保存账号不受影响)。
+    /// 门禁与库街区同款:多账号时必须先在列表中点选要退出的账号。
+    /// </summary>
     [RelayCommand]
     private void CloudLogout()
     {
+        if (!CanLogoutCloud)
+        {
+            StatusText = LanguageService.Format("Account.LogoutPickFirst");
+            return;
+        }
+        var removedName = CloudAccountItems.ElementAtOrDefault(CloudSelectedIndex())?.Display ?? "";
+        var removedId = AppServices.CloudGacha.SavedLoginId;
         AppServices.CloudGacha.Logout();
+        if (_cloudPickedId == removedId)
+        {
+            _cloudPickedId = null;
+        }
         RefreshCloudState();
         CloudStatusText = LanguageService.Format("Account.CloudLoggedOut");
+        StatusText = string.IsNullOrEmpty(removedName)
+            ? LanguageService.Format("Account.CloudLoggedOut")
+            : LanguageService.Format("Account.LoggedOutOf", removedName);
         // 退出后重新展开登录表单,便于再次登录
         IsCloudLoginOpen = true;
     }

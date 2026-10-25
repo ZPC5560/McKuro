@@ -175,7 +175,7 @@ public sealed class AppSettings
     /// <summary>登录状态提醒(库街区/云鸣潮/攻略站会话失效)。</summary>
     public bool NotifLoginEnabled { get; set; } = true;
 
-    /// <summary>周本收尾提醒(本周最后一天仍未打满)。</summary>
+    /// <summary>战歌同奏(周本)收尾提醒(本周最后一天仍有剩余次数)。</summary>
     public bool NotifWeeklyEnabled { get; set; } = true;
 
     /// <summary>活跃度提醒(19 点后当日活跃度仍为 0)。</summary>

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using McKuro.Core.Infrastructure;
@@ -76,6 +76,7 @@ public sealed class GuideCacheService
         }
         try
         {
+            using var _gate = _db.Enter();
             using var cmd = _db.Connection.CreateCommand();
             cmd.CommandText =
                 """
@@ -143,6 +144,7 @@ public sealed class GuideCacheService
         }
         try
         {
+            using var _gate = _db.Enter();
             var listJson = JsonSerializer.Serialize(list, GuideCacheJsonContext.Default.IReadOnlyListGuideIntroductionItem);
             using var cmd = _db.Connection.CreateCommand();
             cmd.CommandText =
@@ -178,6 +180,7 @@ public sealed class GuideCacheService
         }
         try
         {
+            using var _gate = _db.Enter();
             var detailJson = JsonSerializer.Serialize(detail, GuideCacheJsonContext.Default.GuideIntroductionInfo);
             using var cmd = _db.Connection.CreateCommand();
             cmd.CommandText =
@@ -208,6 +211,7 @@ public sealed class GuideCacheService
     {
         try
         {
+            using var _gate = _db.Enter();
             using var cmd = _db.Connection.CreateCommand();
             if (keepCardRoleIds.Count == 0)
             {
@@ -256,6 +260,7 @@ public sealed class GuideCacheService
         }
         try
         {
+            using var _gate = _db.Enter();
             using var cmd = _db.Connection.CreateCommand();
             cmd.CommandText =
                 "SELECT role_info_json, role_info_update_time FROM guide_cache WHERE account_id = $acct AND card_role_id = $id";
@@ -302,6 +307,7 @@ public sealed class GuideCacheService
         }
         try
         {
+            using var _gate = _db.Enter();
             var json = JsonSerializer.Serialize(data, GuideCacheJsonContext.Default.GuideRoleInfoData);
             using var cmd = _db.Connection.CreateCommand();
             cmd.CommandText =

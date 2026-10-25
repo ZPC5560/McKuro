@@ -216,7 +216,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         WeakReferenceMessenger.Default.Register<MainWindowViewModel, ShowToastMessage>(this,
             static (recipient, message) => recipient.ShowToast(message.Value));
 
-        // 悬浮提醒(签到/活动/登录/周本/活跃度):提醒通知器触发 → 右上角卡片(设置页外显示)
+        // 悬浮提醒(签到/活动/登录/战歌同奏(周本)/活跃度):提醒通知器触发 → 右上角卡片(设置页外显示)
         HookReminders();
 
         // 诊断冒烟(McKuro_SMOKE_NOTIF=1):预置三类示例提醒供悬浮通知 UI 验证;不触碰网络
