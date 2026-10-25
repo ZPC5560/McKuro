@@ -17,7 +17,7 @@
     <!-- Native AOT 发布 (win-x64 需在 Windows 上发布;osx-arm64 可本地验证) -->
     <PublishAot>true</PublishAot>
     <StripSymbols>true</StripSymbols>
-    <Version>1.3.7</Version>
+    <Version>1.3.7.1</Version>
     <!-- 注意:不要启用 InvariantGlobalization —— Semi 主题需要 zh-CN 文化支持 -->
     <!-- IL2104: 第三方 HanumanInstitute.LibMpv 自身产生的裁剪警告;本项目仅用其
          原生库加载/符号解析路径(无反射),该警告对本用法不适用 -->
@@ -102,7 +102,7 @@
     <None Include="Assets\geetest.html" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\Js\*.js" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\attr\*.png" CopyToOutputDirectory="PreserveNewest" />
-    <!-- 每日数据官方图标(波片/结晶单质/活跃度/战令/周本,参照 Haiyu Assets/GameAssets/Waves 与 Java 版 WutheringWavesTool) -->
+    <!-- 每日数据官方图标(波片/结晶单质/活跃度/战令/战歌同奏,参照 Haiyu Assets/GameAssets/Waves 与 Java 版 WutheringWavesTool) -->
     <None Include="Assets\waves\*.png" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\HpatchzResource\hpatchz.exe" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\HpatchzResource\NOTICE.txt" CopyToOutputDirectory="PreserveNewest" />
