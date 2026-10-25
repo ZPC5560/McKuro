@@ -74,9 +74,83 @@
         <Style Selector="Grid.os-material #ContentHost" x:SetterTargetType="Border">
             <Setter Property="Background" Value="{DynamicResource McKuroContentTintMaterial}" />
         </Style>
+
+        <!-- 自绘窗口操作栏的三个按钮:最小化/最大化/关闭(仅无边框沉浸模式下出现) -->
+        <Style Selector="Button.winBtn">
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.winBtn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#22FFFFFF" />
+        </Style>
+        <Style Selector="Button.winBtn.winClose:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource McKuroDanger}" />
+        </Style>
+        <!-- 操作栏左侧应用 logo:是「临时固定操作栏」的开关,固定时用主题色底+描边标示状态 -->
+        <Style Selector="Button.titleLogo">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.titleLogo:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#22FFFFFF" />
+        </Style>
+        <Style Selector="Button.titleLogo.pinned /template/ ContentPresenter">
+            <Setter Property="Background" Value="#335A8DEE" />
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccent}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <!-- 导航栏顶部头像:是「临时固定导航栏」的开关,固定时用主题色描边标示状态 -->
+        <Style Selector="Button.navAvatar">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="23" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.navAvatar:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#22FFFFFF" />
+        </Style>
+        <Style Selector="Border.avatarFrame">
+            <Setter Property="Background" Value="#33FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="#809AA8BC" />
+            <Setter Property="BoxShadow" Value="0 2 10 0 #2E0A1428" />
+        </Style>
+        <Style Selector="Button.navAvatar.pinned Border.avatarFrame">
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccent}" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="BoxShadow" Value="0 0 12 0 #665A8DEE" />
+        </Style>
+
+        <!-- 窗口按钮字形用 1px 描边路径绘制(不依赖系统图标字体,跨平台一致) -->
+        <Style Selector="Button.winBtn Path.winGlyph">
+            <Setter Property="Stroke" Value="{DynamicResource SemiColorText2}" />
+            <Setter Property="StrokeThickness" Value="1" />
+            <Setter Property="StrokeLineCap" Value="Round" />
+        </Style>
+        <Style Selector="Button.winBtn:pointerover Path.winGlyph">
+            <Setter Property="Stroke" Value="{DynamicResource SemiColorText1}" />
+        </Style>
+        <Style Selector="Button.winBtn.winClose:pointerover Path.winGlyph">
+            <Setter Property="Stroke" Value="White" />
+        </Style>
     </Window.Styles>
 
-    <Grid x:Name="RootShell">
+    <Grid x:Name="RootShell" ClipToBounds="True">
         <!-- 全局背景:纯色底座 + 氛围遮罩 + 双彩色光斑。
              光斑是液态玻璃的"折射源":玻璃后面的色彩梯度让边缘高光/暗影可见(纯平底色上看不出玻璃)。 -->
         <Grid IsHitTestVisible="False">
@@ -94,14 +168,34 @@
             <Border x:Name="BackdropTint" Background="{DynamicResource McKuroBackdropTint}" />
         </Grid>
 
-        <Grid ColumnDefinitions="76,*">
+        <!-- 列宽 Auto:NavRail.Width 在 76 ⇄ 0 之间由 Transition 动画(自动隐藏),内容区随之回流。
+             Transition 由 Avalonia 动画时钟驱动(与渲染帧对齐),比自建 DispatcherTimer 更平滑。 -->
+        <Grid x:Name="ShellGrid" ColumnDefinitions="Auto,*">
+            <Grid.Transitions>
+                <Transitions>
+                    <ThicknessTransition Property="Margin" Duration="0:0:0.2" Easing="CubicEaseOut" />
+                </Transitions>
+            </Grid.Transitions>
         <!-- 左侧 76px 图标导航:液态玻璃质感。
              分层光学:半透明底色 → 顶部光斑 → 左缘受光亮线+右缘背光暗线(折射立体感) → 内容。
-             选中态:Apple 液态玻璃滑动胶囊——玻璃胶囊在导航项间平滑滑动(代码后置驱动)。 -->
-        <Border x:Name="NavRail" Grid.Column="0"
+             选中态:Apple 液态玻璃滑动胶囊——玻璃胶囊在导航项间平滑滑动(代码后置驱动)。
+             自动隐藏:外层 Border 宽度收缩并裁剪,内层固定 76 宽整体左移(NavGlassTranslate),
+             因此收纳过程中导航内容不会被压缩变形。 -->
+        <Border x:Name="NavRail" Grid.Column="0" Width="76" ClipToBounds="True"
                 Background="{DynamicResource McKuroNavFill}"
                 BorderThickness="0">
-            <Panel x:Name="NavGlassPanel">
+            <Border.Transitions>
+                <Transitions>
+                    <DoubleTransition Property="Width" Duration="0:0:0.2" Easing="CubicEaseOut" />
+                </Transitions>
+            </Border.Transitions>
+            <!-- 内层固定 76 宽:收纳时整体左移(负 Margin)而不是被压扁 -->
+            <Panel x:Name="NavGlassPanel" Width="76" HorizontalAlignment="Left">
+                <Panel.Transitions>
+                    <Transitions>
+                        <ThicknessTransition Property="Margin" Duration="0:0:0.2" Easing="CubicEaseOut" />
+                    </Transitions>
+                </Panel.Transitions>
                 <!-- 顶部径向光斑:光源从上方射入玻璃的漫反射 -->
                 <Border IsHitTestVisible="False">
                     <Border.Background>
@@ -137,30 +231,32 @@
                     </Border.RenderTransform>
                 </Border>
                 <DockPanel>
-                    <!-- 顶部账号头像:登录后显示库街区真实头像(磁盘缓存),未登录/无缓存显示守岸人默认图标 -->
-                    <Border DockPanel.Dock="Top"
-                            Width="46" Height="46"
-                            CornerRadius="23"
-                            HorizontalAlignment="Center"
-                            Margin="0,12,0,14"
-                            Background="#33FFFFFF"
-                            BorderThickness="1"
-                            BorderBrush="#809AA8BC"
-                            BoxShadow="0 2 10 0 #2E0A1428">
-                        <Panel>
-                            <Border Width="42" Height="42" CornerRadius="21" ClipToBounds="True"
-                                    BorderThickness="1" BorderBrush="#40FFFFFF"
-                                    IsVisible="{Binding !HasNavAvatar}">
-                                <Image Source="avares://McKuro/Assets/shorekeeper_icon.png"
-                                       Stretch="UniformToFill" />
-                            </Border>
-                            <Border Width="42" Height="42" CornerRadius="21" ClipToBounds="True"
-                                    BorderThickness="1" BorderBrush="#40FFFFFF"
-                                    IsVisible="{Binding HasNavAvatar}">
-                                <controls:AsyncImage ImageUrl="{Binding NavAvatarPath}" Stretch="UniformToFill" />
-                            </Border>
-                        </Panel>
-                    </Border>
+                    <!-- 顶部账号头像:登录后显示库街区真实头像(磁盘缓存),未登录/无缓存显示守岸人默认图标。
+                         同时是「临时固定导航栏」的开关:点击固定(不再自动收起),再次点击取消固定。
+                         固定状态只在本次运行内有效,不写配置。 -->
+                    <Button x:Name="NavAvatarButton" Classes="navAvatar" DockPanel.Dock="Top"
+                            HorizontalAlignment="Center" Margin="0,12,0,14"
+                            ToolTip.Tip="{loc:Localize Key=Nav.PinToggle}"
+                            AutomationProperties.Name="{loc:Localize Key=Nav.PinToggle}"
+                            Click="OnNavAvatarClick">
+                        <Border x:Name="NavAvatarFrame" Classes="avatarFrame"
+                                Width="46" Height="46"
+                                CornerRadius="23">
+                            <Panel>
+                                <Border Width="42" Height="42" CornerRadius="21" ClipToBounds="True"
+                                        BorderThickness="1" BorderBrush="#40FFFFFF"
+                                        IsVisible="{Binding !HasNavAvatar}">
+                                    <Image Source="avares://McKuro/Assets/shorekeeper_icon.png"
+                                           Stretch="UniformToFill" />
+                                </Border>
+                                <Border Width="42" Height="42" CornerRadius="21" ClipToBounds="True"
+                                        BorderThickness="1" BorderBrush="#40FFFFFF"
+                                        IsVisible="{Binding HasNavAvatar}">
+                                    <controls:AsyncImage ImageUrl="{Binding NavAvatarPath}" Stretch="UniformToFill" />
+                                </Border>
+                            </Panel>
+                        </Border>
+                    </Button>
                     <!-- 导航项:自然高度堆叠 + 窗口居中(替代原 12 行强制均分);矮窗口走 Viewbox 缩放 -->
                     <ListBox x:Name="NavList"
                              ItemsSource="{Binding NavigationItems}"
@@ -230,6 +326,67 @@
             <ContentControl Content="{Binding CurrentPage}" />
         </Border>
         </Grid>
+
+        <!-- ==================== 无边框沉浸:自绘窗口操作栏 ====================
+             仅在「窗口操作栏自动隐藏」开启时显示(此时代码侧把系统 chrome 换成
+             WindowDecorations.BorderOnly + ExtendClientArea,原生标题栏与边框消失)。
+             显示时由代码后置把内容区(导航栏 + 页面)整体下推等高一段(ApplyTitleBarOffset),
+             因此不会盖住页面顶部按键;ZIndex 高于页面、低于弹窗/通知。
+             鼠标贴近窗口顶边时滑出,移开后自动收起。
+             拖动空白处移动窗口、双击最大化/还原;右侧三键为最小化/最大化/关闭。 -->
+        <Border x:Name="TitleBarHost" VerticalAlignment="Top" Height="38"
+                ZIndex="150" IsVisible="False" IsHitTestVisible="False">
+            <Border.Transitions>
+                <Transitions>
+                    <ThicknessTransition Property="Margin" Duration="0:0:0.2" Easing="CubicEaseOut" />
+                </Transitions>
+            </Border.Transitions>
+            <Border x:Name="TitleBarSurface"
+                    Background="{DynamicResource McKuroGlassFillStrong}"
+                    BorderBrush="{DynamicResource McKuroNavDivider}"
+                    BorderThickness="0,0,0,1"
+                    BoxShadow="0 2 12 0 #33000000">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <!-- 左侧:应用图标 + 标题(纯展示,不拦截拖动/双击) -->
+                    <StackPanel Orientation="Horizontal" Spacing="9" Margin="10,0,0,0"
+                                VerticalAlignment="Center">
+                        <!-- 应用 logo 同时是「临时固定操作栏」开关(再点取消) -->
+                        <Button x:Name="TitleBarLogoButton" Classes="titleLogo"
+                                Click="OnTitleBarLogoClick"
+                                ToolTip.Tip="{loc:Localize Key=Win.PinToggle}"
+                                AutomationProperties.Name="{loc:Localize Key=Win.PinToggle}">
+                            <Image Width="16" Height="16" Source="avares://McKuro/Assets/app.ico" />
+                        </Button>
+                        <TextBlock Text="{loc:Localize Key=Win.Title}" FontSize="12"
+                                   VerticalAlignment="Center" IsHitTestVisible="False"
+                                   Foreground="{DynamicResource SemiColorText2}" />
+                    </StackPanel>
+                    <!-- 右侧:最小化 / 最大化·还原 / 关闭 -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2"
+                                Margin="0,0,8,0" VerticalAlignment="Center">
+                        <Button x:Name="TitleBarMinimizeButton" Classes="winBtn"
+                                Click="OnTitleBarMinimize"
+                                AutomationProperties.Name="{loc:Localize Key=Win.Minimize}"
+                                ToolTip.Tip="{loc:Localize Key=Win.Minimize}">
+                            <Path Classes="winGlyph" Data="M0,0 L10,0" Stretch="None" />
+                        </Button>
+                        <Button x:Name="TitleBarMaximizeButton" Classes="winBtn"
+                                Click="OnTitleBarMaximizeRestore"
+                                AutomationProperties.Name="{loc:Localize Key=Win.MaximizeRestore}"
+                                ToolTip.Tip="{loc:Localize Key=Win.MaximizeRestore}">
+                            <Path x:Name="TitleBarMaximizeGlyph" Classes="winGlyph"
+                                  Data="M0.5,0.5 L9.5,0.5 L9.5,9.5 L0.5,9.5 Z" Stretch="None" />
+                        </Button>
+                        <Button x:Name="TitleBarCloseButton" Classes="winBtn winClose"
+                                Click="OnTitleBarClose"
+                                AutomationProperties.Name="{loc:Localize Key=Win.Close}"
+                                ToolTip.Tip="{loc:Localize Key=Win.Close}">
+                            <Path Classes="winGlyph" Data="M0.5,0.5 L9.5,9.5 M9.5,0.5 L0.5,9.5" Stretch="None" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Border>
 
         <!-- 应用更新询问弹窗(启动自动检查触发;「自动下载安装」开启时不弹,直接静默升级) -->
         <Panel Background="#66000000" IsVisible="{Binding AppUpdatePromptVisible}" ZIndex="200">

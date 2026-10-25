@@ -83,6 +83,23 @@ public sealed class AppSettings
     /// <summary>启动软件后默认进入的页面:Home(主页,默认)/ Launcher(鸣潮启动页)。</summary>
     public string StartupPage { get; set; } = "Home";
 
+    // ---------- 窗口外观:沉浸 / 自动隐藏(默认关闭,保持原生窗口体验) ----------
+
+    /// <summary>
+    /// 导航栏自动隐藏:开启后左侧 76px 导航栏滑出隐藏,鼠标贴窗口左边缘时滑回,
+    /// 移开导航栏后自动收起。默认关闭。
+    /// </summary>
+    public bool AutoHideNavRail { get; set; }
+
+    /// <summary>
+    /// 窗口操作栏自动隐藏(沉浸无边框):开启后去掉系统标题栏与边框,改为软件内自绘操作栏
+    /// (拖动 / 最小化 / 最大化 / 关闭),鼠标贴窗口顶边时滑出,移开后收起。默认关闭。
+    /// <para>
+    /// 该开关是「无边框沉浸」的唯一入口:关闭时窗口完全保持系统原生 chrome。
+    /// </para>
+    /// </summary>
+    public bool AutoHideTitleBar { get; set; }
+
     /// <summary>背景封面视频(默认开启;无 LibVLC native 库时自动回退首帧图)。</summary>
     public bool BackgroundVideoEnabled { get; set; } = true;
 

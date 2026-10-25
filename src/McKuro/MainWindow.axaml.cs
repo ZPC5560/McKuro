@@ -1,13 +1,17 @@
 using System;
+using System.Globalization;
+using System.IO;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform;
 using Avalonia.Animation;
 
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using McKuro.Services;
 
 namespace McKuro;
@@ -65,6 +69,8 @@ public partial class MainWindow : Window
         InitTrayIcon();
         InitSystemMaterial();
         HookNavPill();
+        ShellGrid.LayoutUpdated += OnShellLayoutProbe;
+        InitImmersiveUi();
     }
 
     /// <summary>
@@ -222,6 +228,9 @@ public partial class MainWindow : Window
             return;
         }
 
+        // 无边框沉浸下操作栏的最大化/还原字形跟随状态
+        UpdateMaximizeGlyph();
+
         // 最小化位置=系统托盘 且游戏会话进行中(启动中/游戏中):点击最小化 → 隐藏到托盘,
         // 从托盘恢复后再最小化仍回托盘;游戏进程结束(会话空闲)后恢复为常规任务栏最小化。
         if (state == WindowState.Minimized
@@ -372,6 +381,30 @@ public partial class MainWindow : Window
     /// <summary>当前渲染缩放(物理像素/DIP),用于把 DIP 尺寸换算为 WM_SIZING 的像素坐标。</summary>
     private double _renderScale = 1.0;
 
+    /// <summary>
+    /// 重新测量非客户区厚度(物理像素)与渲染缩放。
+    /// 窗口 chrome 会在「原生 ⇄ 无边框沉浸」间切换,切换后客户区厚度变化,
+    /// WM_SIZING 的比例钳制必须用新的差值,否则拖拽时会把窗口越拖越偏。
+    /// </summary>
+    private void MeasureNonClientSize()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+        var platformHandle = TryGetPlatformHandle();
+        if (platformHandle is null || platformHandle.Handle == IntPtr.Zero)
+        {
+            return;
+        }
+        _renderScale = RenderScaling;
+        if (GetWindowRect(platformHandle.Handle, out var wr) && GetClientRect(platformHandle.Handle, out var cr))
+        {
+            _nonClientX = (wr.Right - wr.Left) - (cr.Right - cr.Left);
+            _nonClientY = (wr.Bottom - wr.Top) - (cr.Bottom - cr.Top);
+        }
+    }
+
     /// <summary>仅 Windows:安装窗口过程钩子,拖动缩放时钳制矩形为视频比例。</summary>
     private void InstallSizeAspectHook()
     {
@@ -386,11 +419,7 @@ public partial class MainWindow : Window
         }
         _renderScale = RenderScaling;
         // 缓存非客户区尺寸:GetWindowRect 与 GetClientRect 的差值(同一坐标系的物理像素)
-        if (GetWindowRect(platformHandle.Handle, out var wr) && GetClientRect(platformHandle.Handle, out var cr))
-        {
-            _nonClientX = (wr.Right - wr.Left) - (cr.Right - cr.Left);
-            _nonClientY = (wr.Bottom - wr.Top) - (cr.Bottom - cr.Top);
-        }
+        MeasureNonClientSize();
         _wndProcDelegate = WindowProcProxy;
         var procPtr = Marshal.GetFunctionPointerForDelegate(_wndProcDelegate);
         // 64 位进程用 SetWindowLongPtrW,32 位用 SetWindowLongW(该 API 无 SetWindowLongPtrW 导出)
@@ -586,6 +615,814 @@ public partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
+
+    // ==================== 沉浸 / 自动隐藏(导航栏 + 自绘窗口操作栏) ====================
+    // 设计要点:
+    // ① 「窗口操作栏自动隐藏」开启 ⇒ 系统 chrome 换成无边框(WindowDecorations.BorderOnly +
+    //    ExtendClientArea),原生标题栏/边框消失,改由软件内 TitleBarHost 承担拖动与三键;
+    //    关闭 ⇒ 完全回到系统原生 chrome(XAML 里 TitleBarHost 不显示)。
+    // ② 显隐判定只做「指针到窗口左/上边缘的距离」:贴边(≤ RevealZone)立即展开,
+    //    离开「展开区域 + HoldZone」后按轮询拍数延迟收起(避免快速划过时闪动)。
+    // ③ 轮询同时用于 Windows 上指针落在原生 resize 边框(非客户区,拿不到 PointerMoved)的情形,
+    //    其他平台退回 PointerMoved 提供的最近位置。
+
+    /// <summary>导航栏展开宽度(DIP,与 XAML 中 NavRail.Width / ContentNavWidth 一致)。</summary>
+    private const double NavRailWidth = ContentNavWidth;
+
+    /// <summary>自绘窗口操作栏高度(DIP,与 XAML 中 TitleBarHost.Height 一致)。</summary>
+    private const double TitleBarHeight = 38;
+
+    /// <summary>
+    /// 贴边唤出带:指针距窗口左/上边缘 ≤ 该值即展开(DIP)。
+    /// <para>
+    /// 取值依据(实测 Avalonia 12.1.2 / Win11 150% DPI,WindowDecorations.BorderOnly + 扩展客户区):
+    /// 客户区顶部 0~6 DIP 仍属系统 resize 边框(WM_NCHITTEST=HTTOP,拿不到 PointerMoved),
+    /// 左右边框约 7.3 DIP 在客户区外。轮询(GetCursorPos)能覆盖整条物理边缘,
+    /// 指针事件则只能从客户区可达处开始 —— 10 DIP 让"贴到窗口边缘"在两条来源下都成立。
+    /// </para>
+    /// </summary>
+    private const double RevealZone = 10;
+
+    /// <summary>已展开时继续悬停的余量:离开「展开区域 + 该余量」后才准备收起(DIP)。</summary>
+    private const double HoldZone = 8;
+
+    /// <summary>
+    /// 导航栏收起前的等待拍数(轮询 70ms ⇒ 约 70ms,近乎即时)。
+    /// 用户反馈「左边收缩有延迟」:导航栏只做一次 70ms 迟滞防抖,指针离开即收起。
+    /// </summary>
+    private const int NavHideDelayTicks = 1;
+
+    /// <summary>窗口操作栏收起前的等待拍数(轮询 70ms ⇒ 约 560ms,避免误触后立刻消失)。</summary>
+    private const int TitleHideDelayTicks = 8;
+
+    /// <summary>自动隐藏轮询间隔(ms)。</summary>
+    private const int AutoHidePollMs = 70;
+
+    /// <summary>无边框沉浸模式下,指针最多允许超出客户区多少 DIP 仍算"贴边"(覆盖原生边框厚度)。</summary>
+    private const double OutsideTolerance = 12;
+
+    /// <summary>导航栏显隐状态机(距窗口左边缘的距离)。</summary>
+    private readonly EdgeRevealState _navReveal = new()
+    {
+        Extent = NavRailWidth,
+        RevealZone = RevealZone,
+        HoldZone = HoldZone,
+        HideDelayTicks = NavHideDelayTicks,
+    };
+
+    /// <summary>窗口操作栏显隐状态机(距窗口上边缘的距离)。</summary>
+    private readonly EdgeRevealState _titleReveal = new()
+    {
+        Extent = TitleBarHeight,
+        RevealZone = RevealZone,
+        // 操作栏显示时会把内容区整体下推(见 ApplyTitleBarOffset),页面首行按键落在
+        // 「38 + 该余量」以内;余量给足,用户点首行时操作栏不会中途收起把页面顶回去。
+        HoldZone = 44,
+        HideDelayTicks = TitleHideDelayTicks,
+    };
+
+    /// <summary>当前是否处于无边框沉浸模式(= 设置项 AutoHideTitleBar)。</summary>
+    private bool _immersive;
+
+    /// <summary>自动隐藏轮询的诊断计数(MCKURO_AUTOHIDE_TRACE=1 时每 14 拍打印一行)。</summary>
+    private int _autohideTraceTicks;
+
+    /// <summary>导航栏/操作栏当前视觉状态(动画的目标值,避免每拍重复触发动画)。</summary>
+    private bool _navVisualShown = true;
+    private bool _titleVisualShown;
+
+    /// <summary>
+    /// 导航栏是否被手动「临时固定」(点击导航栏顶部头像切换)。
+    /// 只作用于本次运行:固定后不受贴边/失焦逻辑影响始终展开,再点一次恢复自动收起。
+    /// </summary>
+    private bool _navPinned;
+
+    /// <summary>
+    /// 窗口操作栏是否被手动「临时固定」(点击操作栏左侧应用 logo 切换)。
+    /// 固定后操作栏常驻(内容保持下推)、不受贴边/失焦逻辑影响;再点一次恢复自动收起。只作用于本次运行。
+    /// </summary>
+    private bool _titlePinned;
+
+    private DispatcherTimer? _autoHideTimer;
+
+    /// <summary>上一次轮询到的指针位置(用于判断"指针是否在移动";静止不算贴边唤出)。</summary>
+    private Point _lastPolledPoint;
+    private bool _polledInitialized;
+
+    /// <summary>非 Windows 平台/兜底:最近一次 PointerMoved 的窗口内坐标与是否在窗口内。</summary>
+    private bool _pointerInside;
+    private Point _pointerLast;
+
+    /// <summary>冒烟钩子文件(空 = 未启用);启用时只用伪指针文件,忽略真实指针与指针事件,保证自动化可复现。</summary>
+    private string? _smokePointerFile;
+
+    /// <summary>是否启用冒烟伪指针(等价于 <see cref="_smokePointerFile"/> 非空)。</summary>
+    private bool _smokePointerEnabled;
+
+    /// <summary>是否输出自动隐藏诊断日志(启动时读一次 MCKURO_AUTOHIDE_TRACE,避免每拍查环境变量)。</summary>
+    private bool _autohideTraceEnabled;
+
+
+    private const string MaximizeGlyphData = "M0.5,0.5 L9.5,0.5 L9.5,9.5 L0.5,9.5 Z";
+    private const string RestoreGlyphData = "M2.5,0.5 L9.5,0.5 L9.5,7.5 M0.5,2.5 L7.5,2.5 L7.5,9.5 L0.5,9.5 Z";
+
+    /// <summary>当前最大化按钮字形是否已是"还原"图标(避免每次状态变化重建 Geometry)。</summary>
+    private bool _maximizeGlyphIsRestore;
+
+
+    /// <summary>初始化沉浸/自动隐藏:按已保存设置切换窗口 chrome,并挂接指针与设置变更。</summary>
+    private void InitImmersiveUi()
+    {
+        var settings = AppServices.Settings.Current;
+        _smokePointerFile = Environment.GetEnvironmentVariable("MCKURO_AUTOHIDE_POINT_FILE");
+        _smokePointerEnabled = !string.IsNullOrEmpty(_smokePointerFile);
+        _autohideTraceEnabled = Environment.GetEnvironmentVariable("MCKURO_AUTOHIDE_TRACE") == "1";
+
+        // 初始状态按设置直接到位:启用了自动隐藏就从第一帧就是收起态(不再"先展开 2.2s 再收起",
+        // 否则每次启动都会看到两栏闪一下再收走)
+        _navReveal.ForceHide();
+        _titleReveal.ForceHide();
+        ApplyImmersiveChrome(settings.AutoHideTitleBar);
+        SetNavRailShown(!settings.AutoHideNavRail, animate: false);
+        SetTitleBarShown(!settings.AutoHideTitleBar, animate: false);
+
+        TitleBarSurface.AddHandler(PointerPressedEvent, OnTitleBarPointerPressed, RoutingStrategies.Bubble);
+        AddHandler(PointerMovedEvent, OnShellPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(PointerExitedEvent, OnShellPointerExited, RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(KeyDownEvent, OnShellKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
+        Deactivated += (_, _) => OnShellDeactivated();
+
+        if (settings.AutoHideNavRail || settings.AutoHideTitleBar)
+        {
+            StartAutoHideTimer();
+        }
+
+        UiSettingsNotifier.Changed += OnUiSettingsChanged;
+        Closed += (_, _) =>
+        {
+            UiSettingsNotifier.Changed -= OnUiSettingsChanged;
+            StopAutoHideTimer();
+        };
+    }
+
+    /// <summary>设置页改动「导航栏/窗口操作栏自动隐藏」后即时重读并应用。</summary>
+    private void OnUiSettingsChanged()
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(OnUiSettingsChanged);
+            return;
+        }
+        var settings = AppServices.Settings.Current;
+
+        if (settings.AutoHideTitleBar != _immersive)
+        {
+            ApplyImmersiveChrome(settings.AutoHideTitleBar);
+        }
+
+        // 开启自动隐藏 → 立即以收起状态生效(和启动时一致);关闭 → 常驻展开
+        if (settings.AutoHideNavRail)
+        {
+            _navReveal.ForceHide();
+            SetNavRailShown(false, animate: true);
+        }
+        else
+        {
+            _navReveal.ForceShow();
+            SetNavRailShown(true, animate: true);
+        }
+
+        if (settings.AutoHideTitleBar)
+        {
+            _titleReveal.ForceHide();
+            SetTitleBarShown(false, animate: true);
+        }
+        else if (_immersive)
+        {
+            _titleReveal.ForceShow();
+            SetTitleBarShown(true, animate: true);
+        }
+
+        if (settings.AutoHideNavRail || settings.AutoHideTitleBar)
+        {
+            StartAutoHideTimer();
+        }
+        else
+        {
+            StopAutoHideTimer();
+        }
+        ApplyAutoHideVisuals();
+    }
+
+    /// <summary>切换系统窗口 chrome:原生(Full)⇄ 无边框沉浸(BorderOnly + 扩展客户区)。</summary>
+    private void ApplyImmersiveChrome(bool immersive)
+    {
+        _immersive = immersive;
+        if (immersive)
+        {
+            // 先去掉标题栏样式(WS_CAPTION),再让客户区铺满整窗(Avalonia 的扩展客户区行为)
+            WindowDecorations = WindowDecorations.BorderOnly;
+            ExtendClientAreaToDecorationsHint = true;
+            ExtendClientAreaTitleBarHeightHint = -1;
+        }
+        else
+        {
+            ExtendClientAreaToDecorationsHint = false;
+            WindowDecorations = WindowDecorations.Full;
+        }
+
+        TitleBarHost.IsVisible = immersive;
+        TitleBarHost.IsHitTestVisible = immersive && _titleVisualShown;
+        if (!immersive)
+        {
+            _titleVisualShown = false;
+            _titlePinned = false;
+            TitleBarLogoButton.Classes.Set("pinned", false);
+            ApplyTitleBarOffset(-TitleBarHeight, animate: false);
+        }
+
+        // chrome 切换会改变客户区高度:等一次布局后重新量非客户区、重贴启动页比例与胶囊位置
+        Dispatcher.UIThread.Post(() =>
+        {
+            MeasureNonClientSize();
+            SnapNavPill();
+            ApplyAspectCorrection();
+            UpdateMaximizeGlyph();
+            System.Console.Error.WriteLine(
+                $"MCKURO-IMMERSIVE on={_immersive} ncx={_nonClientX} ncy={_nonClientY} " +
+                $"client={ClientSize.Width:F0}x{ClientSize.Height:F0}");
+        }, DispatcherPriority.Loaded);
+    }
+
+    private void OnShellPointerMoved(object? sender, PointerEventArgs e)
+    {
+        var point = e.GetPosition(this);
+        _pointerInside = true;
+        _pointerLast = point;
+
+        if (_smokePointerEnabled)
+        {
+            return;
+        }
+
+        // 指针事件是"真实输入"的权威来源:某些场景下 GetCursorPos 会滞后/被独占程序裁掉
+        // (远程会话、游戏用 ClipCursor 锁光标等),只要窗口确实收到了移动事件,就立即按贴边规则展开。
+        // 这里只负责"展开/保持",不推进收起计时(高频事件会把延迟压没),收起仍由 70ms 轮询决定。
+        var settings = AppServices.Settings.Current;
+        bool changed = false;
+        if (settings.AutoHideNavRail)
+        {
+            changed |= _navReveal.Observe(point.X);
+        }
+        if (_immersive && settings.AutoHideTitleBar)
+        {
+            changed |= _titleReveal.Observe(point.Y);
+        }
+        if (changed)
+        {
+            ApplyAutoHideVisuals();
+        }
+    }
+
+    private void OnShellPointerExited(object? sender, PointerEventArgs e)
+    {
+        _pointerInside = false;
+    }
+
+    /// <summary>键盘兜底:按 Alt 立即唤出两栏(指针唤出失效时仍可关窗/拖动)。</summary>
+    private void OnShellKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.LeftAlt or Key.RightAlt))
+        {
+            return;
+        }
+        if (!_immersive && !AppServices.Settings.Current.AutoHideNavRail)
+        {
+            return;
+        }
+        _navReveal.ForceShow();
+        _titleReveal.ForceShow();
+        ApplyAutoHideVisuals();
+    }
+
+    /// <summary>窗口失焦:立即收起两栏(切走时界面更干净)。</summary>
+    private void OnShellDeactivated()
+    {
+        if (!_immersive && !AppServices.Settings.Current.AutoHideNavRail)
+        {
+            return;
+        }
+        if (!_navPinned)
+        {
+            _navReveal.ForceHide();
+        }
+        if (!_titlePinned)
+        {
+            _titleReveal.ForceHide();
+        }
+        ApplyAutoHideVisuals();
+    }
+
+    private void StartAutoHideTimer()
+    {
+        if (_autoHideTimer is null)
+        {
+            _autoHideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(AutoHidePollMs) };
+            _autoHideTimer.Tick += OnAutoHideTick;
+        }
+        if (!_autoHideTimer.IsEnabled)
+        {
+            _autoHideTimer.Start();
+        }
+    }
+
+    private void StopAutoHideTimer()
+    {
+        _autoHideTimer?.Stop();
+    }
+
+    /// <summary>自动隐藏轮询:取指针位置 → 喂给两个状态机 → 按结果驱动动画。</summary>
+    private void OnAutoHideTick(object? sender, EventArgs e)
+    {
+        if (!IsVisible || WindowState == WindowState.Minimized)
+        {
+            return;
+        }
+
+        var settings = AppServices.Settings.Current;
+        bool navOn = settings.AutoHideNavRail;
+        bool titleOn = _immersive && settings.AutoHideTitleBar;
+        if (!navOn && !titleOn)
+        {
+            return;
+        }
+
+        var polled = TryGetPointerInClientDip();
+
+        // 指针是否在移动:静止停在贴边带里不算"贴边唤出"。
+        // 背景:启动时鼠标可能恰好停在窗口顶部/左边缘,若不判移动就会一启动就弹出操作栏且一直不收起。
+        bool moved;
+        if (polled is { } current)
+        {
+            // 冒烟钩子由脚本写文件驱动,视为"有移动"(否则静态伪指针会永远唤不出来)
+            moved = _smokePointerEnabled
+                || (_polledInitialized
+                    && (Math.Abs(current.X - _lastPolledPoint.X) > 0.5
+                        || Math.Abs(current.Y - _lastPolledPoint.Y) > 0.5));
+            _lastPolledPoint = current;
+            _polledInitialized = true;
+        }
+        else
+        {
+            moved = false;
+            _polledInitialized = false;
+        }
+
+        // 指针事件作为第二来源(只有轮询认为"在窗口内"时才采信):
+        // 轮询读不到真实位置(远程会话/光标被独占程序裁剪)时靠它兜底;
+        // 但轮询已判定指针离开窗口时必须放弃事件源里残留的旧坐标 —— 否则从顶部原生边框带
+        // 移出窗口不会触发 PointerExited,残留的"贴边"坐标会让操作栏永远不收起(用户报的"有概率不隐藏")。
+        var eventPoint = !_smokePointerEnabled && _pointerInside && polled is not null
+            ? _pointerLast
+            : (Point?)null;
+        var navEdge = NearestEdge(polled?.X, eventPoint?.X);
+        var titleEdge = NearestEdge(polled?.Y, eventPoint?.Y);
+        if (!moved)
+        {
+            if (!_navReveal.Shown)
+            {
+                navEdge = null;
+            }
+            if (!_titleReveal.Shown)
+            {
+                titleEdge = null;
+            }
+        }
+        if (_autohideTraceEnabled && ++_autohideTraceTicks % 14 == 0)
+        {
+            System.Console.Error.WriteLine(
+                $"MCKURO-AUTOHIDE poll={(polled is { } pp ? $"{pp.X:F1},{pp.Y:F1}" : "null")} " +
+                $"evt={(eventPoint is { } ep ? $"{ep.X:F1},{ep.Y:F1}" : "null")} moved={moved} " +
+                $"nav={_navReveal.Shown}/{_navVisualShown} title={_titleReveal.Shown}/{_titleVisualShown} " +
+                $"pinned={_navPinned}/{_titlePinned} client={ClientSize.Width:F0}x{ClientSize.Height:F0}");
+        }
+
+        if (navOn)
+        {
+            if (_navPinned)
+            {
+                _navReveal.ForceShow();
+            }
+            else
+            {
+                _navReveal.Update(navEdge);
+            }
+        }
+        if (titleOn)
+        {
+            if (_titlePinned)
+            {
+                _titleReveal.ForceShow();
+            }
+            else
+            {
+                _titleReveal.Update(titleEdge);
+            }
+        }
+        ApplyAutoHideVisuals();
+    }
+
+    /// <summary>两个指针来源取"更贴近边缘"的那个(忽略 null);都为空表示指针不在窗口内。</summary>
+    private static double? NearestEdge(double? a, double? b)
+    {
+        if (a is not { } av)
+        {
+            return b;
+        }
+        if (b is not { } bv)
+        {
+            return av;
+        }
+        return Math.Min(av, bv);
+    }
+
+    /// <summary>
+    /// 取指针相对客户区左上角的 DIP 坐标;指针明显离开窗口时返回 null。
+    /// Windows 用 GetCursorPos(同时覆盖原生 resize 边框区域),其余平台用最近一次 PointerMoved。
+    /// </summary>
+    private Point? TryGetPointerInClientDip()
+    {
+        // 冒烟钩子:正常运行不设置该环境变量,走真实指针;设置后改为读文件(见方法注释)
+        if (_smokePointerFile is { Length: > 0 } smokePointerFile)
+        {
+            return TryReadSmokePointer(smokePointerFile);
+        }
+
+        double x;
+        double y;
+        if (OperatingSystem.IsWindows() && GetCursorPos(out var screen))
+        {
+            var handle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+            var origin = new POINT { X = 0, Y = 0 };
+            if (handle == IntPtr.Zero || !ClientToScreen(handle, ref origin))
+            {
+                return null;
+            }
+            var scale = RenderScaling > 0 ? RenderScaling : 1.0;
+            x = (screen.X - origin.X) / scale;
+            y = (screen.Y - origin.Y) / scale;
+        }
+        else if (_pointerInside)
+        {
+            x = _pointerLast.X;
+            y = _pointerLast.Y;
+        }
+        else
+        {
+            return null;
+        }
+
+        if (x < -OutsideTolerance || y < -OutsideTolerance
+            || x > ClientSize.Width + OutsideTolerance || y > ClientSize.Height + OutsideTolerance)
+        {
+            return null;
+        }
+        return new Point(x, y);
+    }
+
+    /// <summary>
+    /// 冒烟专用:从文件读取"伪指针"位置(单位 DIP,相对客户区左上角),供自动化验证贴边唤出。
+    /// <para>
+    /// 为什么需要:真实指针可能被前台的独占程序(游戏)用 ClipCursor 锁在屏幕中心,
+    /// 此时 SetCursorPos 无法把光标移到窗口边缘,自动化脚本就没法验证唤出/收起。
+    /// 文件内容为 <c>"x,y"</c>;<c>null</c>/空/文件不存在 = 指针在窗口外。
+    /// 只有设置 <c>MCKURO_AUTOHIDE_POINT_FILE</c> 时才会走到这里,正常运行零开销。
+    /// </para>
+    /// </summary>
+    private static Point? TryReadSmokePointer(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+            var text = File.ReadAllText(path).Trim();
+            if (text.Length == 0 || text.Equals("null", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+            var parts = text.Split(',');
+            if (parts.Length == 2
+                && double.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var px)
+                && double.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var py))
+            {
+                return new Point(px, py);
+            }
+        }
+        catch (IOException)
+        {
+            // 文件正被脚本覆盖写入:本拍当作"窗口外",下一拍再读
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+        return null;
+    }
+
+    /// <summary>把状态机结果落到视觉上(只在目标状态变化时才启动动画)。</summary>
+    private void ApplyAutoHideVisuals()
+    {
+        var settings = AppServices.Settings.Current;
+
+        bool wantNav = _navPinned || !settings.AutoHideNavRail || _navReveal.Shown;
+        if (wantNav != _navVisualShown)
+        {
+            SetNavRailShown(wantNav, animate: true);
+        }
+
+        if (!_immersive)
+        {
+            return;
+        }
+        bool wantTitle = _titlePinned || !settings.AutoHideTitleBar || _titleReveal.Shown;
+        if (wantTitle != _titleVisualShown)
+        {
+            SetTitleBarShown(wantTitle, animate: true);
+        }
+    }
+
+    /// <summary>
+    /// 导航栏展开/收起:宽度 76⇄0(XAML 中 NavRail 的 DoubleTransition)+ 内层固定 76 宽面板整体左移
+    /// (NavGlassPanel 的 ThicknessTransition),内容区随之平滑回流。
+    /// <para>
+    /// 之前用 15ms DispatcherTimer 逐帧写属性,实测帧间隔被渲染帧节流到 ~26~32ms/帧
+    /// (每个渲染帧只赶上一次回调),肉眼就是"顿挫";改为 Avalonia Transition 后由动画时钟按渲染帧推进。
+    /// </para>
+    /// </summary>
+    private void SetNavRailShown(bool show, bool animate)
+    {
+        _navVisualShown = show;
+        NavRail.IsHitTestVisible = show;
+        // 不再在收起瞬间隐藏胶囊:外层 NavRail 宽 0 + ClipToBounds 已经把它裁掉,
+        // 立即设 IsVisible=false 会让选中高亮在导航栏滑走前先"消失"一下。
+
+        if (animate)
+        {
+            StartLayoutProbe("nav");
+        }
+        SetWithOptionalTransition(NavRail, animate, () => NavRail.Width = show ? NavRailWidth : 0);
+        SetWithOptionalTransition(
+            NavGlassPanel,
+            animate,
+            () => NavGlassPanel.Margin = show ? default : new Thickness(-NavRailWidth, 0, 0, 0));
+
+        if (show)
+        {
+            // 导航容器(内层固定 76 宽)尺寸不变,胶囊位置不受宽度动画影响,直接贴合即可
+            SnapNavPill();
+        }
+    }
+
+    /// <summary>
+    /// 自绘窗口操作栏展开/收起:操作栏自身沿 Y 轴上移隐藏,同时把内容区(导航栏 + 页面)**整体下推等高一段**。
+    /// <para>
+    /// 必须下推而不是覆盖:页面顶部常有可点按键(抽卡页的 UID/同步、主页的账号卡等),
+    /// 覆盖式操作栏会挡住它们 —— 指针为了点页面首行反而停留在操作栏的保持区里,操作栏不会收起,
+    /// 于是首行按键永远点不到。下推后操作栏底边始终贴住内容顶边:不遮挡、可正常点击。
+    /// </para>
+    /// </summary>
+    private void SetTitleBarShown(bool show, bool animate)
+    {
+        _titleVisualShown = show;
+        if (!_immersive)
+        {
+            TitleBarHost.IsVisible = false;
+            TitleBarHost.IsHitTestVisible = false;
+            ApplyTitleBarOffset(-TitleBarHeight, animate: false);
+            return;
+        }
+
+        TitleBarHost.IsVisible = true;
+        TitleBarHost.IsHitTestVisible = show;
+        ApplyTitleBarOffset(show ? 0 : -TitleBarHeight, animate);
+        UpdateMaximizeGlyph();
+    }
+
+    /// <summary>
+    /// 把操作栏纵向偏移(Y ∈ [-操作栏高度, 0])同时落到「操作栏自身位置」与「内容区顶部留白」:
+    /// 操作栏底边永远等于内容顶边 —— 滑出时内容被平滑下推,收起时同步复位。
+    /// </summary>
+    private void ApplyTitleBarOffset(double titleBarY, bool animate)
+    {
+        if (animate)
+        {
+            StartLayoutProbe("title");
+        }
+        var inset = Math.Clamp(TitleBarHeight + titleBarY, 0, TitleBarHeight);
+        SetWithOptionalTransition(
+            TitleBarHost,
+            animate,
+            () => TitleBarHost.Margin = new Thickness(0, titleBarY, 0, 0));
+        SetWithOptionalTransition(
+            ShellGrid,
+            animate,
+            () => ShellGrid.Margin = new Thickness(0, inset, 0, 0));
+    }
+
+    // ---- 临时诊断:测量过渡期间的"实际布局帧间隔"(确认是否还有顿挫) ----
+    private long _probeFirstTick;
+    private long _probeLastTick;
+    private int _probeFrames;
+    private long _probeSumGap;
+    private long _probeMaxGap;
+    private bool _probeActive;
+    private string _probeName = "";
+
+    private void StartLayoutProbe(string name)
+    {
+        if (!_autohideTraceEnabled)
+        {
+            return;
+        }
+        _probeActive = true;
+        _probeName = name;
+        _probeFirstTick = 0;
+        _probeLastTick = 0;
+        _probeFrames = 0;
+        _probeSumGap = 0;
+        _probeMaxGap = 0;
+        DispatcherTimer.RunOnce(() =>
+        {
+            if (!_probeActive)
+            {
+                return;
+            }
+            _probeActive = false;
+            if (_probeFrames > 1)
+            {
+                System.Console.Error.WriteLine(
+                    $"MCKURO-ANIM {_probeName} layoutFrames={_probeFrames} " +
+                    $"avg={_probeSumGap / (double)(_probeFrames - 1):F1}ms max={_probeMaxGap}ms " +
+                    $"span={_probeLastTick - _probeFirstTick}ms");
+            }
+        }, TimeSpan.FromMilliseconds(400));
+    }
+
+    private void OnShellLayoutProbe(object? sender, EventArgs e)
+    {
+        if (!_probeActive)
+        {
+            return;
+        }
+        var now = Environment.TickCount64;
+        if (_probeFirstTick == 0)
+        {
+            _probeFirstTick = now;
+        }
+        if (_probeLastTick != 0)
+        {
+            var gap = now - _probeLastTick;
+            _probeSumGap += gap;
+            if (gap > _probeMaxGap)
+            {
+                _probeMaxGap = gap;
+            }
+        }
+        _probeLastTick = now;
+        _probeFrames++;
+    }
+
+    /// <summary>
+    /// 设置属性的目标值:animate=true 时由 XAML 声明的 Transition 自动补间;
+    /// animate=false 时临时摘掉 Transition,保证"立即到位"(初始化、退出沉浸、设置切换等场景)。
+    /// </summary>
+    private static void SetWithOptionalTransition(Control target, bool animate, Action apply)
+    {
+        if (animate)
+        {
+            apply();
+            return;
+        }
+        var saved = target.Transitions;
+        target.Transitions = null;
+        try
+        {
+            apply();
+        }
+        finally
+        {
+            target.Transitions = saved;
+        }
+    }
+
+    /// <summary>自绘操作栏拖动/双击最大化:点在按钮上时交给按钮处理。</summary>
+    private void OnTitleBarPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+        if (e.Source is Visual source && FindAncestorButton(source) is not null)
+        {
+            return;
+        }
+        if (e.ClickCount >= 2)
+        {
+            ToggleMaximizeRestore();
+            return;
+        }
+        BeginMoveDrag(e);
+    }
+
+    private static Button? FindAncestorButton(Visual? visual)
+    {
+        for (var current = visual; current is not null; current = current.GetVisualParent())
+        {
+            if (current is Button button)
+            {
+                return button;
+            }
+        }
+        return null;
+    }
+
+    private void ToggleMaximizeRestore()
+    {
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    }
+
+    /// <summary>点击操作栏左侧应用 logo:临时固定/取消固定窗口操作栏(不落盘,重启恢复自动隐藏)。</summary>
+    private void OnTitleBarLogoClick(object? sender, RoutedEventArgs e)
+    {
+        if (!_immersive)
+        {
+            return;
+        }
+        _titlePinned = !_titlePinned;
+        TitleBarLogoButton.Classes.Set("pinned", _titlePinned);
+        if (_titlePinned)
+        {
+            _titleReveal.ForceShow();
+        }
+        ApplyAutoHideVisuals();
+    }
+
+    /// <summary>点击导航栏顶部头像:临时固定/取消固定导航栏(不落盘,重启恢复自动隐藏)。</summary>
+    private void OnNavAvatarClick(object? sender, RoutedEventArgs e)
+    {
+        if (!AppServices.Settings.Current.AutoHideNavRail)
+        {
+            // 没开自动隐藏时导航栏本来就常驻,固定没有意义(也会亮起误导性的描边)
+            return;
+        }
+        _navPinned = !_navPinned;
+        NavAvatarButton.Classes.Set("pinned", _navPinned);
+        if (_navPinned)
+        {
+            _navReveal.ForceShow();
+        }
+        ApplyAutoHideVisuals();
+    }
+
+    private void OnTitleBarMinimize(object? sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void OnTitleBarMaximizeRestore(object? sender, RoutedEventArgs e) => ToggleMaximizeRestore();
+
+    private void OnTitleBarClose(object? sender, RoutedEventArgs e) => Close();
+
+    /// <summary>最大化/还原按钮字形随窗口状态切换。</summary>
+    private void UpdateMaximizeGlyph()
+    {
+        if (TitleBarMaximizeGlyph is null)
+        {
+            return;
+        }
+        var restore = WindowState == WindowState.Maximized;
+        if (restore == _maximizeGlyphIsRestore && TitleBarMaximizeGlyph.Data is not null)
+        {
+            return;
+        }
+        _maximizeGlyphIsRestore = restore;
+        TitleBarMaximizeGlyph.Data = Geometry.Parse(restore ? RestoreGlyphData : MaximizeGlyphData);
+    }
+
+    /// <summary>Win32 屏幕坐标(物理像素,用于读取真实指针位置,能覆盖原生 resize 边框)。</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
+    /// <summary>把客户区坐标(物理像素)换算为屏幕坐标,用于把光标位置反推到窗口内。</summary>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
 
     // ---- 导航栏液态玻璃滑动胶囊(Apple 风格):可打断的滑动 + 形变 ----
 

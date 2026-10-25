@@ -268,6 +268,43 @@
                               SelectedIndex="{Binding StartupPageIndex, Mode=TwoWay}" />
                 </Grid>
             </Border>
+            <!-- 导航栏自动隐藏:鼠标贴窗口左边缘滑出(即时生效) -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="PanelLeft" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.AutoHideNav}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.AutoHideNav.Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{loc:Localize Key=Settings.AutoHideNav}"
+                                  IsChecked="{Binding AutoHideNavRail, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+            <!-- 窗口操作栏自动隐藏:开启即无边框沉浸,软件内自绘操作栏(即时生效) -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="FullScreenMaximize" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.AutoHideTitleBar}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.AutoHideTitleBar.Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{loc:Localize Key=Settings.AutoHideTitleBar}"
+                                  IsChecked="{Binding AutoHideTitleBar, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+            <!-- 开启后的操作提示:操作栏贴顶滑出,窗口拖动/关闭都在自绘栏上 -->
+            <Border Classes="row" IsVisible="{Binding AutoHideTitleBar}">
+                <TextBlock Classes="rowDesc" TextWrapping="Wrap"
+                           Text="{loc:Localize Key=Settings.AutoHideTitleBar.Hint}" />
+            </Border>
         </StackPanel>
     </Border>
 </StackPanel>

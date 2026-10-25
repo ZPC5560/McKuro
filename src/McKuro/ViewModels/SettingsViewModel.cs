@@ -643,6 +643,32 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Save();
     }
 
+    // ---- 窗口外观:沉浸 / 自动隐藏(即时生效,主窗口就地切换 chrome) ----
+
+    /// <summary>导航栏自动隐藏(鼠标贴窗口左边缘滑出)。</summary>
+    [ObservableProperty]
+    private bool _autoHideNavRail;
+
+    /// <summary>导航栏自动隐藏即时保存并通知主窗口。</summary>
+    partial void OnAutoHideNavRailChanged(bool value)
+    {
+        AppServices.Settings.Current.AutoHideNavRail = value;
+        AppServices.Settings.Save();
+        UiSettingsNotifier.NotifyChanged();
+    }
+
+    /// <summary>窗口操作栏自动隐藏(开启即进入无边框沉浸:自绘操作栏 + 系统 chrome 移除)。</summary>
+    [ObservableProperty]
+    private bool _autoHideTitleBar;
+
+    /// <summary>窗口操作栏自动隐藏即时保存并通知主窗口切换窗口边框。</summary>
+    partial void OnAutoHideTitleBarChanged(bool value)
+    {
+        AppServices.Settings.Current.AutoHideTitleBar = value;
+        AppServices.Settings.Save();
+        UiSettingsNotifier.NotifyChanged();
+    }
+
     // ---- 消息通知(悬浮提醒类别开关;触发时除设置页外全局弹出) ----
 
     /// <summary>通知总开关(二级菜单的父开关:关闭后不弹任何提醒,下面四类开关状态原样保留)。</summary>
@@ -1071,6 +1097,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         _languageIndex = Math.Max(0, Languages.IndexOf(LanguageLabel(s.Language)));
         _startupPageIndex = s.StartupPage == "Launcher" ? 1 : 0;
+        _autoHideNavRail = s.AutoHideNavRail;
+        _autoHideTitleBar = s.AutoHideTitleBar;
         _appUpdateAutoCheck = s.AppUpdateAutoCheck;
         _appUpdateAutoInstall = s.AppUpdateAutoInstall;
         _appUpdateIpFronting = s.AppUpdateIpFronting;
@@ -1224,6 +1252,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.NotifEnabled = NotifEnabled;
         s.Language = LanguageIndex == 1 ? "en-US" : "zh-Hans";
         s.StartupPage = StartupPageIndex == 1 ? "Launcher" : "Home";
+        s.AutoHideNavRail = AutoHideNavRail;
+        s.AutoHideTitleBar = AutoHideTitleBar;
         s.Theme = ThemeIndex switch
         {
             1 => "Light",
