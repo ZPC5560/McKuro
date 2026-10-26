@@ -693,6 +693,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _notifLivenessEnabled;
 
+    /// <summary>深塔/海墟/矩阵赛季临期提醒(三类共用一个开关)。</summary>
+    [ObservableProperty]
+    private bool _notifTowerEnabled;
+
+    /// <summary>启动时重置当天提醒台账(默认关;开启后每次启动会重弹当天已提醒过的内容)。</summary>
+    [ObservableProperty]
+    private bool _notifResetOnLaunch;
+
     partial void OnNotifActivityEnabledChanged(bool value)
     {
         AppServices.Settings.Current.NotifActivityEnabled = value;
@@ -714,6 +722,22 @@ public sealed partial class SettingsViewModel : ViewModelBase
     partial void OnNotifLivenessEnabledChanged(bool value)
     {
         AppServices.Settings.Current.NotifLivenessEnabled = value;
+        AppServices.Settings.Save();
+    }
+
+    partial void OnNotifTowerEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.NotifTowerEnabled = value;
+        AppServices.Settings.Save();
+    }
+
+    /// <summary>
+    /// 即时保存。<b>不在这里清台账</b>:开关的语义是"下次启动时重置",
+    /// 打开开关立刻把当天的提醒再弹一遍属于用户没预期的副作用。
+    /// </summary>
+    partial void OnNotifResetOnLaunchChanged(bool value)
+    {
+        AppServices.Settings.Current.NotifResetOnLaunch = value;
         AppServices.Settings.Save();
     }
 
@@ -1091,6 +1115,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _notifLoginEnabled = s.NotifLoginEnabled;
         _notifWeeklyEnabled = s.NotifWeeklyEnabled;
         _notifLivenessEnabled = s.NotifLivenessEnabled;
+        _notifTowerEnabled = s.NotifTowerEnabled;
+        _notifResetOnLaunch = s.NotifResetOnLaunch;
         foreach (var p in s.SkipVerifyFiles)
         {
             SkipVerifyFiles.Add(p);

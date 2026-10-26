@@ -198,6 +198,26 @@ public sealed class AppSettings
     /// <summary>活跃度提醒(19 点后当日活跃度仍为 0)。</summary>
     public bool NotifLivenessEnabled { get; set; } = true;
 
+    /// <summary>
+    /// 深塔/海墟/矩阵赛季临期提醒(逆境深塔 / 冥歌海墟 / 终焉矩阵结束前 3 天内且未满额完成)。
+    /// <para>
+    /// 三类共用一个开关:<b>一份数据、一次拉取、一个设置项</b>。它们同属"赛季制挑战",
+    /// 用户想不想被提醒几乎总是同一个答案;拆三个开关只会让设置页多三行同义文案。
+    /// </para>
+    /// </summary>
+    public bool NotifTowerEnabled { get; set; } = true;
+
+    /// <summary>
+    /// 启动时重置当天提醒台账(默认关)。
+    /// <para>
+    /// 提醒卡片 8 秒自动消失,首轮弹出时用户可能正在忙别的、没看清就没了;而台账保证"当天不再重复",
+    /// 于是这条提醒当天就再也不会出现。开启本项后,软件每次启动清空<b>当天</b>台账,
+    /// 首轮检查会把当天该弹的提醒重新弹一遍 —— 代价是每启动一次就多弹一次。
+    /// </para>
+    /// <para>历史日期的台账记录不受影响(它们本就已跨天失效)。</para>
+    /// </summary>
+    public bool NotifResetOnLaunch { get; set; }
+
     // ---------- mcguide 攻略站 ----------
 
     /// <summary>mcguide x-token(攻略站登录后服务端返回)。</summary>

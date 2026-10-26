@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using McKuro.Core.Services.Settings;
 using Microsoft.Extensions.Logging;
 
 namespace McKuro.Core.Services.Notification;
@@ -87,6 +88,78 @@ public sealed class NotificationStore
         var cutoff = DateTime.Now.AddDays(-RetentionDays).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         ledger.Shown.RemoveAll(s => string.CompareOrdinal(s.Day, cutoff) < 0);
     }
+}
+
+/// <summary>
+/// 提醒台账(logic 层):在持久化 <see cref="NotificationStore"/> 之上提供「当天已弹过」的读写与清理。
+/// <para>
+/// 去重与「启动时重置」都收敛到这里 —— 后者是用户可配置项(<see cref="AppSettings.NotifResetOnLaunch"/>):
+/// 开启后软件每次启动都把<b>当天</b>台账清空一次,让当天已弹过(但可能没看清/被 8 秒自动关掉)的
+/// 提醒在本次运行的首轮检查里重新弹出来。历史日期的记录原样保留(它们本来就已跨天失效)。
+/// </para>
+/// </summary>
+public sealed class ReminderLedgerService
+{
+    private readonly NotificationStore _store;
+    private readonly object _gate = new();
+    private List<StoredShownReminder> _shown;
+
+    public ReminderLedgerService(string appDataDir) : this(new NotificationStore(appDataDir))
+    {
+    }
+
+    public ReminderLedgerService(NotificationStore store)
+    {
+        _store = store;
+        _shown = _store.Load().Shown;
+    }
+
+    /// <summary>今天是否已经弹过该 Key。</summary>
+    public bool WasShownToday(string key)
+    {
+        var today = Today();
+        lock (_gate)
+        {
+            return _shown.Any(s => s.Key == key && s.Day == today);
+        }
+    }
+
+    /// <summary>记录「今天弹过该 Key」并落盘;返回 false 表示今天已经记过(调用方应跳过)。</summary>
+    public bool TryMarkShown(string key)
+    {
+        var today = Today();
+        lock (_gate)
+        {
+            if (_shown.Any(s => s.Key == key && s.Day == today))
+            {
+                return false;
+            }
+            _shown.Add(new StoredShownReminder { Key = key, Day = today });
+            _store.Save(new ReminderLedger { Shown = _shown.ToList() });
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// 清空<b>当天</b>的台账记录并落盘(历史日期不动)。返回被清掉的条数。
+    /// <para>启动时「重新提醒」用:清空后首轮检查会把当天该弹的提醒重新走一遍 Raise。</para>
+    /// </summary>
+    public int ClearToday()
+    {
+        var today = Today();
+        lock (_gate)
+        {
+            var removed = _shown.RemoveAll(s => s.Day == today);
+            if (removed > 0)
+            {
+                _store.Save(new ReminderLedger { Shown = _shown.ToList() });
+            }
+            return removed;
+        }
+    }
+
+    private static string Today()
+        => DateTime.Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
 }
 
 [JsonSerializable(typeof(ReminderLedger))]

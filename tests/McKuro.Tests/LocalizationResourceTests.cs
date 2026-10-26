@@ -573,4 +573,60 @@ public class LocalizationResourceTests
         var segments = value.Split('.');
         return segments.All(s => s.Length > 0 && char.IsAsciiLetter(s[0]));
     }
+
+    // ---------- 深塔赛季临期提醒的文案拼装 ----------
+
+    /// <summary>
+    /// 回顾背景:提醒正文由「模板 + 时长片段」拼装,片段自带前后空格。
+    /// 曾经片段不带前导空格、模板带前导空格,于是"不到 1 小时"那条成了
+    /// 「本期还剩 不到 1 小时后结束」(双空格),而整点天数会输出「3 天 0 小时后」。
+    /// 这里直接把最终句子钉住 —— 断言整句而不是片段,才能抓到这类拼装层面的错。
+    /// </summary>
+    [Theory]
+    [InlineData("Notif.TowerRemainDays", " 2 天 2 小时后", "本期还剩 2 天 2 小时后结束,记得清掉未完成的挑战")]
+    [InlineData("Notif.TowerRemainHours", " 5 小时后", "本期还剩 5 小时后结束,记得清掉未完成的挑战")]
+    [InlineData("Notif.TowerRemainSoon", "不到 1 小时", "本期还剩不到 1 小时结束,记得清掉未完成的挑战")]
+    [InlineData("Notif.TowerRemainDaysExact", " 3 天后", "本期还剩 3 天后结束,记得清掉未完成的挑战")]
+    public void TowerReminderSentence_ComposesWithoutDoubleSpaces(
+        string fragmentKey, string fragmentExpected, string sentenceExpected)
+    {
+        var lang = LoadLang("zh-Hans");
+
+        // 片段本身:前导空格 + 结尾的「后」都在片段里(模板不再额外补空格)
+        var fragment = fragmentKey switch
+        {
+            "Notif.TowerRemainDays" => lang[fragmentKey].Replace("{0}", "2").Replace("{1}", "2"),
+            "Notif.TowerRemainHours" => lang[fragmentKey].Replace("{0}", "5"),
+            "Notif.TowerRemainDaysExact" => lang[fragmentKey].Replace("{0}", "3"),
+            _ => lang[fragmentKey],
+        };
+        Assert.Equal(fragmentExpected, fragment);
+
+        // 整句:模板里 {0} 紧跟「还剩」、片段自带前导空格 → 恰好一个空格
+        var sentence = lang["Notif.TowerMessage"].Replace("{0}", fragment);
+        Assert.Equal(sentenceExpected, sentence);
+        Assert.DoesNotContain("  ", sentence, StringComparison.Ordinal);
+    }
+
+    /// <summary>带完成度的变体同理:整句不得出现双空格,且占位符顺序与中英文一致。</summary>
+    [Fact]
+    public void TowerReminderSentence_WithProgress_HasNoDoubleSpaces()
+    {
+        var lang = LoadLang("zh-Hans");
+        var fragment = lang["Notif.TowerRemainDays"].Replace("{0}", "2").Replace("{1}", "2");
+        var sentence = lang["Notif.TowerMessageWithProgress"]
+            .Replace("{0}", fragment).Replace("{1}", "9000").Replace("{2}", "12000").Replace("{3}", "积分");
+        Assert.Equal("本期还剩 2 天 2 小时后结束,已完成 9000/12000 积分", sentence);
+        Assert.DoesNotContain("  ", sentence, StringComparison.Ordinal);    }
+
+    /// <summary>「整点天数」与「X 天 Y 小时」必须是两个 key,不能靠 0 小时蒙过去。</summary>
+    [Fact]
+    public void TowerRemainDays_ExactAndFractional_AreDistinctKeys()
+    {
+        var zh = LoadLang("zh-Hans");
+        Assert.True(zh.ContainsKey("Notif.TowerRemainDaysExact"));
+        Assert.NotEqual(zh["Notif.TowerRemainDays"], zh["Notif.TowerRemainDaysExact"]);
+        // 中文里「0 小时」是显式的 bug 特征,模板本身不该能产出它
+        Assert.DoesNotContain("0 小时", zh["Notif.TowerRemainDaysExact"], StringComparison.Ordinal);
+    }
 }

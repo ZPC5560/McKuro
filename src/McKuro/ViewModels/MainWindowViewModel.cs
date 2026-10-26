@@ -329,7 +329,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         AppUpdatePromptVisible = false;
     }
 
-    /// <summary>冒烟模式(McKuro_SMOKE_NOTIF=1)示例提醒:覆盖三类不同图标配别的提醒供 UI 验证。</summary>
+    /// <summary>冒烟模式(McKuro_SMOKE_NOTIF=1)示例提醒:覆盖各类别不同图标配色的提醒供 UI 验证。</summary>
     private void SeedSmokeReminders()
     {
         var r = AppServices.Reminders;
@@ -342,6 +342,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         r.Raise("smoke:liveness", NotificationKind.DailyLiveness,
             LanguageService.Format("Notif.LivenessTitle"),
             LanguageService.Format("Notif.LivenessMessage", 100), NavigationKeys.Home);
+        // 深塔赛季临期(新增类别:图标/配色/进度文案一起看)
+        r.Raise("smoke:tower", NotificationKind.TowerEnding,
+            LanguageService.Format("Notif.TowerSlashTitle"),
+            LanguageService.Format("Notif.TowerMessageWithProgress", "2 天 2 小时", 9000, 12000,
+                LanguageService.Format("Notif.TowerUnitScore")), NavigationKeys.Tower);
     }
 
     partial void OnSelectedNavigationItemChanged(NavigationItem? value)

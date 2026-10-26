@@ -15,25 +15,28 @@ public enum NotificationKind
     WeeklyBoss,
     /// <summary>每日活跃度。</summary>
     DailyLiveness,
+    /// <summary>深塔/海墟/矩阵赛季临期(逆境深塔 / 冥歌海墟 / 终焉矩阵结束前 3 天内)。</summary>
+    TowerEnding,
 }
 
 /// <summary>
 /// 提醒通知器:提醒调度器的出口。按「稳定 Key + 当日台账」去重 ——
-/// 同一提醒(同 Key)一天只弹一次悬浮通知,重启不重复打扰(台账持久化到 notifications.json);
+/// 同一提醒(同 Key)一天只弹一次悬浮通知,重启不重复打扰(台账持久化到 notifications.json;
+/// 设置项 <c>NotifResetOnLaunch</c> 开启时启动会先清空当天台账,见 <see cref="ReminderLedgerService.ClearToday"/>);
 /// 类别开关由设置页配置(Notif*Enabled),关闭的类别直接跳过(台账不记录,重新开启后下轮恢复);
 /// 总开关(NotifEnabled)关闭时全部跳过 —— 判定统一走 <see cref="NotificationPreferences"/>。
 /// </summary>
 public sealed class ReminderNotifier
 {
-    private readonly NotificationStore _store;
-    private readonly object _gate = new();
-    private List<StoredShownReminder> _shown;
+    private readonly ReminderLedgerService _ledger;
 
     public ReminderNotifier(string appDataDir)
     {
-        _store = new NotificationStore(appDataDir);
-        _shown = _store.Load().Shown;
+        _ledger = new ReminderLedgerService(appDataDir);
     }
+
+    /// <summary>清空当天台账(启动时「重新提醒」用);返回清掉的条数。</summary>
+    public int ResetToday() => _ledger.ClearToday();
 
     /// <summary>提醒触发(可在后台线程调用):去重通过后触发 <see cref="Raised"/>(已调度回 UI 线程)。
     /// 诊断(<c>McKuro_UI_HEARTBEAT=1</c>):打印「Raise 调用 → UI 线程实际派发」的延迟,
@@ -44,15 +47,9 @@ public sealed class ReminderNotifier
         {
             return;
         }
-        var today = DateTime.Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
-        lock (_gate)
+        if (!_ledger.TryMarkShown(key))
         {
-            if (_shown.Any(s => s.Key == key && s.Day == today))
-            {
-                return;
-            }
-            _shown.Add(new StoredShownReminder { Key = key, Day = today });
-            _store.Save(new ReminderLedger { Shown = _shown.ToList() });
+            return;
         }
         var draft = new RaisedReminder(kind, title, message, navKey);
         var raisedAt = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -132,6 +129,7 @@ public sealed class NotificationKindIconConverter : Avalonia.Data.Converters.IVa
                 NotificationKind.AccountSession => FluentIcons.Common.Icon.PersonCircle,
                 NotificationKind.WeeklyBoss => FluentIcons.Common.Icon.Trophy,
                 NotificationKind.DailyLiveness => FluentIcons.Common.Icon.Fire,
+                NotificationKind.TowerEnding => FluentIcons.Common.Icon.BuildingSkyscraper,
                 _ => FluentIcons.Common.Icon.Info,
             }
             : FluentIcons.Common.Icon.Info;
@@ -140,7 +138,7 @@ public sealed class NotificationKindIconConverter : Avalonia.Data.Converters.IVa
         => throw new NotSupportedException();
 }
 
-/// <summary>提醒类别 → 强调色(状态语义:签到蓝/活动橙/登录红/战歌同奏紫/活跃度橙红)。</summary>
+/// <summary>提醒类别 → 强调色(状态语义:活动橙/登录红/战歌同奏紫/活跃度橙红/深塔青)。</summary>
 public sealed class NotificationKindBrushConverter : Avalonia.Data.Converters.IValueConverter
 {
     public static readonly NotificationKindBrushConverter Instance = new();
@@ -154,6 +152,8 @@ public sealed class NotificationKindBrushConverter : Avalonia.Data.Converters.IV
                 NotificationKind.AccountSession => Avalonia.Media.Color.Parse("#EF4444"),
                 NotificationKind.WeeklyBoss => Avalonia.Media.Color.Parse("#8B5CF6"),
                 NotificationKind.DailyLiveness => Avalonia.Media.Color.Parse("#F97316"),
+                // 深塔收尾:青蓝(与上面四个都拉开,一眼能分辨"赛季快刷新了")
+                NotificationKind.TowerEnding => Avalonia.Media.Color.Parse("#0EA5E9"),
                 _ => Avalonia.Media.Color.Parse("#64748B"),
             }
             : Avalonia.Media.Color.Parse("#64748B");

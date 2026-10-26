@@ -929,6 +929,45 @@
                                       IsChecked="{Binding NotifLivenessEnabled, Mode=TwoWay}" />
                     </Grid>
                 </Border>
+                <!-- 深塔/海墟/矩阵赛季临期提醒(三类共用一个开关) -->
+                <Border Classes="subRow">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                        <ic:FluentIcon Icon="BuildingSkyscraper" IconVariant="Regular" IconSize="Size16"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource SemiColorText2}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource SemiColorText1}"
+                                       Text="{loc:Localize Key=Notif.TowerToggle}" />
+                            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.TowerToggleDesc}" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                      IsChecked="{Binding NotifTowerEnabled, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- 提醒行为:启动时重置当天台账(防"没看清就不再提醒") -->
+        <StackPanel Spacing="2" Margin="4,6,0,0">
+            <TextBlock Classes="sectionTitle" Text="{loc:Localize Key=Notif.Behavior}" />
+            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.BehaviorDesc}" />
+        </StackPanel>
+        <Border Classes="section">
+            <StackPanel>
+                <Border Classes="row">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                        <ic:FluentIcon Icon="ArrowClockwise" IconVariant="Regular" IconSize="Size16"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource SemiColorText2}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource SemiColorText1}"
+                                       Text="{loc:Localize Key=Notif.ResetToggle}" />
+                            <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Notif.ResetToggleDesc}" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                      IsChecked="{Binding NotifResetOnLaunch, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
             </StackPanel>
         </Border>
     </StackPanel>

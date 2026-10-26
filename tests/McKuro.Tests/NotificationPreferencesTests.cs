@@ -6,7 +6,7 @@ namespace McKuro.Tests;
 /// <summary>
 /// 通知门控测试(总开关 × 类别开关)。
 /// <para>
-/// 「通知」在设置页是二级菜单:总开关之下才是四类具体提醒。判定集中在
+/// 「通知」在设置页是二级菜单:总开关之下才是各具体提醒。判定集中在
 /// <see cref="NotificationPreferences"/> 一处,提醒链路有两处独立入口
 /// (ReminderScheduler 轮询门控 + ReminderNotifier 出口门控),
 /// 任何一处漏掉总开关都会表现为"总开关关了但某一类还在弹",故逐一覆盖。
@@ -14,13 +14,14 @@ namespace McKuro.Tests;
 /// </summary>
 public class NotificationPreferencesTests
 {
-    /// <summary>四类提醒(与设置页二级菜单里的开关一一对应)。</summary>
+    /// <summary>各类提醒(与设置页二级菜单里的开关一一对应)。</summary>
     public static TheoryData<NotificationKind> AllKinds =>
     [
         NotificationKind.ActivityEnding,
         NotificationKind.AccountSession,
         NotificationKind.WeeklyBoss,
         NotificationKind.DailyLiveness,
+        NotificationKind.TowerEnding,
     ];
 
     [Theory]
@@ -47,7 +48,7 @@ public class NotificationPreferencesTests
     [Fact]
     public void MasterSwitchOff_TakesPrecedenceOverEnabledCategories()
     {
-        // 总开关关闭、四类全开:仍全部不允许(短路优先于类别判定)
+        // 总开关关闭、各类全开:仍全部不允许(短路优先于类别判定)
         var settings = new AppSettings
         {
             NotifEnabled = false,
@@ -55,6 +56,7 @@ public class NotificationPreferencesTests
             NotifLoginEnabled = true,
             NotifWeeklyEnabled = true,
             NotifLivenessEnabled = true,
+            NotifTowerEnabled = true,
         };
         Assert.All(Kinds(), kind => Assert.False(NotificationPreferences.IsEnabled(settings, kind)));
     }
@@ -67,6 +69,14 @@ public class NotificationPreferencesTests
         var settings = new AppSettings();
         Assert.True(settings.NotifEnabled);
         Assert.All(Kinds(), kind => Assert.True(NotificationPreferences.IsEnabled(settings, kind)));
+    }
+
+    [Fact]
+    public void ResetOnLaunch_DefaultsOff()
+    {
+        // 默认「不改」:老用户升级后行为必须与之前一致(同一条提醒当天仍只弹一次)
+        var settings = new AppSettings();
+        Assert.False(settings.NotifResetOnLaunch);
     }
 
     [Fact]
@@ -92,12 +102,17 @@ public class NotificationPreferencesTests
             var writer = new SettingsService(dir, Microsoft.Extensions.Logging.Abstractions.NullLogger<SettingsService>.Instance);
             writer.Current.NotifEnabled = false;
             writer.Current.NotifLivenessEnabled = false;
+            writer.Current.NotifTowerEnabled = false;
+            writer.Current.NotifResetOnLaunch = true;
             writer.Save();
 
             var reader = new SettingsService(dir, Microsoft.Extensions.Logging.Abstractions.NullLogger<SettingsService>.Instance);
             Assert.False(reader.Current.NotifEnabled);
             Assert.False(reader.Current.NotifLivenessEnabled);
+            Assert.False(reader.Current.NotifTowerEnabled);
+            Assert.True(reader.Current.NotifResetOnLaunch);
             Assert.False(NotificationPreferences.IsEnabled(reader.Current, NotificationKind.DailyLiveness));
+            Assert.False(NotificationPreferences.IsEnabled(reader.Current, NotificationKind.TowerEnding));
         }
         finally
         {
@@ -111,6 +126,7 @@ public class NotificationPreferencesTests
         NotificationKind.AccountSession,
         NotificationKind.WeeklyBoss,
         NotificationKind.DailyLiveness,
+        NotificationKind.TowerEnding,
     ];
 
     private static void DisableCategory(AppSettings settings, NotificationKind kind)
@@ -121,6 +137,7 @@ public class NotificationPreferencesTests
             case NotificationKind.AccountSession: settings.NotifLoginEnabled = false; break;
             case NotificationKind.WeeklyBoss: settings.NotifWeeklyEnabled = false; break;
             case NotificationKind.DailyLiveness: settings.NotifLivenessEnabled = false; break;
+            case NotificationKind.TowerEnding: settings.NotifTowerEnabled = false; break;
         }
     }
 }

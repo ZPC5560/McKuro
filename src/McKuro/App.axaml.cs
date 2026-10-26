@@ -75,9 +75,18 @@ public partial class App : Application
         _scheduler = new DailyTaskScheduler();
         _scheduler.Start();
 
-        // 提醒调度(活动临期/登录状态/战歌同奏(周本)/每日活跃度;冒烟模式不启动,保持无网络副作用)
+        // 提醒调度(活动临期/登录状态/战歌同奏(周本)/每日活跃度/深塔赛季临期;
+        // 冒烟模式不启动,保持无网络副作用)
         if (Environment.GetEnvironmentVariable("McKuro_SMOKE") != "1")
         {
+            // 启动时重置当天提醒台账(设置项,默认关):提醒卡片 8 秒自动消失,用户可能没看清就没了,
+            // 而台账保证"当天不再重复"→ 当天永远看不到了。开启后首轮检查会把当天该弹的重新弹一遍。
+            // 必须在新建 ReminderScheduler 之前清:调度器首轮就在窗口 Opened 后跑,晚了会读到旧台账。
+            if (AppServices.Settings.Current.NotifResetOnLaunch)
+            {
+                var cleared = AppServices.Reminders.ResetToday();
+                System.Console.Error.WriteLine($"MCKURO-NOTIF 启动重置当天台账:清掉 {cleared} 条");
+            }
             // 首轮不再盲等 15 秒:窗口就绪后再 Start(见下方窗口 Opened),只等出口 IP 探测完成
             _reminderScheduler = new ReminderScheduler(networkInit);
         }

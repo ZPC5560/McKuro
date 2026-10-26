@@ -36,6 +36,26 @@ public sealed record TowerDataResult(
     string RoleId);
 
 /// <summary>
+/// 赛季临期提醒用的轻量快照:只含三个**赛季制**玩法(逆境深塔/冥歌海墟/终焉矩阵)。
+/// <para>
+/// 提醒链路<see cref="TowerService.GetSeasonSnapshotAsync"/> 刻意不复用 <see cref="TowerDataResult"/>:
+/// 全息战略/地图探索那三个接口对本功能毫无用处,却要额外 1.2 秒间隔并放大库街区风控概率
+/// (同一账号短时间串行打 6 个数据中心接口)。提醒每几小时跑一次,只取必要数据。
+/// </para>
+/// </summary>
+/// <param name="Tower">逆境深塔(towerDataDetail)。</param>
+/// <param name="Slash">冥歌海墟(slashDetail)。</param>
+/// <param name="Matrix">终焉矩阵(newTowerDetail)。</param>
+/// <param name="Error">整体失败原因;空串表示成功(单项失败只让该成员为 null)。</param>
+/// <param name="RoleId">本次解析出的库街区角色条目 ID。</param>
+public sealed record TowerSeasonSnapshot(
+    TowerSeasonData? Tower,
+    SlashData? Slash,
+    NewTowerData? Matrix,
+    string Error,
+    string RoleId);
+
+/// <summary>
 /// 深塔/海墟数据服务:用库街区 accessToken 拉取逆境深塔、终焉矩阵、再生海域与全息战略数据。
 /// (对齐 WutheringWavesTool TowerDataDetailTask / NewTowerDataDetailTask / SlashDataDetailTask,
 /// 全息战略对齐官方 H5 的 challengeIndex / challengeDetails)
@@ -226,6 +246,101 @@ public sealed class TowerService
     /// <summary>整体失败结果(各数据成员为 null,只带原因)。</summary>
     private static TowerDataResult Failed(string error, string roleId = "")
         => new(null, null, null, null, null, null, error, roleId);
+
+    /// <summary>
+    /// 赛季临期提醒专用:只拉三个赛季制玩法(深塔/海墟/矩阵)的结束时间与完成度。
+    /// <para>
+    /// 与 <see cref="GetTowerDataAsync"/> 共用同一套 accessToken 换取流程,但不请求全息战略/地图探索,
+    /// 也不落库矩阵历史 —— 提醒链路的副作用必须为零,否则"后台每几小时跑一次"会变成
+    /// "后台每几小时往历史表里塞一条记录"。
+    /// </para>
+    /// <para>整体失败(未登录/令牌失效)时 <see cref="TowerSeasonSnapshot.Error"/> 非空;单项失败静默为 null。</para>
+    /// </summary>
+    public async Task<TowerSeasonSnapshot> GetSeasonSnapshotAsync(CancellationToken ct = default)
+    {
+        var account = _accounts.Current;
+        if (account is null)
+        {
+            return new TowerSeasonSnapshot(null, null, null, CoreStrings.T("Core.Tower.NoLogin", "请先登录库街区账号"), "");
+        }
+
+        var deviceId = account.DeviceId ?? Guid.NewGuid().ToString("N");
+        var gamer = await _kuro.GetGamerAsync(account, (int)KuroGameType.Waves, ct).ConfigureAwait(false);
+        if (gamer is not { Code: 200, Data: not null } || gamer.Data.Count == 0)
+        {
+            return new TowerSeasonSnapshot(null, null, null, CoreStrings.T("Core.Tower.RoleListFailed", "获取角色列表失败"), "");
+        }
+        var roleId = gamer.Data[0].RoleId ?? "";
+        if (string.IsNullOrEmpty(roleId))
+        {
+            return new TowerSeasonSnapshot(null, null, null, CoreStrings.T("Core.Tower.NoRoleId", "角色 ID 为空"), "");
+        }
+
+        _api.PublicIp = _kuro.Ip;
+        var accessToken = await _api.GetAccessTokenAsync(
+            account.Token, deviceId, roleId, account.UserId ?? "", "android", ct).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            return new TowerSeasonSnapshot(null, null, null,
+                CoreStrings.T("Core.Tower.TokenFailed", "获取访问令牌失败(Token 可能已失效)"), roleId);
+        }
+
+        TowerSeasonData? tower = null;
+        SlashData? slash = null;
+        NewTowerData? matrix = null;
+        // 三个接口各自吞异常:任一失败只让该项缺席,不影响另外两项的提醒判定
+        try
+        {
+            tower = await _api.GetTowerAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "提醒: 拉取逆境深塔赛季数据失败");
+        }
+        try
+        {
+            matrix = await _api.GetNewTowerAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "提醒: 拉取终焉矩阵赛季数据失败");
+        }
+        // 与页面链路一致:两个数据中心接口之间留间隔,降低极验概率
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(600), ct).ConfigureAwait(false);
+            slash = await _api.GetSlashAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "提醒: 拉取冥歌海墟赛季数据失败");
+        }
+
+        if (tower is null && slash is null && matrix is null)
+        {
+            return new TowerSeasonSnapshot(null, null, null,
+                CoreStrings.T("Core.Tower.EmptyData", "接口返回空数据(可能受风控)"), roleId);
+        }
+        static string Remain(long? ms) => ms is { } v
+            ? TimeSpan.FromMilliseconds(v) is { TotalDays: > 0 } t2 ? $"{t2.Days}天{t2.Hours}小时" : $"{v / 3600000.0:F1}小时"
+            : "无";
+        _logger.LogInformation(
+            "提醒: 赛季剩余 | 深塔{TSE} | 矩阵{NTE} | 海墟{SSE}",
+            Remain(tower?.SeasonEndTime), Remain(matrix?.EndTime), Remain(slash?.SeasonEndTime));
+        return new TowerSeasonSnapshot(tower, slash, matrix, "", roleId);
+    }
 
     /// <summary>
     /// 终焉矩阵本期有记录时落库一期历史(key=roleId+赛季结束时间,对齐 WutheringWavesTool saveToDB)。
