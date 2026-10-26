@@ -154,6 +154,43 @@ public class AutoHideWindowTests
     }
 
     [Fact]
+    public void Reveal_Zone_Matches_Bar_Size()
+    {
+        // 导航栏:半个宽度(76/2=38);操作栏:一个高度(38)—— 用户要求的"靠近就出现",不必贴物理边缘
+        var nav = new EdgeRevealState
+        {
+            Extent = 76,
+            RevealZone = 38,
+            HoldZone = 8,
+            HideDelayTicks = 1,
+        };
+        Assert.True(nav.Update(37));  // 半个导航栏宽度内 → 展开
+        nav.ForceHide();
+        Assert.False(nav.Update(39)); // 超出 → 不展开
+
+        var title = new EdgeRevealState
+        {
+            Extent = 38,
+            RevealZone = 38,
+            HoldZone = 20,
+            HideDelayTicks = 1,
+            RevealDwellTicks = 4,
+        };
+        // 一个操作栏高度内:停留够拍数就展开
+        for (var i = 0; i < 3; i++)
+        {
+            Assert.False(title.Update(37));
+        }
+        Assert.True(title.Update(37));
+        Assert.True(title.Shown);
+
+        // 展开后,顶部 38(唤出带)~58(唤出带+保持余量)之间仍保持显示,不会刚出就收
+        Assert.True(title.Update(38));
+        Assert.True(title.Update(58));
+        Assert.False(title.Update(59));
+    }
+
+    [Fact]
     public void Reveal_Dwell_Requires_Staying_In_The_Zone()
     {
         // 操作栏:需在唤出带内连续停留 4 拍(40ms/拍 ⇒ 160ms)才展开,

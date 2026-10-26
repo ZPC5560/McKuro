@@ -621,7 +621,7 @@ public partial class MainWindow : Window
     // ① 「窗口操作栏自动隐藏」开启 ⇒ 系统 chrome 换成无边框(WindowDecorations.BorderOnly +
     //    ExtendClientArea),原生标题栏/边框消失,改由软件内 TitleBarHost 承担拖动与三键;
     //    关闭 ⇒ 完全回到系统原生 chrome(XAML 里 TitleBarHost 不显示)。
-    // ② 显隐判定只做「指针到窗口左/上边缘的距离」:贴边(≤ RevealZone)立即展开,
+    // ② 显隐判定只做「指针到窗口左/上边缘的距离」:进入唤出带(≤ RevealZone)立即展开,
     //    离开「展开区域 + HoldZone」后按轮询拍数延迟收起(避免快速划过时闪动)。
     // ③ 轮询同时用于 Windows 上指针落在原生 resize 边框(非客户区,拿不到 PointerMoved)的情形,
     //    其他平台退回 PointerMoved 提供的最近位置。
@@ -633,15 +633,19 @@ public partial class MainWindow : Window
     private const double TitleBarHeight = 38;
 
     /// <summary>
-    /// 贴边唤出带:指针距窗口左/上边缘 ≤ 该值即展开(DIP)。
-    /// <para>
-    /// 取值依据(实测 Avalonia 12.1.2 / Win11 150% DPI,WindowDecorations.BorderOnly + 扩展客户区):
-    /// 客户区顶部 0~6 DIP 仍属系统 resize 边框(WM_NCHITTEST=HTTOP,拿不到 PointerMoved),
-    /// 左右边框约 7.3 DIP 在客户区外。轮询(GetCursorPos)能覆盖整条物理边缘,
-    /// 指针事件则只能从客户区可达处开始 —— 10 DIP 让"贴到窗口边缘"在两条来源下都成立。
-    /// </para>
+    /// 导航栏唤出带:指针距窗口左边缘 ≤ 该值即展开(DIP)。
+    /// 按用户要求取「半个导航栏宽度」(76 / 2 = 38):靠近到导航栏一半宽度内就该出现,
+    /// 不必一路贴到物理边缘(客户区左缘外还有约 7.3 DIP 的原生 resize 边框,贴边手感更差)。
     /// </summary>
-    private const double RevealZone = 10;
+    private const double NavRevealZone = NavRailWidth / 2;
+
+    /// <summary>
+    /// 操作栏唤出带:指针距窗口顶部 ≤ 该值即展开(DIP)。
+    /// 按用户要求取「一个操作栏高度」(38):靠近顶部一个操作栏高度内就该出现。
+    /// 顶部 0~6 DIP 仍是原生 resize 边框(WM_NCHITTEST=HTTOP,拿不到 PointerMoved),
+    /// 靠 GetCursorPos 轮询覆盖;38 DIP 的带不会碰到页面首行控件(实测设置页分类菜单顶部约 60 DIP)。
+    /// </summary>
+    private const double TitleRevealZone = TitleBarHeight;
 
     /// <summary>已展开时继续悬停的余量:离开「展开区域 + 该余量」后才准备收起(DIP)。</summary>
     private const double HoldZone = 8;
@@ -682,7 +686,7 @@ public partial class MainWindow : Window
     private readonly EdgeRevealState _navReveal = new()
     {
         Extent = NavRailWidth,
-        RevealZone = RevealZone,
+        RevealZone = NavRevealZone,
         HoldZone = HoldZone,
         HideDelayTicks = NavHideDelayTicks,
     };
@@ -691,10 +695,11 @@ public partial class MainWindow : Window
     private readonly EdgeRevealState _titleReveal = new()
     {
         Extent = TitleBarHeight,
-        RevealZone = RevealZone,
+        RevealZone = TitleRevealZone,
         // 保持区 = 操作栏高度 + 20:指针在栏内或紧贴栏下沿时保持显示,再往下就收起。
-        // 余量不宜过大(曾是 44):那样指针只在页面首行区域活动就会把操作栏一直挂住,
-        // 体感就是"移开了却迟迟不收起"。真正的保护由「按下鼠标期间不收起」承担(见 OnAutoHideTick)。
+        // 必须 ≥ 唤出带(这里唤出带 = 一个操作栏高度 38),否则刚唤出就会因"超出保持区"被收起而抖动。
+        // 余量也不宜过大(曾是 44):那样指针只在页面首行活动就会把操作栏一直挂住,体感"移开了却不收起"。
+        // 真正的保护由「按住鼠标期间冻结」承担(见 OnAutoHideTick)。
         HoldZone = 20,
         HideDelayTicks = TitleHideDelayTicks,
         RevealDwellTicks = TitleRevealDwellTicks,
