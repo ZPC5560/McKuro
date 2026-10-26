@@ -647,16 +647,24 @@ public partial class MainWindow : Window
     private const double HoldZone = 8;
 
     /// <summary>
-    /// 导航栏收起前的等待拍数(轮询 70ms ⇒ 约 70ms,近乎即时)。
-    /// 用户反馈「左边收缩有延迟」:导航栏只做一次 70ms 迟滞防抖,指针离开即收起。
+    /// 导航栏收起前的等待拍数(轮询 40ms ⇒ 约 40ms,近乎即时)。
+    /// 用户反馈「左边收缩有延迟」:导航栏只做一次 40ms 迟滞防抖,指针离开即收起。
     /// </summary>
     private const int NavHideDelayTicks = 1;
 
-    /// <summary>窗口操作栏收起前的等待拍数(轮询 70ms ⇒ 约 560ms,避免误触后立刻消失)。</summary>
-    private const int TitleHideDelayTicks = 8;
+    /// <summary>
+    /// 窗口操作栏收起前的等待拍数(轮询 70ms ⇒ 约 140ms)。
+    /// 用户反馈「操作栏自动隐藏有延迟」:原先 8 拍(70ms/拍 ≈560ms)+200ms 动画接近 0.8 秒。
+    /// 现轮询 40ms、只留 1 拍(≈40ms):防抖由「保持区 20 DIP + 按住鼠标不收起」承担,
+    /// 不必再靠拉长拍数;指针离开顶部区域后立即开始收起(动画收 130ms)。
+    /// </summary>
+    private const int TitleHideDelayTicks = 1;
 
-    /// <summary>自动隐藏轮询间隔(ms)。</summary>
-    private const int AutoHidePollMs = 70;
+    /// <summary>
+    /// 自动隐藏轮询间隔(ms)。原是 70ms(状态机按拍计数,拍粗了整体反应就慢);
+    /// 40ms 让「离开边缘 → 开始收起」的判定误差不超过半帧多一点,轮询本身只是两次 GetCursorPos,开销可忽略。
+    /// </summary>
+    private const int AutoHidePollMs = 40;
 
     /// <summary>无边框沉浸模式下,指针最多允许超出客户区多少 DIP 仍算"贴边"(覆盖原生边框厚度)。</summary>
     private const double OutsideTolerance = 12;
@@ -675,9 +683,10 @@ public partial class MainWindow : Window
     {
         Extent = TitleBarHeight,
         RevealZone = RevealZone,
-        // 操作栏显示时会把内容区整体下推(见 ApplyTitleBarOffset),页面首行按键落在
-        // 「38 + 该余量」以内;余量给足,用户点首行时操作栏不会中途收起把页面顶回去。
-        HoldZone = 44,
+        // 保持区 = 操作栏高度 + 20:指针在栏内或紧贴栏下沿时保持显示,再往下就收起。
+        // 余量不宜过大(曾是 44):那样指针只在页面首行区域活动就会把操作栏一直挂住,
+        // 体感就是"移开了却迟迟不收起"。真正的保护由「按下鼠标期间不收起」承担(见 OnAutoHideTick)。
+        HoldZone = 20,
         HideDelayTicks = TitleHideDelayTicks,
     };
 
@@ -712,6 +721,12 @@ public partial class MainWindow : Window
     /// <summary>非 Windows 平台/兜底:最近一次 PointerMoved 的窗口内坐标与是否在窗口内。</summary>
     private bool _pointerInside;
     private Point _pointerLast;
+
+    /// <summary>
+    /// 鼠标左键是否处于按下状态(窗口内任意位置)。
+    /// 按下期间不收起操作栏:否则点页面首行按键时操作栏可能中途收起,把被点的按钮整体上移走。
+    /// </summary>
+    private bool _pointerButtonDown;
 
     /// <summary>冒烟钩子文件(空 = 未启用);启用时只用伪指针文件,忽略真实指针与指针事件,保证自动化可复现。</summary>
     private string? _smokePointerFile;
@@ -749,6 +764,8 @@ public partial class MainWindow : Window
         TitleBarSurface.AddHandler(PointerPressedEvent, OnTitleBarPointerPressed, RoutingStrategies.Bubble);
         AddHandler(PointerMovedEvent, OnShellPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(PointerExitedEvent, OnShellPointerExited, RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(PointerPressedEvent, OnShellPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(PointerReleasedEvent, OnShellPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(KeyDownEvent, OnShellKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
         Deactivated += (_, _) => OnShellDeactivated();
 
@@ -889,6 +906,19 @@ public partial class MainWindow : Window
         _pointerInside = false;
     }
 
+    private void OnShellPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            _pointerButtonDown = true;
+        }
+    }
+
+    private void OnShellPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _pointerButtonDown = false;
+    }
+
     /// <summary>键盘兜底:按 Alt 立即唤出两栏(指针唤出失效时仍可关窗/拖动)。</summary>
     private void OnShellKeyDown(object? sender, KeyEventArgs e)
     {
@@ -1018,10 +1048,16 @@ public partial class MainWindow : Window
                 _navReveal.Update(navEdge);
             }
         }
+        if (_pointerButtonDown && OperatingSystem.IsWindows() && !IsLeftButtonDown())
+        {
+            // 在窗口外松开(wms 收不到 PointerReleased)会让标记永久为真,这里用真实按键状态纠正
+            _pointerButtonDown = false;
+        }
         if (titleOn)
         {
-            if (_titlePinned)
+            if (_titlePinned || _pointerButtonDown)
             {
+                // 固定,或用户正按着鼠标(可能正在点被下推的页面首行):保持显示不推进收起
                 _titleReveal.ForceShow();
             }
             else
@@ -1171,6 +1207,8 @@ public partial class MainWindow : Window
         {
             StartLayoutProbe("nav");
         }
+        SetTransitionDuration(NavRail, show);
+        SetTransitionDuration(NavGlassPanel, show);
         SetWithOptionalTransition(NavRail, animate, () => NavRail.Width = show ? NavRailWidth : 0);
         SetWithOptionalTransition(
             NavGlassPanel,
@@ -1209,6 +1247,23 @@ public partial class MainWindow : Window
         UpdateMaximizeGlyph();
     }
 
+    /// <summary>操作栏/导航栏展开与收起各自的补间时长:收起更快,避免"移开后还慢慢往上爬"的观感。</summary>
+    private static readonly TimeSpan RevealDuration = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan HideDuration = TimeSpan.FromMilliseconds(130);
+
+    /// <summary>把过渡时长改成展开/收起各自的档位(XAML 里声明的是默认 200ms)。</summary>
+    private static void SetTransitionDuration(Control target, bool show)
+    {
+        var duration = show ? RevealDuration : HideDuration;
+        foreach (var transition in target.Transitions ?? [])
+        {
+            if (transition is ThicknessTransition thickness)
+            {
+                thickness.Duration = duration;
+            }
+        }
+    }
+
     /// <summary>
     /// 把操作栏纵向偏移(Y ∈ [-操作栏高度, 0])同时落到「操作栏自身位置」与「内容区顶部留白」:
     /// 操作栏底边永远等于内容顶边 —— 滑出时内容被平滑下推,收起时同步复位。
@@ -1220,6 +1275,8 @@ public partial class MainWindow : Window
             StartLayoutProbe("title");
         }
         var inset = Math.Clamp(TitleBarHeight + titleBarY, 0, TitleBarHeight);
+        SetTransitionDuration(TitleBarHost, titleBarY >= 0);
+        SetTransitionDuration(ShellGrid, titleBarY >= 0);
         SetWithOptionalTransition(
             TitleBarHost,
             animate,
@@ -1418,6 +1475,13 @@ public partial class MainWindow : Window
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetCursorPos(out POINT lpPoint);
+
+    /// <summary>当前左键是否仍按住(真实键盘/鼠标状态,不受事件丢失影响)。</summary>
+    private static bool IsLeftButtonDown()
+        => (GetAsyncKeyState(0x01) & 0x8000) != 0;
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
 
     /// <summary>把客户区坐标(物理像素)换算为屏幕坐标,用于把光标位置反推到窗口内。</summary>
     [DllImport("user32.dll")]

@@ -130,6 +130,30 @@ public class AutoHideWindowTests
     }
 
     [Fact]
+    public void Short_Hold_Zone_Releases_As_Soon_As_Pointer_Leaves_The_Bar_Area()
+    {
+        // 操作栏:高度 38 + 保持余量 20 = 58 DIP,2 拍(≈140ms)后收起
+        var state = new EdgeRevealState
+        {
+            Extent = 38,
+            RevealZone = 10,
+            HoldZone = 20,
+            HideDelayTicks = 2,
+        };
+        state.ForceShow();
+
+        // 指针仍在栏内 / 紧贴栏下沿:保持
+        Assert.True(state.Update(0));
+        Assert.True(state.Update(38));
+        Assert.True(state.Update(58));
+
+        // 离开:两拍后就收起(旧值 8 拍 ≈560ms 是用户反馈的「有延迟」)
+        Assert.True(state.Update(200));
+        Assert.False(state.Update(200));
+        Assert.False(state.Shown);
+    }
+
+    [Fact]
     public void Force_Show_And_Hide_Reset_Pending_Countdown()
     {
         var state = NewState();
