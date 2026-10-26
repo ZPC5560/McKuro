@@ -669,6 +669,15 @@ public partial class MainWindow : Window
     /// <summary>无边框沉浸模式下,指针最多允许超出客户区多少 DIP 仍算"贴边"(覆盖原生边框厚度)。</summary>
     private const double OutsideTolerance = 12;
 
+    /// <summary>
+    /// 操作栏需要在唤出带内连续停留多少拍才展开(40ms/拍 ⇒ 160ms)。
+    /// 页面顶部常有横向菜单/页签(设置页分类、抽卡页视图),鼠标从窗口顶边穿过时若立即展开,
+    /// 内容会被下推 38 DIP —— 用户随后点到的已经不是原来的按钮,表现为"点了没反应",
+    /// 指针离开后又收起,看起来像"操作栏闪了一下"。要求停留即可过滤掉这种穿越。
+    /// 导航栏不需要(左边缘没有横向菜单,且用户希望贴边即出)。
+    /// </summary>
+    private const int TitleRevealDwellTicks = 4;
+
     /// <summary>导航栏显隐状态机(距窗口左边缘的距离)。</summary>
     private readonly EdgeRevealState _navReveal = new()
     {
@@ -688,6 +697,7 @@ public partial class MainWindow : Window
         // 体感就是"移开了却迟迟不收起"。真正的保护由「按下鼠标期间不收起」承担(见 OnAutoHideTick)。
         HoldZone = 20,
         HideDelayTicks = TitleHideDelayTicks,
+        RevealDwellTicks = TitleRevealDwellTicks,
     };
 
     /// <summary>当前是否处于无边框沉浸模式(= 设置项 AutoHideTitleBar)。</summary>
@@ -1055,10 +1065,17 @@ public partial class MainWindow : Window
         }
         if (titleOn)
         {
-            if (_titlePinned || _pointerButtonDown)
+            if (_titlePinned)
             {
-                // 固定,或用户正按着鼠标(可能正在点被下推的页面首行):保持显示不推进收起
                 _titleReveal.ForceShow();
+            }
+            else if (_pointerButtonDown)
+            {
+                // 按住鼠标期间**冻结**当前状态(既不 ForceShow 也不推进收起计时)。
+                // 教训:这里曾写成 ForceShow —— 结果是“任何一次点击都会先把操作栏弹出来”,
+                // 而操作栏一显示就把内容下推 38 DIP,按下的那一刻指针已被按下、
+                // 松手时按钮已经移走 → Click 不触发(设置页点菜单“没反应”),
+                // 随后 40ms 又收起 → 表现为“操作栏显示又消失”。冻结则两种情况都不会发生。
             }
             else
             {

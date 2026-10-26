@@ -154,6 +154,54 @@ public class AutoHideWindowTests
     }
 
     [Fact]
+    public void Reveal_Dwell_Requires_Staying_In_The_Zone()
+    {
+        // 操作栏:需在唤出带内连续停留 4 拍(40ms/拍 ⇒ 160ms)才展开,
+        // 防止鼠标从窗口顶边穿过去点页面横向菜单时把内容顶下去(点了没反应/操作栏闪一下)
+        var state = new EdgeRevealState
+        {
+            Extent = 38,
+            RevealZone = 10,
+            HoldZone = 20,
+            HideDelayTicks = 1,
+            RevealDwellTicks = 4,
+        };
+
+        // 只穿过 1~3 拍:不展开
+        for (var i = 0; i < 3; i++)
+        {
+            Assert.False(state.Update(3));
+        }
+        // 中途离开又回来:重新计数
+        Assert.False(state.Update(300));
+        Assert.False(state.Update(3));
+        Assert.False(state.Update(3));
+
+        // 连续停留到第 4 拍:展开
+        Assert.False(state.Update(3));
+        Assert.True(state.Update(3));
+        Assert.True(state.Shown);
+    }
+
+    [Fact]
+    public void Reveal_Dwell_Does_Not_Affect_Hiding()
+    {
+        var state = new EdgeRevealState
+        {
+            Extent = 38,
+            RevealZone = 10,
+            HoldZone = 20,
+            HideDelayTicks = 1,
+            RevealDwellTicks = 4,
+        };
+        state.ForceShow();
+
+        Assert.True(state.Update(38));   // 仍在栏内
+        Assert.False(state.Update(200)); // 离开一拍就收起
+        Assert.False(state.Shown);
+    }
+
+    [Fact]
     public void Force_Show_And_Hide_Reset_Pending_Countdown()
     {
         var state = NewState();
