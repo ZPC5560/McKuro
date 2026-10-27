@@ -39,6 +39,24 @@ public sealed partial class LauncherViewModel
         await RepairGameAsync();
     }
 
+    /// <summary>
+    /// 检查重复文件(手动体积自检)。
+    /// <para>
+    /// 与其它菜单项不同:这里<b>先不关菜单</b>,等扫描真正开始(状态栏已出现"正在检查…")再关。
+    /// 原先所有菜单项都"点了立刻关面板",而检查重复文件需要枚举整个游戏目录(数万文件,数秒到数十秒),
+    /// 面板一关、状态栏又没绑定,用户看到的就是"点了一下什么都没发生"(2026-10 反馈)。
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private async Task CheckResidueFromMenuAsync()
+    {
+        var task = CheckResidueCoreAsync(promptAlways: true, skipBusyGuard: false);
+        // 给状态栏一帧时间把"正在检查…"画出来,再收起菜单
+        await Task.Yield();
+        CloseGameMenu();
+        await task;
+    }
+
     /// <summary>创建桌面快捷方式(指向启动器自身)。</summary>
     [RelayCommand]
     private void CreateDesktopShortcut()

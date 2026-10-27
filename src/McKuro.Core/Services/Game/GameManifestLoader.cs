@@ -797,6 +797,8 @@ public sealed class GameManifestLoader
 [JsonSerializable(typeof(KuroResourcePackIndex))]
 [JsonSerializable(typeof(KuroResourcePack))]
 [JsonSerializable(typeof(KuroResourceBundle))]
+[JsonSerializable(typeof(KuroResourcePackRootConfig))]
 [JsonSerializable(typeof(Dictionary<string, KuroResourcePack>))]
 [JsonSerializable(typeof(Dictionary<string, KuroResourceBundle>))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
 public sealed partial class GameJsonContext : JsonSerializerContext;

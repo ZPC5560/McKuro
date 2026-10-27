@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -16,6 +17,82 @@ public sealed partial class LauncherViewModel : ViewModelBase
 {
     [ObservableProperty]
     private string _statusText = LanguageService.Format("Roles.Ready");
+
+    /// <summary>
+    /// 「游戏已是最新」这类**一次性结果提示**在状态栏停留多久后自动消失。
+    /// <para>
+    /// 为什么需要:状态栏是启动页所有操作的反馈出口,而「已是最新 / 已是最新版本 3.7.1」
+    /// 这类"没有后续动作"的结论会一直挂在那儿 —— 用户切到别的页面再回来、或下次打开软件
+    /// 都还看到同一句话,像一条永远清不掉的残留。它又不像"发现新版本"那样需要一直提醒
+    /// (那个在启动器标题卡里另有常驻文案 <c>InstallStateText</c>)。
+    /// </para>
+    /// <para>
+    /// 8 秒与全局悬浮提醒(活动临期/登录失效等)的停留时长一致,保持同一套节奏。
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan TransientStatusLifetime = TimeSpan.FromSeconds(8);
+
+    /// <summary>当前挂着的自动清除计时器;新提示到达或页面离开时取消。</summary>
+    private Avalonia.Threading.DispatcherTimer? _transientStatusTimer;
+
+    /// <summary>当前状态栏内容是否属于"会自动消失"的一次性提示。</summary>
+    private bool _isStatusTransient;
+
+    /// <summary>
+    /// 设一条"会自动消失"的状态提示,并把它标记为 transient。
+    /// <para>
+    /// <b>只用于没有后续动作的结论</b>(如「游戏已是最新」)。失败/进行中/需要用户处理的
+    /// 提示仍走普通 <see cref="StatusText"/> 赋值,必须留在屏幕上 —— 把"检查失败"也自动清了,
+    /// 用户就永远看不到错在哪。
+    /// </para>
+    /// </summary>
+    private void SetTransientStatus(string text)
+    {
+        StatusText = text;
+        _isStatusTransient = true;
+        StartTransientStatusTimer();
+    }
+
+    /// <summary>启动(或重置)自动清除计时器:到期后清空状态栏。</summary>
+    private void StartTransientStatusTimer()
+    {
+        _transientStatusTimer?.Stop();
+        _transientStatusTimer = new Avalonia.Threading.DispatcherTimer
+        {
+            Interval = TransientStatusLifetime,
+        };
+        _transientStatusTimer.Tick += (_, _) =>
+        {
+            _transientStatusTimer?.Stop();
+            _transientStatusTimer = null;
+            _isStatusTransient = false;
+            StatusText = "";
+        };
+        _transientStatusTimer.Start();
+    }
+
+    /// <summary>取消自动清除(普通提示接管状态栏时调用,避免它被上一条的计时器误清)。</summary>
+    private void CancelTransientStatusTimer()
+    {
+        _transientStatusTimer?.Stop();
+        _transientStatusTimer = null;
+        _isStatusTransient = false;
+    }
+
+    /// <summary>
+    /// 任何对 <see cref="StatusText"/> 的直接赋值都会取消上一条的自动清除计时器。
+    /// <para>
+    /// 不取消的后果:先弹了「游戏已是最新」(8 秒后清),用户立刻点「修复游戏」,
+    /// 状态栏换成「正在修复…」—— 8 秒一到,那条**正在修复**被清空,看起来像卡住了。
+    /// </para>
+    /// </summary>
+    partial void OnStatusTextChanged(string value)
+    {
+        if (!_isStatusTransient)
+        {
+            CancelTransientStatusTimer();
+        }
+    }
 
     [ObservableProperty]
     private string _gameVersionText = LanguageService.Format("Launcher.NotDetected");
@@ -218,8 +295,23 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [ObservableProperty]
     private string _currentFileText = "";
 
+    /// <summary>
+    /// 当前下载速度的「大字数值」(如 <c>37.78</c>)。单位单独放 <see cref="SpeedUnitText"/>,
+    /// 由 XAML 排成「大号数值 + 小号单位」(对齐 FlClash 仪表盘;用户反馈网速不明显)。
+    /// </summary>
     [ObservableProperty]
-    private string _speedText = "";
+    private string _speedValueText = "--";
+
+    /// <summary>当前下载速度的单位(如 <c>MB/s</c>);无速度时为空串。</summary>
+    [ObservableProperty]
+    private string _speedUnitText = "";
+
+    /// <summary>
+    /// 本次任务的速度峰值(如 <c>峰值 42.1 MB/s</c>)。有峰值才能判断"现在是不是掉速了",
+    /// 只给瞬时值用户看不出网络波动。
+    /// </summary>
+    [ObservableProperty]
+    private string _peakSpeedText = "";
 
     [ObservableProperty]
     private string _bytesText = "";
@@ -324,15 +416,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
     public string PlatformGameNotice => AppServices.Capabilities.GameSupportText;
 
-    /// <summary>服务器渠道列表(与设置页一致)。</summary>
-    public IReadOnlyList<string> Servers { get; } =
-    [
-        LanguageService.Format("Server.Auto"), LanguageService.Format("Server.Official"),
-        LanguageService.Format("Server.Bilibili"), "WeGame", LanguageService.Format("Server.Global"),
-    ];
-
-    [ObservableProperty]
-    private int _selectedServerIndex;
+    /// <summary>上一次导航到本页时生效的渠道(用于检测设置页改过渠道,决定要不要重载官方内容)。</summary>
+    private GameServerType _lastResolvedServer = GameServerType.Unknown;
 
     private UpdateCheckResult? _lastCheck;
 
@@ -363,14 +448,9 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
     public LauncherViewModel()
     {
-        SelectedServerIndex = AppServices.Settings.Current.ServerType switch
-        {
-            GameServerType.Official => 1,
-            GameServerType.Bilibili => 2,
-            GameServerType.WeGame => 3,
-            GameServerType.Global => 4,
-            _ => 0,
-        };
+        // 渠道唯一来源是设置(启动页不再单独维护一份下拉框 —— 已删掉那份从未被任何
+        // 控件绑定的 Servers/SelectedServerIndex 死代码)。切换入口只在设置页。
+        _lastResolvedServer = ServerType;
         RefreshState();
         VideoEnabled = AppServices.Settings.Current.BackgroundVideoEnabled;
         _lastLoadedVideoSetting = AppServices.Settings.Current.BackgroundVideoEnabled;
@@ -410,25 +490,29 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
     }
 
-    /// <summary>导航到启动页时调用:同步渠道/背景视频来源,配置变化时重新加载官方背景(无需重启)。</summary>
+    /// <summary>
+    /// 导航到启动页时调用:同步渠道/背景视频来源,配置变化时重新加载官方背景(无需重启)。
+    /// </summary>
     public void OnNavigatedTo()
     {
         var s = AppServices.Settings.Current;
 
-        // 服务器渠道可能在设置页变更:同步到启动页(渠道影响官方背景/轮播/更新检查)
-        var wantServer = s.ServerType switch
+        // 离开再回来时,上一页留下的"已是最新"之类一次性提示不该跟着回来
+        // (它本来就是"刚才那次检查"的结论,不是当前状态)。
+        // 但**只清一次性提示**:「请先设置游戏目录」「当前平台不支持」这类
+        // 需要用户处理的提示必须留着,清了就等于什么反馈都没给。
+        if (_isStatusTransient && !IsBusy && !IsDownloading)
         {
-            GameServerType.Official => 1,
-            GameServerType.Bilibili => 2,
-            GameServerType.WeGame => 3,
-            GameServerType.Global => 4,
-            _ => 0,
-        };
-        var serverChanged = SelectedServerIndex != wantServer;
-        if (serverChanged)
-        {
-            SelectedServerIndex = wantServer;
+            CancelTransientStatusTimer();
+            StatusText = "";
         }
+
+        // 服务器渠道可能在设置页变更:同步到启动页(渠道影响官方背景/轮播/更新检查/画质面板)。
+        // 这里比较「解析后的渠道」而不是界面索引 —— 渠道的唯一定义在 GameServerResolver,
+        // 启动页不再保留自己的那份下拉选择。
+        var resolved = ServerType;
+        var serverChanged = _lastResolvedServer != resolved;
+        _lastResolvedServer = resolved;
 
         // 视频来源指纹(开关 + 官方/自定义 + 自定义路径)可能在设置页变更
         var wantSource = VideoSourceFingerprint(s);
@@ -580,19 +664,11 @@ public sealed partial class LauncherViewModel : ViewModelBase
     public static string VideoSourceFingerprint(AppSettings s) =>
         $"{(s.BackgroundVideoEnabled ? 1 : 0)}|{s.BackgroundVideoMode}|{s.CustomBackgroundVideoPath ?? ""}";
 
-    private GameServerType SelectedServerType => SelectedServerIndex switch
-    {
-        1 => GameServerType.Official,
-        2 => GameServerType.Bilibili,
-        3 => GameServerType.WeGame,
-        4 => GameServerType.Global,
-        _ => GameServerType.Unknown,
-    };
-
-    private GameServerType ServerType =>
-        SelectedServerType != GameServerType.Unknown
-            ? SelectedServerType
-            : AppServices.Paths.DetectServerType();
+    /// <summary>
+    /// 当前生效渠道:<b>设置优先、自动检测兜底</b>(判定收敛在
+    /// <see cref="GameServerResolver.Resolve"/> 一处,避免各页面各写一份而漂移)。
+    /// </summary>
+    private GameServerType ServerType => GameServerResolver.Resolve(AppServices.Settings, AppServices.Paths);
 
     /// <summary>拉取官方封面轮播图、公告与背景封面(失败静默,不影响其余功能)。</summary>
     private async Task LoadLauncherInfoAsync()
@@ -740,9 +816,18 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
 
         var paths = AppServices.Paths;
-        IsInstalled = paths.IsGameInstalled;
+        // 「安装未完成」优先于 exe 存在性:下载/安装被打断时根 exe 可能已落盘,
+        // 若据此判为已安装,按钮会变成「启动游戏」—— 既没有续传入口、点启动也必然失败。
+        // 判为未安装后,按钮回到「下载安装」,InstallAsync 会复用已下文件继续(下载器按 .part 续传)。
+        var installIncomplete = AppServices.GameUpdater.HasIncompleteInstall();
+        IsInstalled = paths.IsGameInstalled && !installIncomplete;
         GameVersionText = IsInstalled ? LanguageService.Format("Launcher.Installed") : LanguageService.Format("Launcher.NotInstalledShort");
-        InstallStateText = IsInstalled ? LanguageService.Format("Launcher.GameReady") : LanguageService.Format("Launcher.NotInstalled");
+        // 三种状态的文案:已装 / 上次没装完(说明会续传,避免用户以为要从头下几十 GB) / 从未安装
+        InstallStateText = IsInstalled
+            ? LanguageService.Format("Launcher.GameReady")
+            : installIncomplete
+                ? LanguageService.Format("Launcher.InstallIncomplete")
+                : LanguageService.Format("Launcher.NotInstalled");
         RefreshGraphicsComponents();
 
         if (!IsInstalled)
@@ -826,7 +911,12 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
             if (result.NotInstalled)
             {
-                InstallStateText = LanguageService.Format("Launcher.InstallHint");
+                // NotInstalled 现在涵盖两种情形(见 GameUpdater.CheckUpdateAsync):
+                // 从未安装 / 上次安装被打断。后者要明确告诉用户「会续传」,
+                // 否则看到几十 GB 的预估会以为得从头再来一遍。
+                InstallStateText = AppServices.GameUpdater.HasIncompleteInstall()
+                    ? LanguageService.Format("Launcher.InstallIncomplete")
+                    : LanguageService.Format("Launcher.InstallHint");
             }
             else if (result.HasUpdate)
             {
@@ -838,7 +928,18 @@ public sealed partial class LauncherViewModel : ViewModelBase
                 InstallStateText = LanguageService.Format("Launcher.UpToDate", result.ServerVersion);
             }
 
-            StatusText = result.HasUpdate ? LanguageService.Format("Launcher.UpdateAvailable") : LanguageService.Format("Launcher.Latest");
+            // 「已是最新」没有后续动作,让它自动消失;「发现新版本」必须留着提醒,走普通赋值。
+            // 注意:无更新时启动器标题卡整张隐藏(<c>IsVisible="{Binding HasUpdate}"</c>),
+            // 所以状态栏是这句话的唯一出口 —— 消失后页面回到干净状态,正是想要的结果
+            // (「没有更新」是常态,不需要一直占着一行)。
+            if (result.HasUpdate)
+            {
+                StatusText = LanguageService.Format("Launcher.UpdateAvailable");
+            }
+            else
+            {
+                SetTransientStatus(LanguageService.Format("Launcher.Latest"));
+            }
         }
         catch (Exception ex)
         {
@@ -872,6 +973,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
         StatusText = LanguageService.Format("Launcher.PredownloadStatus");
         // 清单回来之前总量未知:进度环转圈而不是死画 0%(弱网下这段可能很久)。
         IsPreparing = true;
+        // 新任务重置峰值与波动曲线:上一轮的峰值/波形会把新曲线压平或误导"网速已恢复"。
+        ResetSpeedStatistics();
 
         var progress = new Progress<DownloadProgress>(p => HandleProgress(p));
 
@@ -918,10 +1021,19 @@ public sealed partial class LauncherViewModel : ViewModelBase
         {
             return;
         }
+        // 还没选安装目录:直接给可操作的指引,而不是让 Core 返回一句"未设置游戏目录"就算完。
+        // 全新安装场景下用户还没机会配目录(以前必须先装官方客户端才能选目录)。
+        if (string.IsNullOrWhiteSpace(AppServices.Settings.Current.GameRootDir))
+        {
+            StatusText = LanguageService.Format("Launcher.PickDirFirst");
+            return;
+        }
 
         IsDownloading = true;
         try
         {
+            // 安装/更新是新任务:上一轮的峰值与波形不该延续到新曲线(否则"看起来一直在满速")
+            ResetSpeedStatistics();
             await InstallCoreAsync();
         }
         finally
@@ -951,6 +1063,9 @@ public sealed partial class LauncherViewModel : ViewModelBase
             {
                 RefreshState();
                 await CheckUpdateAsync();
+                // 安装成功后做一次体积自检(后台,不阻塞状态栏):多次断连留下的备份/半成品
+                // 会让目录比清单大出几十 GB,发现"明显有过大残留"时弹窗问用户是否删除。
+                await CheckResidueAfterInstallAsync();
             }
         }
         catch (Exception ex)
@@ -986,7 +1101,12 @@ public sealed partial class LauncherViewModel : ViewModelBase
         {
             ProgressText = p.StageText!;
             CurrentFileText = p.CurrentFile;
-            SpeedText = "";
+            ClearSpeedDisplay();
+            // 剩余时间/已下载量也一起清掉:这两项只在"有字节在流动"时才有意义。
+            // 不清的话,差分合成一个 18 GB 分组期间界面会一直挂着上一阶段算出的
+            // "剩余约 30 分钟",而进度条是静止的 —— 用户看到的是一个永远不动的承诺。
+            RemainingTimeText = "";
+            BytesText = "";
             return;
         }
 
@@ -996,7 +1116,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             ProgressPercent = Math.Clamp(p.FileIndex * 100.0 / p.FileTotal, 0, 100);
             ProgressText = LanguageService.Format("Launcher.Verifying", p.FileIndex, p.FileTotal);
             CurrentFileText = p.CurrentFile;
-            SpeedText = "";
+            ClearSpeedDisplay();
             BytesText = "";
             RemainingTimeText = "";
             return;
@@ -1012,10 +1132,9 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
         _lastInstallUiUpdate = now;
         ProgressPercent = p.Percent * 100;
-        // 速度只在 SpeedText 显示一处(对齐上游 1.6 修复:避免进度行与速度行重复显示)
         ProgressText = LanguageService.Format("Launcher.FileProgress", p.FileIndex, p.FileTotal, FormatSize(p.BytesDownloaded), FormatSize(p.BytesTotal));
         CurrentFileText = p.CurrentFile;
-        SpeedText = FormatSpeed(p.SpeedBps);
+        ApplySpeedDisplay(p.SpeedBps);
         BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";
         UpdateRemainingTime(p.BytesTotal - p.BytesDownloaded, p.SpeedBps);
         SampleSpeedHistory(p.SpeedBps);
@@ -1034,6 +1153,12 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
         OnPropertyChanged(nameof(DownloadPaused));
         OnPropertyChanged(nameof(PauseResumeText));
+
+        // 暂停/恢复都要清掉剩余时间与速度读数:
+        // 暂停期间速度窗口里的字节增量趋零,ETA 会被算成越来越大(甚至"剩余 8 小时"),
+        // 而实际只是没在下。恢复后由下一次 HandleProgress 自然重算。
+        RemainingTimeText = "";
+        ClearSpeedDisplay();
     }
 
     [RelayCommand]
@@ -1071,6 +1196,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
             {
                 RefreshState();
                 await CheckUpdateAsync();
+                // 修复同样是"反复下载"的高发场景(每次修复都会给被替换文件再留一份备份)
+                await CheckResidueAfterInstallAsync();
             }
         }
         catch (Exception ex)
@@ -1082,6 +1209,117 @@ public sealed partial class LauncherViewModel : ViewModelBase
             IsPreparing = false;
             IsDownloading = false;
             ProgressText = "";
+        }
+    }
+
+    /// <summary>
+    /// 安装/修复完成后的体积自检(用户需求 2026-10):比对游戏目录实际占用与服务端清单总量,
+    /// 同时扫描启动器自身留下的残留(替换前备份 / 孤儿 .part / 补丁与差分临时目录)。
+    /// 仅在"明显过大"或"残留体积可观"时弹窗询问是否删除,不打扰常态安装。
+    /// <para>
+    /// <b>不阻断、不报错</b>:自检失败只写日志;用户选择保留时什么都不做。
+    /// 扫描与删除都在后台线程,UI 线程只负责弹窗。
+    /// </para>
+    /// </summary>
+    private async Task CheckResidueAfterInstallAsync()
+    {
+        // 用户可在设置里关掉(默认开);关闭后连扫描都不做。
+        if (!AppServices.Settings.Current.InstallResidueCheckEnabled)
+        {
+            return;
+        }
+
+        // 走统一的扫描/弹窗/删除路径,但只在"明显过大"时才打扰(用户主动点菜单则如实呈现)。
+        await CheckResidueCoreAsync(promptAlways: false, skipBusyGuard: true);
+    }
+
+    /// <summary>
+    /// 手动触发体积自检(启动页功能菜单「检查重复文件」)。
+    /// </summary>
+    [RelayCommand]
+    private async Task CheckResidueAsync() => await CheckResidueCoreAsync(promptAlways: true);
+
+    /// <summary>
+    /// 体积自检主体(手动入口与安装后自动检查共用,避免两份漂移)。
+    /// </summary>
+    /// <param name="promptAlways">
+    /// true = 用户主动触发:只要有可回收残留就弹窗并如实反馈;
+    /// false = 安装后自动:只在 <see cref="ResiduePolicy.ShouldPrompt"/> 判定"明显过大"时才打扰。
+    /// </param>
+    /// <param name="skipBusyGuard">
+    /// 安装刚结束时 <see cref="IsDownloading"/> 可能仍为 true(外层 finally 尚未执行),
+    /// 安装后自检必须跳过 bussy 守卫,否则这一步会被自己挡掉。
+    /// </param>
+    private async Task CheckResidueCoreAsync(bool promptAlways, bool skipBusyGuard = false)
+    {
+        if (!NativeGameManagementSupported)
+        {
+            StatusText = PlatformGameNotice;
+            return;
+        }
+        if (!skipBusyGuard && (IsBusy || IsDownloading))
+        {
+            return;
+        }
+
+        // 只在"自己确实拿到了忙碌位"时才占 IsBusy / 释放它。
+        // 安装后自检会跳过守卫,而那时外层业务可能仍持有 IsBusy —— 无条件置 true/false
+        // 会抢走别人的忙碌位、再把它清掉(后续命令的 IsBusy 自守卫就失效了)。
+        var ownsBusy = !IsBusy;
+        if (ownsBusy)
+        {
+            IsBusy = true;
+        }
+        StatusText = LanguageService.Format("Launcher.Residue.Scanning");
+        try
+        {
+            // 扫描要遍历整个游戏目录(数万文件),必须把进度回吐到状态栏,
+            // 否则用户点完只感到"卡住"而不是"正在检查"。
+            var scanProgress = new Progress<ResidueScanProgress>(p =>
+            {
+                StatusText = p.ScannedFiles > 0
+                    ? LanguageService.Format("Launcher.Residue.ScanningCount", p.ScannedFiles)
+                    : LanguageService.Format("Launcher.Residue.Scanning");
+            });
+            var result = await AppServices.GameUpdater.ScanResidueAsync(progress: scanProgress);
+            if (!result.Report.HasResidue)
+            {
+                StatusText = LanguageService.Format("Launcher.Residue.NoneFound");
+                return;
+            }
+            // 自动检查走策略门槛;手动检查如实呈现
+            if (!promptAlways && !ResiduePolicy.ShouldPrompt(result))
+            {
+                return;
+            }
+
+            StatusText = LanguageService.Format("Launcher.Residue.Prompting");
+            var owner = (Avalonia.Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+            var confirmed = await McKuro.Views.ResidueCleanupWindow.ShowAsync(owner, result);
+            if (!confirmed)
+            {
+                StatusText = LanguageService.Format("Launcher.Residue.Kept");
+                return;
+            }
+
+            StatusText = LanguageService.Format("Launcher.Residue.Deleting");
+            var (freed, failures) = await Task.Run(() => AppServices.GameUpdater.DeleteResidue(result));
+            StatusText = failures > 0
+                ? LanguageService.Format("Launcher.Residue.Partial", FormatSize(freed), failures)
+                : LanguageService.Format("Launcher.Residue.Cleaned", FormatSize(freed));
+            RefreshState();
+        }
+        catch (Exception ex)
+        {
+            StatusText = LanguageService.Format("Launcher.Residue.FailedWith", ex.Message);
+        }
+        finally
+        {
+            if (ownsBusy)
+            {
+                IsBusy = false;
+            }
         }
     }
 
@@ -1290,41 +1528,140 @@ public sealed partial class LauncherViewModel : ViewModelBase
         return $"{size:0.##} {units[unit]}";
     }
 
-    private static string FormatSpeed(double bps)
+    /// <summary>
+    /// 把一次速度上报落到界面:大字数值 + 单位 + 峰值,并采样进曲线。
+    /// 速度只在进度卡的大字处显示一处(对齐上游 1.6 修复:避免进度行与速度行重复显示)。
+    /// </summary>
+    private void ApplySpeedDisplay(double speedBps)
     {
-        if (bps <= 0)
+        var display = SpeedTextFormat.FromBytesPerSecond(speedBps);
+        SpeedValueText = display.Value;
+        SpeedUnitText = display.Unit;
+
+        var mbps = speedBps / 1024.0 / 1024.0;
+        if (mbps > _peakSpeedMbps)
         {
-            return "--";
+            _peakSpeedMbps = mbps;
+            PeakSpeedText = LanguageService.Format("Launcher.PeakSpeed", SpeedTextFormat.FromMbps(_peakSpeedMbps).Combined);
         }
-        string[] units = ["B/s", "KB/s", "MB/s", "GB/s"];
-        double v = bps;
-        int unit = 0;
-        while (v >= 1024 && unit < units.Length - 1)
-        {
-            v /= 1024;
-            unit++;
-        }
-        // 对齐 Haiyu:保留两位小数的字节速率(MB/s)
-        return $"{v:0.##} {units[unit]}";
+        SampleSpeedHistory(speedBps);
     }
 
-    /// <summary>采样网速到历史集合(500ms 一点,保留最近 5 秒约 10 点,供 5 秒波动曲线显示)。</summary>
+    /// <summary>清空速度相关展示(非下载阶段)。峰值保留:曲线上仍显示本次任务的波动参照。</summary>
+    private void ClearSpeedDisplay()
+    {
+        SpeedValueText = "--";
+        SpeedUnitText = "";
+    }
+
+    /// <summary>本次任务的速度峰值(MB/s)。</summary>
+    private double _peakSpeedMbps;
+
+    /// <summary>
+    /// 冒烟/目视验证用的假数据驱动(<c>McKuro_SMOKE=1</c> + <c>McKuro_SMOKE_DL=1</c>):
+    /// 不触网,只按固定节奏往进度卡灌一组"会抖动的网速",用于验证曲线与大字排版。
+    /// <para>
+    /// <c>McKuro_SMOKE_DL</c> 的取值决定波形形态,便于分别验收三条纵轴规则:
+    /// <c>1</c>/<c>normal</c> = 常规抖动(13.5MB/s 基准,含一次掉速);
+    /// <c>weak</c> = 弱网小流量(0.6~1.2MB/s,验证小数值也能放大出波动);
+    /// <c>stable</c> = 稳定高速(30MB/s ± 0.3,验证噪声不被放大成锯齿)。
+    /// </para>
+    /// 返回的计时器由调用方持有(随窗口关闭结束)。
+    /// </summary>
+    internal Avalonia.Threading.DispatcherTimer? StartSmokeDownloadFeed()
+    {
+        if (Environment.GetEnvironmentVariable("McKuro_SMOKE") != "1")
+        {
+            return null;
+        }
+        var profile = Environment.GetEnvironmentVariable("McKuro_SMOKE_DL");
+        if (string.IsNullOrEmpty(profile) || profile == "0")
+        {
+            return null;
+        }
+
+        IsDownloading = true;
+        CanPauseCurrentPhase = true;
+        IsPreparing = false;
+        ResetSpeedStatistics();
+        ProgressPercent = 18.6;
+        ProgressText = LanguageService.Format("Launcher.FileProgress", 180, 734, FormatSize(1_660_000_000), FormatSize(8_920_000_000));
+        DownloadSizeText = LanguageService.Format("Launcher.NeedDownload", FormatSize(7_260_000_000));
+        RemainingTimeText = LanguageService.Format("Launcher.RemainMinutes", 34);
+        StatusText = LanguageService.Format("Launcher.PredownloadStatus");
+
+        var phase = 0;
+        var rng = new Random(20261026);
+        var timer = new Avalonia.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(250),
+        };
+        timer.Tick += (_, _) =>
+        {
+            phase++;
+            double mbps;
+            switch (profile)
+            {
+                case "weak":
+                    // 弱网:0.6~1.2MB/s,抖动绝对值只有 ±0.3 —— 正是旧实现里"看着像直线"的场景
+                    mbps = 0.9 + Math.Sin(phase * 0.33) * 0.22 + Math.Sin(phase * 0.11) * 0.08
+                        + (rng.NextDouble() - 0.5) * 0.06;
+                    break;
+                case "stable":
+                    // 稳定高速:30MB/s ± 0.3 —— 应呈现轻微起伏,而不是满屏锯齿
+                    mbps = 30.0 + Math.Sin(phase * 0.5) * 0.3 + (rng.NextDouble() - 0.5) * 0.1;
+                    break;
+                default:
+                    // 常规:13.5MB/s 基准 + 慢正弦 + 偶发下探,验证自适应放大与掉速形态
+                    var wave = Math.Sin(phase * 0.28) * 4.2 + Math.Sin(phase * 0.09) * 2.0;
+                    var dip = phase % 37 is > 30 and < 36 ? -6.5 : 0;
+                    var jitter = (rng.NextDouble() - 0.5) * 1.2;
+                    mbps = Math.Max(0.4, 13.5 + wave + dip + jitter);
+                    break;
+            }
+            ApplySpeedDisplay(Math.Max(1, mbps * 1024 * 1024));
+            ProgressPercent = Math.Min(99.9, ProgressPercent + 0.15);
+        };
+        timer.Start();
+        return timer;
+    }
+
+    /// <summary>重置峰值与曲线(新任务启动时调用,避免上一轮的大峰值把新曲线压平)。</summary>
+    private void ResetSpeedStatistics()
+    {
+        _peakSpeedMbps = 0;
+        PeakSpeedText = "";
+        _lastSpeedSample = DateTime.MinValue;
+        DownloadSpeedHistory.Clear();
+    }
+
+    /// <summary>采样网速到历史集合(250ms 一点,保留最近 30 秒约 120 点,供波动曲线显示)。</summary>
+    /// <remarks>
+    /// 口径参考 FlClash 仪表盘:窗口太短(旧实现只有 5 秒 10 点)看不出"网速在波动",
+    /// 曲线几乎是一条小抖动;30 秒窗口足够呈现一次掉速/回升的完整形态。
+    /// </remarks>
     private void SampleSpeedHistory(double speedBps)
     {
         var now = DateTime.UtcNow;
-        if ((now - _lastSpeedSample).TotalMilliseconds < 500)
+        if ((now - _lastSpeedSample).TotalMilliseconds < SpeedSampleIntervalMs)
         {
             return;
         }
         _lastSpeedSample = now;
         var mbps = speedBps / 1024.0 / 1024.0;
         DownloadSpeedHistory.Add(mbps);
-        // 保留最近 5 秒(10 点)
-        while (DownloadSpeedHistory.Count > 10)
+        // 保留最近 30 秒
+        while (DownloadSpeedHistory.Count > SpeedSampleMaxPoints)
         {
             DownloadSpeedHistory.RemoveAt(0);
         }
     }
+
+    /// <summary>曲线采样间隔(毫秒)。250ms × 120 点 = 30 秒窗口。</summary>
+    public const int SpeedSampleIntervalMs = 250;
+
+    /// <summary>曲线保留点数。</summary>
+    public const int SpeedSampleMaxPoints = 120;
 
     /// <summary>更新下载/磁盘预估(参考 Haiyu Config.Size + UnCompressSize,磁盘空间用 DriveInfo 实测)。</summary>
     private void UpdateDownloadEstimate(long downloadBytes, long diskBytes = 0)

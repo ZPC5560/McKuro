@@ -132,6 +132,26 @@
                     <!-- 弹窗面板面色:比 McKuroGlassFillStrong 更透一档(70%),让系统材质透出来,
                          同时保证列表文字仍有一层稳定底,不会直接压在壁纸/Live2D 上 -->
                     <SolidColorBrush x:Key="McKuroDialogSurface" Color="#B3141D32" />
+                    <!-- 下载进度卡专用(2026-10 用户反馈"进度条和网速不明显"):
+                         ① 速度大字用近乎纯白 + 主题青蓝单位,和周围 11px 灰字拉开层级;
+                         ② 进度条轨道压暗(贴在玻璃卡上要能看出"还有多少没下"),
+                            填充用青→蓝渐变(单色填充在玻璃底上会糊掉);
+                         ③ 曲线线色取更亮的青蓝,面积填充同色低透明;
+                         ④ 基线极淡,只提供参照不抢视线。 -->
+                    <SolidColorBrush x:Key="McKuroSpeedValue" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="McKuroSpeedUnit" Color="#8FC7FF" />
+                    <!-- 环轨道:压在深色玻璃卡上,用 30% 白才看得见"还剩多少没下"(更淡会糊进卡底) -->
+                    <SolidColorBrush x:Key="McKuroProgressTrack" Color="#55FFFFFF" />
+                    <LinearGradientBrush x:Key="McKuroProgressFill" StartPoint="0%,50%" EndPoint="100%,50%">
+                        <GradientStop Color="#4FD0FF" Offset="0" />
+                        <GradientStop Color="#5A8DEE" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="McKuroChartLine" Color="#6FE3FF" />
+                    <LinearGradientBrush x:Key="McKuroChartFill" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#8C4FD0FF" Offset="0" />
+                        <GradientStop Color="#004FD0FF" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="McKuroChartBaseline" Color="#33FFFFFF" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="McKuroAccent" Color="#5A8DEE" />
@@ -198,6 +218,23 @@
                     <SolidColorBrush x:Key="McKuroSwitchChipSelectedText" Color="#0F2B5B" />
                     <!-- 弹窗面板面色:理由见暗色主题同名令牌(亮色主题用 78% 白) -->
                     <SolidColorBrush x:Key="McKuroDialogSurface" Color="#C7FFFFFF" />
+                    <!-- 下载进度卡专用:亮色主题下压在视频/壁纸上的卡片仍是浅底,
+                         速度大字用深墨蓝而不是纯白(纯白在浅底上彻底看不见);
+                         曲线改用饱和的深青蓝,否则浅底 + 浅色线 = 一片白。 -->
+                    <SolidColorBrush x:Key="McKuroSpeedValue" Color="#0F2B5B" />
+                    <SolidColorBrush x:Key="McKuroSpeedUnit" Color="#2F6FD0" />
+                    <!-- 环轨道:亮色卡片底上要"看得见的浅灰",否则整环消失只剩一小段进度 -->
+                    <SolidColorBrush x:Key="McKuroProgressTrack" Color="#331F3A66" />
+                    <LinearGradientBrush x:Key="McKuroProgressFill" StartPoint="0%,50%" EndPoint="100%,50%">
+                        <GradientStop Color="#12A7D8" Offset="0" />
+                        <GradientStop Color="#3D6FD8" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="McKuroChartLine" Color="#1E8FC7" />
+                    <LinearGradientBrush x:Key="McKuroChartFill" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#661E8FC7" Offset="0" />
+                        <GradientStop Color="#001E8FC7" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="McKuroChartBaseline" Color="#330F2B5B" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 

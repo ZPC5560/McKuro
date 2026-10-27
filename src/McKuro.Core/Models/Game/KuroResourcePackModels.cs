@@ -20,6 +20,22 @@ public sealed class KuroResourcePackIndex
 
     /// <summary>资源等级组合(键为组合名:HD/SD/UHD)。</summary>
     [JsonPropertyName("bundles")] public Dictionary<string, KuroResourceBundle>? Bundles { get; set; }
+
+    /// <summary>根节点配置(含画质说明页链接等)。</summary>
+    [JsonPropertyName("config")] public KuroResourcePackRootConfig? Config { get; set; }
+}
+
+/// <summary>
+/// 新版协议根节点 <c>config</c> 里与本项目相关的部分。
+/// <para>
+/// 实测(2026-10-27):国服/B站只给 <c>zh-Hans</c> 一条,国际服给全 10 种语言。
+/// 这是官方自己的「画质怎么选」说明页,拿来给用户一个可信的参考,比我们自己写一段猜测强。
+/// </para>
+/// </summary>
+public sealed class KuroResourcePackRootConfig
+{
+    /// <summary>语言代码 → 画质说明页 URL(键如 zh-Hans / en / ja)。</summary>
+    [JsonPropertyName("resourceLevelHint")] public Dictionary<string, string>? ResourceLevelHint { get; set; }
 }
 
 /// <summary>单个资源包(下载其 indexFile 可得到包内文件清单)。</summary>

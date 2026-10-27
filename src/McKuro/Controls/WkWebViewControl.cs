@@ -58,10 +58,18 @@ public sealed class WkWebViewControl : NativeControlHost
 
     private IntPtr _webView;
 
-    public WkWebViewControl()
+    /// <summary>
+    /// 静态构造:类处理器只挂一次(详见 <c>WebView2Control</c> 上的同名说明)。
+    /// 写在实例构造里会每 new 一次控件就多一个永不解除的类型级处理器。
+    /// </summary>
+    static WkWebViewControl()
     {
         UrlProperty.Changed.AddClassHandler<WkWebViewControl>((o, _) => o.LoadUrl());
         HtmlProperty.Changed.AddClassHandler<WkWebViewControl>((o, _) => o.LoadUrl());
+    }
+
+    public WkWebViewControl()
+    {
     }
 
     protected override IPlatformHandle CreateNativeControlCore(IPlatformHandle parent)

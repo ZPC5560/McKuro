@@ -153,7 +153,7 @@ public sealed class GameUpdater : IGameUpdater
             var indexUrl = KuroEndpoints.ResourcePackIndexForServerType(serverType);
             if (indexUrl is null)
             {
-                return; // 该渠道没有资源包协议(仅国服官方提供)
+                return; // 该渠道没有资源包协议(WeGame 无该端点;国服/B站/国际服都有)
             }
 
             var index = await _loader.LoadResourcePackIndexAsync(indexUrl).ConfigureAwait(false);
@@ -223,7 +223,7 @@ public sealed class GameUpdater : IGameUpdater
         CancellationToken ct = default)
     {
         var root = _paths.GameRootDir;
-        if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+        if (string.IsNullOrEmpty(root))
         {
             return new UpdateCheckResult
             {
@@ -231,6 +231,9 @@ public sealed class GameUpdater : IGameUpdater
                 Message = CoreStrings.T("Core.Updater.NoGameDirSet", "请先在设置中指定游戏安装目录"),
             };
         }
+        // 目标目录可以还不存在(全新安装到用户指定目录):此时视为"一个文件都没有的未安装状态",
+        // 照常去拉清单,让界面能算出需要下载多少、并允许直接点「下载安装」。
+        // 安装流程自己会 Directory.CreateDirectory,不需要在这里建目录。
 
         var indexUrl = _indexUrlProvider(serverType);
         var load = await _loader.LoadKuroAsync(indexUrl, preDownload: false, ct).ConfigureAwait(false);
@@ -246,7 +249,12 @@ public sealed class GameUpdater : IGameUpdater
             return new UpdateCheckResult { Success = false, Message = CoreStrings.T("Core.Updater.ManifestNoVersion", "更新清单缺少版本号") };
         }
         var installedVersion = ReadInstalledVersion(root);
-        var notInstalled = !_paths.IsGameInstalled;
+        // 「未装完」= 根 exe 不存在(从没装过)**或** 上次安装/更新被中途打断。
+        // 后者的关键性:下载途中启动器 exe 就可能已落盘,只看 IsGameInstalled 会把它当成
+        // "已安装",于是重启后按钮变成「启动游戏」、既没有续传入口,点启动又因客户端 exe
+        // 还没下完而失败(用户反馈的原症状)。标记由 InstallAsync 开头写入、写已装版本时清除。
+        var incompleteInstall = ReadIncompleteInstall(root);
+        var notInstalled = !_paths.IsGameInstalled || incompleteInstall;
 
         // [过渡代码 · 下个版本移除] 启动即后台把旧版数据目录里的预载包搬到游戏目录 DiffData。
         // 不 await:几十 GB 的跨盘搬迁可能要几分钟,不能卡住「检查更新」;
@@ -647,6 +655,18 @@ public sealed class GameUpdater : IGameUpdater
         {
             return (false, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
         }
+        // 全新安装到用户指定目录时目标目录可能还不存在:先建出来。
+        // 下载/落位全部依赖该目录可用(临时目录 DiffData 也在它下面)。
+        try
+        {
+            Directory.CreateDirectory(root);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "创建游戏目录失败: {Root}", root);
+            return (false, CoreStrings.F("Core.Updater.CreateGameDirFailed",
+                $"无法创建游戏目录: {root}", root));
+        }
 
         var indexUrl = _indexUrlProvider(serverType);
         var load = await _loader.LoadKuroAsync(indexUrl, preDownload: false, ct).ConfigureAwait(false);
@@ -657,6 +677,11 @@ public sealed class GameUpdater : IGameUpdater
 
         var manifest = load.Manifest;
         var installedVersion = ReadInstalledVersion(root);
+        // 安装真正开始前打「未完成」标记:此后若被打断(关掉应用/下载失败/取消),
+        // 下次启动必须继续按「未装完」处理,而不是因为根 exe 已落盘就误判为已安装。
+        // 标记在成功写出已装版本的地方清除(见下方三处 ClearIncompleteInstallFlag)。
+        MarkIncompleteInstall(root);
+
         // [过渡代码 · 下个版本移除] 等旧位置的预载包搬完再找暂存目录,
         // 否则升级后第一次点「安装更新」会在旧位置消费预载包(跨卷复制,慢)。
         await MigrateLegacyPredownloadAsync(root, progress).WaitAsync(ct).ConfigureAwait(false);
@@ -970,6 +995,133 @@ public sealed class GameUpdater : IGameUpdater
         {
             // 临时目录被占用时保留,下次启动可清理。
         }
+    }
+
+    // ---------- 安装后的残留/重复文件自检 ----------
+
+    /// <inheritdoc />
+    public async Task<ResidueScanResult> ScanResidueAsync(
+        CancellationToken ct = default,
+        IProgress<ResidueScanProgress>? progress = null)
+    {
+        var root = _paths.GameRootDir;
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+        {
+            return ResidueScanResult.None;
+        }
+
+        try
+        {
+            // 清单总量只用来做"明显过大"的对比;拿不到就算 0(此时只按残留体积判断)。
+            long manifestBytes = 0;
+            IReadOnlySet<string>? claimed = null;
+            try
+            {
+                var serverType = GameServerResolver.Resolve(_settings, _paths);
+                var load = await _loader.LoadKuroAsync(
+                    _indexUrlProvider(serverType), preDownload: false, ct).ConfigureAwait(false);
+                if (load.Success && load.Manifest is not null)
+                {
+                    manifestBytes = load.Manifest.Files.Sum(f => f.Size);
+                    claimed = load.Manifest.Files
+                        .Select(f => f.Path.Replace('\\', '/'))
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "残留自检:清单不可用,跳过体积比对");
+            }
+
+            var inUse = BuildInUsePaths(claimed);
+
+            var (report, actual) = await Task.Run(
+                () =>
+                {
+                    var scan = ResidueScanner.Scan(root, inUse, claimed, ct, progress);
+                    var actualBytes = ResidueScanner.MeasureDirectoryBytes(root, ct, progress);
+                    return (scan, actualBytes);
+                },
+                ct).ConfigureAwait(false);
+
+            return new ResidueScanResult
+            {
+                Report = report,
+                ActualBytes = actual,
+                ManifestBytes = manifestBytes,
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // 自检失败不能影响安装结果:记录后按"没有残留"处理。
+            _logger.LogWarning(ex, "残留自检失败");
+            return ResidueScanResult.None;
+        }
+    }
+
+    /// <inheritdoc />
+    public (long FreedBytes, int Failures) DeleteResidue(ResidueScanResult result)
+    {
+        if (result is null || !result.Report.HasResidue)
+        {
+            return (0, 0);
+        }
+        var (freed, failures) = ResidueScanner.Delete(result.Report);
+        if (failures > 0)
+        {
+            _logger.LogWarning("清理残留:回收 {Freed} 字节,{Failures} 项删除失败", freed, failures);
+        }
+        else
+        {
+            _logger.LogInformation("清理残留:回收 {Freed} 字节", freed);
+        }
+        return (freed, failures);
+    }
+
+    /// <summary>
+    /// 仍在使用的目录:当前完整的预下载暂存目录(续传要用,删了重下几十 GB)。
+    /// 备份目录与临时目录不在此列 —— 它们随时可以重建或本来就要删。
+    /// </summary>
+    private HashSet<string> BuildInUsePaths(IReadOnlySet<string>? claimed)
+    {
+        var inUse = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var diffData = _paths.DiffDataDir;
+            if (diffData is null || !Directory.Exists(diffData))
+            {
+                return inUse;
+            }
+            // DiffData 下除 install_tmp 以外的子目录都是「某版本的预下载暂存」:
+            // 只要带完整标记(predownload.json)就说明是待消费的预载包,必须保住。
+            foreach (var dir in Directory.EnumerateDirectories(diffData))
+            {
+                if (string.Equals(
+                        Path.GetFileName(dir),
+                        GamePathResolver.InstallTempDirName,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                if (File.Exists(Path.Combine(dir, MarkerFileName)))
+                {
+                    inUse.Add(dir);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // 枚举失败就不加保护:残留扫描本身也会跳过读不到的目录
+        }
+        return inUse;
     }
 
     // ================== [过渡代码 · 下个版本整段删除] ==================
@@ -1416,8 +1568,20 @@ public sealed class GameUpdater : IGameUpdater
             return false;
         }
 
-        // 解析启动 exe:用户指定 → Wuthering Waves.exe → Client-Win64-Shipping.exe
         var s = _settings?.Current;
+
+        // 对齐官方启动器:Client -dx11 -slno -krqlv=hd {自定义参数}
+        // -krqlv 是鸣潮 3.x 起必需的引导参数,缺失会导致游戏启动即崩溃退出。
+        var args = BuildLaunchCommandLine();
+
+        // 自定义启动程序(mod 加载器)优先:它的存在意义就是"由我来启动游戏",
+        // 因此绕过下面的 exe 解析,直接把游戏参数交给它。
+        if (s?.CustomLauncherEnabled == true)
+        {
+            return LaunchCustomLauncher(s, args, out error);
+        }
+
+        // 解析启动 exe:用户指定 → Wuthering Waves.exe → Client-Win64-Shipping.exe
         var exeName = s?.StartGameExeName;
         var exe = ResolveLaunchExe(root, string.IsNullOrWhiteSpace(exeName) ? null : exeName);
         if (exe is null || !File.Exists(exe))
@@ -1428,10 +1592,6 @@ public sealed class GameUpdater : IGameUpdater
 
         try
         {
-            // 对齐官方启动器:Client -dx11 -slno -krqlv=hd {自定义参数}
-            // -krqlv 是鸣潮 3.x 起必需的引导参数,缺失会导致游戏启动即崩溃退出。
-            var args = BuildLaunchCommandLine();
-
             var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = exe,
@@ -1446,6 +1606,38 @@ public sealed class GameUpdater : IGameUpdater
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "启动游戏可执行文件失败: {Exe}", exe);
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 用自定义启动程序(如 mod 加载器)启动。
+    /// <para>
+    /// <b>关键语义:目标不存在时必须报错,绝不回退去启动游戏本体。</b>
+    /// 否则用户会以为 mod 生效了,实际打开的是原版游戏 —— 而且没有任何提示,
+    /// 排查成本极高。(上游 Haiyu 1.4.6 有专门的测试守这条。)
+    /// </para>
+    /// </summary>
+    private bool LaunchCustomLauncher(AppSettings s, string gameArguments, out string? error)
+    {
+        var options = CustomLauncherOptions.FromSettings(s);
+        var invalid = options.Validate();
+        if (invalid is not null)
+        {
+            error = invalid + "(已开启「使用自定义启动程序」,请修正或关闭该开关)";
+            return false;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(options.CreateStartInfo(gameArguments));
+            error = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "启动自定义启动程序失败: {Path}", options.Path);
             error = ex.Message;
             return false;
         }
@@ -1474,12 +1666,21 @@ public sealed class GameUpdater : IGameUpdater
     /// <inheritdoc/>
     public string? ResolveLaunchExePath()
     {
+        // 启用自定义启动程序时,"实际被拉起的进程"就是它 —— 进程监控必须盯这个,
+        // 否则会一直等游戏本体进程,「游戏中」状态永远不出现。
+        var s = _settings?.Current;
+        if (s?.CustomLauncherEnabled == true)
+        {
+            var custom = CustomLauncherOptions.FromSettings(s);
+            return custom.Validate() is null ? custom.Path : null;
+        }
+
         var root = _paths.GameRootDir;
         if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
         {
             return null;
         }
-        var exeName = _settings?.Current.StartGameExeName;
+        var exeName = s?.StartGameExeName;
         return ResolveLaunchExe(root, string.IsNullOrWhiteSpace(exeName) ? null : exeName);
     }
 
@@ -1640,6 +1841,124 @@ public sealed class GameUpdater : IGameUpdater
         return string.IsNullOrEmpty(root) ? null : ReadInstalledVersion(root);
     }
 
+    /// <inheritdoc/>
+    public bool HasIncompleteInstall()
+    {
+        var root = _paths.GameRootDir;
+        return !string.IsNullOrEmpty(root) && ReadIncompleteInstall(root);
+    }
+
+    /// <summary>
+    /// 读取「安装未完成」标记。
+    /// <para>
+    /// 有 DB 时读 install_incomplete 表;无 DB 时回退到数据目录下的标记文件
+    /// (与已装版本标记同样的双通道,保证注入缺失时本判定不静默退化)。
+    /// </para>
+    /// <para>
+    /// <b>兜底推断</b>(标记机制上线前就已经被打断的老安装没有标记,只看标记会把它们
+    /// 永远当成"装好了"):根 exe 在、但客户端 exe 缺失 → 判定未装完。
+    /// 依据是本目录结构的必然性:游戏能正常运行必须有
+    /// <see cref="GamePathResolver.ExeClientRelative"/>;而根 exe 是**启动器**,
+    /// 下载队列走到它比客户端 exe 早得多,于是"根 exe 在、客户端 exe 不在"几乎只可能是
+    /// 半成品。正常装完的游戏两者都在,不会命中。
+    /// </para>
+    /// </summary>
+    private bool ReadIncompleteInstall(string gameRoot)
+    {
+        gameRoot = NormalizeRoot(gameRoot);
+        if (_database is not null)
+        {
+            if (_database.HasIncompleteInstall(gameRoot))
+            {
+                return true;
+            }
+        }
+        else if (File.Exists(Path.Combine(_appDataDir, "install_incomplete_" + HashKey(gameRoot) + ".flag")))
+        {
+            return true;
+        }
+        return LooksLikePartialInstall(gameRoot);
+    }
+
+    /// <summary>
+    /// 目录形态推断:根 exe 已存在但客户端 exe 缺失 ⇒ 半成品。
+    /// <para>
+    /// 仅在"根 exe 存在"时才做这个判断(从没装过的空目录由调用方的
+    /// <see cref="GamePathResolver.IsGameInstalled"/> 直接判 false,不需要也不应该命中这里)。
+    /// </para>
+    /// </summary>
+    private static bool LooksLikePartialInstall(string gameRoot)
+    {
+        if (string.IsNullOrEmpty(gameRoot))
+        {
+            return false;
+        }
+        try
+        {
+            if (!File.Exists(Path.Combine(gameRoot, GamePathResolver.ExeRootName)))
+            {
+                return false; // 根 exe 都没有 = 从没装过,不是"装到一半"
+            }
+            return !File.Exists(Path.Combine(gameRoot, GamePathResolver.ExeClientRelative));
+        }
+        catch (Exception)
+        {
+            // 路径异常(权限/非法字符)时保守返回 false:不要因此把正常安装误判成未装完
+            return false;
+        }
+    }
+
+    /// <summary>写入「安装未完成」标记(幂等;下载/安装真正开始前调用)。</summary>
+    private void MarkIncompleteInstall(string gameRoot)
+    {
+        gameRoot = NormalizeRoot(gameRoot);
+        if (_database is not null)
+        {
+            _database.SetIncompleteInstall(gameRoot);
+            return;
+        }
+        try
+        {
+            Directory.CreateDirectory(_appDataDir);
+            File.WriteAllText(Path.Combine(_appDataDir, "install_incomplete_" + HashKey(gameRoot) + ".flag"),
+                DateTime.Now.ToString("O"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "写入安装未完成标记失败: {Root}", gameRoot);
+        }
+    }
+
+    /// <summary>清除「安装未完成」标记(安装真正成功后调用)。</summary>
+    private void ClearIncompleteInstallFlag(string gameRoot)
+    {
+        gameRoot = NormalizeRoot(gameRoot);
+        if (_database is not null)
+        {
+            _database.ClearIncompleteInstall(gameRoot);
+            return;
+        }
+        try
+        {
+            var path = Path.Combine(_appDataDir, "install_incomplete_" + HashKey(gameRoot) + ".flag");
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "清除安装未完成标记失败: {Root}", gameRoot);
+        }
+    }
+
+    /// <summary>目录路径 → 稳定的短文件名键(无 DB 回退通道用;不泄漏完整路径到文件名)。</summary>
+    private static string HashKey(string value)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(bytes, 0, 8).ToLowerInvariant();
+    }
+
     private string? ReadInstalledVersion(string gameRoot)    {
         gameRoot = NormalizeRoot(gameRoot);
         if (_database is not null)
@@ -1746,6 +2065,9 @@ public sealed class GameUpdater : IGameUpdater
     private void WriteInstalledVersion(string gameRoot, string version)
     {
         gameRoot = NormalizeRoot(gameRoot);
+        // 写"已安装版本"= 安装真正成功的唯一收口点(全量安装 / 补丁安装 / 修复三条路径都汇到这里),
+        // 因此「未完成」标记在这里统一清除,不必在每个调用点各写一遍(漏一处就会永久误判未装完)。
+        ClearIncompleteInstallFlag(gameRoot);
         if (_database is not null)
         {
             _database.SetInstalledVersion(gameRoot, version);

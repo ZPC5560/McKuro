@@ -143,13 +143,16 @@ public sealed class UpPoolProviderTests
     }
 
     [Fact]
-    public async Task Fallback_ToFiveMaps_When_PoolList_Absent()
+    public async Task Fallback_Does_Not_Treat_Resident_Roles_As_Up()
     {
-        // 只有 five_maps(全量目录)、无 pool_list 时,回退到全量目录(老行为,避免误判)
+        // 走到兜底分支的前提:主循环一个 UP 都没收集到。这份数据里 five_maps 的条目
+        // 全部是 pool_type=0(常驻),所以主路径把它们都排除了 → roleIds 为空 → 进兜底。
+        // 兜底拿的是「全量目录」,若不剔除常驻,卡卡罗(1301)就会被当成 UP,
+        // 于是常驻角色永远不会被判"歪" —— 恰好把最该统计的那一半洗成 UP。
         const string body = """
             {"code":0,"data":{"five_group_config":{"five_maps":[
-                {"name":"穗穗","item_id":1110,"weapon_id":21050096},
-                {"name":"卡卡罗","item_id":1301,"weapon_id":21010015}]}}}
+                {"name":"卡卡罗","item_id":1301,"weapon_id":21010015,"pool_type":0},
+                {"name":"安可","item_id":1203,"weapon_id":21010012,"pool_type":0}]}}}
             """;
         var provider = new RemoteUpPoolProvider(
             new HttpClient(new StubHttpMessageHandler(body)),
@@ -158,7 +161,46 @@ public sealed class UpPoolProviderTests
         var upIds = await provider.GetUpIdsAsync();
 
         Assert.True(upIds.TryGetValue(CardPoolType.RoleActivity, out var roleSet), "RoleActivity 应有 UP 集合");
-        Assert.True(roleSet!.Contains(1110), "无 pool_list 时回退 five_maps 应包含穗穗(1110)");
-        Assert.True(roleSet.Contains(1301), "无 pool_list 时回退 five_maps 应包含卡卡罗(1301)");
+        Assert.False(roleSet!.Contains(1301), "兜底模式不应把常驻五星角色(卡卡罗 1301)当 UP");
+        Assert.False(roleSet.Contains(1203), "兜底模式不应把常驻五星角色(安可 1203)当 UP");
+    }
+
+    [Fact]
+    public async Task Fallback_Excludes_All_Resident_Five_Star_Roles()
+    {
+        // 五个常驻五星角色全在 five_maps 且都标了 pool_type=0 → 兜底后应一个都不剩
+        const string body = """
+            {"code":0,"data":{"five_group_config":{"five_maps":[
+                {"name":"卡卡罗","item_id":1301,"pool_type":0},{"name":"安可","item_id":1203,"pool_type":0},
+                {"name":"维里奈","item_id":1405,"pool_type":0},{"name":"凌阳","item_id":1104,"pool_type":0},
+                {"name":"鉴心","item_id":1503,"pool_type":0}]}}}
+            """;
+        var provider = new RemoteUpPoolProvider(
+            new HttpClient(new StubHttpMessageHandler(body)),
+            new FixedTimeProvider(), NullLogger<RemoteUpPoolProvider>.Instance);
+
+        var upIds = await provider.GetUpIdsAsync();
+
+        Assert.True(upIds.TryGetValue(CardPoolType.RoleActivity, out var roleSet));
+        Assert.Empty(roleSet!);
+    }
+
+    [Fact]
+    public async Task Limited_Roles_Still_Enter_Up_Set_Through_Main_Path()
+    {
+        // 对照组:限定角色(pool_type 缺省/非 0)照常进 UP 集合,剔除常驻不影响这条主路径
+        const string body = """
+            {"code":0,"data":{"five_group_config":{"five_maps":[
+                {"name":"今汐","item_id":1304},{"name":"卡卡罗","item_id":1301,"pool_type":0}]}}}
+            """;
+        var provider = new RemoteUpPoolProvider(
+            new HttpClient(new StubHttpMessageHandler(body)),
+            new FixedTimeProvider(), NullLogger<RemoteUpPoolProvider>.Instance);
+
+        var upIds = await provider.GetUpIdsAsync();
+
+        Assert.True(upIds.TryGetValue(CardPoolType.RoleActivity, out var roleSet));
+        Assert.Contains(1304, roleSet!);
+        Assert.DoesNotContain(1301, roleSet!);
     }
 }

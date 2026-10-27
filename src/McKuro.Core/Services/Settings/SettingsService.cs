@@ -63,6 +63,24 @@ public sealed class AppSettings
     /// <summary>启动 exe 文件名(空 = 自动:Wuthering Waves.exe → Client-Win64-Shipping.exe)。</summary>
     public string StartGameExeName { get; set; } = "";
 
+    // ---------- 自定义启动程序(mod 加载器等外部程序) ----------
+
+    /// <summary>
+    /// 启用自定义启动程序:启动游戏时改为拉起 <see cref="CustomLauncherPath"/>(通常是 mod 加载器),
+    /// 并把游戏启动参数一并传给它。
+    /// <para>
+    /// 关闭时<b>保留</b>已选路径与参数,下次开启不用重选。
+    /// 与 <see cref="StartGameExeName"/> 不同:那只能指向游戏目录内的文件,这里可以是任意路径。
+    /// </para>
+    /// </summary>
+    public bool CustomLauncherEnabled { get; set; }
+
+    /// <summary>自定义启动程序的绝对路径(.exe)。</summary>
+    public string CustomLauncherPath { get; set; } = "";
+
+    /// <summary>自定义启动器自己的附加参数(追加在游戏参数之后)。</summary>
+    public string CustomLauncherArguments { get; set; } = "";
+
     /// <summary>启动游戏后最小化主窗口。</summary>
     public bool MinimizeOnLaunch { get; set; }
 
@@ -139,6 +157,20 @@ public sealed class AppSettings
     public bool Live2DPointerFollow { get; set; } = true;
 
     // ---------- 游戏修复(对齐 Haiyu 的跳过校验文件) ----------
+
+    /// <summary>
+    /// 安装/修复完成后的「重复文件自检」(默认开)。
+    /// <para>
+    /// 开启后每次安装或修复成功,都在后台比对游戏目录实际占用与服务端清单总量,并扫描启动器
+    /// 自身留下的残留(替换前备份 <c>.McKuro_backup</c>、孤儿 <c>.part</c>、补丁/差分临时目录)。
+    /// 只有"明显过大"(可回收 ≥128MB 或比清单大出 25%)时才弹窗询问是否删除,
+    /// 常态安装不会被打扰。
+    /// </para>
+    /// <para>
+    /// 用户反馈(2026-10):多次断连下载后目录里出现重复文件、体积明显超出应有总量。
+    /// </para>
+    /// </summary>
+    public bool InstallResidueCheckEnabled { get; set; } = true;
 
     /// <summary>修复游戏时跳过的文件相对路径列表(如 Client/Saved/Logs/Client.log)。</summary>
     public List<string> SkipVerifyFiles { get; set; } = [];

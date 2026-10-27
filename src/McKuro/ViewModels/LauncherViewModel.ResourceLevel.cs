@@ -33,6 +33,42 @@ public sealed partial class LauncherViewModel
     /// <summary>等级卡片列表是否可见(点小按钮后展开;官方样式默认收起)。</summary>
     public bool ShowResourceLevelPanel => ShowResourceLevelPill && IsResourceLevelPickerOpen;
 
+    /// <summary>
+    /// 官方「画质怎么选」说明页链接(空 = 该渠道没给这一节点,不显示入口)。
+    /// 取自 index.json 根节点 <c>config.resourceLevelHint</c>,按界面语言挑选。
+    /// </summary>
+    [ObservableProperty]
+    private string _resourceLevelHintUrl = "";
+
+    /// <summary>是否显示「画质怎么选」入口。</summary>
+    public bool HasResourceLevelHint => !string.IsNullOrWhiteSpace(ResourceLevelHintUrl);
+
+    partial void OnResourceLevelHintUrlChanged(string value) =>
+        OnPropertyChanged(nameof(HasResourceLevelHint));
+
+    /// <summary>在浏览器打开官方的画质说明页(链接由官方 index.json 提供)。</summary>
+    [RelayCommand]
+    private async Task OpenResourceLevelHintAsync()
+    {
+        if (!HasResourceLevelHint)
+        {
+            return;
+        }
+        try
+        {
+            if (Avalonia.Application.Current?.ApplicationLifetime
+                is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime { MainWindow: { } window })
+            {
+                await window.Launcher.LaunchUriAsync(new Uri(ResourceLevelHintUrl));
+            }
+        }
+        catch (Exception)
+        {
+            // 打开外部链接失败属边缘情形:给一句提示即可,不能影响页面
+            StatusText = LanguageService.Format("Status.OpenWebFailed");
+        }
+    }
+
     partial void OnIsResourceLevelPickerOpenChanged(bool value) =>
         OnPropertyChanged(nameof(ShowResourceLevelPanel));
 
@@ -79,7 +115,7 @@ public sealed partial class LauncherViewModel
     [ObservableProperty]
     private string _currentResourceLevelText = "";
 
-    /// <summary>渠道是否支持资源等级(仅国服官方;其它渠道隐藏面板而不是给必失败按钮)。</summary>
+    /// <summary>渠道是否支持资源等级(国服官方/B站/国际服支持;WeGame 等隐藏面板而不是给必失败按钮)。</summary>
     public bool ResourceLevelSupported => ResourceLevelService.SupportsResourceLevels(ServerType);
 
     /// <summary>当前是否可交互(未在下载/切换中)。</summary>
@@ -110,13 +146,15 @@ public sealed partial class LauncherViewModel
         IsLoadingResourceLevels = true;
         try
         {
-            var options = await AppServices.ResourceLevels.GetLevelOptionsAsync(ServerType);
+            var result = await AppServices.ResourceLevels.GetLevelOptionsAsync(ServerType);
             ResourceLevelItems.Clear();
-            foreach (var o in options)
+            foreach (var o in result.Items)
             {
-                // 纯体积文案(如 "99.45 GB")供二次确认弹窗插入句子;
-                // 卡片则显示带前缀的 "游戏大小: 99.45 GB"。
+                // 卡片主文案给「游戏大小」(这一档总共多大,便于横向比较);
+                // 二次确认弹窗必须用「实际还需下载」—— 两件事不能混:
+                // 已装 HD 切 UHD 只需下 61.50 GB,而总量是 99.45 GB。
                 var sizeOnly = o.TotalBytes > 0 ? FormatSize(o.TotalBytes) : "";
+                var missingOnly = o.DownloadBytes > 0 ? FormatSize(o.DownloadBytes) : "";
                 ResourceLevelItems.Add(new ResourceLevelItem
                 {
                     Value = o.Value,
@@ -126,10 +164,19 @@ public sealed partial class LauncherViewModel
                         ? LanguageService.Format("Launcher.LevelSize", sizeOnly)
                         : "",
                     SizeOnlyText = sizeOnly,
+                    // 已装好的一档没有"还需下载",空白比"需下载 0 B"清楚
+                    DownloadText = o.Installed || missingOnly.Length == 0
+                        ? ""
+                        : LanguageService.Format("Launcher.LevelDownloadNeed", missingOnly),
+                    DownloadSizeOnlyText = o.Installed ? "" : missingOnly,
                     Installed = o.Installed,
                     IsCurrent = string.Equals(o.Value, CurrentResourceLevel, StringComparison.OrdinalIgnoreCase),
                 });
             }
+
+            // 官方「画质怎么选」说明页:没有该节点(国服/B站只给 zh-Hans,缺则退英文)
+            // 或链接为空时清空,UI 据此隐藏入口 —— 不要自己编链接。
+            ResourceLevelHintUrl = result.HintUrl ?? "";
 
             // 无可用等级(端点不可用/解析失败)时不显示空面板
             SetResourceLevelPanelReady(ResourceLevelItems.Count > 0);
@@ -217,7 +264,11 @@ public sealed partial class LauncherViewModel
         // 未安装:交由 View 做二次确认(含体积提示);未注入时拒绝,避免静默下载几十 GB
         if (ConfirmLevelSwitchAsync is null)
         {
-            StatusText = LanguageService.Format("Launcher.LevelNeedConfirm", item.DisplayName, item.SizeText);
+            // 提示必须用「还需下载」而不是「游戏大小」:后者会多报已装好的共享包
+            StatusText = LanguageService.Format(
+                "Launcher.LevelNeedConfirm",
+                item.DisplayName,
+                string.IsNullOrWhiteSpace(item.DownloadSizeOnlyText) ? item.SizeOnlyText : item.DownloadSizeOnlyText);
             return;
         }
 
@@ -485,6 +536,18 @@ public sealed partial class ResourceLevelItem : ObservableObject
 
     /// <summary>纯体积如「80.52 GB」(二次确认弹窗插入句子用,避免出现"游戏大小:"前缀)。</summary>
     public string SizeOnlyText { get; init; } = "";
+
+    /// <summary>
+    /// 如「需下载 61.50 GB」—— 只算本地缺失的包,已装好的部分不重复计入。
+    /// 已安装的等级为空串(没有"还需下载"这回事)。
+    /// </summary>
+    public string DownloadText { get; init; } = "";
+
+    /// <summary>纯缺失体积如「61.50 GB」(二次确认弹窗插入句子用)。</summary>
+    public string DownloadSizeOnlyText { get; init; } = "";
+
+    /// <summary>是否显示「需下载 X」这一行(已安装的等级不显示)。</summary>
+    public bool ShowDownloadNeed => !Installed && !string.IsNullOrWhiteSpace(DownloadText);
 
     /// <summary>是否已安装(显示「已安装」并作为当前项高亮)。</summary>
     public bool Installed { get; init; }

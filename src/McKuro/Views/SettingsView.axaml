@@ -686,6 +686,27 @@
                               SelectedIndex="{Binding SelectedServerIndex, Mode=TwoWay}" />
                 </Grid>
             </Border>
+
+            <!-- 官方启动器安装记录(防"改用官方启动器被判未安装 → 整包重下") -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Certificate" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.OfficialRecord}" />
+                        <TextBlock Classes="rowDesc" TextWrapping="Wrap"
+                                   Text="{loc:Localize Key=Settings.OfficialRecord.Desc}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button Content="{loc:Localize Key=Settings.OfficialRecord.Write}"
+                                Command="{Binding WriteOfficialRecordCommand}" />
+                        <Button Content="{loc:Localize Key=Settings.OfficialRecord.Remove}"
+                                Command="{Binding RemoveOfficialRecordCommand}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
         </StackPanel>
     </Border>
 </StackPanel>
@@ -732,6 +753,32 @@
                             <TextBox Grid.Column="1" Text="{Binding StartGameExeName, Mode=TwoWay}"
                                      PlaceholderText="{loc:Localize Key=Launch.ExeName.Placeholder}" />
                         </Grid>
+
+                        <!-- 自定义启动程序(mod 加载器):任意路径的外部 exe + 自己的参数 -->
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <TextBlock Text="{loc:Localize Key=Launch.CustomLauncher}" FontSize="13" VerticalAlignment="Center" />
+                            <ToggleSwitch Grid.Column="1" HorizontalAlignment="Left"
+                                          IsChecked="{Binding CustomLauncherEnabled, Mode=TwoWay}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12"
+                              IsVisible="{Binding CustomLauncherEnabled}">
+                            <TextBlock Text="{loc:Localize Key=Launch.CustomLauncherPath}" FontSize="13" VerticalAlignment="Center" />
+                            <Grid Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <TextBox Grid.Column="0" Text="{Binding CustomLauncherPath, Mode=TwoWay}"
+                                         PlaceholderText="{loc:Localize Key=Launch.CustomLauncherPath.Placeholder}" />
+                                <Button Grid.Column="1" Content="{loc:Localize Key=Common.Browse}"
+                                        Command="{Binding BrowseCustomLauncherCommand}" />
+                            </Grid>
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12"
+                              IsVisible="{Binding CustomLauncherEnabled}">
+                            <TextBlock Text="{loc:Localize Key=Launch.CustomLauncherArgs}" FontSize="13" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1" Text="{Binding CustomLauncherArguments, Mode=TwoWay}"
+                                     PlaceholderText="{loc:Localize Key=Launch.CustomLauncherArgs.Placeholder}" />
+                        </Grid>
+                        <TextBlock Text="{loc:Localize Key=Launch.CustomLauncher.Hint}" FontSize="11"
+                                   TextWrapping="Wrap" Foreground="{DynamicResource McKuroTextMuted}"
+                                   IsVisible="{Binding CustomLauncherEnabled}" />
                     </StackPanel>
                 </Grid>
             </Border>
@@ -1022,6 +1069,21 @@
                     </StackPanel>
                     <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
                                   IsChecked="{Binding FastVerifyEnabled, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+            <!-- 安装后重复文件自检(用户需求 2026-10):多次断连下载后目录会积累备份与半成品 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Delete" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.ResidueCheck}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.ResidueCheck.Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{Binding InstallResidueCheckEnabled, Mode=TwoWay}" />
                 </Grid>
             </Border>
         </StackPanel>

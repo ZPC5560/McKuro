@@ -140,7 +140,21 @@ public sealed partial class PlayTimeService
             ct.ThrowIfCancellationRequested();
             try
             {
-                var plain = await Task.Run(() => ClientLogDecryptor.DecryptFile(file), ct).ConfigureAwait(false);
+                // 用 Checked 版本:密钥不匹配时解出来是乱码,静默跳过会让"游玩统计一直是 0"
+                // 变成一个查不出原因的现象,这里至少留一条可诊断的警告。
+                var decrypted = await Task.Run(
+                    () => ClientLogDecryptor.DecryptFileChecked(file), ct).ConfigureAwait(false);
+                if (!decrypted.IsSuccess)
+                {
+                    if (decrypted.Status == ClientLogDecryptStatus.KeyMismatch)
+                    {
+                        _logger.LogWarning(
+                            "日志解密校验失败(疑似游戏更换了日志加密密钥,需更新 McKuro): {File}", file);
+                    }
+                    continue;
+                }
+
+                var plain = decrypted.Text;
                 if (string.IsNullOrWhiteSpace(plain))
                 {
                     continue;

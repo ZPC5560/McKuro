@@ -432,7 +432,7 @@ public sealed partial class HomeViewModel : ViewModelBase
     {
         IsInstalled = AppServices.Paths.IsGameInstalled;
         InstallStateText = IsInstalled ? LanguageService.Format("Launcher.GameReady") : LanguageService.Format("Launcher.NotInstalled");
-        ServerTypeText = AppServices.Paths.DetectServerType() switch
+        ServerTypeText = GameServerResolver.Resolve(AppServices.Settings, AppServices.Paths) switch
         {
             GameServerType.Official => LanguageService.Format("Server.Official"),
             GameServerType.Bilibili => LanguageService.Format("Server.Bilibili"),

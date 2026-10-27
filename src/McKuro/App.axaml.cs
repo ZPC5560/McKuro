@@ -141,6 +141,34 @@ public partial class App : Application
                         ? vm.NavigationItems.FirstOrDefault(n => n.Key == navKey) ?? vm.NavigationItems[2]
                         : vm.NavigationItems[2];
                     vm.NavigateTo(target);
+
+                    // 下载进度卡目视验证(McKuro_SMOKE_DL=normal|weak|stable):不触网,按固定节奏
+                    // 灌假波形,用于验证速度曲线自适应放大、大字网速与环形进度排版。
+                    if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("McKuro_SMOKE_DL")))
+                    {
+                        var launcherItem = vm.NavigationItems.FirstOrDefault(n => n.ViewModel is LauncherViewModel);
+                        if (launcherItem?.ViewModel is LauncherViewModel launcherVm)
+                        {
+                            vm.NavigateTo(launcherItem);
+                            launcherVm.StartSmokeDownloadFeed();
+                        }
+                    }
+
+                    // 重复/残留文件弹窗目视验证(McKuro_SMOKE_RESIDUE=1):
+                    // 直接触发一次手动体积自检(会弹窗),用于验证清理确认窗口的排版与文案。
+                    if (Environment.GetEnvironmentVariable("McKuro_SMOKE_RESIDUE") == "1")
+                    {
+                        var launcherItem = vm.NavigationItems.FirstOrDefault(n => n.ViewModel is LauncherViewModel);
+                        if (launcherItem?.ViewModel is LauncherViewModel launcherVm)
+                        {
+                            vm.NavigateTo(launcherItem);
+                            // 等启动页绑定完成再触发,否则弹窗可能抢在窗口就绪前
+                            DispatcherTimer.RunOnce(
+                                () => launcherVm.CheckResidueCommand.Execute(null),
+                                TimeSpan.FromSeconds(2));
+                        }
+                    }
+
                     // 冒烟时长默认 4s,可用 McKuro_SMOKE_SECONDS 覆盖(验证视频背景等慢加载 UI 用)
                     var seconds = double.TryParse(Environment.GetEnvironmentVariable("McKuro_SMOKE_SECONDS"), out var s) && s > 0
                         ? s

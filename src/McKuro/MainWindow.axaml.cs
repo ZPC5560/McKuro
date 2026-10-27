@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform;
@@ -781,6 +782,8 @@ public partial class MainWindow : Window
         AddHandler(PointerExitedEvent, OnShellPointerExited, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(PointerPressedEvent, OnShellPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(PointerReleasedEvent, OnShellPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+        // 顶部拖动带:操作栏收起时仍可拖窗(Tunnel 且在控件之前:命中空白处才接管,见方法注释)
+        AddHandler(PointerPressedEvent, OnShellPointerPressedForDrag, RoutingStrategies.Tunnel);
         AddHandler(KeyDownEvent, OnShellKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
         Deactivated += (_, _) => OnShellDeactivated();
 
@@ -1424,6 +1427,75 @@ public partial class MainWindow : Window
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// 顶部拖动带:操作栏<b>收起</b>时,客户区顶部 1/4(不少于 44 DIP)的空白处按住即可拖动窗口,
+    /// 双击最大化/还原。判定本身在 <see cref="DragBandRules"/>(纯函数、有单测),这里只做 AVALONIA 接线。
+    /// <para>
+    /// 只在无边框沉浸模式下接管:此模式没有系统标题栏,操作栏一收起整个窗口就没有可拖的空白,
+    /// 用户必须先贴顶唤出操作栏才能挪窗 —— 本方法把那片区域补回来。
+    /// 操作栏已展开时不接管(那段本来就是操作栏自己的拖动区,避免两处抢同一个手势)。
+    /// </para>
+    /// <para>
+    /// <b>只接空白</b>:命中可交互控件(按钮/输入框/列表项/页签…)时一律放行,否则会把
+    /// 「点顶部菜单」变成「拖窗口」—— 这正是上一轮"设置页点分类没反应"的同类事故,
+    /// 当时的原因是操作栏展开把内容下推;这里如果再吞点击,症状会一模一样。
+    /// </para>
+    /// </summary>
+    private void OnShellPointerPressedForDrag(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+        var point = e.GetPosition(this);
+        // 判定统一走 DragBandRules(纯函数、有单测):模式/操作栏状态/命中控件/位置四道闸
+        if (!DragBandRules.ShouldStartDrag(
+                _immersive,
+                _titleReveal.Shown,
+                _titlePinned,
+                IsInteractiveSource(e.Source as Visual),
+                point.Y,
+                Bounds.Height))
+        {
+            return;
+        }
+        if (e.ClickCount >= 2)
+        {
+            ToggleMaximizeRestore();
+            e.Handled = true;
+            return;
+        }
+        BeginMoveDrag(e);
+    }
+
+    /// <summary>
+    /// 该视觉及其祖先里是否有「会消费指针事件的交互控件」。
+    /// <para>
+    /// 刻意<b>不含</b> <see cref="ScrollViewer"/> / <see cref="SelectingItemsControl"/> 这类容器:
+    /// 页面根节点通常就是 ScrollViewer,把它们算进来会让整条拖动带永久失效。
+    /// 容器空白处的按下本来就没有别的语义,交给拖动正合适。
+    /// </para>
+    /// <para>
+    /// 用 <c>is</c> 逐类型判断而不是 <c>switch case</c>:类型间有继承关系
+    /// (CheckBox/RadioButton ⊂ ToggleButton ⊂ ButtonBase),写 case 会因"已由上一 case 处理"
+    /// 编译不过,且后者更易漏掉新增控件。
+    /// </para>
+    /// </summary>
+    private static bool IsInteractiveSource(Visual? visual)
+    {
+        for (var current = visual; current is not null; current = current.GetVisualParent())
+        {
+            if (current is Button || current is TextBox || current is ComboBox || current is Slider
+                || current is RadioButton || current is CheckBox || current is ToggleSwitch
+                || current is ScrollBar || current is ListBoxItem || current is TreeViewItem
+                || current is TabItem || current is MenuItem)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void ToggleMaximizeRestore()

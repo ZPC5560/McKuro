@@ -64,8 +64,12 @@ public partial class LauncherView : UserControl
             vm.ConfirmLevelSwitchAsync = item =>
             {
                 var owner = TopLevel.GetTopLevel(this) as Window;
-                // 用纯体积文案("99.45 GB"),避免把卡片的"游戏大小:"前缀带进句子
-                var size = string.IsNullOrWhiteSpace(item.SizeOnlyText) ? item.SizeText : item.SizeOnlyText;
+                // 弹窗里说「需要下载 X」,必须用**实际还需下载**的量。
+                // 用卡片上的"游戏大小"会多报已装好的共享包(实测已装 HD 切 UHD:99.45 vs 61.50 GB),
+                // 用户会以为要重下整个画质包而放弃切换。
+                var size = !string.IsNullOrWhiteSpace(item.DownloadSizeOnlyText)
+                    ? item.DownloadSizeOnlyText
+                    : string.IsNullOrWhiteSpace(item.SizeOnlyText) ? item.SizeText : item.SizeOnlyText;
                 return ResourceLevelConfirmWindow.ShowAsync(owner, item.DisplayName, size);
             };
 

@@ -10,6 +10,18 @@ public enum GachaSyncStatus
     Success,
     GameDirNotSet,
     ClientLogNotFound,
+
+    /// <summary>
+    /// 日志解密校验失败:解出来不是合法 UTF-8 明文日志。
+    /// <para>
+    /// 与 <see cref="RecordUrlNotFound"/> 是两件完全不同的事:这里是**游戏换了日志加密密钥**,
+    /// 本版本的算法解不开,用户做什么都没用,只能等软件更新;而后者是日志本来就是好的、
+    /// 只是里面还没有抽卡记录(用户没在游戏里打开过抽卡页面)。
+    /// 早先两者混为一谈,报了后者,导致用户被指引去做一件注定无效的事。
+    /// </para>
+    /// </summary>
+    LogKeyMismatch,
+
     RecordUrlNotFound,
     InvalidRequestParams,
     ApiError,
@@ -64,8 +76,22 @@ public sealed class GachaSyncService : IGachaSyncService
             };
         }
 
-        var decrypted = ClientLogDecryptor.DecryptFile(logFile);
-        var url = GachaUrlExtractor.FindRecordUrl(decrypted);
+        // 解密并校验:密钥不匹配时逐字节异或不会报错,只会产出乱码,
+        // 所以必须靠 DecryptFileChecked 把"密钥变了"和"没搜到链接"分开(两者提示完全不同)。
+        var decrypted = ClientLogDecryptor.DecryptFileChecked(logFile);
+        if (!decrypted.IsSuccess)
+        {
+            return new GachaSyncResult
+            {
+                Status = GachaSyncStatus.LogKeyMismatch,
+                Message = CoreStrings.T(
+                    "Core.Gacha.LogKeyMismatch",
+                    "游戏日志解密失败:游戏可能更新了日志加密方式,当前版本的 McKuro 暂时解不开。"
+                    + "请升级到最新版本;在此期间可改用「云鸣潮」通道同步"),
+            };
+        }
+
+        var url = GachaUrlExtractor.FindRecordUrl(decrypted.Text);
         if (url is null)
         {
             return new GachaSyncResult

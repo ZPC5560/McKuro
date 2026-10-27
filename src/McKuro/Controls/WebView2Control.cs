@@ -72,11 +72,26 @@ public sealed class WebView2Control : NativeControlHost
     /// <summary>自定义消息:在拥有 HWND 的原生线程上执行 _nativeActions 里排队的动作。</summary>
     private const uint WmAppRunAction = 0x8000 + 1; // WM_APP+1
 
-    public WebView2Control()
+    /// <summary>
+    /// 静态构造:类处理器<b>必须挂一次且只挂一次</b>。
+    /// <para>
+    /// <see cref="AvaloniaProperty.Changed"/> 是<b>类型级</b>的静态事件,
+    /// <c>AddClassHandler</c> 返回的 IDisposable 又从不被保存,所以把它写在实例构造函数里
+    /// 会「每 new 一个控件就多一个永久处理器」—— 极验窗口反复开关后,旧控件的闭包
+    /// 一直活着(捕获了 this),GC 收不掉。这与 Haiyu 1.4.6 修的 WebView2 匿名事件泄漏是同一类问题。
+    /// 正确写法参考同仓 <c>AsyncImage</c>。
+    /// </para>
+    /// </summary>
+    static WebView2Control()
     {
         // UI 线程回调里把 Url 缓存进普通字段,供原生线程上的导航读取
         UrlProperty.Changed.AddClassHandler<WebView2Control>((o, e) => o._pendingUrl = (string)(e.NewValue ?? ""));
-        // 布局尺寸变化:转投到原生线程同步给 Controller(托管 Bounds 也必须在原生线程设置)
+    }
+
+    public WebView2Control()
+    {
+        // 布局尺寸变化:转投到原生线程同步给 Controller(托管 Bounds 也必须在原生线程设置)。
+        // 这是实例事件、随控件生命周期自然解除,留在实例构造里。
         LayoutUpdated += (_, _) =>
         {
             if (_managedCtrl != null && _hwnd != nint.Zero)

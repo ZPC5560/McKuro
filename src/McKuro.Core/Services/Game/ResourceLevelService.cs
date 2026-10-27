@@ -69,7 +69,11 @@ public sealed class ResourceLevelService
         _installedVersionProvider = installedVersionProvider;
     }
 
-    /// <summary>当前渠道是否支持资源等级切换(仅国服官方提供新版协议端点)。</summary>
+    /// <summary>
+    /// 当前渠道是否支持资源等级切换。
+    /// <para>判据是「该渠道有没有新版协议端点」:国服官方 / 哔哩哔哩 / 国际服三家都有,
+    /// WeGame 没有(见 <see cref="KuroEndpoints.ResourcePackIndexForServerType"/> 里的实测记录)。</para>
+    /// </summary>
     public static bool SupportsResourceLevels(GameServerType serverType) =>
         KuroEndpoints.ResourcePackIndexForServerType(serverType) is not null;
 
@@ -79,10 +83,11 @@ public sealed class ResourceLevelService
             : KuroEndpoints.ResourcePackIndexForServerType(serverType);
 
     /// <summary>
-    /// 读取各资源等级及其体积/是否已安装(供官方样式的「选择资源等级」面板展示)。
-    /// 不支持该协议的渠道返回空列表。
+    /// 读取各资源等级及其体积/是否已安装(供官方样式的「选择资源等级」面板展示),
+    /// 顺带取出官方「画质怎么选」说明页链接(同一个 index.json 里就有,不额外发请求)。
+    /// 不支持该协议的渠道返回空结果。
     /// </summary>
-    public async Task<IReadOnlyList<ResourceLevelOption>> GetLevelOptionsAsync(
+    public async Task<ResourceLevelOptions> GetLevelOptionsAsync(
         GameServerType serverType,
         CancellationToken ct = default)
     {
@@ -90,7 +95,7 @@ public sealed class ResourceLevelService
         var indexUrl = ResolveIndexUrl(serverType);
         if (string.IsNullOrEmpty(root) || indexUrl is null)
         {
-            return [];
+            return new ResourceLevelOptions();
         }
 
         try
@@ -98,7 +103,7 @@ public sealed class ResourceLevelService
             var index = await _loader.LoadResourcePackIndexAsync(indexUrl, ct).ConfigureAwait(false);
             if (index?.ResourcePacks is null || index.Bundles is null)
             {
-                return [];
+                return new ResourceLevelOptions();
             }
 
             // 已安装标记:官方在 launcherDownloadConfig/{uhd,hd,sd}.json 留标记,优先采信(免去几十 GB 的全量校验)。
@@ -125,16 +130,30 @@ public sealed class ResourceLevelService
                     }
                 }
 
+                // 「实际还需下载多少」只累加本地缺失的包:common 已装时不该再算进去,
+                // 否则已装 HD 的用户切 UHD 会被多报 37.95 GB(实测 99.45 vs 61.50)。
+                var missing = ResourceLevelPlanner.MissingBytesFor(
+                    index,
+                    bundleName,
+                    packName => !index.ResourcePacks.TryGetValue(packName, out var p)
+                        || IsPackInstalled(root, packName, p.Version));
+
                 options.Add(new ResourceLevelOption
                 {
                     Level = level,
                     Value = value,
                     BundleName = bundleName,
                     TotalBytes = total,
+                    DownloadBytes = missing,
                     Installed = installed,
                 });
             }
-            return options;
+
+            return new ResourceLevelOptions
+            {
+                Items = options,
+                HintUrl = ResourceLevelPlanner.LevelHintUrl(index, CoreStrings.CurrentLanguage),
+            };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -143,7 +162,7 @@ public sealed class ResourceLevelService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "读取资源等级列表失败");
-            return [];
+            return new ResourceLevelOptions();
         }
     }
 
@@ -449,7 +468,7 @@ public sealed class ResourceLevelService
             return new ResourceLevelResult
             {
                 Success = false,
-                Message = CoreStrings.T("Launcher.LevelUnsupported", "当前渠道暂不支持资源等级切换(仅国服官方)"),
+                Message = CoreStrings.T("Launcher.LevelUnsupported", "当前渠道暂不支持资源等级切换"),
             };
         }
 

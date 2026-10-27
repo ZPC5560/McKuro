@@ -17,6 +17,20 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
 {
     private const string ApiUrl = "https://api3.sanyueqi.cn/api/v1/pool/draw_config_infos";
 
+    /// <summary>
+    /// 常驻五星**角色**的 itemId(卡卡罗 / 安可 / 维里奈 / 凌阳 / 鉴心)。
+    /// <para>
+    /// 只在「五个来源全都缺失、退化成全量目录」的兜底路径里用来剔除常驻 ——
+    /// 主路径用 <c>five_maps.pool_type == 0</c> 判定,不需要这份名单。
+    /// </para>
+    /// <para>
+    /// <b>关于常驻五星武器:</b>这里<b>故意不列</b>。常驻武器池本身没有 UP 概念,
+    /// 而角色限定池的「歪」只对角色有意义;把武器 id 加进黑名单反而会误伤
+    /// 「限定角色 + 其专武同期 UP」这类组合。保持与上游 RecordHelper.IsResident 一致的口径。
+    /// </para>
+    /// </summary>
+    private static readonly int[] ResidentFiveStarRoleIds = [1203, 1301, 1405, 1104, 1503];
+
     private readonly HttpClient _http;
     private readonly ILogger<RemoteUpPoolProvider> _logger;
     private readonly TimeProvider _time;
@@ -117,6 +131,12 @@ public sealed class RemoteUpPoolProvider : IUpPoolProvider
         if (roleIds.Count == 0 && weaponIds.Count == 0)
         {
             CollectFromFiveMaps(model.Data.FiveGroupConfig?.FiveMaps, roleIds, weaponIds);
+
+            // 兜底分支拿的是**全量五星目录**,里面常驻五星角色也在内。
+            // 若直接当 UP 用,常驻角色(卡卡罗/安可/维里奈/凌阳/鉴心)永远不会被判为"歪" ——
+            // 恰好把最能说明运气的那一半记录洗成了 UP。这里按官方常驻名单剔除。
+            // (主路径不受影响:five_maps 的 pool_type == 0 已经把常驻排除过了。)
+            roleIds.ExceptWith(ResidentFiveStarRoleIds);
         }
 
         var all = new HashSet<int>(roleIds);

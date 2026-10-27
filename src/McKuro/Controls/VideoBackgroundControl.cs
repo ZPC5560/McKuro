@@ -356,12 +356,22 @@ public sealed class VideoBackgroundControl : Grid
         };
         Children.Add(_fallback);
 
-        VideoUrlProperty.Changed.AddClassHandler<VideoBackgroundControl>((o, e) => o.OnUrlChanged());
-        FallbackImageUrlProperty.Changed.AddClassHandler<VideoBackgroundControl>((o, e) => o.OnUrlChanged());
-        IsVideoEnabledProperty.Changed.AddClassHandler<VideoBackgroundControl>((o, e) => o.OnUrlChanged());
+        // 注意:三个 Url 类处理器挂在静态构造里(见下方 static ctor),
+        // 不要移回实例构造 —— 那是类型级事件,实例构造里挂会随实例数累积不解除的处理器。
 
         DetachedFromVisualTree += OnDetached;
         LayoutUpdated += OnLayoutDiag;
+    }
+
+    /// <summary>
+    /// 静态构造:类处理器只挂一次(详见 <c>WebView2Control</c> 上的同名说明)。
+    /// 这三个都是「换了 URL 就重新加载」的响应式属性,处理器挂在类型上即可正确工作。
+    /// </summary>
+    static VideoBackgroundControl()
+    {
+        VideoUrlProperty.Changed.AddClassHandler<VideoBackgroundControl>((o, e) => o.OnUrlChanged());
+        FallbackImageUrlProperty.Changed.AddClassHandler<VideoBackgroundControl>((o, e) => o.OnUrlChanged());
+        IsVideoEnabledProperty.Changed.AddClassHandler<VideoBackgroundControl>((o, e) => o.OnUrlChanged());
     }
 
     /// <summary>背景覆盖诊断:视频位图的实际 Bounds 是否与父控件一致(不一致=裁剪错误)。

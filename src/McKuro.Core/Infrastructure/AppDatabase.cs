@@ -163,6 +163,15 @@ public sealed class AppDatabase : IDisposable
                 update_time TEXT NOT NULL
             );
 
+            -- 安装未完成标记:下载/安装开始即写入,成功走到"写已装版本"时删除。
+            -- 用于区分「真装好了」与「下到一半被打断」—— 后者游戏根目录里可能已经有
+            -- 启动器 exe(Wuthering Waves.exe),旧的"只看 exe 存在"判定会误判成已安装,
+            -- 于是重启后按钮变成「启动游戏」、既无法继续下载、点启动又因客户端 exe 缺失而失败。
+            CREATE TABLE IF NOT EXISTS install_incomplete (
+                game_root TEXT PRIMARY KEY,
+                started_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS new_tower_history (
                 role_id TEXT NOT NULL,
                 end_time INTEGER NOT NULL,
@@ -392,6 +401,42 @@ public sealed class AppDatabase : IDisposable
             cmd.CommandText = "SELECT version FROM installed_versions WHERE game_root = $root";
             cmd.Parameters.AddWithValue("$root", NormalizeRoot(gameRoot));
             return cmd.ExecuteScalar() as string;
+        });
+
+    /// <summary>该游戏目录是否有「安装未完成」标记(下载/安装被打断)。</summary>
+    public bool HasIncompleteInstall(string gameRoot)
+        => Execute(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT 1 FROM install_incomplete WHERE game_root = $root";
+            cmd.Parameters.AddWithValue("$root", NormalizeRoot(gameRoot));
+            return cmd.ExecuteScalar() is not null;
+        });
+
+    /// <summary>标记「安装未完成」(下载/安装开始前写入;重复调用幂等)。</summary>
+    public void SetIncompleteInstall(string gameRoot)
+        => Execute(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                """
+                INSERT INTO install_incomplete (game_root, started_at)
+                VALUES ($root, $time)
+                ON CONFLICT(game_root) DO UPDATE SET started_at = excluded.started_at
+                """;
+            cmd.Parameters.AddWithValue("$root", NormalizeRoot(gameRoot));
+            cmd.Parameters.AddWithValue("$time", DateTime.Now.ToString("O"));
+            cmd.ExecuteNonQuery();
+        });
+
+    /// <summary>清除「安装未完成」标记(安装成功写入已装版本后调用)。</summary>
+    public void ClearIncompleteInstall(string gameRoot)
+        => Execute(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM install_incomplete WHERE game_root = $root";
+            cmd.Parameters.AddWithValue("$root", NormalizeRoot(gameRoot));
+            cmd.ExecuteNonQuery();
         });
 
     /// <summary>记录(或更新)某游戏目录的已安装版本。单条 UPSERT,原子提交。</summary>

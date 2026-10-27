@@ -55,6 +55,7 @@ public static class AppServices
     public static UpdateInstaller Installer => Services.GetRequiredService<UpdateInstaller>();
     public static IGameUpdater GameUpdater => Services.GetRequiredService<IGameUpdater>();
     public static ResourceLevelService ResourceLevels => Services.GetRequiredService<ResourceLevelService>();
+    public static OfficialLauncherRecordService OfficialRecords => Services.GetRequiredService<OfficialLauncherRecordService>();
     public static GachaApiClient GachaApi => Services.GetRequiredService<GachaApiClient>();
     public static GachaRecordStore GachaStore => Services.GetRequiredService<GachaRecordStore>();
     public static GachaAnalysisService GachaAnalysis => Services.GetRequiredService<GachaAnalysisService>();
@@ -243,6 +244,47 @@ public static class AppServices
                 Timeout = TimeSpan.FromSeconds(60),
             };
         });
+
+        // 游戏文件下载专用客户端 —— 与上面那个「元数据客户端」必须分开,原因有二:
+        // ① 元数据客户端开着 AutomaticDecompression=All,会给请求带上 Accept-Encoding,
+        //    而下载走 HTTP Range 续传。若 CDN 对 206 响应做了压缩,Content-Range 指的是
+        //    **压缩体**的偏移,而 .NET 解压后再交给写入方 —— 偏移与清单错位。
+        //    当前的防护是"写入量对不上就抛 IOException 进重试",表现为"某些节点偶发下载失败"。
+        //    下载侧因此必须 identity + 不解压,让字节流与清单严格一一对应。
+        // ② 元数据请求要短超时(60s)快速失败,下载不能有总超时 ——
+        //    流式下载的挂死由 FileDownloader 的"单次读取空闲超时"负责,总超时会把
+        //    大文件的下到 90% 直接掐掉。
+        // (连接池参数对齐 Haiyu 1.4.3 的 GameDownloadSocketHandler;并发上限高于 DownloadEngine
+        //  默认的 8,避免连接复用成为瓶颈。)
+        services.AddSingleton<GameDownloadHttpClient>(sp =>
+        {
+            var handler = new System.Net.Http.SocketsHttpHandler
+            {
+                AutomaticDecompression = System.Net.DecompressionMethods.None,
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 10,
+                MaxConnectionsPerServer = 16,
+                ConnectTimeout = TimeSpan.FromSeconds(30),
+                PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
+                PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+                ResponseDrainTimeout = TimeSpan.FromSeconds(5),
+                EnableMultipleHttp2Connections = true,
+                UseCookies = false,
+            };
+            if (systemProxy is not null)
+            {
+                handler.Proxy = systemProxy;
+            }
+
+            var client = new HttpClient(handler, disposeHandler: true)
+            {
+                // 总超时必须无限:大文件一次续传可能持续几分钟到几十分钟,
+                // 挂死保护交给 FileDownloader.DefaultIdleReadTimeout(90s 无数据才重试)。
+                Timeout = Timeout.InfiniteTimeSpan,
+            };
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Encoding", "identity");
+            return new GameDownloadHttpClient(client);
+        });
         services.AddSingleton(sp => new SettingsService(dataDir,
             sp.GetRequiredService<ILoggerFactory>().CreateLogger<SettingsService>()));
         services.AddSingleton<ISettingsService>(sp => sp.GetRequiredService<SettingsService>());
@@ -277,7 +319,7 @@ public static class AppServices
             sp.GetRequiredService<HttpClient>(),
             sp.GetRequiredService<ILoggerFactory>().CreateLogger<GameManifestLoader>()));
         services.AddSingleton<DownloadEngine>(sp => new DownloadEngine(
-            sp.GetRequiredService<HttpClient>(),
+            sp.GetRequiredService<GameDownloadHttpClient>().Client,
             8,
             sp.GetRequiredService<ILoggerFactory>().CreateLogger<DownloadEngine>()));
         services.AddSingleton<UpdateInstaller>();
@@ -302,6 +344,13 @@ public static class AppServices
             // 惰性取值(而不是构造时取),避免 DI 构建期就读库/读盘。
             installedVersionProvider: () =>
                 sp.GetRequiredService<IGameUpdater>().GetInstalledVersion()));
+        // 官方启动器安装记录回写:让"用 McKuro 装好的游戏"被官方启动器识别为已安装,
+        // 否则官方「定位游戏目录」会判未安装并触发整包重下。独立工具,不进安装/更新主链路。
+        services.AddSingleton<OfficialLauncherRecordService>(sp => new OfficialLauncherRecordService(
+            sp.GetRequiredService<GamePathResolver>(),
+            sp.GetRequiredService<GameManifestLoader>(),
+            settings: sp.GetRequiredService<ISettingsService>(),
+            logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<OfficialLauncherRecordService>()));
 
         // ---- 抽卡 ----
         services.AddSingleton<GachaApiClient>(sp => new GachaApiClient(

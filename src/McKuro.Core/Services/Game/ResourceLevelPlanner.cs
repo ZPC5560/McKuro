@@ -2,7 +2,7 @@ using McKuro.Core.Models.Game;
 
 namespace McKuro.Core.Services.Game;
 
-/// <summary>单个资源等级的可选信息(供 UI 展示「游戏大小 / 已安装」,对齐官方启动器)。</summary>
+/// <summary>单个资源等级的可选信息(供 UI 展示「游戏大小 / 需下载 / 已安装」,对齐官方启动器)。</summary>
 public sealed class ResourceLevelOption
 {
     public required GameResourceLevel Level { get; init; }
@@ -16,8 +16,33 @@ public sealed class ResourceLevelOption
     /// <summary>该等级的总下载体积(common + 等级包);包清单未加载时为 0。</summary>
     public long TotalBytes { get; init; }
 
+    /// <summary>
+    /// <b>切到这个等级实际还需要下载的字节数</b>(只算本地缺失的包)。
+    /// <para>
+    /// 与 <see cref="TotalBytes"/> 的区别很关键:已装 HD 的用户切 UHD,common 已经在了,
+    /// 只需下 uhd(实测 61.50 GB),但 TotalBytes 会显示 common+uhd = 99.45 GB —— 多报 37.95 GB。
+    /// 拿 TotalBytes 当"要下多少"就是在吓用户。
+    /// </para>
+    /// </summary>
+    public long DownloadBytes { get; init; }
+
     /// <summary>该等级的全部文件已就位(即「已安装」)。</summary>
     public bool Installed { get; init; }
+}
+
+/// <summary>
+/// 一次「读取资源等级列表」的完整结果:选项列表 + 官方画质说明页链接。
+/// <para>
+/// 链接单独拎出来,是因为它属于 <b>index.json 根节点</b>而不是某一档;而 VM 刷新面板时
+/// 只需要多拿一个字段 —— 若为它再加一次网络请求就浪费了(同一个 index.json 已经拿过)。
+/// </para>
+/// </summary>
+public sealed class ResourceLevelOptions
+{
+    public IReadOnlyList<ResourceLevelOption> Items { get; init; } = [];
+
+    /// <summary>官方「画质怎么选」说明页(按当前界面语言挑);没有该节点时为 null。</summary>
+    public string? HintUrl { get; init; }
 }
 
 /// <summary>
@@ -105,6 +130,83 @@ public static class ResourceLevelPlanner
             }
         }
         return total;
+    }
+
+    /// <summary>
+    /// 切到某等级<b>实际还需要下载</b>的体积(只累加本地缺失的包)。
+    /// <para>
+    /// <b>为什么不能直接用 <see cref="TotalBytesFor"/>:</b>它算的是「这个等级有多大」,
+    /// 而不是「你还差多少」。实测国服 3.7.1:common 40.17 GB + uhd 61.50 GB = 99.45 GB,
+    /// 而已经装了 HD 的用户 common 本来就有,切 UHD 只需下 61.50 GB ——
+    /// 展示 99.45 会多报 37.95 GB,足够让人放弃切换。
+    /// </para>
+    /// <para>
+    /// "本地缺失"由调用方传入的判定函数决定(通常是「官方标记版本与服务端一致」),
+    /// 这样这个纯函数不需要知道任何磁盘/标记细节,可直接单测。
+    /// </para>
+    /// </summary>
+    /// <param name="index">新版协议索引。</param>
+    /// <param name="bundleName">组合名(HD/SD/UHD)。</param>
+    /// <param name="isPackInstalled">该包是否已完整安装(版本一致)。</param>
+    public static long MissingBytesFor(
+        KuroResourcePackIndex index,
+        string bundleName,
+        Func<string, bool> isPackInstalled)
+    {
+        long missing = 0;
+        foreach (var packName in ResolvePackNames(index, bundleName))
+        {
+            if (isPackInstalled(packName))
+            {
+                continue;
+            }
+            if (index.ResourcePacks is not null && index.ResourcePacks.TryGetValue(packName, out var pack))
+            {
+                missing += PackBytes(pack);
+            }
+        }
+        return missing;
+    }
+
+    /// <summary>
+    /// 官方「画质怎么选」说明页链接(按界面语言挑,挑不到退英文,再退第一条)。
+    /// <para>
+    /// 数据来自 index.json 根节点的 <c>config.resourceLevelHint</c>:实测国服/B站只给
+    /// <c>zh-Hans</c> 一条,国际服给全 10 种语言。没有该节点(或为空)时返回 null,
+    /// 由 UI 决定不显示这个入口 —— 不要自己编一个链接。
+    /// </para>
+    /// </summary>
+    /// <param name="index">新版协议索引。</param>
+    /// <param name="language">当前界面语言(如 zh-Hans / en-US)。</param>
+    public static string? LevelHintUrl(KuroResourcePackIndex index, string? language)
+    {
+        var hints = index.Config?.ResourceLevelHint;
+        if (hints is null || hints.Count == 0)
+        {
+            return null;
+        }
+
+        // 界面语言是带地区的(en-US / zh-Hans),官方键是短码(en / zh-Hans / pt-BR),两轮匹配
+        if (!string.IsNullOrWhiteSpace(language))
+        {
+            if (hints.TryGetValue(language, out var exact) && !string.IsNullOrWhiteSpace(exact))
+            {
+                return exact;
+            }
+
+            var shortCode = language.Split('-')[0];
+            if (hints.TryGetValue(shortCode, out var byShort) && !string.IsNullOrWhiteSpace(byShort))
+            {
+                return byShort;
+            }
+        }
+
+        if (hints.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en))
+        {
+            return en;
+        }
+
+        return hints.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
     }
 
     /// <summary>把 index.json 的 bundles 转成有序的等级选项(极致 → 高清 → 流畅)。</summary>

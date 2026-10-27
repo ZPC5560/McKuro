@@ -269,22 +269,55 @@ public static class KuroEndpoints
 
     /// <summary>
     /// CN 官方新版协议 index.json(含 resourcePacks/bundles,可据以切换资源等级)。
-    /// <para>实测:仅 CN 官方(及 volcdn 镜像)提供该端点;哔哩哔哩/WeGame/国际服的
-    /// <c>official</c> 段均返回 404,故资源等级切换目前只支持国服官方。</para>
     /// </summary>
     public const string CnResourcePackIndex =
         "https://prod-cn-alicdn-gamestarter.kurogame.com/launcher/game/"
         + CnOfficialAppKey + "/G152/official/index.json";
 
     /// <summary>
+    /// 哔哩哔哩渠道的新版协议 index.json。
+    /// <para>与 CN 官方同主机、同 <c>G152</c>,只有 appKey 段与 <c>serverCode</c> 换成 <c>bilibili</c>。
+    /// 实测(2026-10-27):返回 200,<c>bundles</c> = HD/SD/UHD、<c>resourcePacks</c> = uhd/sd/hd/common,
+    /// 与国服完全同构;各包 indexFile 的 <c>dest</c> 前缀同为 <c>Client/Content/{SD,HD,UHD}/</c>。
+    /// </para>
+    /// </summary>
+    public const string BilibiliResourcePackIndex =
+        "https://prod-cn-alicdn-gamestarter.kurogame.com/launcher/game/"
+        + "10004_IY6xmlAusbImBjWrpPj1OwNuirXEO44x/G152/bilibili/index.json";
+
+    /// <summary>
+    /// 国际服新版协议 index.json。
+    /// <para>
+    /// <b>注意主机名不同</b>:国际服用 <c>prod-alicdn-gamestarter.kurogame.com</c>(<b>没有</b> <c>-cn-</c>),
+    /// 用到国服/B站的 <c>prod-cn-alicdn-gamestarter.kurogame.com</c> 会 404;反之把国服地址换成
+    /// <c>prod-alicdn</c> 同样 404 —— 两者是各渠道各自的域,不是同一份文件的镜像。
+    /// </para>
+    /// <para>实测(2026-10-27):200,<c>bundles</c> = HD/SD/UHD、<c>resourcePacks</c> = uhd/sd/hd/common,
+    /// 包体积与国服同量级(3.7.1:common 40.17 GB / sd 21.97 GB),落位目录同构。</para>
+    /// </summary>
+    public const string GlobalResourcePackIndex =
+        "https://prod-alicdn-gamestarter.kurogame.com/launcher/game/"
+        + "50004_P7xcUZnEr1AXIGON25E6KjpOgTlVrg6e/G153/official/index.json";
+
+    /// <summary>
     /// 取某渠道的新版协议端点(不支持时返回 null,调用方应回退到「不可切换等级」的逻辑)。
+    /// <para>
+    /// <b>支持面(2026-10-27 逐主机实测,勿凭印象改):</b>
+    /// 国服官方 / 哔哩哔哩 / 国际服三家都有该端点;WeGame <b>四个主机全部 404</b>,故仍不支持。
+    /// </para>
+    /// <para>
+    /// <c>Unknown</c> 归到国服官方:未识别渠道时按最保守的假设走国服地址,失败由上层
+    /// (加载清单失败 → 返回 null)兜住,不会把用户带进必失败的路径。
+    /// </para>
     /// </summary>
     public static string? ResourcePackIndexForServerType(
-        McKuro.Core.Services.Game.GameServerType type) =>
-        type is McKuro.Core.Services.Game.GameServerType.Official
-            or McKuro.Core.Services.Game.GameServerType.Unknown
-            ? CnResourcePackIndex
-            : null;
+        McKuro.Core.Services.Game.GameServerType type) => type switch
+    {
+        McKuro.Core.Services.Game.GameServerType.Bilibili => BilibiliResourcePackIndex,
+        McKuro.Core.Services.Game.GameServerType.Global => GlobalResourcePackIndex,
+        McKuro.Core.Services.Game.GameServerType.WeGame => null,
+        _ => CnResourcePackIndex,
+    };
 
     /// <summary>按游戏类型获取 index.json 地址。</summary>
     public static string ForGame(McKuro.Core.Services.Game.KuroGame game, McKuro.Core.Services.Game.GameServerType type) =>

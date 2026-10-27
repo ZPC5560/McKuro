@@ -226,17 +226,31 @@ public sealed partial class WikiViewModel : ViewModelBase
     [RelayCommand]
     private Task LoadAsync() => LoadInternalAsync();
 
-    /// <summary>服务器渠道:与启动器页一致(设置优先,自动检测兜底)。</summary>
-    private static GameServerType ServerType
+    /// <summary>
+    /// 导航到资讯页时调用:渠道变了就重载。
+    /// <para>
+    /// 资讯/公告/轮播全部按渠道取内容,而本 VM 只在启动时构造一次。设置页换了区服后
+    /// 若不重载,用户看到的是旧渠道的内容 —— 表现为"切了区服没反应"。
+    /// </para>
+    /// </summary>
+    public void OnNavigatedTo()
     {
-        get
+        var resolved = ServerType;
+        if (resolved == _lastLoadedServer)
         {
-            var configured = AppServices.Settings.Current.ServerType;
-            return configured == GameServerType.Unknown
-                ? AppServices.Paths.DetectServerType()
-                : configured;
+            return;
         }
+        _lastLoadedServer = resolved;
+        // 渠道变更必须强制重拉:LoadInternalAsync 内部有 IsBusy 门,
+        // 正在加载时直接 return 即可(下次进来渠道已被记录,不会重复触发)。
+        _ = LoadInternalAsync();
     }
+
+    /// <summary>上一次加载资讯内容时使用的渠道(用于导航时判断是否需要重载)。</summary>
+    private GameServerType _lastLoadedServer = GameServerType.Unknown;
+
+    /// <summary>服务器渠道:与启动器页一致(设置优先,自动检测兜底)。判定收敛在 <see cref="GameServerResolver"/>。</summary>
+    private static GameServerType ServerType => GameServerResolver.Resolve(AppServices.Settings, AppServices.Paths);
 
     /// <summary>
     /// 资讯数据源渠道说明:曾试验英文界面切国际服英文内容包(G153/en.json),

@@ -4,6 +4,7 @@ using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using McKuro.Core.Models.Game;
 using McKuro.Core.Services.Game;
 using McKuro.Core.Services.Update;
 using McKuro.Core.Services.Wallpaper;
@@ -65,6 +66,19 @@ public sealed partial class SettingsViewModel : ViewModelBase
     partial void OnFastVerifyEnabledChanged(bool value)
     {
         AppServices.Settings.Current.FastVerifyEnabled = value;
+        AppServices.Settings.Save();
+    }
+
+    /// <summary>
+    /// 安装/修复完成后的「重复文件自检」(默认开):比对目录占用与清单总量,
+    /// 发现明显过大的残留时弹窗询问是否删除。
+    /// </summary>
+    [ObservableProperty]
+    private bool _installResidueCheckEnabled = true;
+
+    partial void OnInstallResidueCheckEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.InstallResidueCheckEnabled = value;
         AppServices.Settings.Save();
     }
 
@@ -130,6 +144,73 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         AppServices.Settings.Current.StartGameExeName = value;
         AppServices.Settings.Save();
+    }
+
+    // ---------- 自定义启动程序(mod 加载器等外部程序) ----------
+
+    /// <summary>启用自定义启动程序(关闭时保留已选路径,下次开启不用重选)。</summary>
+    [ObservableProperty]
+    private bool _customLauncherEnabled;
+
+    partial void OnCustomLauncherEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.CustomLauncherEnabled = value;
+        AppServices.Settings.Save();
+    }
+
+    /// <summary>自定义启动程序的绝对路径。</summary>
+    [ObservableProperty]
+    private string _customLauncherPath = "";
+
+    partial void OnCustomLauncherPathChanged(string value)
+    {
+        AppServices.Settings.Current.CustomLauncherPath = value;
+        AppServices.Settings.Save();
+    }
+
+    /// <summary>自定义启动器自己的附加参数(追加在游戏参数之后)。</summary>
+    [ObservableProperty]
+    private string _customLauncherArguments = "";
+
+    partial void OnCustomLauncherArgumentsChanged(string value)
+    {
+        AppServices.Settings.Current.CustomLauncherArguments = value;
+        AppServices.Settings.Save();
+    }
+
+    /// <summary>选择自定义启动程序(文件选择器);选完即时保存。</summary>
+    [RelayCommand]
+    private async Task BrowseCustomLauncherAsync()
+    {
+        var lifetime = Avalonia.Application.Current?.ApplicationLifetime
+            as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+        var topLevel = lifetime?.MainWindow;
+        if (topLevel is null)
+        {
+            return;
+        }
+
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(
+            new Avalonia.Platform.Storage.FilePickerOpenOptions
+            {
+                Title = LanguageService.Format("Settings.PickCustomLauncherTitle"),
+                AllowMultiple = false,
+                // 只列可执行文件;Windows 上是 .exe,macOS/Linux 上筛可执行位由系统对话框处理,
+                // 因此这里只在 Windows 加扩展名过滤(跨平台硬编码 .exe 会让人选不到)。
+                FileTypeFilter = OperatingSystem.IsWindows()
+                    ? [new Avalonia.Platform.Storage.FilePickerFileType("可执行文件")
+                        {
+                            Patterns = ["*.exe"],
+                        }]
+                    : null,
+            });
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        CustomLauncherPath = files[0].Path.LocalPath;
+        StatusText = LanguageService.Format("Status.CustomLauncherSet", CustomLauncherPath);
     }
 
     /// <summary>启动游戏后最小化主窗口。</summary>
@@ -1073,10 +1154,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _downloadConcurrency = s.DownloadConcurrency;
         _limitSpeedMbps = s.LimitSpeedMbps;
         _fastVerifyEnabled = s.FastVerifyEnabled;
+        _installResidueCheckEnabled = s.InstallResidueCheckEnabled;
         _useDx11 = s.UseDx11;
         _disableDlss = s.DisableDlss;
         _startGameArguments = s.StartGameArguments;
         _startGameExeName = s.StartGameExeName;
+        _customLauncherEnabled = s.CustomLauncherEnabled;
+        _customLauncherPath = s.CustomLauncherPath;
+        _customLauncherArguments = s.CustomLauncherArguments;
         // 空 = 未设置(旧配置/首次运行):按游戏目录里已装的资源包探测,探测不到则官方默认 hd
         var effectiveLevel = string.IsNullOrWhiteSpace(s.ResourceLevel)
             ? LaunchArguments.DetectInstalledResourceLevel(s.GameRootDir) ?? LaunchArguments.DefaultResourceLevel
@@ -1193,10 +1278,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
         var dir = folders[0].Path.LocalPath;
 
-        // 校验目录包含游戏主程序(对齐 Haiyu 选目录后自动识别:无效目录直接提示,不写入配置)
-        if (!File.Exists(Path.Combine(dir, GamePathResolver.ExeRootName)))
+        // 目录合法性判定抽到 GameDirValidator(纯函数、可单测):
+        // 「已有游戏」与「准备新装到空目录」都是合法选择,只有"看起来是别的目录"才拒绝。
+        var verdict = GameDirValidator.Validate(dir);
+        if (verdict == GameDirVerdict.NotGameDirectory)
         {
-            StatusText = LanguageService.Format("Status.DirNotContains", GamePathResolver.ExeRootName);
+            StatusText = LanguageService.Format("Status.DirNotEmptyNotGame", GamePathResolver.ExeRootName);
             return;
         }
 
@@ -1205,8 +1292,90 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.ServerType = GameServerType.Unknown; // 交给自动检测
         SelectedServerIndex = 0; // 触发 OnSelectedServerIndexChanged 写回并保存
         GameRootDir = dir; // 触发 OnGameRootDirChanged 写回并保存(含上面的 ServerType 变更)
-        StatusText = LanguageService.Format("Status.DirSet");
+        // 空目录/新目录 = 准备全新安装,给一句明确反馈(否则用户看到"目录已设置"却仍显示未安装会困惑)
+        StatusText = verdict == GameDirVerdict.NewInstallTarget
+            ? LanguageService.Format("Status.DirSetForNewInstall")
+            : LanguageService.Format("Status.DirSet");
         WeakReferenceMessenger.Default.Send(new GameDirectoryChangedMessage(dir));
+    }
+
+    // ---------- 官方启动器安装记录(写回 launcherDownloadConfig.json 等) ----------
+
+    /// <summary>
+    /// 把当前游戏目录登记成官方启动器认得的「已安装」。
+    /// <para>
+    /// 为什么值得单独做一个按钮:McKuro 只写各分包标记(launcherDownloadConfig/{pack}.json),
+    /// 而官方启动器判"已安装"读的是**顶层** launcherDownloadConfig.json。缺这份记录时,
+    /// 用户改用官方启动器「定位游戏目录」会被判未安装,从头重下 80+GB —— 文件其实全在。
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private async Task WriteOfficialRecordAsync()
+    {
+        var service = AppServices.OfficialRecords;
+
+        var locate = service.LocateGameFolder();
+        var problem = locate.State switch
+        {
+            OfficialRecordLocateState.GameFolderMissing => LanguageService.Format("Status.OfficialRecordNeedGameDir"),
+            OfficialRecordLocateState.GameFolderEmpty => LanguageService.Format("Status.OfficialRecordFolderEmpty"),
+            OfficialRecordLocateState.GameExeMissing =>
+                LanguageService.Format("Status.OfficialRecordNoExe", GamePathResolver.ExeRootName),
+            _ => null,
+        };
+        if (problem is not null)
+        {
+            StatusText = problem;
+            return;
+        }
+
+        var folder = locate.GameFolder!;
+        var serverType = GameServerResolver.Resolve(AppServices.Settings, AppServices.Paths);
+        var record = await service.BuildInstallRecordAsync(serverType);
+        if (record is null)
+        {
+            StatusText = ResourceLevelService.SupportsResourceLevels(serverType)
+                ? LanguageService.Format("Status.OfficialRecordNoPack")
+                : LanguageService.Format("Status.OfficialRecordUnsupportedChannel");
+            return;
+        }
+
+        var install = await service.WriteInstallRecordAsync(folder, record);
+        if (install.HasFailed)
+        {
+            StatusText = LanguageService.Format("Status.OfficialRecordWriteFailed", install.FailedFiles.Count);
+            return;
+        }
+
+        // 资源清单是 best-effort:失败只提示,不推翻已成功的安装记录
+        var index = await service.WriteResourceIndexAsync(folder, record);
+        StatusText = index.HasFailed
+            ? LanguageService.Format("Status.OfficialRecordIndexFailed")
+            : LanguageService.Format("Status.OfficialRecordWritten", install.WrittenCount + index.WrittenCount);
+    }
+
+    /// <summary>移除本工具写入的官方安装记录(分包目录只删 .json,不整目录删)。</summary>
+    [RelayCommand]
+    private void RemoveOfficialRecord()
+    {
+        var service = AppServices.OfficialRecords;
+        var folder = AppServices.Paths.GameRootDir;
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+        {
+            StatusText = LanguageService.Format("Status.OfficialRecordNeedGameDir");
+            return;
+        }
+
+        if (!service.HasAnyRecord(folder))
+        {
+            StatusText = LanguageService.Format("Status.OfficialRecordNone");
+            return;
+        }
+
+        var result = service.RemoveRecords(folder);
+        StatusText = result.HasFailed
+            ? LanguageService.Format("Status.OfficialRecordRemoveFailed", result.FailedFiles.Count)
+            : LanguageService.Format("Status.OfficialRecordRemoved", result.RemovedCount);
     }
 
     [RelayCommand]
@@ -1256,6 +1425,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.DisableDlss = DisableDlss;
         s.StartGameArguments = StartGameArguments;
         s.StartGameExeName = StartGameExeName;
+        s.CustomLauncherEnabled = CustomLauncherEnabled;
+        s.CustomLauncherPath = CustomLauncherPath;
+        s.CustomLauncherArguments = CustomLauncherArguments;
         s.ResourceLevel = ResourceLevelIndex switch
         {
             0 => "uhd",
@@ -1275,6 +1447,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         s.SkipVerifyFiles = [.. SkipVerifyFiles];
         s.AutoSkipVerifyDelete = AutoSkipVerifyDelete;
         s.FastVerifyEnabled = FastVerifyEnabled;
+        s.InstallResidueCheckEnabled = InstallResidueCheckEnabled;
         s.NotifEnabled = NotifEnabled;
         s.Language = LanguageIndex == 1 ? "en-US" : "zh-Hans";
         s.StartupPage = StartupPageIndex == 1 ? "Launcher" : "Home";

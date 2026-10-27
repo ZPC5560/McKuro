@@ -37,30 +37,62 @@ public partial class WikiView : UserControl
         InitializeComponent();
 
         // 视频区按比例自适应:分辨率解析后高度 = 宽度/显示比例(剩余空间由官方资讯区填满)
-        BannerVideo.VideoAspectRatioResolved += (w, h) =>
-        {
-            _videoAspect = h > 0 ? (double)w / h : null;
-            UpdateBannerHeight();
-        };
-        BannerHost.SizeChanged += (_, _) => UpdateBannerHeight();
+        BannerVideo.VideoAspectRatioResolved += OnVideoAspectRatioResolved;
+        BannerHost.SizeChanged += OnBannerHostSizeChanged;
 
-        DataContextChanged += (_, _) =>
-        {
-            if (DataContext is WikiViewModel vm)
-            {
-                vm.PropertyChanged += (_, e) =>
-                {
-                    if (e.PropertyName is nameof(WikiViewModel.CurrentBannerIsDirectVideo)
-                        or nameof(WikiViewModel.CurrentBannerIsBili)
-                        or nameof(WikiViewModel.CurrentBanner))
-                    {
-                        UpdateVideoOverlay();
-                    }
-                };
-            }
-            UpdateVideoOverlay();
-        };
+        DataContextChanged += OnDataContextChanged;
+        DetachedFromVisualTree += (_, _) => UnhookViewModel();
     }
+
+    /// <summary>当前已挂钩的 WikiViewModel(用于成对解绑,避免匿名 lambda 无法 -=)。</summary>
+    private WikiViewModel? _hookedVm;
+
+    /// <summary>
+    /// DataContext 换了就重挂:先解旧的再挂新的。
+    /// <para>
+    /// <b>为什么要这么写:</b>WikiViewModel 是长生命周期单例,而 WikiView 会随导航反复重建。
+    /// 原来用匿名 lambda 订阅 <c>vm.PropertyChanged</c>,既无法解绑、又会随每次进入页面
+    /// 多挂一份,视图被 ViewModel 的委托链一直钉着(与 Haiyu 1.4.6 修的 WebView2 匿名事件泄漏同类)。
+    /// 改成具名方法 + 字段持有后,可以精确地 -= 掉。
+    /// </para>
+    /// </summary>
+    private void OnDataContextChanged(object? sender, EventArgs e)
+    {
+        UnhookViewModel();
+        if (DataContext is WikiViewModel vm)
+        {
+            _hookedVm = vm;
+            vm.PropertyChanged += OnWikiVmPropertyChanged;
+        }
+        UpdateVideoOverlay();
+    }
+
+    private void OnWikiVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(WikiViewModel.CurrentBannerIsDirectVideo)
+            or nameof(WikiViewModel.CurrentBannerIsBili)
+            or nameof(WikiViewModel.CurrentBanner))
+        {
+            UpdateVideoOverlay();
+        }
+    }
+
+    private void UnhookViewModel()
+    {
+        if (_hookedVm is not null)
+        {
+            _hookedVm.PropertyChanged -= OnWikiVmPropertyChanged;
+            _hookedVm = null;
+        }
+    }
+
+    private void OnVideoAspectRatioResolved(double width, double height)
+    {
+        _videoAspect = height > 0 ? width / height : null;
+        UpdateBannerHeight();
+    }
+
+    private void OnBannerHostSizeChanged(object? sender, SizeChangedEventArgs e) => UpdateBannerHeight();
 
     /// <summary>视频区高度:直接视频按显示比例、B站嵌入按 16:9、图片保持默认 220;
     /// 右列总高跟随左列(整体高度绑定),官方资讯区填满视频以下剩余空间。</summary>

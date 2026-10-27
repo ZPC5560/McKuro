@@ -391,6 +391,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             roles.OnNavigatedTo();
         }
+        // 导航到资讯页时重载:资讯/公告/轮播都按渠道取内容,
+        // 设置页里换了区服后若不重载,用户看到的是上一个渠道的缓存内容(表现为"切了区服没反应")。
+        if (item.ViewModel is WikiViewModel wiki)
+        {
+            wiki.OnNavigatedTo();
+        }
     }
 
     /// <summary>通过字符串 key 导航(供消息接收)。</summary>

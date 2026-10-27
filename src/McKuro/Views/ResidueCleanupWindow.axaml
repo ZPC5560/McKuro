@@ -1,0 +1,112 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ic="using:FluentIcons.Avalonia"
+        xmlns:loc="clr-namespace:McKuro.Services"
+        mc:Ignorable="d" d:DesignWidth="480" d:DesignHeight="340"
+        x:Class="McKuro.Views.ResidueCleanupWindow"
+        Title="{loc:Localize Key=Launcher.Residue.Title}"
+        Width="480" MaxHeight="560" SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+  <!-- 安装完成后的「重复/残留文件」清理确认(用户需求 2026-10):
+       多次断连下载后游戏目录会积累备份与半成品,体积明显大于服务端清单。
+       这里只列出启动器自己产生、且确认可删的条目 —— 不列"清单外的文件"
+       (其它画质资源包/存档/日志本来就不在清单里,删了会坏档)。 -->
+  <Window.Styles>
+    <Style Selector="Button.dlgCancel">
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="18,8" />
+    </Style>
+    <Style Selector="Button.dlgConfirm">
+      <Setter Property="Foreground" Value="{DynamicResource McKuroWarning}" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="18,8" />
+    </Style>
+  </Window.Styles>
+  <Border Padding="22" Background="{DynamicResource SemiColorBg1}">
+    <StackPanel Spacing="14">
+      <!-- 标题 -->
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <Border Width="36" Height="36" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+          <ic:FluentIcon Icon="Delete" IconVariant="Regular" IconSize="Size20"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Foreground="{DynamicResource McKuroWarning}" />
+        </Border>
+        <TextBlock x:Name="TitleText" FontSize="16" FontWeight="Bold"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource SemiColorText0}" />
+      </StackPanel>
+
+      <!-- 说明正文 -->
+      <TextBlock x:Name="BodyText" FontSize="13" TextWrapping="Wrap" LineHeight="20"
+                 Foreground="{DynamicResource SemiColorText1}" />
+
+      <!-- 体积对比:实测 / 清单 / 可回收 -->
+      <Border CornerRadius="10" Padding="14,10"
+              Background="{DynamicResource SemiColorBg2}"
+              BorderBrush="{DynamicResource McKuroSwitchChipStroke}"
+              BorderThickness="1">
+        <StackPanel Spacing="6">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{loc:Localize Key=Launcher.Residue.ActualLabel}" FontSize="12"
+                       Foreground="{DynamicResource SemiColorText2}" />
+            <TextBlock x:Name="ActualText" Grid.Column="1" FontSize="12" FontWeight="Bold"
+                       Foreground="{DynamicResource SemiColorText1}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{loc:Localize Key=Launcher.Residue.ManifestLabel}" FontSize="12"
+                       Foreground="{DynamicResource SemiColorText2}" />
+            <TextBlock x:Name="ManifestText" Grid.Column="1" FontSize="12"
+                       Foreground="{DynamicResource SemiColorText2}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{loc:Localize Key=Launcher.Residue.ReclaimLabel}" FontSize="12"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource SemiColorText1}" />
+            <TextBlock x:Name="ReclaimText" Grid.Column="1" FontSize="13" FontWeight="Bold"
+                       Foreground="{DynamicResource McKuroWarning}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <!-- 分类明细:按类别合并(备份 N 项 / 半成品 N 项 …),避免列出上千条 -->
+      <ItemsControl x:Name="KindList" MaxHeight="168">
+        <ItemsControl.Template>
+          <ControlTemplate>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+              <ItemsPresenter />
+            </ScrollViewer>
+          </ControlTemplate>
+        </ItemsControl.Template>
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Spacing="4" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="x:String">
+            <TextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource SemiColorText2}" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <!-- 安全说明:明确告诉用户删的是什么、不会动什么 -->
+      <TextBlock Text="{loc:Localize Key=Launcher.Residue.SafeHint}" FontSize="11"
+                 TextWrapping="Wrap" LineHeight="17"
+                 Foreground="{DynamicResource SemiColorText3}" />
+
+      <!-- 操作 -->
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+        <Button x:Name="KeepButton" MinWidth="96" Classes="dlgCancel"
+                Content="{loc:Localize Key=Launcher.Residue.Keep}" />
+        <Button x:Name="DeleteButton" MinWidth="120" Classes="dlgConfirm"
+                Content="{loc:Localize Key=Launcher.Residue.Delete}" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>

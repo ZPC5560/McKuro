@@ -359,9 +359,13 @@ public class ResourceLevelServiceTests : IDisposable
 
     private sealed class StubHandler(Dictionary<string, string> responses) : HttpMessageHandler
     {
+        /// <summary>实际请求过的 URL(按到达顺序),供断言"真的打到了某渠道端点"。</summary>
+        public List<string> RequestedPaths { get; } = [];
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var url = request.RequestUri!.ToString();
+            RequestedPaths.Add(url);
             if (responses.TryGetValue(url, out var body))
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
@@ -379,7 +383,7 @@ public class ResourceLevelServiceTests : IDisposable
         MarkInstalled("common", "hd");
         var svc = CreateService(new Dictionary<string, string> { [IndexUrl] = IndexJson() });
 
-        var options = await svc.GetLevelOptionsAsync(GameServerType.Official);
+        var options = (await svc.GetLevelOptionsAsync(GameServerType.Official)).Items;
 
         Assert.Equal(3, options.Count);
         Assert.Equal(["uhd", "hd", "sd"], options.Select(o => o.Value));
@@ -400,10 +404,43 @@ public class ResourceLevelServiceTests : IDisposable
     {
         var svc = CreateService(new Dictionary<string, string> { [IndexUrl] = IndexJson() });
 
-        // indexUrlProvider 被显式覆盖,故这里直接验证渠道能力判断本身
+        // indexUrlProvider 被显式覆盖,故这里直接验证渠道能力判断本身。
+        // 2026-10-27 逐主机实测:B站与国际服都有新版协议端点,只有 WeGame 四主机全 404。
         Assert.True(ResourceLevelService.SupportsResourceLevels(GameServerType.Official));
-        Assert.False(ResourceLevelService.SupportsResourceLevels(GameServerType.Bilibili));
-        Assert.False(ResourceLevelService.SupportsResourceLevels(GameServerType.Global));
+        Assert.True(ResourceLevelService.SupportsResourceLevels(GameServerType.Bilibili));
+        Assert.True(ResourceLevelService.SupportsResourceLevels(GameServerType.Global));
+        Assert.False(ResourceLevelService.SupportsResourceLevels(GameServerType.WeGame));
+    }
+
+    [Theory]
+    [InlineData(GameServerType.Official, "10003_oLNgHF1CESo51DGHN2odtp40e3oI1HfZ/G152/official")]
+    [InlineData(GameServerType.Bilibili, "10004_IY6xmlAusbImBjWrpPj1OwNuirXEO44x/G152/bilibili")]
+    [InlineData(GameServerType.WeGame, null)]
+    public void ResourcePackIndexForServerType_Selects_Channel_Path(GameServerType type, string? expectedPath)
+    {
+        var url = KuroEndpoints.ResourcePackIndexForServerType(type);
+
+        if (expectedPath is null)
+        {
+            Assert.Null(url);
+            return;
+        }
+
+        Assert.NotNull(url);
+        Assert.EndsWith($"/launcher/game/{expectedPath}/index.json", url);
+    }
+
+    [Fact]
+    public void ResourcePackIndexForServerType_Uses_Global_Host_Without_Cn_Prefix()
+    {
+        var url = KuroEndpoints.ResourcePackIndexForServerType(GameServerType.Global);
+
+        // 国际服走 prod-alicdn-…,与国服/B站 的 prod-cn-alicdn-… 是两个不同的域。
+        // 实测把国际服地址套到 -cn- 主机(或反之)一律 404,这条断言守住"别为了统一而合并"。
+        Assert.NotNull(url);
+        Assert.StartsWith("https://prod-alicdn-gamestarter.kurogame.com/", url);
+        Assert.DoesNotContain("prod-cn-alicdn", url);
+        Assert.Contains("G153/official", url);
     }
 
     // ---------- 删除资源包(端到端) ----------
@@ -653,7 +690,8 @@ public class ResourceLevelServiceTests : IDisposable
     [Fact]
     public async Task Switch_Rejects_Unsupported_Channel_Without_Index_Override()
     {
-        // 不提供 indexUrlProvider:哔哩哔哩应得到明确的"暂不支持",而不是静默失败
+        // 不提供 indexUrlProvider:WeGame 应得到明确的"暂不支持",而不是静默失败。
+        // (B站/国际服已有端点,不再是"不支持"样本。)
         var http = new HttpClient(new StubHandler([]));
         var svc = new ResourceLevelService(
             new GameManifestLoader(http),
@@ -663,10 +701,39 @@ public class ResourceLevelServiceTests : IDisposable
             indexUrlProvider: null,
             logger: NullLogger<ResourceLevelService>.Instance);
 
-        var result = await svc.SwitchAsync(GameServerType.Bilibili, "uhd");
+        var result = await svc.SwitchAsync(GameServerType.WeGame, "uhd");
 
         Assert.False(result.Success);
         Assert.NotNull(result.Message);
+    }
+
+    [Fact]
+    public async Task Switch_On_Bilibili_Uses_Channel_Endpoint_When_Index_Override_Absent()
+    {
+        // B站现在也走新版协议:没有 indexUrlProvider 时不能提前判"不支持",
+        // 而应真的去请求渠道端点(这里用桩 HTTP 提供该端点的响应)。
+        var responses = new Dictionary<string, string>
+        {
+            [KuroEndpoints.BilibiliResourcePackIndex!] = IndexJson(),
+        };
+        var handler = new StubHandler(responses);
+        var svc = new ResourceLevelService(
+            new GameManifestLoader(new HttpClient(handler)),
+            new DownloadEngine(new HttpClient(handler)),
+            new GamePathResolver(() => _root),
+            settings: null,
+            indexUrlProvider: null,
+            logger: NullLogger<ResourceLevelService>.Instance);
+
+        // 三个等级标记齐全 → 无需下载,直接成功(证明请求真的打到了渠道端点)
+        MarkInstalled("common", "hd", "sd", "uhd");
+        var result = await svc.SwitchAsync(GameServerType.Bilibili, "hd");
+
+        Assert.True(result.Success);
+        Assert.True(result.AlreadyInstalled);
+        Assert.Contains(
+            handler.RequestedPaths,
+            p => p.Contains("bilibili", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -851,7 +918,7 @@ public class ResourceLevelServiceTests : IDisposable
             new Dictionary<string, string> { [IndexUrl] = IndexJson() },
             installedGameVersion: TestPackVersion);
 
-        var options = await svc.GetLevelOptionsAsync(GameServerType.Official);
+        var options = (await svc.GetLevelOptionsAsync(GameServerType.Official)).Items;
 
         Assert.True(options.Single(o => o.Value == "hd").Installed);
     }

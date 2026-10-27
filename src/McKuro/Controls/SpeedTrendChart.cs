@@ -1,21 +1,31 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
+using McKuro.Services;
 
 namespace McKuro.Controls;
 
 /// <summary>
-/// 实时下载速度波动曲线(参考 Haiyu 的 DownloadSpeedPoints 波形)。
-/// 输入 <see cref="Values"/>(单位 MB/s,每秒一点),自绘折线 + 渐变填充,横轴为最近 N 点、纵轴按最大值自适应。
+/// 实时下载速度波动曲线(对齐 FlClash 仪表盘的上传/下载波形)。
+/// 输入 <see cref="Values"/>(单位 MB/s),自绘平滑曲线 + 渐变面积 + 端点光点。
+/// <para>
+/// 纵轴口径由 <see cref="SpeedChartMath.ComputeBounds"/> 决定(纯函数、有单测):
+/// 按窗口内<b>真实波动幅度</b>自适应放大,弱网下的细小抖动也能填满画面;
+/// 同时对稳定态设放大上限,避免把采样噪声画成锯齿。
+/// </para>
+/// <para>回归背景(2026-10 用户反馈):旧实现 ① 用直线连点、无平滑;② 纵轴取
+/// <c>max(span*1.25, max*0.1)</c> 且以 max 为锚 → 波动大时曲线被压成一条直线;
+/// ③ 画在 38px 高的细条里,没有面积填充 → "看不出网速在抖"。</para>
 /// </summary>
 public sealed class SpeedTrendChart : Control
 {
-    public static readonly StyledProperty<IReadOnlyList<double>> ValuesProperty =
-        AvaloniaProperty.Register<SpeedTrendChart, IReadOnlyList<double>>(nameof(Values));
+    public static readonly StyledProperty<IReadOnlyList<double>?> ValuesProperty =
+        AvaloniaProperty.Register<SpeedTrendChart, IReadOnlyList<double>?>(nameof(Values));
 
     public static readonly StyledProperty<IBrush> LineBrushProperty =
         AvaloniaProperty.Register<SpeedTrendChart, IBrush>(nameof(LineBrush),
@@ -25,9 +35,11 @@ public sealed class SpeedTrendChart : Control
         AvaloniaProperty.Register<SpeedTrendChart, IBrush>(nameof(FillBrush),
             new LinearGradientBrush
             {
+                StartPoint = new RelativePoint(0.5, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(0.5, 1, RelativeUnit.Relative),
                 GradientStops =
                 {
-                    new GradientStop(Color.FromArgb(90, 64, 158, 255), 0),
+                    new GradientStop(Color.FromArgb(120, 64, 158, 255), 0),
                     new GradientStop(Color.FromArgb(0, 64, 158, 255), 1),
                 },
             });
@@ -35,8 +47,23 @@ public sealed class SpeedTrendChart : Control
     public static readonly StyledProperty<int> MaxPointsProperty =
         AvaloniaProperty.Register<SpeedTrendChart, int>(nameof(MaxPoints), 60);
 
-    /// <summary>速度历史值(单位 MB/s,最近在前?最近在后)。</summary>
-    public IReadOnlyList<double> Values
+    /// <summary>线宽(DIP)。细曲线在玻璃卡片上会"糊掉",默认给到 2.2。</summary>
+    public static readonly StyledProperty<double> LineThicknessProperty =
+        AvaloniaProperty.Register<SpeedTrendChart, double>(nameof(LineThickness), 2.2);
+
+    /// <summary>是否在曲线末端画一个当前值光点(一眼看出"现在在哪")。</summary>
+    public static readonly StyledProperty<bool> ShowLastPointProperty =
+        AvaloniaProperty.Register<SpeedTrendChart, bool>(nameof(ShowLastPoint), true);
+
+    /// <summary>是否画一条水平基线(给曲线一个视觉参照,避免"悬空")。</summary>
+    public static readonly StyledProperty<bool> ShowBaselineProperty =
+        AvaloniaProperty.Register<SpeedTrendChart, bool>(nameof(ShowBaseline), true);
+
+    public static readonly StyledProperty<IBrush?> BaselineBrushProperty =
+        AvaloniaProperty.Register<SpeedTrendChart, IBrush?>(nameof(BaselineBrush));
+
+    /// <summary>速度历史(单位 MB/s,旧 → 新)。</summary>
+    public IReadOnlyList<double>? Values
     {
         get => GetValue(ValuesProperty);
         set => SetValue(ValuesProperty, value);
@@ -56,126 +83,247 @@ public sealed class SpeedTrendChart : Control
         set => SetValue(FillBrushProperty, value);
     }
 
-    /// <summary>保留点数。</summary>
+    /// <summary>最多使用的点数(超出时只画最近 N 点)。</summary>
     public int MaxPoints
     {
         get => GetValue(MaxPointsProperty);
         set => SetValue(MaxPointsProperty, value);
     }
 
+    public double LineThickness
+    {
+        get => GetValue(LineThicknessProperty);
+        set => SetValue(LineThicknessProperty, value);
+    }
+
+    public bool ShowLastPoint
+    {
+        get => GetValue(ShowLastPointProperty);
+        set => SetValue(ShowLastPointProperty, value);
+    }
+
+    public bool ShowBaseline
+    {
+        get => GetValue(ShowBaselineProperty);
+        set => SetValue(ShowBaselineProperty, value);
+    }
+
+    public IBrush? BaselineBrush
+    {
+        get => GetValue(BaselineBrushProperty);
+        set => SetValue(BaselineBrushProperty, value);
+    }
+
     static SpeedTrendChart()
     {
-        AffectsRender<SpeedTrendChart>(ValuesProperty, LineBrushProperty, FillBrushProperty, MaxPointsProperty);
+        AffectsRender<SpeedTrendChart>(
+            ValuesProperty, LineBrushProperty, FillBrushProperty, MaxPointsProperty,
+            LineThicknessProperty, ShowLastPointProperty, ShowBaselineProperty, BaselineBrushProperty);
         ClipToBoundsProperty.OverrideDefaultValue<SpeedTrendChart>(true);
-        // 值集合变化(InotifyPropertyChanged / ObservableCollection)时重绘
         ValuesProperty.Changed.AddClassHandler<SpeedTrendChart>((o, _) => o.OnValuesChanged());
     }
 
+    private INotifyCollectionChanged? _observed;
+
     private void OnValuesChanged()
     {
-        if (Values is ObservableCollection<double> oc)
+        // 集合实例换了才重订阅,避免同一集合被多次赋值时叠出一堆事件处理器。
+        var collection = Values as INotifyCollectionChanged;
+        if (!ReferenceEquals(_observed, collection))
         {
-            oc.CollectionChanged += (_, _) => Dispatcher.UIThread.Post(InvalidateVisual);
+            if (_observed is not null)
+            {
+                _observed.CollectionChanged -= OnCollectionChanged;
+            }
+            _observed = collection;
+            if (_observed is not null)
+            {
+                _observed.CollectionChanged += OnCollectionChanged;
+            }
         }
         Dispatcher.UIThread.Post(InvalidateVisual);
     }
 
-    public SpeedTrendChart()
-    {
-    }
+    private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => Dispatcher.UIThread.Post(InvalidateVisual);
 
     private Pen? _linePen;
     private IBrush? _linePenBrush;
+    private double _linePenThickness = double.NaN;
+    private Pen? _baselinePen;
+    private IBrush? _baselinePenBrush;
     private readonly List<Point> _points = new();
+
+    /// <summary>基线默认色:压在玻璃卡片上的一层极淡白线(用户主题不参与,始终"若有若无")。</summary>
+    private static readonly IBrush FallbackBaselineBrush = new SolidColorBrush(Color.FromArgb(46, 255, 255, 255));
+
+    /// <summary>
+    /// 在画布内平滑曲线时,上下各留的呼吸边距(DIP):曲线与端点光点不会被裁掉。
+    /// </summary>
+    private const double VerticalPadding = 4.0;
 
     public override void Render(DrawingContext context)
     {
         base.Render(context);
+
         var width = Bounds.Width;
         var height = Bounds.Height;
-        if (width <= 2 || height <= 2 || Values is null || Values.Count < 2)
+        var source = Values;
+        if (width <= 2 || height <= 2 || source is null || source.Count == 0)
         {
             return;
         }
 
-        // 纵轴范围:取波动幅度(点集合 max-min),稳定时(波动小)放大显示,让微小上下起伏清晰可见
-        var minMbps = double.MaxValue;
-        var maxMbps = 0.0;
-        foreach (var v in Values)
+        // 只取最近 MaxPoints 点(集合本身也做了裁剪,这里再护一层:外部直接塞长数组也不卡)
+        var count = source.Count;
+        var take = MaxPoints > 1 ? Math.Min(count, MaxPoints) : count;
+        var offset = count - take;
+        var raw = new double[take];
+        for (var i = 0; i < take; i++)
         {
-            if (v < minMbps)
-            {
-                minMbps = v;
-            }
-            if (v > maxMbps)
-            {
-                maxMbps = v;
-            }
+            raw[i] = source[offset + i];
         }
-        if (minMbps == double.MaxValue)
-        {
-            minMbps = 0;
-        }
-        var span = maxMbps - minMbps;
-        // 范围至少取波动幅度的 1.25 倍,并保证非零;稳定时自动缩小范围以放大波动
-        var scale = Math.Max(span * 1.25, maxMbps * 0.1);
-        if (scale <= 0)
-        {
-            scale = 1.0;
-        }
-        var yBottom = maxMbps - scale * 0.15; // 顶部留 15% margin
-        if (yBottom < 0)
-        {
-            yBottom = 0;
-        }
-        var yTop = yBottom + scale;
 
-        // 底部留 4px 边距
-        var drawHeight = height - 4;
-        var n = Values.Count;
-        var stepX = width / Math.Max(n - 1, 1);
+        var smoothed = SpeedChartMath.Smooth(raw);
+        var bounds = SpeedChartMath.ComputeBounds(smoothed);
+        var peak = SpeedChartMath.Peak(smoothed);
 
-        var padLeft = 2.0;
+        var drawHeight = height - VerticalPadding * 2;
+        var baselineY = height - VerticalPadding;
+        if (drawHeight <= 1)
+        {
+            return;
+        }
+
+        var stepX = take > 1 ? width / (take - 1) : width;
+
+        // 末端光点有半径,若最后一个点正好压在画布右沿会被 ClipToBounds 切掉半边(看起来像一条断线);
+        // 贝塞尔控制点也可能轻微超出上下边距。这里左右各让出光晕半径,上下留 VerticalPadding。
+        var rightInset = ShowLastPoint ? 5.0 : 0.0;
+        var usableWidth = Math.Max(1, width - rightInset);
+        stepX = take > 1 ? usableWidth / (take - 1) : usableWidth;
+
         var points = _points;
         points.Clear();
-        points.EnsureCapacity(n);
-        for (int i = 0; i < n; i++)
+        points.EnsureCapacity(take);
+        for (var i = 0; i < take; i++)
         {
-            var x = padLeft + i * stepX;
-            // 值映射到 [yBottom, yTop] 范围(波动范围自适应,稳定时放大微小起伏)
-            var ratio = Math.Clamp((Values[i] - yBottom) / (yTop - yBottom), 0, 1);
-            var y = drawHeight - drawHeight * ratio;
+            var x = take > 1 ? i * stepX : Math.Max(0, usableWidth - 1);
+            var ratio = bounds.Ratio(smoothed[i]);
+            // 峰值为 0(还没开始/已暂停)时贴底画平线,不要悬在中间
+            var y = peak <= 0 ? baselineY : baselineY - drawHeight * ratio;
             points.Add(new Point(x, y));
         }
 
-        // 填充区域(曲线到底部闭合)
+        // ---------- 面积(曲线 → 底边闭合) ----------
         if (points.Count >= 2)
         {
-            var geo = new StreamGeometry();
-            using (var g = geo.Open())
-            {
-                g.BeginFigure(points[0], false);
-                for (int i = 1; i < points.Count; i++)
-                {
-                    g.LineTo(points[i]);
-                }
-                g.LineTo(new Point(points[^1].X, drawHeight));
-                g.LineTo(new Point(points[0].X, drawHeight));
-                g.EndFigure(true);
-            }
-            context.DrawGeometry(FillBrush, null, geo);
+            var area = BuildCurve(points, baselineY, closeToBottom: baselineY);
+            context.DrawGeometry(FillBrush, null, area);
         }
 
-        // 折线(Pen 按 brush 引用缓存,免每秒重绘 new Pen)
-        if (_linePen is null || !ReferenceEquals(_linePenBrush, LineBrush))
+        // ---------- 基线(虚线参照线,按输入引用缓存 Pen) ----------
+        if (ShowBaseline)
         {
-            _linePen = new Pen(LineBrush, 2);
+            var brush = BaselineBrush ?? FallbackBaselineBrush;
+            if (_baselinePen is null || !ReferenceEquals(_baselinePenBrush, brush))
+            {
+                _baselinePen = new Pen(brush, 1)
+                {
+                    DashStyle = new DashStyle([3, 3], 0),
+                };
+                _baselinePenBrush = brush;
+            }
+            context.DrawLine(_baselinePen, new Point(0, baselineY - 0.5), new Point(width, baselineY - 0.5));
+        }
+
+        // ---------- 曲线 ----------
+        if (_linePen is null || !ReferenceEquals(_linePenBrush, LineBrush) || _linePenThickness != LineThickness)
+        {
+            _linePen = new Pen(LineBrush, LineThickness)
+            {
+                LineCap = PenLineCap.Round,
+                LineJoin = PenLineJoin.Round,
+            };
             _linePenBrush = LineBrush;
+            _linePenThickness = LineThickness;
         }
-        var pen = _linePen;
-        for (int i = 1; i < points.Count; i++)
+        if (points.Count >= 2)
         {
-            context.DrawLine(pen, points[i - 1], points[i]);
+            context.DrawGeometry(null, _linePen, BuildCurve(points, baselineY, closeToBottom: null));
         }
+
+        // ---------- 末端光点 ----------
+        if (ShowLastPoint && points.Count >= 2)
+        {
+            var last = points[^1];
+            // 外圈光晕是线色的淡染;按线色引用缓存,避免每帧新建画刷
+            if (_lastPointHalo is null || !ReferenceEquals(_lastPointHaloSource, LineBrush))
+            {
+                _lastPointHalo = MakeHalo(LineBrush);
+                _lastPointHaloSource = LineBrush;
+            }
+            context.DrawEllipse(_lastPointHalo, null, last, 5.5, 5.5);
+            context.DrawEllipse(LineBrush, null, last, 2.6, 2.6);
+        }
+    }
+
+    private IBrush? _lastPointHalo;
+    private IBrush? _lastPointHaloSource;
+
+    /// <summary>线段色的淡染版本(纯色才能算;渐变就退回半透明白)。</summary>
+    private static IBrush MakeHalo(IBrush line)
+    {
+        if (line is ISolidColorBrush { Color: var c })
+        {
+            return new SolidColorBrush(Color.FromArgb(70, c.R, c.G, c.B));
+        }
+        return new SolidColorBrush(Color.FromArgb(70, 255, 255, 255));
+    }
+
+    /// <summary>
+    /// 把点序列转成平滑曲线(Catmull-Rom 切线 → 三次贝塞尔,与 FlClash 的 LineChart 同一套算法),
+    /// 可选闭合到基线用于面积填充。
+    /// <para>
+    /// 切线在「相对基线的高度」空间计算(越高的点数值越大,恒为正),这样
+    /// <see cref="SpeedChartMath.Slopes"/> 的 ±3×高度 夹取才有物理意义:控制点不会
+    /// 把曲线拽到基线以下。屏幕 y 轴朝下,控制点要按 <c>y - slope/3</c> 反号加上去。
+    /// </para>
+    /// </summary>
+    /// <param name="points">屏幕坐标点列(旧 → 新)。</param>
+    /// <param name="heightBase">基线 y(通常就是画布底);用它与点的 y 差得到"离地高度"。</param>
+    /// <param name="closeToBottom">非空表示曲线要闭合到该 y 形成面积。</param>
+    private static StreamGeometry BuildCurve(List<Point> points, double heightBase, double? closeToBottom)
+    {
+        var heights = new double[points.Count];
+        for (var i = 0; i < points.Count; i++)
+        {
+            // 离地高度:恒为正,量纲与速度一致;两侧对称的曲线在这里才有正确的峰谷方向
+            heights[i] = heightBase - points[i].Y;
+        }
+        var slopes = SpeedChartMath.Slopes(heights);
+
+        var geo = new StreamGeometry();
+        using (var g = geo.Open())
+        {
+            g.BeginFigure(points[0], closeToBottom is not null);
+            for (var i = 1; i < points.Count; i++)
+            {
+                var prev = points[i - 1];
+                var cur = points[i];
+                var dx = (cur.X - prev.X) / 3.0;
+                // 高度空间 → 屏幕空间反号:高度上升 = 屏幕上移(y 变小)
+                var c1 = new Point(prev.X + dx, prev.Y - slopes[i - 1] / 3.0);
+                var c2 = new Point(cur.X - dx, cur.Y + slopes[i] / 3.0);
+                g.CubicBezierTo(c1, c2, cur);
+            }
+            if (closeToBottom is { } bottom)
+            {
+                g.LineTo(new Point(points[^1].X, bottom));
+                g.LineTo(new Point(points[0].X, bottom));
+            }
+            g.EndFigure(closeToBottom is not null);
+        }
+        return geo;
     }
 }
