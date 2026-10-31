@@ -1,10 +1,13 @@
 name: Sync release notes from CHANGELOG.md
 description: >
-  Creates (or edits) the GitHub Release for the current tag with this version's
-  section of CHANGELOG.md as the body — the repo changelog, the website
-  changelog section and the Release notes stay one single source.
-  Safe to run from several parallel publish jobs: create is idempotent via
-  `create || edit`, and every job writes the exact same notes.
+  Creates the GitHub Release for the current tag with this version's section of
+  CHANGELOG.md as the body — the repo changelog, the website changelog section
+  and the Release notes stay one single source.
+  Idempotent: the note body is compared first and skipped when already equal;
+  a stale/mismatched release is deleted and recreated (the REST update API
+  returns HTTP 422 when the release's tag binding no longer matches the tag).
+  Callers should hold a shared concurrency group per tag so parallel publish
+  jobs do not race on the delete/create (see build-and-test.yml).
 
 runs:
   using: composite
@@ -24,19 +27,45 @@ runs:
           echo "::error::CHANGELOG.md has no section for ${ver} — write the changelog entry before pushing the tag."
           exit 1
         fi
-        # 幂等:先显式判断 Release 是否存在,再决定 create / edit。
+        # 幂等:先看 Release 是否已存在且正文一致,一致就跳过;否则确保它存在。
         #
-        # 不要写成 `gh release create ... || gh release edit ...`:
-        # 多个 publish job(win / macOS 两个矩阵 / linux)会并发执行本 action,
-        # 首个 job 建成 Release 后,其余 job 的 create 会以 "Release.tag_name already
-        # exists" 失败并落到 edit;而 `gh release edit <tag>` 会把 <tag> 当作 tag_name
-        # 一并提交,在 tag 已存在时返回 HTTP 422(实测 v1.3.7.5 的 win/macOS 任务
-        # 因此全部失败,只有抢在最前的 linux 成功)。
-        # 这里改为先查询:已存在就只改正文与标题(--notes-file / --title 不触碰 tag)。
-        if gh release view "$TAG" >/dev/null 2>&1; then
-          gh release edit "$TAG" --title "McKuro $TAG" --notes-file "$notes"
-          echo "release notes for $TAG updated (existing release) from CHANGELOG.md ($(wc -l < "$notes") lines)"
-        else
-          gh release create "$TAG" --title "McKuro $TAG" --notes-file "$notes" --verify-tag
-          echo "release notes for $TAG created from CHANGELOG.md ($(wc -l < "$notes") lines)"
+        # 踩过的坑(2026-10-31 v1.3.7.5 实测,务必保留注释):
+        # 1) `gh release create ... || gh release edit ...`:四个 publish job
+        #    (win / osx-arm64 / osx-x64 / linux)会并发执行本 action,首个 job 建成后
+        #    其余 create 报 "tag_name already exists" 而落到 edit。
+        # 2) `gh release edit <tag>` 与 `gh api -X PATCH .../releases/<id>` **都会**
+        #    返回 HTTP 422 "Release.tag_name already exists" —— 即便请求体里只发
+        #    body、完全不提 tag_name。根因是 Release 记录的 tag 绑定与真实 tag 对象
+        #    不一致(本次因强制把 tag 移到新提交而触发)。此状态下 REST 更新不可行。
+        # 3) 因此:正文缺失/不一致时才重建 —— 先 `--cleanup-tag=false` 删掉旧记录
+        #    再 create,可自愈 tag 移动造成的失配。并发下删除会互相踩,
+        #    故删除+创建的窗口用"重试 create"兜住:谁先建成谁赢,失败方在下一轮
+        #    读到一致正文即跳过。
+        existing_body="$(gh release view "$TAG" --json body --jq .body 2>/dev/null || true)"
+        if [ -n "$existing_body" ] && [ "$existing_body" = "$(cat "$notes")" ]; then
+          echo "release notes for $TAG already up to date, skipping"
+          exit 0
         fi
+
+        if [ -n "$existing_body" ]; then
+          # 正文过期或记录失配:删掉再建(保留 tag)
+          gh release delete "$TAG" --yes --cleanup-tag=false || true
+          echo "existing release $TAG deleted (stale tag binding or outdated notes), recreating"
+        fi
+
+        # create 失败不立即致命:可能是并发的另一个 job 刚建成。
+        for attempt in 1 2 3 4 5; do
+          if gh release create "$TAG" --title "McKuro $TAG" --notes-file "$notes" --verify-tag; then
+            echo "release notes for $TAG created from CHANGELOG.md ($(wc -l < "$notes") lines)"
+            exit 0
+          fi
+          echo "create attempt $attempt failed (likely concurrent create), re-checking…"
+          sleep $((attempt * 3))
+          cur="$(gh release view "$TAG" --json body --jq .body 2>/dev/null || true)"
+          if [ -n "$cur" ] && [ "$cur" = "$(cat "$notes")" ]; then
+            echo "release notes for $TAG already created by a concurrent job with identical notes"
+            exit 0
+          fi
+        done
+        echo "::error::failed to create or verify release $TAG after retries"
+        exit 1
