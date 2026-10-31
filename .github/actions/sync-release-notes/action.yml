@@ -24,7 +24,19 @@ runs:
           echo "::error::CHANGELOG.md has no section for ${ver} — write the changelog entry before pushing the tag."
           exit 1
         fi
-        # release exists → edit; otherwise create (title convention: McKuro vX.Y.Z)
-        gh release create "$TAG" --title "McKuro $TAG" --notes-file "$notes" --verify-tag 2>/dev/null \
-          || gh release edit "$TAG" --notes-file "$notes"
-        echo "release notes for $TAG synced from CHANGELOG.md ($(wc -l < "$notes") lines)"
+        # 幂等:先显式判断 Release 是否存在,再决定 create / edit。
+        #
+        # 不要写成 `gh release create ... || gh release edit ...`:
+        # 多个 publish job(win / macOS 两个矩阵 / linux)会并发执行本 action,
+        # 首个 job 建成 Release 后,其余 job 的 create 会以 "Release.tag_name already
+        # exists" 失败并落到 edit;而 `gh release edit <tag>` 会把 <tag> 当作 tag_name
+        # 一并提交,在 tag 已存在时返回 HTTP 422(实测 v1.3.7.5 的 win/macOS 任务
+        # 因此全部失败,只有抢在最前的 linux 成功)。
+        # 这里改为先查询:已存在就只改正文与标题(--notes-file / --title 不触碰 tag)。
+        if gh release view "$TAG" >/dev/null 2>&1; then
+          gh release edit "$TAG" --title "McKuro $TAG" --notes-file "$notes"
+          echo "release notes for $TAG updated (existing release) from CHANGELOG.md ($(wc -l < "$notes") lines)"
+        else
+          gh release create "$TAG" --title "McKuro $TAG" --notes-file "$notes" --verify-tag
+          echo "release notes for $TAG created from CHANGELOG.md ($(wc -l < "$notes") lines)"
+        fi
