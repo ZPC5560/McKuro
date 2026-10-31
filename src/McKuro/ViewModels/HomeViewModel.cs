@@ -766,13 +766,26 @@ public sealed partial class HomeViewModel : ViewModelBase
     {
         if (IsBusy)
         {
+            // 刷新中又选了新账号(或游戏退出):不能直接丢弃,结束后按最新绑定再拉一轮
+            _rerunDailyPending = true;
             return;
         }
         RefreshState();
         IsBusy = true;
+        _rerunDailyPending = false;
         try
         {
             var boundKey = AppServices.Settings.Current.HomeBoundAccountId;
+            // await 返回后绑定已变:本次结果属于旧账号,不填卡片(finally 中按新绑定重拉)
+            bool IsStale()
+            {
+                if (AppServices.Settings.Current.HomeBoundAccountId == boundKey)
+                {
+                    return false;
+                }
+                _rerunDailyPending = true;
+                return true;
+            }
             // 先用本地缓存头像占位(离线/慢网也立即显示,参照 Java 版 assets/header 本地文件优先)
             PrefillAvatarFromCache(boundKey);
 
@@ -782,6 +795,10 @@ public sealed partial class HomeViewModel : ViewModelBase
             if (!string.IsNullOrEmpty(boundKey))
             {
                 var boundData = await AppServices.LocalDaily.GetDailyDataForAsync(boundKey);
+                if (IsStale())
+                {
+                    return;
+                }
                 if (boundData is null)
                 {
                     ClearProfile();
@@ -796,6 +813,10 @@ public sealed partial class HomeViewModel : ViewModelBase
 
             // ① 优先本地游戏缓存 + PC 启动器 SDK(不依赖库街区登录)
             var local = await AppServices.LocalDaily.GetDailyDataAsync();
+            if (IsStale())
+            {
+                return;
+            }
             if (local is not null)
             {
                 ApplyDailyData(local);
@@ -813,6 +834,10 @@ public sealed partial class HomeViewModel : ViewModelBase
                 return;
             }
             var data = await AppServices.DailyData.GetDailyDataAsync();
+            if (IsStale())
+            {
+                return;
+            }
             if (data is null)
             {
                 ClearProfile();
@@ -832,8 +857,16 @@ public sealed partial class HomeViewModel : ViewModelBase
         finally
         {
             IsBusy = false;
+            if (_rerunDailyPending)
+            {
+                _rerunDailyPending = false;
+                _ = RefreshDailyAsync();
+            }
         }
     }
+
+    /// <summary>刷新进行中又收到刷新请求(切换绑定账号等):结束后重跑一轮。</summary>
+    private bool _rerunDailyPending;
 
     /// <summary>
     /// 清空角色资料(刷新失败/无数据时,避免展示过期账号)。

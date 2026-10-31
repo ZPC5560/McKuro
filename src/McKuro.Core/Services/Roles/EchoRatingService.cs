@@ -703,7 +703,14 @@ public static class EchoRatingService
         return EchoRatingLevel.S;
     }
 
-    /// <summary>评级角色的全部声骸:总评分 = 5 件得分之和(0-500),等级按单件均分判定。</summary>
+    /// <summary>角色声骸槽位数(总评满分 = 槽位数 × 100)。</summary>
+    public const int EchoSlotCount = 5;
+
+    /// <summary>
+    /// 评级角色的全部声骸:总评分 = 5 件得分之和(0-500),等级按单件均分判定。
+    /// <para>均分按<b>槽位数</b>(至少 5)计算,空槽位计 0 分:旧实现只按已装备件数求平均,
+    /// 装 1 件 75 分、空 4 个槽也会显示"完美毕业"、达成率 75%,与总分 75/500 自相矛盾。</para>
+    /// </summary>
     public static RoleEchoRating RateRole(IEnumerable<EchoInfo> echoes)
     {
         var list = echoes.Where(e => e is not null).ToList();
@@ -711,7 +718,7 @@ public static class EchoRatingService
         // 否则总评会漏掉技能级系数,出现“单件加起来 ≠ 总评”。
         var ratings = list.Select(e => RateEcho(e, e.PriorityWeights, e.SkillCoefficients)).ToList();
         var sum = ratings.Sum(r => r.Score);
-        var mean = ratings.Count > 0 ? sum / ratings.Count : 0.0;
+        var mean = sum / Math.Max(EchoSlotCount, ratings.Count);
         const double max = 500.0;
         // 等级口径与单件一致:由单件实际使用的口径聚合(见 EchoRating.IsUnifiedScale),
         // 不能用"MainProps 是否存在"重新推断 —— 那会与单件的实际门脱钩。

@@ -424,6 +424,14 @@ public sealed class OfficialLauncherRecordService
             {
                 continue;
             }
+            // 包名来自服务端:含路径分隔符/.. 的名字会把 .json 写到游戏目录外。
+            // 记为失败而不是跳过,让整套记录放弃写入(半套记录比不写更糟)。
+            if (!ResourceLevelService.IsSafePackName(pack.Name))
+            {
+                _logger.LogWarning("资源包名不合法,放弃写入官方记录: {Pack}", pack.Name);
+                failed.Add($"{PackVersionDirName}/{pack.Name}.json");
+                continue;
+            }
 
             var path = Path.Combine(dir, pack.Name + ".json");
             var relativePath = $"{PackVersionDirName}/{pack.Name}.json";
@@ -576,7 +584,9 @@ public sealed class OfficialLauncherRecordService
         CancellationToken ct)
     {
         var root = _paths.GameRootDir;
-        var serverType = _settings?.Current.ServerType ?? GameServerType.Official;
+        // 与组装记录(调用方传入的渠道)同一判定点:设置为「自动」(Unknown)时按游戏目录检测,
+        // 否则国际服/B 服用户会拿国服索引生成 LocalGameResources.json(L3)。
+        var serverType = GameServerResolver.Resolve(_settings, _paths);
         var indexUrl = KuroEndpoints.ResourcePackIndexForServerType(serverType);
         if (string.IsNullOrEmpty(root) || indexUrl is null)
         {
@@ -589,8 +599,10 @@ public sealed class OfficialLauncherRecordService
             return [];
         }
 
+        // 只取 HTTPS 地址(L5):LoadResourcePackAsync 也会拒绝 http,这里先筛掉,免得优先级最高的
+        // http 条目把整个清单收集带挂。
         var cdn = index.CdnList?
-            .Where(c => !string.IsNullOrWhiteSpace(c.Url))
+            .Where(c => GameManifestLoader.IsHttpsUrl(c.Url))
             .OrderBy(c => c.P == 0 ? int.MaxValue : c.P)
             .FirstOrDefault()?.Url;
         if (string.IsNullOrWhiteSpace(cdn))
@@ -671,10 +683,12 @@ public sealed class OfficialLauncherRecordService
     // ---------- 移除 ----------
 
     /// <summary>
-    /// 移除本工具写入的三个记录。
+    /// 移除本工具写入的记录:顶层 <c>launcherDownloadConfig.json</c> 与 <c>LocalGameResources.json</c>。
     /// <para>
-    /// 分包目录<b>只删 .json</b>,目录本身与其中的非记录内容一律保留 ——
-    /// 那里可能还有官方自己写的东西,不能整目录删。
+    /// <b>分包标记 <c>launcherDownloadConfig/{pack}.json</c> 一律保留。</b>它们与官方启动器写的是同一份文件、
+    /// 无法区分来源;<see cref="ResourceLevelService"/> 的已安装判定和
+    /// <see cref="LaunchArguments.DetectInstalledResourceLevel"/> 都依赖它们 —— 删掉后 McKuro 会认为一个资源包都没装,
+    /// 画质检测回退到 hd,只装了 UHD/SD 的安装会以错误的 <c>-krqlv</c> 启动(M4)。
     /// </para>
     /// </summary>
     public OfficialRecordWriteResult RemoveRecords(string gameFolder)
@@ -683,7 +697,6 @@ public sealed class OfficialLauncherRecordService
         var failed = new List<string>();
 
         TryDelete(Path.Combine(gameFolder, InstalledConfigFileName), removed, failed);
-        TryDeleteDirectory(Path.Combine(gameFolder, PackVersionDirName), removed, failed);
         TryDelete(Path.Combine(gameFolder, LocalIndexFileName), removed, failed);
 
         return new OfficialRecordWriteResult { RemovedEntries = removed, FailedFiles = failed };
@@ -693,36 +706,6 @@ public sealed class OfficialLauncherRecordService
     public bool HasAnyRecord(string gameFolder) =>
         File.Exists(Path.Combine(gameFolder, InstalledConfigFileName))
         || File.Exists(Path.Combine(gameFolder, LocalIndexFileName));
-
-    private void TryDeleteDirectory(string path, List<string> removed, List<string> failed)
-    {
-        try
-        {
-            if (!Directory.Exists(path))
-            {
-                return;
-            }
-            foreach (var file in Directory.GetFiles(path, "*.json"))
-            {
-                var relative = $"{PackVersionDirName}/{Path.GetFileName(file)}";
-                try
-                {
-                    File.Delete(file);
-                    removed.Add(relative);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "官方记录删除失败: {Path}", file);
-                    failed.Add(relative);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "官方记录目录访问失败: {Path}", path);
-            failed.Add($"{PackVersionDirName}/");
-        }
-    }
 
     private void TryDelete(string path, List<string> removed, List<string> failed)
     {

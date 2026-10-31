@@ -324,8 +324,18 @@ public sealed class FlexibleLongConverter : JsonConverter<long?>
         }
     }
 
+    /// <summary>写出实际值(数字);null 写 null。旧实现总写 null,序列化后再读回会丢值。</summary>
     public override void Write(Utf8JsonWriter writer, long? value, JsonSerializerOptions options)
-        => writer.WriteNullValue();
+    {
+        if (value is { } v)
+        {
+            writer.WriteNumberValue(v);
+        }
+        else
+        {
+            writer.WriteNullValue();
+        }
+    }
 }
 
 [JsonSerializable(typeof(NewTowerData))]

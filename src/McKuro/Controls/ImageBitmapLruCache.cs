@@ -35,7 +35,8 @@ public sealed class ImageBitmapLruCache
 
     public void Clear() => _cache.Clear();
 
-    private static long EstimateBytes(Bitmap bmp)
+    /// <summary>按 BGRA8888 估算位图占用字节(TintedAsyncImage 的着色缓存同口径计权)。</summary>
+    internal static long EstimateBytes(Bitmap bmp)
     {
         try
         {

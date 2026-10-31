@@ -80,6 +80,14 @@ public sealed class GameManifestLoader
                 };
             }
 
+            // cdnList 里有地址、却没有一个是 HTTPS:拒绝继续。清单提供校验所有游戏文件用的 MD5,
+            // 走明文 HTTP 时中间人可以连清单带文件一起替换(包括游戏主程序)。
+            var declaredCdns = updateData.CdnList ?? [];
+            if (declaredCdns.Any(c => !string.IsNullOrWhiteSpace(c.Url))
+                && !declaredCdns.Any(c => IsHttpsUrl(c.Url)))
+            {
+                return Fail(CoreStrings.T("Core.Manifest.InsecureCdn", "CDN 地址不是 HTTPS,已拒绝下载"));
+            }
             var cdnUrl = (await SelectCdnAsync(updateData.CdnList, updateData.Resources, ct).ConfigureAwait(false))?.TrimEnd('/') ?? "";
             var resourceJsonUrl = !string.IsNullOrWhiteSpace(cdnUrl) && !string.IsNullOrWhiteSpace(updateData.Resources)
                 ? cdnUrl + "/" + updateData.Resources.TrimStart('/')
@@ -89,11 +97,16 @@ public sealed class GameManifestLoader
             // 首选「完整校验索引」indexFile.json(参考 Haiyu GetVerificationResourceAsync)。
             // 它是 resource.json 的严格超集:实测鸣潮 CN 两者同为 915 条且 dest/md5/size 全等,
             // 但校验索引额外带 chunkInfos(分片哈希)—— 分片续传与快速校验都依赖它。
-            // 取不到/校验不过时回退 resource.json,再回退 index.json 内嵌清单,行为逐级退化不报错。
-            var verificationList = await TryLoadVerificationIndexAsync(
+            // 取不到(404/网络)或官方没给 indexFileMd5 时回退 resource.json,再回退 index.json 内嵌清单;
+            // 但**给了 MD5 却对不上**按篡改处理直接失败 —— 不能悄悄换成同一 CDN 上没有哈希锁定的 resource.json。
+            var (verificationList, verificationTampered) = await TryLoadVerificationIndexAsync(
                 updateData.Config,
                 cdnUrl,
                 ct).ConfigureAwait(false);
+            if (verificationTampered)
+            {
+                return Fail(CoreStrings.T("Core.Manifest.IndexMd5Mismatch", "完整校验索引 MD5 校验失败(内容可能被篡改或 CDN 缓存异常),已停止更新"));
+            }
             if (verificationList is { Count: > 0 })
             {
                 fileList = verificationList;
@@ -182,11 +195,12 @@ public sealed class GameManifestLoader
     /// 快速校验都依赖分片哈希,只有这份索引能让它们真正生效。
     /// </para>
     /// <para>
-    /// 任何失败(路径缺失/MD5 不符/网络异常/解析失败)都返回 <c>null</c>,由调用方回退
-    /// <c>resource.json</c> —— 保持既有行为不被削弱。
+    /// 路径缺失/网络异常/解析失败返回 <c>(null, false)</c>,由调用方回退 <c>resource.json</c>。
+    /// <b>官方给了 indexFileMd5 而下载内容对不上</b>时返回 <c>(null, true)</c>:这是篡改信号,
+    /// 调用方必须失败,不能回退到同一 CDN 上没有哈希锁定的 resource.json(它提供校验所有游戏文件的 MD5)。
     /// </para>
     /// </summary>
-    private async Task<List<KuroFileInfo>?> TryLoadVerificationIndexAsync(
+    private async Task<(List<KuroFileInfo>? Files, bool Md5Mismatch)> TryLoadVerificationIndexAsync(
         KuroConfig? config,
         string cdnUrl,
         CancellationToken ct)
@@ -195,7 +209,7 @@ public sealed class GameManifestLoader
             || string.IsNullOrWhiteSpace(config.IndexFile)
             || string.IsNullOrWhiteSpace(cdnUrl))
         {
-            return null;
+            return (null, false);
         }
 
         try
@@ -209,22 +223,22 @@ public sealed class GameManifestLoader
             if (!string.IsNullOrWhiteSpace(config.IndexFileMd5)
                 && !HashMatches(payload, config.IndexFileMd5))
             {
-                _logger.LogWarning("完整校验索引 MD5 不符,回退 resource.json");
-                return null;
+                _logger.LogWarning("完整校验索引 MD5 不符,按篡改处理(不回退 resource.json)");
+                return (null, true);
             }
 
             var list = JsonSerializer.Deserialize(payload, GameJsonContext.Default.KuroGameResourceList);
             var files = list?.Resource;
             if (files is not { Count: > 0 })
             {
-                return null;
+                return (null, false);
             }
 
             _logger.LogInformation(
                 "使用完整校验索引: {Count} 个文件,其中 {Chunked} 个带分片信息",
                 files.Count,
                 files.Count(f => f.ChunkInfos is { Count: > 0 }));
-            return files;
+            return (files, false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -233,7 +247,7 @@ public sealed class GameManifestLoader
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "完整校验索引不可用,回退 resource.json");
-            return null;
+            return (null, false);
         }
     }
 
@@ -377,6 +391,11 @@ public sealed class GameManifestLoader
         {
             return Fail("资源包缺少 indexFile");
         }
+        // 调用方(ResourceLevelService/官方记录)直接从 cdnList 取第一个地址,这里统一把关。
+        if (!IsHttpsUrl(cdnUrl))
+        {
+            return Fail(CoreStrings.T("Core.Manifest.InsecureCdn", "CDN 地址不是 HTTPS,已拒绝下载"));
+        }
 
         try
         {
@@ -434,6 +453,7 @@ public sealed class GameManifestLoader
     }
 
     /// <summary>从通用 GameManifest JSON 地址加载。</summary>
+    /// <remarks>目前只有单元测试调用,不做 HTTPS/MD5 锁定;接入生产前需补上与 <see cref="LoadKuroAsync"/> 相同的校验。</remarks>
     public async Task<ManifestLoadResult> LoadGenericAsync(
         string manifestUrl,
         CancellationToken ct = default)
@@ -480,6 +500,11 @@ public sealed class GameManifestLoader
         string? indexFileMd5 = null,
         CancellationToken ct = default)
     {
+        if (!IsHttpsUrl(patchIndexUrl))
+        {
+            return Fail(CoreStrings.T("Core.Manifest.InsecureCdn", "CDN 地址不是 HTTPS,已拒绝下载"));
+        }
+
         try
         {
             using var response = await _http.GetAsync(patchIndexUrl, ct).ConfigureAwait(false);
@@ -658,8 +683,9 @@ public sealed class GameManifestLoader
         string? probePath,
         CancellationToken ct)
     {
+        // 只接受 HTTPS:清单与 MD5 都来自 CDN,明文 HTTP 下中间人可整套替换(L5)。
         var candidates = cdns?
-            .Where(c => !string.IsNullOrWhiteSpace(c.Url))
+            .Where(c => IsHttpsUrl(c.Url))
             .OrderBy(c => c.P == 0 ? int.MaxValue : c.P)
             .ToArray() ?? [];
         if (candidates.Length == 0)
@@ -763,6 +789,12 @@ public sealed class GameManifestLoader
     private static bool IsAbsoluteUrl(string value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri)
         && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
+    /// <summary>是否为绝对 HTTPS 地址(CDN 基址只接受 HTTPS)。</summary>
+    internal static bool IsHttpsUrl(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps;
 
     private static ManifestLoadResult Fail(string message) =>
         new() { Success = false, Message = message };

@@ -120,9 +120,9 @@ public static class ClientLogDecryptor
             {
                 return new ClientLogDecryptResult(ClientLogDecryptStatus.FileMissing, null);
             }
-            // 原地解密复用 ReadAllBytes 的数组:游戏日志可达数十 MB,
+            // 原地解密复用读入的数组:游戏日志可达数十 MB,
             // 旧实现(读入 + 新缓冲 + GetString)瞬时驻留 3 倍文件体积。
-            bytes = File.ReadAllBytes(path);
+            bytes = ReadAllBytesShared(path);
         }
         catch (Exception)
         {
@@ -145,17 +145,70 @@ public static class ClientLogDecryptor
     }
 
     /// <summary>
+    /// 以 <c>FileShare.ReadWrite | FileShare.Delete</c> 读取整个文件。
+    /// <para>
+    /// <see cref="File.ReadAllBytes"/> 只允许 <c>FileShare.Read</c>,游戏运行中(持有写句柄)打开会共享冲突,
+    /// 而"游戏开着时同步抽卡"恰恰是最常见的用法。按打开时的长度读一份快照;
+    /// 读的过程中文件被截短则按实际读到的长度返回。
+    /// </para>
+    /// </summary>
+    private static byte[] ReadAllBytesShared(string path)
+    {
+        using var fs = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 1,
+            FileOptions.SequentialScan);
+        long length = fs.Length;
+        if (length > Array.MaxLength)
+        {
+            throw new IOException("Client.log too large");
+        }
+
+        var buffer = new byte[length];
+        int read = fs.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+        if (read < buffer.Length)
+        {
+            Array.Resize(ref buffer, read);
+        }
+        return buffer;
+    }
+
+    /// <summary>
+    /// 末尾不完整 UTF-8 序列的字节数(0~3)。游戏边跑边写时,读到的快照可能恰好截在一个多字节字符中间,
+    /// 这种截断不代表密钥变了,校验前去掉即可。只处理"合法首字节 + 不足数量的续字节"这一种形态。
+    /// </summary>
+    private static int IncompleteUtf8TailLength(ReadOnlySpan<byte> bytes)
+    {
+        for (int back = 1; back <= 3 && back <= bytes.Length; back++)
+        {
+            byte b = bytes[^back];
+            if ((b & 0xC0) == 0x80)
+            {
+                continue; // 续字节,继续往前找首字节
+            }
+
+            int need = (b & 0xE0) == 0xC0 ? 2 : (b & 0xF0) == 0xE0 ? 3 : (b & 0xF8) == 0xF0 ? 4 : 1;
+            return need > back ? back : 0;
+        }
+        return 0;
+    }
+
+    /// <summary>
     /// 校验 + 解码一步到位。校验不过(含密钥不匹配)统一给
     /// <see cref="ClientLogDecryptStatus.KeyMismatch"/> —— 对用户而言下一步动作相同(升级软件)。
     /// </summary>
     private static ClientLogDecryptResult Decode(byte[] bytes)
     {
-        if (!IsValidDecryptedLog(bytes))
+        int length = bytes.Length - IncompleteUtf8TailLength(bytes);
+        if (!IsValidDecryptedLog(bytes.AsSpan(0, length)))
         {
             return new ClientLogDecryptResult(ClientLogDecryptStatus.KeyMismatch, null);
         }
 
-        var text = DecodeStrict(bytes);
+        var text = DecodeStrict(bytes, length);
         return text is null
             ? new ClientLogDecryptResult(ClientLogDecryptStatus.KeyMismatch, null)
             : new ClientLogDecryptResult(ClientLogDecryptStatus.Success, text);
@@ -169,11 +222,11 @@ public static class ClientLogDecryptor
     /// 抛出未捕获异常会把「游玩统计/抽卡同步」整条链路打成崩溃,代价远大于多一次 catch。
     /// </para>
     /// </summary>
-    private static string? DecodeStrict(byte[] bytes)
+    private static string? DecodeStrict(byte[] bytes, int length)
     {
         try
         {
-            return StrictUtf8.GetString(bytes, 3, bytes.Length - 3);
+            return StrictUtf8.GetString(bytes, 3, length - 3);
         }
         catch (Exception)
         {

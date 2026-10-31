@@ -61,7 +61,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(3), token).ConfigureAwait(false);
+            // 不能 ConfigureAwait(false):ToastText 是绑定属性,必须在 UI 线程清空
+            await Task.Delay(TimeSpan.FromSeconds(3), token);
+            // 延迟刚结束时新通知到达(已取消本计时):不清掉新 toast
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
             ToastText = "";
         }
         catch (OperationCanceledException)
@@ -294,9 +300,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             {
                 return;
             }
-            if (AppServices.Settings.Current.AppUpdateAutoInstall)
+            // 静默自动安装只在新版带 SHA-256 摘要时进行:无摘要的包无法校验(启用加速镜像时还来自第三方),
+            // 此时退回"发现新版本,请确认"的弹窗,由用户决定是否安装。
+            if (AppServices.Settings.Current.AppUpdateAutoInstall && _settings.PendingUpdateHasChecksum)
             {
-                await _settings.DownloadAppUpdateAsync();
+                await _settings.AutoInstallAppUpdateAsync();
             }
             else
             {
@@ -351,11 +359,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSelectedNavigationItemChanged(NavigationItem? value)
     {
-        if (value is not null)
+        // NavigateTo 自己会写 SelectedNavigationItem:那次变更不能再进 NavigateTo,
+        // 否则代码触发的导航让每个页面的 OnNavigatedTo 执行两次(账号页会起两个重叠的会话校验)
+        if (value is not null && !_navigating)
         {
             NavigateTo(value);
         }
     }
+
+    /// <summary>NavigateTo 执行期间置位(防止经 SelectedNavigationItem 变更回调重入)。</summary>
+    private bool _navigating;
 
     /// <summary>页面切换后重估悬浮提醒可见性(设置页不显示提醒卡片)。</summary>
     partial void OnCurrentPageChanged(ViewModelBase? value)
@@ -368,7 +381,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             nav.IsSelected = ReferenceEquals(nav, item);
         }
         CurrentPage = item.ViewModel;
-        SelectedNavigationItem = item;
+        _navigating = true;
+        try
+        {
+            SelectedNavigationItem = item;
+        }
+        finally
+        {
+            _navigating = false;
+        }
         // 页面切换留痕(诊断"某页数据不刷新/没触发重载"这类问题;stderr 非用户可见通道)
         System.Console.Error.WriteLine($"MCKURO-NAV -> {item.Key}");
         // 导航到启动页时自动检查更新(移除手动检查按钮后)
@@ -396,6 +417,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (item.ViewModel is WikiViewModel wiki)
         {
             wiki.OnNavigatedTo();
+        }
+        // 画质可能已在启动器页改过,设置页只在构造时读过一次:进页时重新同步显示。
+        if (item.ViewModel is SettingsViewModel settingsPage)
+        {
+            settingsPage.OnNavigatedTo();
         }
     }
 

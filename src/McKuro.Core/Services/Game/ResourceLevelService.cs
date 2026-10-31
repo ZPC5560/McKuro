@@ -166,9 +166,47 @@ public sealed class ResourceLevelService
         }
     }
 
-    /// <summary>官方已安装标记:&lt;游戏目录&gt;/launcherDownloadConfig/{packName}.json。</summary>
-    private static string MarkerPath(string gameRoot, string packName) =>
-        Path.Combine(gameRoot, "launcherDownloadConfig", packName.ToLowerInvariant() + ".json");
+    /// <summary>
+    /// 资源包名能否安全地拼进文件名:非空、不超过 64 字符,只含 ASCII 字母/数字/<c>_</c>/<c>-</c>
+    /// (等价 <c>^[a-z0-9_-]+$</c>,忽略大小写)。
+    /// <para>
+    /// 包名来自服务端 index.json,会被拼成 <c>launcherDownloadConfig/{name}.json</c> 用于写入与删除;
+    /// 含 <c>..\..\</c> 的名字可以写/删游戏目录外的 .json。真实包名只有 common/hd/sd/uhd 这类短词。
+    /// </para>
+    /// </summary>
+    internal static bool IsSafePackName(string? packName)
+    {
+        if (string.IsNullOrEmpty(packName) || packName.Length > 64)
+        {
+            return false;
+        }
+        foreach (var c in packName)
+        {
+            if (!char.IsAsciiLetterOrDigit(c) && c != '_' && c != '-')
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// 官方已安装标记:&lt;游戏目录&gt;/launcherDownloadConfig/{packName}.json。
+    /// 包名不合法(见 <see cref="IsSafePackName"/>)时返回 null,调用方一律按"没有标记/不写"处理。
+    /// </summary>
+    internal static string? MarkerPath(string gameRoot, string packName) =>
+        IsSafePackName(packName)
+            ? Path.Combine(gameRoot, OfficialLauncherRecordService.PackVersionDirName, packName.ToLowerInvariant() + ".json")
+            : null;
+
+    /// <summary>
+    /// 标记文件内容(与官方启动器同格式:<c>{"packName":"hd","version":"3.7.0"}</c>)。
+    /// 用源生成序列化而不是字符串插值:版本号带引号/反斜杠时插值会生成非法 JSON。
+    /// </summary>
+    internal static string MarkerJson(string packName, string? version) =>
+        System.Text.Json.JsonSerializer.Serialize(
+            new OfficialPackVersionConfig { PackName = packName.ToLowerInvariant(), Version = version ?? "" },
+            OfficialLauncherJsonContext.Default.OfficialPackVersionConfig);
 
     /// <summary>
     /// 读取官方标记里记录的包版本(文件不存在/损坏/无 version 字段返回 null)。
@@ -183,7 +221,7 @@ public sealed class ResourceLevelService
         try
         {
             var path = MarkerPath(gameRoot, packName);
-            if (!File.Exists(path))
+            if (path is null || !File.Exists(path))
             {
                 return null;
             }
@@ -402,7 +440,7 @@ public sealed class ResourceLevelService
 
         // 选 CDN:优先官方 P 优先级(0 视为最低)。
         var cdn = index.CdnList?
-            .Where(c => !string.IsNullOrWhiteSpace(c.Url))
+            .Where(c => GameManifestLoader.IsHttpsUrl(c.Url)) // 只取 HTTPS(L5):http 条目会被 LoadResourcePackAsync 拒绝
             .OrderBy(c => c.P == 0 ? int.MaxValue : c.P)
             .FirstOrDefault()?.Url;
         if (string.IsNullOrWhiteSpace(cdn))
@@ -570,10 +608,14 @@ public sealed class ResourceLevelService
     {
         try
         {
-            var dir = Path.Combine(gameRoot, "launcherDownloadConfig");
-            Directory.CreateDirectory(dir);
-            var payload = $"{{\"packName\":\"{packName.ToLowerInvariant()}\",\"version\":\"{version}\"}}";
-            File.WriteAllText(Path.Combine(dir, packName.ToLowerInvariant() + ".json"), payload);
+            var path = MarkerPath(gameRoot, packName);
+            if (path is null)
+            {
+                _logger.LogWarning("资源包名不合法,跳过写标记: {Pack}", packName);
+                return;
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, MarkerJson(packName, version));
         }
         catch (Exception ex)
         {
@@ -755,7 +797,7 @@ public sealed class ResourceLevelService
 
         // 取出包清单(只有清单里的文件才允许删)
         var cdn = index.CdnList?
-            .Where(c => !string.IsNullOrWhiteSpace(c.Url))
+            .Where(c => GameManifestLoader.IsHttpsUrl(c.Url)) // 只取 HTTPS(L5):http 条目会被 LoadResourcePackAsync 拒绝
             .OrderBy(c => c.P == 0 ? int.MaxValue : c.P)
             .FirstOrDefault()?.Url;
         if (string.IsNullOrWhiteSpace(cdn))
@@ -842,8 +884,8 @@ public sealed class ResourceLevelService
     {
         try
         {
-            var path = Path.Combine(gameRoot, "launcherDownloadConfig", packName.ToLowerInvariant() + ".json");
-            if (File.Exists(path))
+            var path = MarkerPath(gameRoot, packName);
+            if (path is not null && File.Exists(path))
             {
                 File.Delete(path);
             }

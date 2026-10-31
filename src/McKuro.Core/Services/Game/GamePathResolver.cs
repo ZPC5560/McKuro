@@ -1,3 +1,5 @@
+using McKuro.Core.Infrastructure;
+
 namespace McKuro.Core.Services.Game;
 
 /// <summary>服务器/渠道类型。</summary>
@@ -90,11 +92,76 @@ public sealed class GamePathResolver
     public string? DiffDataDir =>
         GameRootDir is null ? null : Path.Combine(GameRootDir, DiffDataDirName);
 
-    /// <summary>指定版本的预下载暂存目录(游戏目录下 DiffData/&lt;版本&gt;)。</summary>
+    /// <summary>
+    /// 指定版本的预下载暂存目录(游戏目录下 DiffData/&lt;版本&gt;)。
+    /// <para>
+    /// <b>版本号来自服务端 index.json,必须先校验再拼路径</b>:暂存目录之后可能被递归删除,
+    /// <c>version = ".."</c> 会让暂存目录变成游戏根目录(根目录下没有 predownload.json → 整个游戏被删),
+    /// 绝对路径则会删到任意位置。这里只接受 <see cref="IsSafeVersionSegment"/> 认可的纯数字版本号,
+    /// 其余一律返回 null(调用方按"不可用"处理)。
+    /// </para>
+    /// </summary>
     public string? PredownloadStagingDir(string version) =>
-        DiffDataDir is null || string.IsNullOrWhiteSpace(version)
+        DiffDataDir is null || !IsSafeVersionSegment(version)
             ? null
             : Path.Combine(DiffDataDir, version);
+
+    /// <summary>
+    /// 版本号能否安全地用作 DiffData 下的单级目录名:1~4 段、每段 1~9 位 ASCII 数字、以 '.' 分隔
+    /// (与 GameUpdater.TryParseVersion 认可的形态一致,但更严:不接受空白、正负号等 int.TryParse 会放过的写法)。
+    /// </summary>
+    public static bool IsSafeVersionSegment(string? version)
+    {
+        if (string.IsNullOrEmpty(version) || version.Length > 64)
+        {
+            return false;
+        }
+        var segments = version.Split('.');
+        if (segments.Length is < 1 or > 4)
+        {
+            return false;
+        }
+        foreach (var segment in segments)
+        {
+            if (segment.Length is 0 or > 9)
+            {
+                return false;
+            }
+            foreach (var c in segment)
+            {
+                if (!char.IsAsciiDigit(c))
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// <paramref name="path"/> 是否恰好是 <paramref name="parentDir"/> 的<b>直接</b>子目录
+    /// (不是它本身、不是更深的后代、也不在它外面)。递归删除暂存/临时目录前用它做最后一道断言。
+    /// </summary>
+    public static bool IsDirectChildOf(string? parentDir, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(parentDir) || string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+        try
+        {
+            var fullParent = Path.GetFullPath(parentDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var actualParent = Path.GetDirectoryName(fullPath);
+            return !string.IsNullOrEmpty(actualParent)
+                && string.Equals(actualParent, fullParent, ArchivePathGuard.PathComparison)
+                && !string.IsNullOrEmpty(Path.GetFileName(fullPath));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// 补丁包临时下载目录(DiffData/install_tmp)。与游戏同盘,补丁装完即删;
@@ -103,9 +170,46 @@ public sealed class GamePathResolver
     public string? InstallTempDir =>
         DiffDataDir is null ? null : Path.Combine(DiffDataDir, InstallTempDirName);
 
-    /// <summary>本次安装专用的一次性临时目录(DiffData/install_tmp/&lt;guid&gt;)。</summary>
+    /// <summary>
+    /// 一次性临时目录(DiffData/install_tmp/&lt;guid&gt;)。
+    /// <para>
+    /// 官方补丁下载<b>不再用它</b>:每次一个新 GUID 意味着补丁永远无法续传、取消还会留下孤立目录。
+    /// 补丁请改用 <see cref="PatchInstallTempDir"/>(按补丁固定命名)。保留本方法供其它一次性用途。
+    /// </para>
+    /// </summary>
     public string? NewInstallTempDir() =>
         InstallTempDir is null ? null : Path.Combine(InstallTempDir, Guid.NewGuid().ToString("N"));
+
+    /// <summary>补丁临时目录名前缀(DiffData/install_tmp/p-&lt;key&gt;),便于残留扫描识别"按补丁固定命名"的目录。</summary>
+    public const string PatchInstallTempPrefix = "p-";
+
+    /// <summary>
+    /// 某个官方补丁专用的<b>固定</b>临时目录(DiffData/install_tmp/p-&lt;key&gt;)。
+    /// <para>
+    /// 同一补丁(同 indexFile + indexFileMd5 + 源版本)每次得到同一目录,下载中断/取消后
+    /// 下次安装能复用已下完的文件与 .part 续传;不同补丁得到不同目录,旧补丁的残留由调用方/残留扫描清理。
+    /// </para>
+    /// </summary>
+    /// <param name="patchKey"><see cref="ComputePatchKey"/> 的结果(只含小写十六进制)。</param>
+    public string? PatchInstallTempDir(string patchKey)
+    {
+        if (InstallTempDir is null || string.IsNullOrEmpty(patchKey) || !patchKey.All(char.IsAsciiHexDigitLower))
+        {
+            return null;
+        }
+        return Path.Combine(InstallTempDir, PatchInstallTempPrefix + patchKey);
+    }
+
+    /// <summary>
+    /// 补丁标识:对 indexFile 相对路径、indexFileMd5 与本地源版本取 SHA-256 前 8 字节(16 位小写十六进制)。
+    /// 不含 CDN 前缀 —— 同一补丁换 CDN 也应复用同一目录。
+    /// </summary>
+    public static string ComputePatchKey(string? indexFile, string? indexFileMd5, string? sourceVersion)
+    {
+        var text = string.Join('\n', indexFile?.Trim() ?? "", indexFileMd5?.Trim().ToLowerInvariant() ?? "", sourceVersion?.Trim() ?? "");
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text));
+        return Convert.ToHexString(hash, 0, 8).ToLowerInvariant();
+    }
 
     /// <summary>检测服务器/渠道类型(依据 SDK 目录)。</summary>
     public GameServerType DetectServerType()

@@ -54,6 +54,53 @@ public class NewTowerHistoryTests
     }
 
     [Fact]
+    public void NormalizeToServerHour4_Uses_Server_Date_Regardless_Of_Input_Timezone()
+    {
+        // 服务器(UTC+8)2026-08-25 21:34 → 归整到服务器当天 04:00 = 2026-08-24 20:00 UTC
+        var expected = new DateTimeOffset(2026, 8, 25, 4, 0, 0, TimeSpan.FromHours(8)).ToUnixTimeMilliseconds();
+        Assert.Equal(expected, TowerService.NormalizeToServerHour4(new DateTime(2026, 8, 25, 21, 34, 56)));
+        Assert.Equal(expected, TowerService.NormalizeToServerHour4(new DateTime(2026, 8, 25, 13, 34, 56, DateTimeKind.Utc)));
+    }
+
+    [Fact]
+    public void NormalizeToServerHour4_Is_Stable_Around_Utc_Midnight()
+    {
+        // 回归(L16):赛季结束于服务器 04:00(= UTC 前一日 20:00)。旧实现按本机时间归整,
+        // UTC+4 等时区里结束时刻恰在本机午夜附近,剩余毫秒的秒级抖动会让归整日期翻转 → 同一期两行历史。
+        var end = new DateTime(2026, 8, 24, 20, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(
+            TowerService.NormalizeToServerHour4(end.AddSeconds(-20)),
+            TowerService.NormalizeToServerHour4(end.AddSeconds(20)));
+    }
+
+    [Fact]
+    public void EndTime_RoundTrips_Through_Serializer()
+    {
+        // FlexibleLongConverter.Write 曾总是写 null:序列化再读回会丢掉 endTime
+        var json = JsonSerializer.Serialize(new NewTowerData { EndTime = 1_724_480_400_000 }, TowerJsonContext.Default.NewTowerData);
+        Assert.Contains("\"endTime\":1724480400000", json);
+        Assert.Equal(1_724_480_400_000, Parse(json).EndTime);
+        var empty = JsonSerializer.Serialize(new NewTowerData(), TowerJsonContext.Default.NewTowerData);
+        Assert.Null(Parse(empty).EndTime);
+    }
+
+    [Fact]
+    public void PickRole_Prefers_Configured_RoleId_And_Falls_Back_To_First()
+    {
+        // 回归(M21):深塔页曾总是取账号绑定的第一个角色,与角色页(按配置的角色 ID)不一致
+        var roles = new List<McKuro.Core.Models.Kuro.GameRoilDataItem>
+        {
+            new() { RoleId = "100001" },
+            new() { RoleId = "100002" },
+        };
+        Assert.Equal("100002", TowerService.PickRole(roles, "100002").RoleId);
+        Assert.Equal("100002", TowerService.PickRole(roles, " 100002 ").RoleId);
+        Assert.Equal("100001", TowerService.PickRole(roles, "999999").RoleId);
+        Assert.Equal("100001", TowerService.PickRole(roles, null).RoleId);
+        Assert.Equal("100001", TowerService.PickRole(roles, "").RoleId);
+    }
+
+    [Fact]
     public void SeasonCycleDays_Is_28_After_Cutoff()
     {
         // 2025-02-03 起深塔/海墟改为 28 天周期(对齐 WutheringWavesTool SeasonService)

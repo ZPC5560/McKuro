@@ -15,7 +15,8 @@ namespace McKuro.Services;
 /// 信号实现按平台分派:
 /// Windows 用命名 <see cref="EventWaitHandle"/>(内核对象,支持 Set/WaitOne);
 /// macOS/Linux 命名 EventWaitHandle/Semaphore 不受 .NET 支持(仅命名 Mutex 可用),
-/// 改用临时目录标记文件 + 轮询 —— 语义等价,跨进程可见。
+/// 改用用户数据目录下的标记文件 + 轮询 —— 语义等价,跨进程可见。
+/// (不放共享的 /tmp:其他用户先建同名文件后,本用户既删不掉也写不了,唤起功能就失效。)
 /// </para>
 /// <para>
 /// NativeAOT 安全(纯 BCL 无反射)。Mutex/EventWaitHandle 均存根引用,防止 GC 终结器提前释放命名句柄。
@@ -60,7 +61,9 @@ public static class SingleInstanceGuard
             else
             {
                 // Unix:命名事件不可用,写标记文件由主实例轮询消费
-                File.WriteAllText(GetSignalFilePath(), DateTime.UtcNow.Ticks.ToString());
+                var path = GetSignalFilePath();
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, DateTime.UtcNow.Ticks.ToString());
             }
         }
         catch (Exception)
@@ -120,12 +123,12 @@ public static class SingleInstanceGuard
                             File.Delete(signalPath);
                             Dispatcher.UIThread.Post(ActivateMainWindow);
                         }
-                        Thread.Sleep(500);
                     }
                     catch (Exception)
                     {
-                        return; // 异常:结束监听,不影响主流程
+                        // 单次失败(文件正被次实例写入/瞬时权限问题)不能让监听永久退出:下一拍再试
                     }
+                    Thread.Sleep(500);
                 }
             })
             {
@@ -136,8 +139,15 @@ public static class SingleInstanceGuard
         }
     }
 
+    /// <summary>
+    /// 唤起标记文件路径:当前用户的数据目录(macOS ~/Library/Application Support/McKuro,
+    /// Linux ~/.config/McKuro)。此时 AppServices 尚未初始化,直接按默认数据目录规则取。
+    /// </summary>
     private static string GetSignalFilePath()
-        => Path.Combine(Path.GetTempPath(), ShowSignalFileName);
+        => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "McKuro",
+            ShowSignalFileName);
 
     private static void ActivateMainWindow()
     {

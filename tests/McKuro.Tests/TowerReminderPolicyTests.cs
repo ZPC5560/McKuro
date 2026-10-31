@@ -256,4 +256,16 @@ public class TowerReminderPolicyTests
             TowerReminderPolicy.ReminderKey(slash),
             TowerReminderPolicy.ReminderKey(nextSeason));
     }
+
+    [Fact]
+    public void ReminderKey_Uses_Server_Date_Of_End_Time()
+    {
+        // 回归(L16):赛季在服务器 04:00 结束 = UTC 前一日 20:00。Key 的日期必须取服务器日期,
+        // 否则按调用方时区格式化,非 UTC+8 用户在本机午夜附近会因剩余毫秒抖动换出两个 Key。
+        var endUtc = new DateTime(2026, 10, 29, 20, 0, 0, DateTimeKind.Utc);
+        var a = new TowerSeasonExpiry(TowerKind.Slash, TimeSpan.FromHours(1), endUtc.AddSeconds(-30), null);
+        var b = new TowerSeasonExpiry(TowerKind.Slash, TimeSpan.FromHours(1), endUtc.AddSeconds(30), null);
+        Assert.Equal("tower:Slash:20261030", TowerReminderPolicy.ReminderKey(a));
+        Assert.Equal(TowerReminderPolicy.ReminderKey(a), TowerReminderPolicy.ReminderKey(b));
+    }
 }

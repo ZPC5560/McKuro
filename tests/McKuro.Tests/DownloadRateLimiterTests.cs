@@ -94,4 +94,49 @@ public class DownloadRateLimiterTests
         var pause = new PauseTokenSource();
         await pause.WaitAsync().WaitAsync(TimeSpan.FromMilliseconds(300));
     }
+
+    /// <summary>
+    /// L4:Pause/Resume 与等待方高并发交错后,只要最终处于未暂停状态,任何等待都必须放行
+    /// (旧实现先置标志再换门,读者可能拿到永远不会完成的门而永久挂起)。
+    /// </summary>
+    [Fact]
+    public async Task Interleaved_Pause_Resume_Never_Leaves_Waiters_Hanging()
+    {
+        var pause = new PauseTokenSource();
+        var waiters = new List<Task>();
+        var toggler = Task.Run(() =>
+        {
+            for (var i = 0; i < 5000; i++)
+            {
+                pause.Pause();
+                pause.Resume();
+            }
+        });
+        var readers = Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+        {
+            for (var i = 0; i < 2000; i++)
+            {
+                lock (waiters)
+                {
+                    waiters.Add(pause.WaitAsync());
+                }
+            }
+        })).ToArray();
+
+        await Task.WhenAll(readers.Append(toggler)).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(pause.IsPaused);
+        await Task.WhenAll(waiters).WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    /// <summary>暂停中的等待可被取消(取消令牌照常生效)。</summary>
+    [Fact]
+    public async Task Paused_WaitAsync_Honors_Cancellation()
+    {
+        var pause = new PauseTokenSource();
+        pause.Pause();
+        using var cts = new CancellationTokenSource(100);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pause.WaitAsync(cts.Token));
+        pause.Resume();
+    }
 }

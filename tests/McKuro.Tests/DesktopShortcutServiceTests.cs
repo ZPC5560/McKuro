@@ -60,6 +60,21 @@ public class DesktopShortcutServiceTests
         Assert.Contains(@"'C:\it''s\b.exe'", script, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData('\u2018')]
+    [InlineData('\u2019')]
+    [InlineData('\u201A')]
+    [InlineData('\u201B')]
+    public void BuildScript_Escapes_Unicode_Single_Quotes(char quote)
+    {
+        // PowerShell 也把 U+2018~U+201B 当单引号:"Bob’s Games" 不翻倍会提前结束字符串
+        var dir = $@"C:\Bob{quote}s Games";
+        var script = DesktopShortcutService.BuildScript(dir + @"\a.lnk", dir + @"\b.exe", null, null, null, null);
+
+        Assert.Contains($@"'C:\Bob{quote}{quote}s Games\a.lnk'", script, StringComparison.Ordinal);
+        Assert.Contains($@"'C:\Bob{quote}{quote}s Games\b.exe'", script, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void BuildScript_Does_Not_Interpolate_DollarSign()
     {

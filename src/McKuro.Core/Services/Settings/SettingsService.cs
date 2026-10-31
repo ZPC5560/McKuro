@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using McKuro.Core.Infrastructure;
@@ -15,6 +16,7 @@ public sealed class AppSettings
     public string GameRootDir { get; set; } = "";
 
     /// <summary>库街区 Token(用户自行获取)。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string KujiequToken { get; set; } = "";
 
     /// <summary>玩家角色 ID。</summary>
@@ -195,6 +197,7 @@ public sealed class AppSettings
     public string HomeBoundAccountId { get; set; } = "";
 
     /// <summary>稳定设备 ID(首次生成持久化,库街区 did 头需跨启动不变,否则触发极验风控)。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string StableDeviceId { get; set; } = "";
 
     /// <summary>自动游戏签到(默认开启;每次启动软件后自动执行一次,当天去重)。</summary>
@@ -253,6 +256,7 @@ public sealed class AppSettings
     // ---------- mcguide 攻略站 ----------
 
     /// <summary>mcguide x-token(攻略站登录后服务端返回)。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string GuideToken { get; set; } = "";
 
     /// <summary>mcguide cUid(库街区 userId)。</summary>
@@ -262,6 +266,7 @@ public sealed class AppSettings
     public string GuideCName { get; set; } = "";
 
     /// <summary>mcguide 登录手机号(账号页登录表单复用与同账号判定用)。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string GuidePhone { get; set; } = "";
 
     /// <summary>已选玩家 ID(mcguide user/player/choose)。</summary>
@@ -276,15 +281,18 @@ public sealed class AppSettings
     public List<CloudAccount> CloudAccounts { get; set; } = [];
 
     /// <summary>当前云鸣潮账号的稳定 Id(手机号可为空,不能作键)。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string CurrentCloudAccountId { get; set; } = "";
 
     /// <summary>云鸣潮登录数据 JSON(旧版单账号字段,加载时自动迁移到 <see cref="CloudAccounts"/>)。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string CloudLoginDataJson { get; set; } = "";
 
     /// <summary>云鸣潮登录账号名(旧版单账号字段,迁移后不再使用)。</summary>
     public string CloudLoginName { get; set; } = "";
 
     /// <summary>云鸣潮登录手机号(旧版单账号字段,迁移后不再使用)。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string CloudLoginPhone { get; set; } = "";
 
     // ---------- 快捷键截图 ----------
@@ -372,7 +380,10 @@ public sealed class SettingsService : ISettingsService
             long target = _dirtyVersion;
             try
             {
-                WriteAtomic(_settingsPath, JsonSerializer.Serialize(_settings, SettingsJsonContext.Default.AppSettings));
+                var json = Serialize(_settings);
+                var temp = WriteTemp(_settingsPath, json);
+                // 整个过程持锁:Save 写入的一定是最新内容,直接提交
+                File.Move(temp, _settingsPath, overwrite: true);
                 _lastWrittenVersion = Math.Max(_lastWrittenVersion, target);
             }
             catch (Exception ex)
@@ -421,14 +432,25 @@ public sealed class SettingsService : ISettingsService
                         return;
                     }
                     target = _dirtyVersion;
-                    json = JsonSerializer.Serialize(_settings, SettingsJsonContext.Default.AppSettings);
+                    json = Serialize(_settings);
                 }
 
-                await WriteAtomicAsync(_settingsPath, json, ct).ConfigureAwait(false);
+                var temp = await WriteTempAsync(_settingsPath, json, ct).ConfigureAwait(false);
 
                 lock (_saveLock)
                 {
-                    _lastWrittenVersion = Math.Max(_lastWrittenVersion, target);
+                    // 写临时文件期间同步 Save() 可能已写入更新的版本:此时本次快照已过期,
+                    // 提交会用旧内容覆盖新内容(例如刚续期的 phoneToken 丢失),只能丢弃。
+                    if (target > _lastWrittenVersion)
+                    {
+                        File.Move(temp, _settingsPath, overwrite: true);
+                        _lastWrittenVersion = target;
+                    }
+                    else
+                    {
+                        TryDelete(temp);
+                    }
+
                     if (_dirtyVersion <= _lastWrittenVersion)
                     {
                         _pendingFlush = null;
@@ -447,54 +469,143 @@ public sealed class SettingsService : ISettingsService
         }
     }
 
-    /// <summary>原子写入:写入临时文件再 rename,避免半写状态被读到。</summary>
-    private static void WriteAtomic(string finalPath, string content)
+    /// <summary>序列化(调用方持 <c>_saveLock</c>);敏感字段加密失败时记警告(该字段以明文落盘,不丢数据)。</summary>
+    private string Serialize(AppSettings settings)
     {
-        var dir = Path.GetDirectoryName(finalPath);
-        if (!string.IsNullOrEmpty(dir))
+        SecretProtector.TakeProtectFailures();
+        var json = JsonSerializer.Serialize(settings, SettingsJsonContext.Default.AppSettings);
+        var failures = SecretProtector.TakeProtectFailures();
+        if (failures > 0)
         {
-            Directory.CreateDirectory(dir);
+            _logger.LogWarning("{Count} 个敏感字段加密失败,已按明文保存", failures);
         }
-
-        var tempPath = finalPath + ".tmp-" + Guid.NewGuid().ToString("N");
-        File.WriteAllText(tempPath, content);
-        // AOT 友好:File.Move 内部走 MoveFileEx,可原子替换
-        File.Move(tempPath, finalPath, overwrite: true);
+        return json;
     }
 
-    /// <summary>异步原子写入。</summary>
-    private static async Task WriteAtomicAsync(string finalPath, string content, CancellationToken ct)
+    /// <summary>
+    /// 原子写入第一步:写临时文件并刷到磁盘(<c>Flush(true)</c>),返回临时文件路径;调用方再 <c>File.Move</c> 替换。
+    /// 不先刷盘的话,断电时改名可能先于数据落盘,留下一个空/半截的 settings.json。
+    /// </summary>
+    private static string WriteTemp(string finalPath, string content)
+    {
+        var tempPath = NewTempPath(finalPath);
+        try
+        {
+            using var fs = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            fs.Write(Encoding.UTF8.GetBytes(content));
+            fs.Flush(flushToDisk: true);
+        }
+        catch
+        {
+            TryDelete(tempPath);
+            throw;
+        }
+        return tempPath;
+    }
+
+    /// <summary><see cref="WriteTemp"/> 的异步版本。</summary>
+    private static async Task<string> WriteTempAsync(string finalPath, string content, CancellationToken ct)
+    {
+        var tempPath = NewTempPath(finalPath);
+        try
+        {
+            await using var fs = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                bufferSize: 4096, useAsync: true);
+            await fs.WriteAsync(Encoding.UTF8.GetBytes(content), ct).ConfigureAwait(false);
+            fs.Flush(flushToDisk: true);
+        }
+        catch
+        {
+            TryDelete(tempPath);
+            throw;
+        }
+        return tempPath;
+    }
+
+    private static string NewTempPath(string finalPath)
     {
         var dir = Path.GetDirectoryName(finalPath);
         if (!string.IsNullOrEmpty(dir))
         {
             Directory.CreateDirectory(dir);
         }
+        return finalPath + ".tmp-" + Guid.NewGuid().ToString("N");
+    }
 
-        var tempPath = finalPath + ".tmp-" + Guid.NewGuid().ToString("N");
-        await File.WriteAllTextAsync(tempPath, content, ct).ConfigureAwait(false);
-        File.Move(tempPath, finalPath, overwrite: true);
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception)
+        {
+            // 临时文件残留不影响设置本身
+        }
     }
 
     private AppSettings Load()
     {
+        string json;
         try
         {
-            if (File.Exists(_settingsPath))
+            if (!File.Exists(_settingsPath))
             {
-                var json = File.ReadAllText(_settingsPath);
-                var loaded = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings);
-                if (loaded is not null)
-                {
-                    return Migrate(loaded);
-                }
+                return new AppSettings();
             }
+            json = File.ReadAllText(_settingsPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "读取设置失败,使用默认值: {Path}", _settingsPath);
+            return new AppSettings();
+        }
+
+        try
+        {
+            SecretProtector.TakeUnprotectFailures();
+            var loaded = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings);
+            var failures = SecretProtector.TakeUnprotectFailures();
+            if (failures > 0)
+            {
+                // 典型:settings.json 从别的电脑/别的 Windows 用户拷来,DPAPI 密文解不开。
+                // 这些字段已置空(需要重新登录),其余设置照常使用。
+                _logger.LogWarning("{Count} 个加密字段无法解密(设置文件可能来自其他电脑或用户),已清空,需要重新登录", failures);
+            }
+            if (loaded is not null)
+            {
+                return Migrate(loaded);
+            }
+            BackupCorruptFile(null);
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            // 内容本身解析不了(截断/手改坏/编码错):备份后再回退默认值
+            BackupCorruptFile(ex);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "读取设置失败,使用默认值: {Path}", _settingsPath);
         }
         return new AppSettings();
+    }
+
+    /// <summary>
+    /// 解析失败:先把坏文件改名为 <c>settings.json.corrupt-&lt;时间戳&gt;</c> 再回退默认值。
+    /// 否则下一次 <see cref="Save"/> 会用默认值覆盖它,账号等全部设置无法找回。
+    /// </summary>
+    private void BackupCorruptFile(Exception? ex)
+    {
+        var backup = _settingsPath + ".corrupt-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+        try
+        {
+            File.Move(_settingsPath, backup, overwrite: true);
+            _logger.LogWarning(ex, "设置文件解析失败,已备份为 {Backup} 并使用默认值", backup);
+        }
+        catch (Exception moveEx)
+        {
+            _logger.LogWarning(ex ?? moveEx, "设置文件解析失败,且备份失败({MoveError}),使用默认值: {Path}", moveEx.Message, _settingsPath);
+        }
     }
 
     /// <summary>

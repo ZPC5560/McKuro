@@ -80,19 +80,27 @@ internal sealed class KuroHttpClient
         return dict;
     }
 
-    /// <summary>通用任务型 POST 请求(响应 code != 200 返回 null)。</summary>
+    /// <summary>
+    /// 通用任务型 POST 请求。响应 code 为 200 或在 <paramref name="acceptCodes"/> 中时返回结果,否则返回 null。
+    /// <para>部分接口用非 200 表示正常状态(如签到的 1511"今日已签"),由调用方通过 <paramref name="acceptCodes"/> 声明。</para>
+    /// </summary>
     public async Task<KuroClientReturnCode<T>?> SendTaskRequestAsync<T>(
         KuroAccount account,
         string url,
         Dictionary<string, string> form,
         JsonTypeInfo<KuroClientReturnCode<T>> jsonTypeInfo,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyCollection<int>? acceptCodes = null)
     {
         using var request = BuildPost(url, GetDeviceHeader(account), form);
         using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
         var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         var result = JsonSerializer.Deserialize(json, jsonTypeInfo);
-        if (result is null || result.Code != 200)
+        if (result is null)
+        {
+            return null;
+        }
+        if (result.Code != 200 && (acceptCodes is null || !acceptCodes.Contains(result.Code)))
         {
             return null;
         }

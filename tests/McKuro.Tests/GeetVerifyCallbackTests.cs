@@ -157,7 +157,7 @@ public class GeetVerifyCallbackTests
         {
             pageHtml = await client.GetStringAsync(url);
         }
-        var expectedCb = $"http://127.0.0.1:{new Uri(url).Port}/cb";
+        var expectedCb = CallbackFromPageUrl(url);
         Assert.Contains(expectedCb, pageHtml);
         Assert.DoesNotContain("__MCKURO_CB__", pageHtml);
 
@@ -184,17 +184,17 @@ public class GeetVerifyCallbackTests
 
         var url = await WaitForUrlAsync(openedUrl);
 
-        // 页面 URL 应带 ?cb= 参数,且 cb 指向同一服务端口的 /cb
+        // 页面 URL 应带 ?cb= 参数,且 cb 指向同一服务端口的 /cb/{nonce}(32 位十六进制随机串)
         var uri = new Uri(url);
         Assert.StartsWith("/verify", uri.AbsolutePath, StringComparison.Ordinal);
         var cb = System.Web.HttpUtility.ParseQueryString(uri.Query).Get("cb");
         Assert.NotNull(cb);
-        Assert.Equal($"http://127.0.0.1:{uri.Port}/cb", cb);
+        Assert.Matches($"^http://127\\.0\\.0\\.1:{uri.Port}/cb/[0-9a-f]{{32}}$", cb);
 
         // 清理:直接触发回调结束验证(避免后台任务悬挂)
         using (var client = new HttpClient())
         {
-            await client.GetAsync($"http://127.0.0.1:{uri.Port}/cb?data=%7B%7D");
+            await client.GetAsync($"{cb}?data=%7B%7D");
         }
         await task.WaitAsync(TimeSpan.FromSeconds(10));
     }
@@ -224,8 +224,72 @@ public class GeetVerifyCallbackTests
         Assert.Contains("404", missing);
 
         // 清理:触发回调结束验证
-        await client.GetAsync($"{baseUrl}/cb?data=%7B%7D");
+        await client.GetAsync($"{CallbackFromPageUrl(url)}?data=%7B%7D");
         await task.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task Verify_Callback_Without_Nonce_Is_Ignored()
+    {
+        // 回调路径带每次随机的 nonce:猜不到 nonce 的本地进程/网页提交 /cb?data= 不应完成验证
+        var service = new GeetVerifyService();
+        string? openedUrl = null;
+        var task = service.VerifyAsync(CancellationToken.None, url => openedUrl = url, html: "<html>captcha</html>");
+        var url = await WaitForUrlAsync(openedUrl);
+        var port = new Uri(url).Port;
+
+        using (var client = new HttpClient())
+        {
+            await client.GetAsync($"http://127.0.0.1:{port}/cb?data=%7B%22forged%22%3A1%7D");
+            await client.GetAsync($"http://127.0.0.1:{port}/cb/0000?data=%7B%22forged%22%3A1%7D");
+        }
+        var completed = await Task.WhenAny(task, Task.Delay(500));
+        Assert.NotSame(task, completed);
+
+        // 正确的回调仍然生效
+        using (var client = new HttpClient())
+        {
+            await client.GetAsync($"{CallbackFromPageUrl(url)}?data=%7B%7D");
+        }
+        Assert.Equal("{}", await task.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
+    public async Task Verify_Rejects_Request_With_Foreign_Host_Header()
+    {
+        // DNS 重绑定场景:外部网页的请求 Host 不是 127.0.0.1:{port},即使路径正确也不接受
+        var service = new GeetVerifyService();
+        string? openedUrl = null;
+        var task = service.VerifyAsync(CancellationToken.None, url => openedUrl = url, html: "<html>captcha</html>");
+        var url = await WaitForUrlAsync(openedUrl);
+        var cb = new Uri(CallbackFromPageUrl(url));
+
+        using (var tcp = new TcpClient())
+        {
+            await tcp.ConnectAsync(IPAddress.Loopback, cb.Port);
+            using var stream = tcp.GetStream();
+            var req = $"GET {cb.AbsolutePath}?data=%7B%22forged%22%3A1%7D HTTP/1.1\r\nHost: evil.example:{cb.Port}\r\nConnection: close\r\n\r\n";
+            await stream.WriteAsync(Encoding.ASCII.GetBytes(req));
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            var resp = await reader.ReadToEndAsync();
+            Assert.Contains("403", resp);
+        }
+        var completed = await Task.WhenAny(task, Task.Delay(500));
+        Assert.NotSame(task, completed);
+
+        using (var client = new HttpClient())
+        {
+            await client.GetAsync($"{cb}?data=%7B%7D");
+        }
+        Assert.Equal("{}", await task.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    /// <summary>从验证页 URL 的 cb 参数取回调地址(含随机 nonce)。</summary>
+    private static string CallbackFromPageUrl(string pageUrl)
+    {
+        var cb = System.Web.HttpUtility.ParseQueryString(new Uri(pageUrl).Query).Get("cb");
+        Assert.NotNull(cb);
+        return cb!;
     }
 
     private static async Task<string> WaitForUrlAsync(string? url)

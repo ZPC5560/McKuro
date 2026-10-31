@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using McKuro.Core.Infrastructure;
 
 namespace McKuro.Core.Models.Kuro;
 
@@ -16,12 +17,15 @@ public sealed class KuroAccount
     public string UserId { get; set; } = "";
 
     /// <summary>访问 Token。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string Token { get; set; } = "";
 
     /// <summary>设备 ID。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string DeviceId { get; set; } = "";
 
     /// <summary>绑定手机号(可选)。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string Mobile { get; set; } = "";
 
     /// <summary>昵称(可选)。</summary>

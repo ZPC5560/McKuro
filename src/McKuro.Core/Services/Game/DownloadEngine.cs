@@ -103,8 +103,13 @@ public sealed class DownloadEngine
     /// <param name="ct">取消令牌。</param>
     /// <param name="streamingGameRoot">非空时启用「边下载边更新」流式安装:
     /// 把 <paramref name="destDir"/> 视为游戏根目录,文件下载完成即直接落位到
-    /// <c>{gameRoot}/{entry.Path}</c>(替换前把旧文件备份到 .McKuro_backup),
+    /// <c>{gameRoot}/{entry.Path}</c>(替换前把旧文件同卷移动到 .McKuro_backup),
     /// 不再经过临时暂存目录。返回的失败列表语义与暂存版一致。</param>
+    /// <param name="skipExistingCheck">
+    /// 调用方已确认这些文件缺失或过期(如 <c>ComputeDiff</c> 的结果)时传 true,
+    /// 跳过对目标位置旧文件的「已存在即跳过」整文件 MD5(那次校验必然失败,纯属重复读盘)。
+    /// 不影响 .part 续传判定。
+    /// </param>
     /// <returns>(成功数, 失败列表)</returns>
     public async Task<(int Success, List<string> Failures)> DownloadManyAsync(
         IReadOnlyList<GameFileEntry> files,
@@ -112,7 +117,8 @@ public sealed class DownloadEngine
         string destDir,
         IProgress<DownloadProgress>? progress = null,
         CancellationToken ct = default,
-        string? streamingGameRoot = null)
+        string? streamingGameRoot = null,
+        bool skipExistingCheck = false)
     {
         var failures = new List<string>();
         int success = 0;
@@ -163,7 +169,7 @@ public sealed class DownloadEngine
 
         // 传入 logger:下载中断重试/续传会记 Warning(便于用户反馈时定位 CDN 侧问题)。
         var downloader = new FileDownloader(_http, _logger);
-        // 流式安装:下载落位即进入游戏目录。替换目标前把旧文件备份到 .McKuro_backup,
+        // 流式安装:下载落位即进入游戏目录。替换目标前把旧文件同卷移动到 .McKuro_backup,
         // 备份由 UpdateInstaller.BackupFile 完成(与暂存安装的备份实现一致)。
         var onReplace = streamingGameRoot is null
             ? null
@@ -207,7 +213,8 @@ public sealed class DownloadEngine
                         ct,
                         rateLimiter: _rateLimiter,
                         pauseToken: _pauseToken,
-                        onReplace: onReplace).ConfigureAwait(false);
+                        onReplace: onReplace,
+                        skipExistingCheck: skipExistingCheck).ConfigureAwait(false);
 
                     lock (byteLock)
                     {

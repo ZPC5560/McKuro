@@ -51,6 +51,11 @@ public sealed class WebView2Control : NativeControlHost
     public event Action? PageLoadCompleted;
 
     private Delegate? _navigationCompletedHandler; // 保活官方 NavigationCompleted 事件委托
+    private Delegate? _navigationStartingHandler;  // 保活官方 NavigationStarting 事件委托(导航白名单)
+    private Delegate? _newWindowRequestedHandler;  // 保活官方 NewWindowRequested 事件委托(拦截弹窗)
+
+    /// <summary>白名单基准:Controller 就绪时要加载的初始地址(之后的主框架导航都与它比较)。</summary>
+    private string _initialUrl = "";
 
     /// <summary>仅 Windows 支持;且要求系统装有 WebView2 Runtime(版本探测成功)。</summary>
     public static bool IsSupported { get; } =
@@ -549,7 +554,6 @@ public sealed class WebView2Control : NativeControlHost
             {
                 var isSuccess = e?.GetType().GetProperty("IsSuccess")?.GetValue(e);
                 Log?.LogInformation("NavigationCompleted IsSuccess={S}", isSuccess);
-                Services.GeetVerifyService.TimingLog($"NavigationCompleted IsSuccess={isSuccess}");
                 PageLoadCompleted?.Invoke();
             }),
         }) as Delegate;
@@ -557,12 +561,15 @@ public sealed class WebView2Control : NativeControlHost
         {
             navEvent.AddEventHandler(webview, completedHandler);
         }
+        // 安全加固须在首次 Navigate 之前挂好:导航白名单 + 拦截弹窗 + Release 关闭 DevTools/右键菜单
+        _initialUrl = _pendingUrl;
+        ApplyHardening(webview);
         if (!string.IsNullOrWhiteSpace(_pendingUrl))
         {
             webview.GetType().GetMethod("Navigate", new[] { typeof(string) })!
                 .Invoke(webview, new object?[] { _pendingUrl });
-            Log?.LogInformation("Navigate({Url}) 已提交", _pendingUrl);
-            Services.GeetVerifyService.TimingLog("Navigate 已提交");
+            // 只记主机:极验页查询串里带回调 nonce,B站/YouTube 地址无敏感信息但统一处理
+            Log?.LogInformation("Navigate({Host}) 已提交", Uri.TryCreate(_pendingUrl, UriKind.Absolute, out var nav) ? nav.Authority : "?");
         }
         // 看门狗:8s 后仍无 Chromium 渲染子窗口 = 浏览器子进程被安全软件静默拦截,
         // 触发 CreationFailed 让调用方回退系统浏览器,而不是让用户对黑屏等到超时。
@@ -583,6 +590,103 @@ public sealed class WebView2Control : NativeControlHost
             Log?.LogError("WebView2 看门狗:8s 后宿主仍无渲染子窗口,浏览器子进程疑似被安全软件拦截,回退系统浏览器");
             PostToNativeThread(OnCreationFailed);
         });
+    }
+
+    /// <summary>
+    /// 安全加固(原生线程,首次导航前调用):
+    /// <list type="bullet">
+    /// <item>NavigationStarting:主框架只允许停留在初始页面的来源上(<see cref="WebViewNavigationPolicy"/>),
+    ///   其余导航取消;用户主动点击的 http/https 链接改用系统浏览器打开。</item>
+    /// <item>NewWindowRequested:一律 Handled(不弹出无地址栏的 WebView2 窗口),用户主动的 http/https 链接交给系统浏览器。</item>
+    /// <item>Release 构建关闭 DevTools 与默认右键菜单。</item>
+    /// </list>
+    /// 每一项失败只记日志、不阻断页面加载(加固失败不应让验证不可用)。
+    /// </summary>
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
+    private void ApplyHardening(object webview)
+    {
+#if !DEBUG
+        try
+        {
+            if (GetMember(webview, "Settings") is { } settings)
+            {
+                SetMember(settings, "AreDevToolsEnabled", false);
+                SetMember(settings, "AreDefaultContextMenusEnabled", false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log?.LogWarning("关闭 DevTools/右键菜单失败(忽略): {Message}", ex.Message);
+        }
+#endif
+        try
+        {
+            _navigationStartingHandler = HookEvent(webview, "NavigationStarting", e =>
+            {
+                if (e is null)
+                {
+                    return;
+                }
+                var uri = GetMember(e, "Uri") as string;
+                if (WebViewNavigationPolicy.IsAllowed(_initialUrl, uri))
+                {
+                    return;
+                }
+                SetMember(e, "Cancel", true);
+                var userInitiated = GetMember(e, "IsUserInitiated") is true;
+                Log?.LogInformation("已拦截白名单外的主框架导航 (userInitiated={User})", userInitiated);
+                if (userInitiated)
+                {
+                    SafeUrl.TryOpen(uri);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Log?.LogWarning("挂接 NavigationStarting 失败(忽略): {Message}", ex.Message);
+        }
+        try
+        {
+            _newWindowRequestedHandler = HookEvent(webview, "NewWindowRequested", e =>
+            {
+                if (e is null)
+                {
+                    return;
+                }
+                // Handled=true 且不设置 NewWindow:window.open 返回 null,不创建任何 WebView2 窗口
+                SetMember(e, "Handled", true);
+                var uri = GetMember(e, "Uri") as string;
+                // 只有用户手势触发的才转交系统浏览器(广告脚本自动 window.open 直接丢弃)
+                if (GetMember(e, "IsUserInitiated") is true)
+                {
+                    SafeUrl.TryOpen(uri);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Log?.LogWarning("挂接 NewWindowRequested 失败(忽略): {Message}", ex.Message);
+        }
+    }
+
+    /// <summary>反射挂接官方强类型事件(EventHandler&lt;TArgs&gt;),返回委托供字段保活。</summary>
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
+    private static Delegate? HookEvent(object target, string eventName, Action<object?> callback)
+    {
+        var evt = target.GetType().GetEvent(eventName);
+        if (evt?.EventHandlerType is null)
+        {
+            return null;
+        }
+        var argsType = evt.EventHandlerType.GetMethod("Invoke")!.GetParameters()[1].ParameterType;
+        var maker = typeof(WebView2Control).GetMethod(nameof(MakeEventHandler), BindingFlags.NonPublic | BindingFlags.Static)!
+            .MakeGenericMethod(argsType);
+        if (maker.Invoke(null, new object[] { callback }) is not Delegate handler)
+        {
+            return null;
+        }
+        evt.AddEventHandler(target, handler);
+        return handler;
     }
 
     /// <summary>构造强类型事件委托的泛型工厂(反射挂接官方事件用)。</summary>

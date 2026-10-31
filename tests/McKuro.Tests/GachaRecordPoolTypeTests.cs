@@ -8,8 +8,12 @@ public class GachaRecordPoolTypeTests
     [InlineData("角色精准调谐", CardPoolType.RoleActivity)]
     [InlineData("武器精准调谐", CardPoolType.WeaponsActivity)]
     [InlineData("新手调谐", CardPoolType.Beginner)]
-    [InlineData("新手自选唤取", CardPoolType.Beginner)]
+    [InlineData("新手唤取", CardPoolType.Beginner)]
+    [InlineData("新手自选唤取", CardPoolType.BeginnerChoice)]
+    [InlineData("新手自选", CardPoolType.BeginnerChoice)]
     [InlineData("新手自选唤取（感恩定向唤取）", CardPoolType.GratitudeOrientation)]
+    [InlineData("感恩定向唤取", CardPoolType.GratitudeOrientation)]
+    [InlineData("感恩定向", CardPoolType.GratitudeOrientation)]
     [InlineData("角色新旅唤取", CardPoolType.CharacterNovice)]
     [InlineData("武器新旅唤取", CardPoolType.WeaponNovice)]
     [InlineData("角色联动唤取", CardPoolType.CharacterCollaboration)]
@@ -52,6 +56,17 @@ public class GachaRecordPoolTypeTests
     {
         var record = new GachaRecord { CardPoolType = label, ResourceType = resourceType };
         Assert.Equal(expected, record.PoolType);
+    }
+
+    [Theory]
+    // 存储层读出时直接给枚举:显示名是什么语言、能否被关键词识别都不影响卡池。
+    [InlineData("Character Event", "角色", CardPoolType.WeaponsActivity)]
+    [InlineData("Standard Weapon", "武器", CardPoolType.RoleResident)]
+    [InlineData("角色常驻", "武器", CardPoolType.RoleResident)]
+    public void PoolType_PrefersStoredPoolType(string label, string resourceType, CardPoolType stored)
+    {
+        var record = new GachaRecord { CardPoolType = label, ResourceType = resourceType, StoredPoolType = stored };
+        Assert.Equal(stored, record.PoolType);
     }
 
     [Fact]

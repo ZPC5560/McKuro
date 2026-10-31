@@ -13,8 +13,9 @@ namespace McKuro.ViewModels;
 /// <summary>抽卡分析页(Haiyu 风格):左侧五星列表,右侧统计条 + 图表。</summary>
 public sealed partial class GachaViewModel : ViewModelBase
 {
+    /// <summary>副标题状态文案。初始为空:静态占位词「就绪」没有信息量(同启动页的处理)。</summary>
     [ObservableProperty]
-    private string _statusText = LanguageService.Format("Roles.Ready");
+    private string _statusText = "";
 
     [ObservableProperty]
     private int _totalPulls;
@@ -77,8 +78,6 @@ public sealed partial class GachaViewModel : ViewModelBase
 
     /// <summary>已垫行文本(出五星——无论是否歪——后刷新为角色行)。</summary>
     public string CurrentPityRowText => LanguageService.Format("Gacha.CurrentPity", SelectedPool?.CurrentPity ?? 0);
-
-    public AvaloniaList<GachaRecord> AllRecords { get; } = [];
 
     // ---- 视图切换(0=综合分析[默认] 1=统计卡片 2=表格) ----
     [ObservableProperty]
@@ -176,8 +175,8 @@ public sealed partial class GachaViewModel : ViewModelBase
         {
             await AppServices.GachaIcons.RefreshAsync();
             // 目录更新后重建分析:FiveStarEntry/TabelRecords 的 IconUrl 是派生属性,
-            // 需重新生成条目才会用上新目录
-            if (_analysis is not null)
+            // 需重新生成条目才会用上新目录(分析已发起但尚未完成时同样重跑,旧结果按代次丢弃)
+            if (_analysis is not null || _analysisRequested)
             {
                 AnalyzeCurrentPlayer();
             }
@@ -194,8 +193,8 @@ public sealed partial class GachaViewModel : ViewModelBase
         try
         {
             _upIds = await AppServices.UpPools.GetUpIdsAsync();
-            // 预取完成后再分析一次,使 UP/歪 判定生效
-            if (_analysis is not null)
+            // 预取完成后再分析一次,使 UP/歪 判定生效(分析已发起但尚未完成时同样重跑)
+            if (_analysis is not null || _analysisRequested)
             {
                 AnalyzeCurrentPlayer();
             }
@@ -207,31 +206,84 @@ public sealed partial class GachaViewModel : ViewModelBase
     }
 
     /// <summary>玩家下拉切换时重新分析(空串 = 全部账号聚合)。</summary>
-    partial void OnSelectedPlayerIdChanged(string value) => AnalyzeCurrentPlayer();
-
-    private void AnalyzeCurrentPlayer()
+    partial void OnSelectedPlayerIdChanged(string value)
     {
-        var selected = SelectedPlayerId;
-        List<GachaRecord> records;
-
-        if (string.IsNullOrEmpty(selected) || selected == AllPlayersLabel)
+        if (!_suppressPlayerReanalysis)
         {
-            records = AppServices.GachaStore.GetAllRecords();
+            AnalyzeCurrentPlayer();
         }
-        else
-        {
-            records = AppServices.GachaStore.GetRecords(selected);
-        }
-
-        if (records.Count == 0)
-        {
-            return;
-        }
-
-        var playerId = selected == AllPlayersLabel ? "" : selected;
-        ApplyAnalysis(AppServices.GachaAnalysis.Analyze(playerId, records, _upIds));
-        StatusText = LanguageService.Format("Gacha.LocalLoaded");
     }
+
+    /// <summary>分析请求代次:每发起一次分析 / 直接应用一次结果 +1,较早发起的后台分析完成时据此丢弃。</summary>
+    private int _analysisGeneration;
+
+    /// <summary>是否已发起过本地分析(UP 配置 / 图鉴目录预取完成时据此决定是否重跑)。</summary>
+    private bool _analysisRequested;
+
+    /// <summary>按当前下拉选择重新分析(异步;调用方不等待)。</summary>
+    private void AnalyzeCurrentPlayer() => _ = AnalyzeCurrentPlayerAsync();
+
+    /// <summary>
+    /// 查库 + 全量分析放到线程池,结果回 UI 线程应用。
+    /// <para>此前在 UI 线程同步查 SQLite 并全量分析(1 万+ 记录),切换玩家 / 启动时会卡界面;
+    /// 连续触发时只应用最后一次的结果(代次比对)。</para>
+    /// </summary>
+    private async Task AnalyzeCurrentPlayerAsync()
+    {
+        var generation = ++_analysisGeneration;
+        _analysisRequested = true;
+        var selected = SelectedPlayerId;
+        var isAll = string.IsNullOrEmpty(selected) || selected == AllPlayersLabel;
+        var playerId = isAll ? "" : selected;
+        var upIds = _upIds;
+        try
+        {
+            var analysis = await Task.Run(() =>
+            {
+                var records = isAll
+                    ? AppServices.GachaStore.GetAllRecords()
+                    : AppServices.GachaStore.GetRecords(playerId);
+                return records.Count == 0
+                    ? null
+                    : AppServices.GachaAnalysis.Analyze(playerId, records, upIds);
+            });
+            // 回到 UI 线程;期间又发起了新的分析(换玩家 / 同步完成)则丢弃本次结果
+            if (analysis is null || generation != _analysisGeneration)
+            {
+                return;
+            }
+            ApplyAnalysis(analysis);
+            StatusText = LanguageService.Format("Gacha.LocalLoaded");
+        }
+        catch (Exception ex)
+        {
+            if (generation == _analysisGeneration)
+            {
+                StatusText = LanguageService.Format("Gacha.LocalLoadFailed", ex.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 设置下拉选中项但<b>不</b>触发重新分析(结果已由调用方应用)。
+    /// <para>清空 / 重填 <see cref="PlayerIds"/> 时绑定可能先把选中项写成 null 并触发一次分析,
+    /// 这里推进代次,让那次中间态分析的结果被丢弃。</para>
+    /// </summary>
+    private void SelectPlayerWithoutReanalysis(string playerId)
+    {
+        _suppressPlayerReanalysis = true;
+        try
+        {
+            SelectedPlayerId = playerId;
+        }
+        finally
+        {
+            _suppressPlayerReanalysis = false;
+        }
+        _analysisGeneration++;
+    }
+
+    private bool _suppressPlayerReanalysis;
 
     private void LoadExisting()
     {
@@ -247,9 +299,18 @@ public sealed partial class GachaViewModel : ViewModelBase
             PlayerIds.Add(AllPlayersLabel);
             PlayerIds.AddRange(playerIds);
 
-            // 默认选中最后同步的玩家
-            SelectedPlayerId = playerIds[^1];
-            AnalyzeCurrentPlayer();
+            // 默认选中最近抽过卡的玩家(GetAllPlayerIds 按最近一条记录时间升序,[^1] 即最近)。
+            // 选中项变化会经 OnSelectedPlayerIdChanged 触发一次分析,不再额外调用(此前启动时分析两遍);
+            // 只有选中项未变(不会触发回调)时才手动分析。
+            var target = playerIds[^1];
+            if (SelectedPlayerId == target)
+            {
+                AnalyzeCurrentPlayer();
+            }
+            else
+            {
+                SelectedPlayerId = target;
+            }
         }
         catch (Exception ex)
         {
@@ -297,19 +358,36 @@ public sealed partial class GachaViewModel : ViewModelBase
                 result = await AppServices.GachaSync.SyncFromLocalLogAsync(AppServices.UpPools);
             }
 
+            var upIds = _upIds;
             if (result is null || !result.IsSuccess)
             {
-                // 云鸣潮 + 本地都失败 → 从 sqlite 缓存兜底(校验账号,已有记录则展示)
+                // 云鸣潮 + 本地都失败 → 从 sqlite 缓存兜底(校验账号,已有记录则展示)。
+                // 失败原因统一由 Core 填进 Message(含 ClientLogReadFailed 等各状态),这里不按状态分支。
+                // 查库 + 分析放到线程池,结果回 UI 线程应用
                 string? cachedTarget = result?.Request?.PlayerId;
-                var cachedRecords = TryLoadCache(cachedTarget, out var cachePlayerId);
-                if (cachedRecords is not null)
+                var (cachedAnalysis, cachePlayerId, cachedIds) = await Task.Run(() =>
                 {
-                    ApplyAnalysis(AppServices.GachaAnalysis.Analyze(cachePlayerId ?? "", cachedRecords, _upIds));
-                    var cachedIds = AppServices.GachaStore.GetAllPlayerIds();
+                    var records = TryLoadCache(cachedTarget, out var matched);
+                    return records is null
+                        ? ((GachaAnalysisResult?)null, matched, new List<string>())
+                        : (AppServices.GachaAnalysis.Analyze(matched ?? "", records, upIds), matched, AppServices.GachaStore.GetAllPlayerIds());
+                });
+                if (cachedAnalysis is not null)
+                {
+                    ApplyAnalysis(cachedAnalysis);
                     PlayerIds.Clear();
                     PlayerIds.Add(AllPlayersLabel);
                     PlayerIds.AddRange(cachedIds);
-                    SelectedPlayerId = cachePlayerId ?? (cachedIds.Count > 0 ? cachedIds[^1] : "");
+                    var cacheSelect = cachePlayerId ?? (cachedIds.Count > 0 ? cachedIds[^1] : "");
+                    if (cacheSelect == cachePlayerId)
+                    {
+                        // 结果已应用:只同步下拉,不再重复查库分析(也不让后台分析覆盖下面的状态文案)
+                        SelectPlayerWithoutReanalysis(cacheSelect);
+                    }
+                    else
+                    {
+                        SelectedPlayerId = cacheSelect;
+                    }
                     StatusText = LanguageService.Format("Gacha.SyncFailedCached", result?.Message ?? LanguageService.Format("Gacha.SyncFailed"));
                 }
                 else
@@ -319,24 +397,36 @@ public sealed partial class GachaViewModel : ViewModelBase
                 return;
             }
 
-            if (result.Request?.PlayerId is { Length: > 0 } syncedPlayerId)
+            // 云端同步的底层流水线没有 UP 配置参数,这里统一用最新 UP 集合重算,
+            // 让统计卡、五星列表和表格共享完全相同的判定结果。查库 + 分析放到线程池。
+            var syncedPlayerId = result.Request?.PlayerId is { Length: > 0 } pid ? pid : null;
+            var pipelineAnalysis = result.Analysis;
+            var (syncedAnalysis, all) = await Task.Run(() =>
             {
-                // 云端同步的底层流水线没有 UP 配置参数,这里统一用最新 UP 集合重算,
-                // 让统计卡、五星列表和表格共享完全相同的判定结果。
-                var syncedRecords = AppServices.GachaStore.GetRecords(syncedPlayerId);
-                ApplyAnalysis(AppServices.GachaAnalysis.Analyze(syncedPlayerId, syncedRecords, _upIds));
-            }
-            else if (result.Analysis is not null)
+                var analysis = syncedPlayerId is not null
+                    ? AppServices.GachaAnalysis.Analyze(syncedPlayerId, AppServices.GachaStore.GetRecords(syncedPlayerId), upIds)
+                    : pipelineAnalysis;
+                return (analysis, AppServices.GachaStore.GetAllPlayerIds());
+            });
+            if (syncedAnalysis is not null)
             {
-                ApplyAnalysis(result.Analysis);
+                ApplyAnalysis(syncedAnalysis);
             }
 
             // 刷新玩家下拉(可能新增玩家)
-            var all = AppServices.GachaStore.GetAllPlayerIds();
             PlayerIds.Clear();
             PlayerIds.Add(AllPlayersLabel);
             PlayerIds.AddRange(all);
-            SelectedPlayerId = result.Request?.PlayerId ?? (all.Count > 0 ? all[^1] : "");
+            var select = result.Request?.PlayerId ?? (all.Count > 0 ? all[^1] : "");
+            if (syncedPlayerId is not null && select == syncedPlayerId)
+            {
+                // 同步玩家的结果刚应用过:只同步下拉选中项,不重复查库分析
+                SelectPlayerWithoutReanalysis(select);
+            }
+            else
+            {
+                SelectedPlayerId = select;
+            }
 
             StatusText = LanguageService.Format("Gacha.Synced", result.NewRecords, result.TotalRecords);
         }
@@ -398,8 +488,9 @@ public sealed partial class GachaViewModel : ViewModelBase
         var result = new List<GachaRecord>(records.Count);
         foreach (var r in records)
         {
-            if (DateTime.TryParse(r.Time, System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.AssumeUniversal, out var dt))
+            // 记录时间是不带时区的服务器本地时间:按墙上时间解析(与 Core GachaAnalysisService.TryParseTime 同口径),
+            // 不做 UTC → 本地换算
+            if (TryParseRecordTime(r.Time, out var dt))
             {
                 // 未来时间(时钟误差容忍 1 天)视为无效
                 if (dt > now.AddDays(1))
@@ -416,8 +507,27 @@ public sealed partial class GachaViewModel : ViewModelBase
         return result;
     }
 
+    /// <summary>
+    /// 解析记录时间(优先 "yyyy-MM-dd HH:mm:ss",兼容 ISO 8601),按墙上时间、不做时区换算。
+    /// 与 Core <c>GachaAnalysisService.TryParseTime</c>(私有,无法复用)保持一致。
+    /// </summary>
+    private static bool TryParseRecordTime(string? time, out DateTime value)
+    {
+        value = default;
+        if (string.IsNullOrWhiteSpace(time))
+        {
+            return false;
+        }
+        return DateTime.TryParseExact(time, "yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture,
+                   System.Globalization.DateTimeStyles.None, out value)
+               || DateTime.TryParse(time, System.Globalization.CultureInfo.InvariantCulture,
+                   System.Globalization.DateTimeStyles.None, out value);
+    }
+
     private void ApplyAnalysis(GachaAnalysisResult analysis)
     {
+        // 直接应用的结果(同步 / 缓存兜底 / 后台分析)也推进代次:更早发起的后台分析完成时不得覆盖它
+        _analysisGeneration++;
         _analysis = analysis;
         TotalPulls = analysis.TotalPulls;
         TotalFiveStars = analysis.TotalFiveStars;
@@ -496,7 +606,6 @@ public sealed partial class GachaViewModel : ViewModelBase
     private void RefreshDetail()
     {
         FiveStarEntries.Clear();
-        AllRecords.Clear();
 
         if (_analysis is null || SelectedPool is null)
         {
@@ -516,10 +625,7 @@ public sealed partial class GachaViewModel : ViewModelBase
             ? Math.Round(pool.FiveStarEntries.Average(e => e.Pity), 1)
             : 0;
 
-        var all = AppServices.GachaStore.GetRecords(_analysis.PlayerId, pool.PoolType);
-        AllRecords.Clear();
-        AllRecords.AddRange(all.AsEnumerable().Reverse());
-
+        // 此前每次切换卡池都在 UI 线程全量查一次该池记录填充 AllRecords,而没有任何视图绑定它,已移除
         RefreshTable();
     }
 

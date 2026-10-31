@@ -673,6 +673,38 @@ public sealed class FastVerifyTests : IDisposable
         return list;
     }
 
+    /// <summary>
+    /// L1:下载器改用 <see cref="FastVerify.ChunkHashMatchesAsync"/> 真异步读盘;它必须与同步版逐条同判
+    /// (匹配 / 哈希不符 / 无哈希 / 文件短于分片末尾)。
+    /// </summary>
+    [Fact]
+    public async Task ChunkHashMatchesAsync_Agrees_With_Sync_Version()
+    {
+        var payload = new byte[300_000];
+        new Random(3).NextBytes(payload);
+        var path = WriteFile("async.bin", payload);
+        string Md5(int start, int length) =>
+            Convert.ToHexStringLower(System.Security.Cryptography.MD5.HashData(payload.AsSpan(start, length)));
+        var cases = new[]
+        {
+            new GameChunkInfo { Start = 0, End = 199_999, Md5 = Md5(0, 200_000) },
+            new GameChunkInfo { Start = 200_000, End = 299_999, Md5 = Md5(200_000, 100_000) },
+            new GameChunkInfo { Start = 0, End = 99, Md5 = new string('0', 32) },
+            new GameChunkInfo { Start = 0, End = 99, Md5 = "" },
+            new GameChunkInfo { Start = 250_000, End = 349_999, Md5 = Md5(250_000, 50_000) },
+        };
+
+        await using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+        foreach (var chunk in cases)
+        {
+            var syncResult = FastVerify.ChunkHashMatches(file, chunk);
+            var asyncResult = await FastVerify.ChunkHashMatchesAsync(file, chunk);
+            Assert.Equal(syncResult, asyncResult);
+        }
+        Assert.True(await FastVerify.ChunkHashMatchesAsync(file, cases[0]));
+        Assert.False(await FastVerify.ChunkHashMatchesAsync(file, cases[4]));
+    }
+
     /// <summary>把指定索引的分片哈希清空(<see cref="GameChunkInfo.Md5"/> 是 init-only,只能重建)。</summary>
     private static List<GameChunkInfo> WithoutHash(IReadOnlyList<GameChunkInfo> chunks, int index)
     {

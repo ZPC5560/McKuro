@@ -115,4 +115,41 @@ public class StatusTextBindingTests
         Assert.True(BindsStatusText(File.ReadAllText(xaml)),
             "LauncherView.axaml 必须绑定 StatusText:启动页所有菜单操作的反馈都靠它(2026-10 用户反馈回归点)");
     }
+
+    /// <summary>
+    /// 状态文案的初始值不能是静态占位词(「就绪」)。
+    /// <para>
+    /// 回归背景(用户反馈 2026-10):"一直显示就绪,这种没必要显示"。启动页 / 角色页 / 抽卡页
+    /// 的 <c>StatusText</c> 初始值都是 <c>LanguageService.Format("Roles.Ready")</c>,
+    /// 于是没有任何操作发生时页面也挂着一个"就绪" —— 它不传达信息,还让人以为有事没做完。
+    /// 这些页面的 StatusText 只在"操作开始/结束"时被赋值,初始值应当为空。
+    /// </para>
+    /// <para>
+    /// 判据只盯<b>字段声明处的初始值</b>,不限制运行时赋任何值 —— 运行时要显示什么由各页面自己决定。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void StatusText_Initializers_Are_Not_Static_Placeholders()
+    {
+        var root = RepositoryRoot();
+        var vmDir = Path.Combine(root, "src", "McKuro", "ViewModels");
+        Assert.True(Directory.Exists(vmDir), $"未找到 {vmDir}");
+
+        var violations = new List<string>();
+        foreach (var vm in Directory.GetFiles(vmDir, "*.cs", SearchOption.AllDirectories))
+        {
+            var source = File.ReadAllText(vm);
+            foreach (Match m in Regex.Matches(source, @"private\s+string\s+_statusText\s*=\s*([^;]+);"))
+            {
+                if (m.Groups[1].Value.Contains("Roles.Ready", StringComparison.Ordinal))
+                {
+                    violations.Add(
+                        $"{Path.GetFileName(vm)}: _statusText 初始值是 Roles.Ready(「就绪」) —— 静态占位词不该常驻,初始应为空串");
+                }
+            }
+        }
+
+        Assert.True(violations.Count == 0,
+            "以下 ViewModel 的状态文案初始值仍是占位词:\n  " + string.Join("\n  ", violations));
+    }
 }

@@ -16,7 +16,7 @@ public readonly record struct DiffProgress(int Checked, int Total, string Curren
 
 /// <summary>
 /// 更新安装器:对比本地文件与清单,计算差异,并将(预下载的)文件原子化安装到游戏目录。
-/// 替换文件前备份到 <c>.McKuro_backup</c>,安装完成后写入版本标记。
+/// 替换文件前把旧文件同卷移动到 <c>.McKuro_backup</c>(最终校验通过后由 GameUpdater 删除),安装完成后写入版本标记。
 /// </summary>
 public sealed class UpdateInstaller
 {
@@ -171,6 +171,7 @@ public sealed class UpdateInstaller
     /// <param name="stagingDir">预下载暂存目录(文件按相对路径存放)。</param>
     /// <param name="manifest">安装所用清单。</param>
     /// <returns>(安装文件数, 失败列表)</returns>
+    /// <remarks>目前只有单元测试调用;生产路径的补丁安装走 <see cref="InstallFilesFromStaging"/>(由 PatchInstaller 调用)。</remarks>
     public (int Installed, List<string> Failures) InstallFromStaging(
         string stagingDir,
         string gameRootDir,
@@ -290,8 +291,14 @@ public sealed class UpdateInstaller
     }
 
     /// <summary>
-    /// 备份将被替换的文件到 <c>.McKuro_backup</c>(供流式安装/回滚)。
-    /// 公开供下载引擎在「边下载边更新」替换目标文件前调用;备份失败不阻断安装。
+    /// 把将被替换的文件<b>移动</b>到 <c>.McKuro_backup</c>(供流式安装替换前调用;备份失败不阻断安装)。
+    /// <para>
+    /// 以前是整文件 <c>File.Copy</c>:76 个分块 pak(78.5 GB)每次更新多写约 78 GB,空间预检也被迫按 2 倍预留,
+    /// 而全仓库没有任何从备份恢复的逻辑。备份目录与游戏文件同在游戏根目录下(同一卷),
+    /// <c>File.Move</c> 只是改名,瞬时完成且不占额外空间。调用方随后会把新文件落位到原路径
+    /// (<c>File.Move(..., overwrite: true)</c>,原路径此时已空,不受影响)。
+    /// 安装/修复最终校验通过后 GameUpdater 会删除整个备份目录。
+    /// </para>
     /// </summary>
     public static void BackupFile(string filePath, string gameRootDir)
     {
@@ -305,19 +312,20 @@ public sealed class UpdateInstaller
             {
                 Directory.CreateDirectory(destDir);
             }
-            if (File.Exists(dest))
-            {
-                File.Delete(dest);
-            }
-            File.Copy(filePath, dest);
+            File.Move(filePath, dest, overwrite: true);
         }
         catch (Exception)
         {
-            // 备份失败不阻断安装
+            // 备份失败不阻断安装(原文件仍在原处,随后被新文件覆盖)
         }
     }
 
     /// <summary>删除游戏目录中不在清单内的文件(可选清理)。</summary>
+    /// <remarks>
+    /// <b>⚠ 目前只有单元测试调用,不要直接接入生产流程。</b>"不在清单内"包括其它画质资源包
+    /// (sd/hd/uhd 互相不在对方清单里)、存档、日志与官方启动器标记 —— 接入前必须先把
+    /// 所有已安装画质包的清单并入 <paramref name="manifest"/>,否则会删掉几十 GB 合法资源。
+    /// </remarks>
     public int RemoveObsolete(GameManifest manifest, string gameRootDir)
     {
         var manifestPaths = manifest.Files
@@ -328,15 +336,16 @@ public sealed class UpdateInstaller
         foreach (var file in Directory.EnumerateFiles(gameRootDir, "*", SearchOption.AllDirectories))
         {
             var relative = Path.GetRelativePath(gameRootDir, file);
-            if (relative.StartsWith(BackupDirName, StringComparison.OrdinalIgnoreCase))
+            if (IsUnderTopLevelDir(relative, BackupDirName))
             {
                 continue;
             }
             // 预下载暂存与补丁临时目录都在游戏目录的工作区里(DiffData/ 及其下的 install_tmp/),
             // 它们不在游戏清单内,但删除会丢掉已预载的几十 GB,因此与备份目录一样跳过。
             // .McKuro_patch 是与之并列的分组差分临时目录,同样跳过。
-            if (relative.StartsWith(GamePathResolver.DiffDataDirName, StringComparison.OrdinalIgnoreCase)
-                || relative.StartsWith(GamePathResolver.PatchTempDirName, StringComparison.OrdinalIgnoreCase))
+            // 必须按目录边界判断:单纯 StartsWith("DiffData") 也会匹配 DiffDataX/ 这类无关目录。
+            if (IsUnderTopLevelDir(relative, GamePathResolver.DiffDataDirName)
+                || IsUnderTopLevelDir(relative, GamePathResolver.PatchTempDirName))
             {
                 continue;
             }
@@ -355,5 +364,12 @@ public sealed class UpdateInstaller
             }
         }
         return removed;
+    }
+
+    /// <summary>相对路径是否位于顶层目录 <paramref name="dirName"/> 之内(要求目录分隔符边界)。</summary>
+    private static bool IsUnderTopLevelDir(string relative, string dirName)
+    {
+        var normalized = relative.Replace('\\', '/');
+        return normalized.StartsWith(dirName + "/", StringComparison.OrdinalIgnoreCase);
     }
 }

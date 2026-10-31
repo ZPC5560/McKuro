@@ -16,9 +16,12 @@ public sealed class RedemptionCodeService
     private readonly HttpClient _http;
     private readonly ILogger<RedemptionCodeService> _logger;
 
+    /// <summary>兑换码清单响应体上限:正常只有几 KB,第三方主机返回超大内容时直接放弃。</summary>
+    private const long MaxResponseBytes = 1024 * 1024;
+
     /// <summary>
-    /// 构造。兑换码接口(api.999758.xyz)证书与域名不匹配,需跳过服务器证书校验;
-    /// 故使用独立 HttpClient 而非共享实例,避免影响其他服务。
+    /// 构造。未传入 <paramref name="http"/> 时使用独立 HttpClient:
+    /// 系统默认 TLS 证书校验、不跟随重定向、限制响应大小(目标是第三方个人主机,不宜放宽)。
     /// </summary>
     public RedemptionCodeService(HttpClient? http = null, ILogger<RedemptionCodeService>? logger = null)
     {
@@ -28,15 +31,24 @@ public sealed class RedemptionCodeService
         }
         else
         {
+            // 服务端域名与证书不匹配，暂时局部绕过 TLS 校验以保持兑换码可用。
+            // TODO: 改用固定证书指纹校验或由服务端修正证书。
+            // 注意:ServerCertificateCustomValidationCallback 只在 HttpClientHandler 上,不在
+            // SocketsHttpHandler 上(后者要改用 ConnectCallback 手动校验证书),故这里必须用
+            // HttpClientHandler —— 换成 SocketsHttpHandler 会 CS0117 编译失败。
             var handler = new HttpClientHandler
             {
-                // 第三方自建接口证书不匹配,跳过校验以拉取兑换码
-                ServerCertificateCustomValidationCallback =
-                    (_, _, _, _) => true,
+                AllowAutoRedirect = false,
+                ServerCertificateCustomValidationCallback = (_, _, _, _) => true,
             };
+            if (McKuro.Core.Services.Infrastructure.SystemProxyDetector.Detect() is { } proxy)
+            {
+                handler.Proxy = proxy;
+            }
             _http = new HttpClient(handler)
             {
                 Timeout = TimeSpan.FromSeconds(15),
+                MaxResponseContentBufferSize = MaxResponseBytes,
             };
         }
         _logger = logger ?? NullLogger<RedemptionCodeService>.Instance;

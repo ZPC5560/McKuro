@@ -3,7 +3,9 @@ using McKuro.Core.Models.Kuro;
 using McKuro.Core.Models.Tower;
 using McKuro.Core.Services.Game;
 using McKuro.Core.Services.Kuro;
+using McKuro.Core.Services.Notification;
 using McKuro.Core.Services.Roles;
+using McKuro.Core.Services.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
@@ -66,21 +68,52 @@ public sealed class TowerService
     private readonly IKuroClient _kuro;
     private readonly KuroAccountService _accounts;
     private readonly AppDatabase? _database;
+    private readonly ISettingsService? _settings;
     private readonly ILogger<TowerService> _logger;
 
+    /// <param name="settings">
+    /// 应用设置(可选):用其中配置的 <see cref="AppSettings.RoleId"/> 在账号绑定的多个角色中选取
+    /// 与角色页一致的那一个;未注入或未配置时回退到第一个角色(旧行为)。
+    /// </param>
     public TowerService(
         KujiequApiClient api,
         IKuroClient kuro,
         KuroAccountService accounts,
         ILogger<TowerService>? logger = null,
-        AppDatabase? database = null)
+        AppDatabase? database = null,
+        ISettingsService? settings = null)
     {
         _api = api;
         _kuro = kuro;
         _accounts = accounts;
         _logger = logger ?? NullLogger<TowerService>.Instance;
         _database = database;
+        _settings = settings;
     }
+
+    /// <summary>
+    /// 从账号绑定的角色列表中选取本次使用的角色:优先匹配配置的角色 ID(与 RoleDataService 同口径),
+    /// 未配置或列表中没有该 ID 时回退到第一个。
+    /// <para>旧实现直接取 <c>Data[0]</c>:多角色账号下深塔页与角色页显示的是不同角色(评审反馈)。</para>
+    /// </summary>
+    internal static GameRoilDataItem PickRole(IReadOnlyList<GameRoilDataItem> roles, string? configuredRoleId)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredRoleId))
+        {
+            var wanted = configuredRoleId.Trim();
+            foreach (var r in roles)
+            {
+                if (string.Equals(r.RoleId, wanted, StringComparison.Ordinal))
+                {
+                    return r;
+                }
+            }
+        }
+        return roles[0];
+    }
+
+    /// <summary>当前配置的角色 ID(未注入设置服务时为 null)。</summary>
+    private string? ConfiguredRoleId => _settings?.Current.RoleId;
 
     /// <summary>
     /// 拉取深塔、海墟与全息战略数据;<see cref="TowerDataResult.Error"/> 非空表示失败
@@ -105,7 +138,7 @@ public sealed class TowerService
         {
             return Failed(CoreStrings.T("Core.Tower.RoleListFailed", "获取角色列表失败"));
         }
-        var role = gamer.Data[0];
+        var role = PickRole(gamer.Data, ConfiguredRoleId);
         var roleId = role.RoleId ?? "";
         _logger.LogInformation("Tower: 角色列表 {Count} 个,本次使用 roleId={RoleId} roleName={RoleName} serverId={ServerId}",
             gamer.Data.Count, roleId, role.RoleName, role.ServerId);
@@ -132,6 +165,12 @@ public sealed class TowerService
         {
             tower = await _api.GetTowerAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // 调用方取消必须向上传播(评审反馈):吞掉会让已取消的加载继续串行打后面 5 个接口。
+            // 令牌未取消的 OCE(HttpClient 超时)仍按单项失败处理,不连累其余页签。
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "拉取逆境深塔数据失败");
@@ -144,6 +183,10 @@ public sealed class TowerService
                 SaveNewTowerHistory(roleId, newTower);
             }
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "拉取终焉矩阵数据失败");
@@ -151,6 +194,10 @@ public sealed class TowerService
         try
         {
             slash = await _api.GetSlashAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -270,7 +317,7 @@ public sealed class TowerService
         {
             return new TowerSeasonSnapshot(null, null, null, CoreStrings.T("Core.Tower.RoleListFailed", "获取角色列表失败"), "");
         }
-        var roleId = gamer.Data[0].RoleId ?? "";
+        var roleId = PickRole(gamer.Data, ConfiguredRoleId).RoleId ?? "";
         if (string.IsNullOrEmpty(roleId))
         {
             return new TowerSeasonSnapshot(null, null, null, CoreStrings.T("Core.Tower.NoRoleId", "角色 ID 为空"), "");
@@ -363,7 +410,7 @@ public sealed class TowerService
             }
             // 剩余毫秒缺失时退化为"当前时间归整",保证仍能落一条历史
             var remaining = newTower.EndTime ?? 0;
-            var end = NormalizeToHour4(DateTime.Now.AddMilliseconds(remaining));
+            var end = NormalizeToServerHour4(DateTime.UtcNow.AddMilliseconds(remaining));
             var json = JsonSerializer.Serialize(modes, TowerJsonContext.Default.ListNewTowerModeDetail);
             _database.UpsertNewTowerHistory(roleId, end, json);
         }
@@ -378,5 +425,19 @@ public sealed class TowerService
     {
         var atFour = new DateTime(local.Year, local.Month, local.Day, 4, 0, 0, local.Kind);
         return new DateTimeOffset(atFour).ToUnixTimeMilliseconds();
+    }
+
+    /// <summary>
+    /// 按<b>服务器时间</b>归整到当天 04:00(赛季在服务器 04:00 结束),返回 Unix 毫秒。
+    /// <para>旧实现按本机时间归整:非 UTC+8 时区里服务器 04:00 可能落在本机午夜附近,
+    /// 剩余毫秒的秒级抖动会让归整日期在两天之间翻转,同一期落出两行历史(评审反馈)。
+    /// 国服(UTC+8)用户本机即服务器时间,结果与旧实现一致,已有历史行不受影响。</para>
+    /// </summary>
+    internal static long NormalizeToServerHour4(DateTime time)
+    {
+        var server = ReminderWindows.ToServerTime(time);
+        var atFour = new DateTimeOffset(
+            server.Year, server.Month, server.Day, ReminderWindows.ResetHour, 0, 0, ReminderWindows.ServerUtcOffset);
+        return atFour.ToUnixTimeMilliseconds();
     }
 }

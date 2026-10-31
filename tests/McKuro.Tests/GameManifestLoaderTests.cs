@@ -127,9 +127,12 @@ public class GameManifestLoaderTests
         Assert.Equal("c0ffee00000000000000000000000001", exe.ChunkInfos[0].Md5);
     }
 
-    /// <summary>indexFileMd5 不符时必须拒绝该索引并回退 resource.json(索引错一个字节会导致误判)。</summary>
+    /// <summary>
+    /// 官方给了 indexFileMd5 而下载内容对不上:按篡改处理直接失败(L5)。
+    /// 不能悄悄回退到同一 CDN 上没有哈希锁定的 resource.json —— 它提供校验所有游戏文件用的 MD5。
+    /// </summary>
     [Fact]
-    public async Task LoadKuroAsync_VerificationIndexMd5Mismatch_FallsBackToResourceJson()
+    public async Task LoadKuroAsync_VerificationIndexMd5Mismatch_Fails_InsteadOfFallingBack()
     {
         var indexUrl = "https://prod-cn-alicdn-gamestarter.kurogame.com/launcher/game/G152/10003/index.json";
         var handler = new FakeHandler(new Dictionary<string, string>
@@ -142,10 +145,86 @@ public class GameManifestLoaderTests
 
         var result = await loader.LoadKuroAsync(indexUrl);
 
+        Assert.False(result.Success);
+        Assert.Null(result.Manifest);
+    }
+
+    /// <summary>官方没给 indexFileMd5 时无从比对,保持原行为:使用校验索引(不报错)。</summary>
+    [Fact]
+    public async Task LoadKuroAsync_VerificationIndexWithoutMd5_StillLoads()
+    {
+        var indexUrl = "https://prod-cn-alicdn-gamestarter.kurogame.com/launcher/game/G152/10003/index.json";
+        var handler = new FakeHandler(new Dictionary<string, string>
+        {
+            [indexUrl] = IndexWithVerification(""),
+            [$"{Cdn}/{VerificationIndexPath}"] = VerificationIndexJson,
+            [$"{Cdn}/{ResourceJsonPath}"] = ResourceJson,
+        });
+        var loader = new GameManifestLoader(new HttpClient(handler));
+
+        var result = await loader.LoadKuroAsync(indexUrl);
+
         Assert.True(result.Success, result.Message);
-        // 回退到 resource.json:3 个文件,且没有分片信息
-        Assert.Equal(3, result.Manifest!.Files.Count);
-        Assert.All(result.Manifest.Files, f => Assert.Empty(f.ChunkInfos));
+        Assert.Equal(2, result.Manifest!.Files.Count);
+    }
+
+    /// <summary>cdnList 只有 http 地址:拒绝下载(L5,明文 CDN 下中间人可连清单带文件一起替换)。</summary>
+    [Fact]
+    public async Task LoadKuroAsync_HttpOnlyCdn_IsRejected()
+    {
+        var indexUrl = "https://cdn.example.com/index.json";
+        var handler = new FakeHandler(new Dictionary<string, string>
+        {
+            [indexUrl] = """
+            {
+              "default": {
+                "cdnList": [ { "url": "http://cdn.example.com/launcher/", "ping": 10 } ],
+                "resourcesBasePath": "game/",
+                "version": "2.3.0"
+              },
+              "gameResourceList": { "resource": [ { "dest": "a.exe", "md5": "x", "size": 1 } ] }
+            }
+            """,
+        });
+        var loader = new GameManifestLoader(new HttpClient(handler));
+
+        var result = await loader.LoadKuroAsync(indexUrl);
+
+        Assert.False(result.Success);
+    }
+
+    /// <summary>http 与 https 并存时只用 https 那个(http 条目即使优先级更高也跳过)。</summary>
+    [Fact]
+    public async Task SelectCdnAsync_SkipsHttpCandidate()
+    {
+        var loader = new GameManifestLoader(new HttpClient(new FakeHandler(new Dictionary<string, string>
+        {
+            ["http://plain.example.com/launcher/patch/indexFile.json"] = "{}",
+            ["https://secure.example.com/launcher/patch/indexFile.json"] = "{}",
+        })));
+        var cdns = new List<KuroCdnData>
+        {
+            new() { Url = "http://plain.example.com/", P = 1 },
+            new() { Url = "https://secure.example.com/", P = 2 },
+        };
+
+        var selected = await loader.SelectCdnAsync(cdns, "launcher/patch/indexFile.json", CancellationToken.None);
+
+        Assert.Equal("https://secure.example.com/", selected);
+    }
+
+    [Fact]
+    public async Task LoadPatchAsync_RejectsHttpIndexUrl()
+    {
+        const string indexUrl = "http://cdn.example.com/indexFile.json";
+        var loader = new GameManifestLoader(new HttpClient(new FakeHandler(new Dictionary<string, string>
+        {
+            [indexUrl] = """{ "resource": [] }""",
+        })));
+
+        var result = await loader.LoadPatchAsync(indexUrl);
+
+        Assert.False(result.Success);
     }
 
     /// <summary>校验索引 404 时必须静默回退 resource.json(不能把整个更新流程搞挂)。</summary>

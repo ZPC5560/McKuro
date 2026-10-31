@@ -246,32 +246,30 @@ public class RoleDetailModelTests
     [Fact]
     public void RoleDetail_EchoTotal_Is_Lazy_Without_Explicit_Refresh()
     {
+        // 装满 5 个槽位:总评均分按 5 槽计算(空槽计 0),只装 1 件时档位会被拉低
         var d = new RoleDetail
         {
             PhantomData = new PhantomData
             {
-                Phantoms =
-                [
-                    new EchoInfo
-                    {
-                        SubProps =
-                        [
-                            new EchoProp { AttributeName = "暴击", AttributeValue = "10.5%" },
-                            new EchoProp { AttributeName = "暴击伤害", AttributeValue = "21%" },
-                            new EchoProp { AttributeName = "攻击", AttributeValue = "60" },
-                            new EchoProp { AttributeName = "生命", AttributeValue = "580" },
-                            new EchoProp { AttributeName = "防御", AttributeValue = "70" },
-                        ],
-                    },
-                ],
+                Phantoms = Enumerable.Range(0, 5).Select(_ => new EchoInfo
+                {
+                    SubProps =
+                    [
+                        new EchoProp { AttributeName = "暴击", AttributeValue = "10.5%" },
+                        new EchoProp { AttributeName = "暴击伤害", AttributeValue = "21%" },
+                        new EchoProp { AttributeName = "攻击", AttributeValue = "60" },
+                        new EchoProp { AttributeName = "生命", AttributeValue = "580" },
+                        new EchoProp { AttributeName = "防御", AttributeValue = "70" },
+                    ],
+                }).ToList(),
             },
         };
 
         // 关键:全程不调用 RefreshEchoRating / 任何合并逻辑
         Assert.True(d.HasEchoRating);
         Assert.True(d.HasEchoTotal);
-        // 无 mainProps → 兼容口径固定分母 10(双暴受上限压制):暴击1.5+暴伤1.5+攻击1.0+生命0.5+防御0.5 = 5.0 → 50 分
-        Assert.Equal(50.0, d.EchoTotalScore);
+        // 无 mainProps → 兼容口径固定分母 10(双暴受上限压制):暴击1.5+暴伤1.5+攻击1.0+生命0.5+防御0.5 = 5.0 → 单件 50 分 × 5
+        Assert.Equal(250.0, d.EchoTotalScore);
         Assert.Equal("毕业", d.EchoTotalGrade);
         Assert.Equal(EchoRatingLevel.SSS, d.EchoTotalLevel);
     }

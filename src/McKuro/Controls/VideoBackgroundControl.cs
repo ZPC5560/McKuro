@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Avalonia;
@@ -79,7 +80,19 @@ public sealed class VideoBackgroundControl : Grid
     private byte[]? _renderBuffer;
     private GCHandle _bufferHandle;
     private IntPtr _bufferPtr;
-    private volatile bool _renderThreadRunning;
+
+    /// <summary>
+    /// 当前渲染线程的运行标志(每个线程一份):停线程只清自己那份。
+    /// 共用一个 bool 时,卡住未退出的旧线程会被新会话的 StartRenderThread 重新置 true"复活",与新线程并发渲染。
+    /// </summary>
+    private StrongBox<bool>? _renderRun;
+
+    /// <summary>
+    /// 渲染线程 join 超时时有意泄露的资源(旧线程可能仍在 mpv SoftwareRender 里写 pin 缓冲):
+    /// 解除固定/释放 mpv 会让原生代码写进已移动的托管数组或已释放的上下文(堆损坏)。
+    /// 静态持有保证 GC 不回收、终结器不运行;只在 mpv 卡死超过 1 秒时发生,泄露有界。
+    /// </summary>
+    private static readonly List<object> s_abandoned = new();
 
     // 从 mpv video-params 读取的实际视频尺寸(首帧到达后解析一次);
     // 位图按视频原生分辨率创建,交给 Image 的 UniformToFill 做封面缩放 —— 与原 LibVLC 行为一致。
@@ -913,29 +926,43 @@ public sealed class VideoBackgroundControl : Grid
             return null;
         }
 
-        var cacheDir = Path.Combine(Path.GetTempPath(), "McKuroVideo");
+        var cacheDir = VideoCache.DefaultDirectory;
         Directory.CreateDirectory(cacheDir);
-        var hash = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(url)));
-        var localPath = Path.Combine(cacheDir, hash + ".mp4");
+        var localPath = VideoCache.PathFor(cacheDir, url);
+        SchedulePruneOnce(cacheDir, localPath);
 
-        if (File.Exists(localPath) && new FileInfo(localPath).Length > 0)
+        // 只有完整下载的文件才会出现在最终文件名下(临时文件 + 原子替换),非空即可信
+        if (VideoCache.IsUsable(localPath))
         {
-            return localPath; // 缓存命中,直接使用本地文件
+            VideoCache.Touch(localPath); // 刷新最近使用时间,供清理按 LRU 淘汰
+            return localPath;
         }
 
-        // 复用共享 HttpClient(连接池/ decompression 统一)
-        var bytes = await McKuro.Services.AppServices.Http.GetByteArrayAsync(url, token).ConfigureAwait(false);
+        // 下载专用客户端:无 60 秒总超时(慢网大视频也能下完),挂死由 VideoCache 的空闲超时兜底;
+        // 流式写盘,不再整段缓冲在内存。取消/失败不会留下半截文件。
+        var ok = await VideoCache.DownloadAsync(AppServices.DownloadHttp, url, localPath, token).ConfigureAwait(false);
         if (Stale(gen))
         {
-            return null; // 下载期间会话已过期:丢弃,不落盘不播放
+            return null; // 下载期间会话已过期:不播放(完整文件已入缓存,下次直接命中)
         }
-        if (bytes.Length == 0)
+        if (!ok)
         {
             ShowFallback(gen);
             return null;
         }
-        await File.WriteAllBytesAsync(localPath, bytes, token).ConfigureAwait(false);
         return localPath;
+    }
+
+    /// <summary>每个进程只清理一次视频缓存(后台执行,不阻塞播放)。</summary>
+    private static int s_pruneScheduled;
+
+    private static void SchedulePruneOnce(string cacheDir, string keepPath)
+    {
+        if (Interlocked.Exchange(ref s_pruneScheduled, 1) == 1)
+        {
+            return;
+        }
+        _ = Task.Run(() => VideoCache.Prune(cacheDir, DateTime.UtcNow, keepPath));
     }
 
     /// <summary>下载视频到本地缓存目录,完成后用本地文件播放(软件渲染路径专用:排队给渲染线程)。</summary>
@@ -1024,27 +1051,48 @@ public sealed class VideoBackgroundControl : Grid
         }
 
         // 先停渲染线程,避免它还在用 mpv render context 时 Dispose
-        StopRenderThread();
-
-        if (_mpv is not null)
+        var renderExited = StopRenderThread();
+        if (!renderExited)
         {
-            // libmpv render API 是嵌入式一等 API:MpvContext.Dispose() 内部 StopRendering(停帧+释放 render context)
-            // + TerminateDestroy(mpv_terminate_destroy),比 libvlc 手动管理 vmem 缓冲生命周期可靠得多。
+            // 渲染线程 1 秒内未退出(多半卡在 mpv 内部):它可能仍持有 _sync 并在 SoftwareRender 中
+            // 使用 mpv 与 pin 缓冲 —— 此时释放 mpv/位图是 use-after-free。有意泄露(见 s_abandoned),
+            // 且不取 _sync(否则 UI 线程会陪着卡住)。
+            Debug.WriteLine("[libmpv] 渲染线程未按时退出:泄露 mpv 会话与渲染缓冲以避免堆损坏");
+            if (_mpv is not null)
+            {
+                lock (s_abandoned)
+                {
+                    s_abandoned.Add(_mpv);
+                }
+                _mpv = null;
+            }
+            _bitmap = null;
+        }
+
+        if (_mpv is { } mpv)
+        {
+            // 先清字段再 Dispose:GL 渲染器的 OnOpenGlDeinit 以「仍是宿主当前 mpv」为条件才在 GL 线程释放渲染上下文,
+            // 若 Deinit 被延后到这之后才执行,它看到 null 就不会再碰正在/已经 Dispose 的上下文。
+            Volatile.Write(ref _mpv, null);
+            // libmpv render API 是嵌入式一等 API:MpvContext.Dispose() 内部 StopRendering(停帧+释放 render context,
+            // GL 路径下通常已在 OnOpenGlDeinit 里释放过)+ TerminateDestroy(mpv_terminate_destroy)。
             try
             {
-                _mpv.Dispose();
+                mpv.Dispose();
             }
             catch (Exception)
             {
                 // 忽略释放异常
             }
-            _mpv = null;
         }
 
-        lock (_sync)
+        if (renderExited)
         {
-            _bitmap?.Dispose();
-            _bitmap = null;
+            lock (_sync)
+            {
+                _bitmap?.Dispose();
+                _bitmap = null;
+            }
         }
         _sizeResolved = false;
         _firstFrameShown = false;
@@ -1092,9 +1140,14 @@ public sealed class VideoBackgroundControl : Grid
     /// <summary>启动后台渲染线程(与 UI 线程解耦,UI 卡顿不影响视频解码/渲染)。</summary>
     private void StartRenderThread()
     {
-        StopRenderThread();
-        _renderThreadRunning = true;
-        _renderThread = new Thread(RenderLoop)
+        if (!StopRenderThread())
+        {
+            // 旧线程卡死未退出:其缓冲已被放弃(AbandonRenderBuffer),新线程用新缓冲,互不干扰
+            Debug.WriteLine("[libmpv] 旧渲染线程未退出,已放弃其缓冲");
+        }
+        var run = new StrongBox<bool>(true);
+        _renderRun = run;
+        _renderThread = new Thread(() => RenderLoop(run))
         {
             IsBackground = true,
             Name = "McKuroVideoRender",
@@ -1102,9 +1155,14 @@ public sealed class VideoBackgroundControl : Grid
         _renderThread.Start();
     }
 
-    private void StopRenderThread()
+    /// <summary>停止渲染线程并释放渲染缓冲。返回 false = 线程 1 秒内未退出(缓冲已被有意泄露,调用方不得释放 mpv)。</summary>
+    private bool StopRenderThread()
     {
-        _renderThreadRunning = false;
+        if (_renderRun is { } run)
+        {
+            Volatile.Write(ref run.Value, false);
+        }
+        _renderRun = null;
         try
         {
             _frameSignal.Set();
@@ -1112,30 +1170,38 @@ public sealed class VideoBackgroundControl : Grid
         catch (ObjectDisposedException)
         {
         }
+        var exited = true;
         if (_renderThread is { IsAlive: true })
         {
             // 等待渲染线程退出(最多 1s),避免 Dispose 时正占用 mpv render context
-            if (!_renderThread.Join(1000))
-            {
-                // 超时:线程可能卡在 mpv 内部,由 mpv.Dispose 兜底
-            }
+            exited = _renderThread.Join(1000);
         }
         _renderThread = null;
-        ReleaseRenderBuffer();
-        lock (_sync)
+        if (exited)
         {
+            ReleaseRenderBuffer();
+            lock (_sync)
+            {
+                _pendingVideoPath = null;
+            }
+        }
+        else
+        {
+            // 超时:线程可能仍在 SoftwareRender 中写 _bufferPtr —— 不能解除固定(堆损坏),也不能取 _sync(会陪着卡住)
+            AbandonRenderBuffer();
             _pendingVideoPath = null;
         }
         _postedGeneration = 0;
+        return exited;
     }
 
     /// <summary>
     /// 专用视频线程:定时处理 LoadFile 并持续调用 SoftwareRender。
     /// mpv 回调只负责唤醒线程，回调丢失也不会让播放停住；UI 线程只接收最新帧。
     /// </summary>
-    private void RenderLoop()
+    private void RenderLoop(StrongBox<bool> run)
     {
-        while (_renderThreadRunning)
+        while (Volatile.Read(ref run.Value))
         {
             try
             {
@@ -1147,7 +1213,7 @@ public sealed class VideoBackgroundControl : Grid
                 break;
             }
 
-            if (!_renderThreadRunning || _disposed)
+            if (!Volatile.Read(ref run.Value) || _disposed)
             {
                 break;
             }
@@ -1255,13 +1321,38 @@ public sealed class VideoBackgroundControl : Grid
         _bufferPtr = _bufferHandle.AddrOfPinnedObject();
     }
 
+    /// <summary>解除固定并释放渲染缓冲。取 <c>_sync</c>:与渲染线程的 SoftwareRender/帧拷贝互斥
+    /// (可重入:EnsureRenderBuffer 已在锁内调用)。</summary>
     private void ReleaseRenderBuffer()
     {
-        if (_bufferHandle.IsAllocated)
+        lock (_sync)
         {
-            _bufferHandle.Free();
-            _bufferHandle = default;
+            if (_bufferHandle.IsAllocated)
+            {
+                _bufferHandle.Free();
+                _bufferHandle = default;
+            }
+            _renderBuffer = null;
+            _bufferPtr = IntPtr.Zero;
         }
+    }
+
+    /// <summary>放弃(不释放)当前渲染缓冲:pin 句柄与数组进 <see cref="s_abandoned"/> 常驻,原生代码可继续安全写入。</summary>
+    private void AbandonRenderBuffer()
+    {
+        if (_bufferHandle.IsAllocated || _renderBuffer is not null)
+        {
+            lock (s_abandoned)
+            {
+                // GCHandle 是值类型:装箱保存即可保持固定(从不 Free)
+                s_abandoned.Add(_bufferHandle);
+                if (_renderBuffer is not null)
+                {
+                    s_abandoned.Add(_renderBuffer);
+                }
+            }
+        }
+        _bufferHandle = default;
         _renderBuffer = null;
         _bufferPtr = IntPtr.Zero;
     }
@@ -1607,6 +1698,12 @@ public sealed class VideoBackgroundControl : Grid
     /// </list>
     /// 线程安全:<c>_sync</c> 保证 OnOpenGlRender 与 <see cref="BeginShutdown"/> 互斥
     /// (释放时等待在途帧完成,避免 mpv render context 跨线程释放)。
+    /// <para>
+    /// 释放顺序:libmpv OpenGL 后端要求释放渲染上下文时其 GL 上下文是当前上下文。
+    /// 所以 <see cref="BeginShutdown"/> 只停帧,渲染上下文在 <see cref="OnOpenGlDeinit"/>
+    /// (Avalonia 已把 GL 上下文设为当前)里经 <see cref="MpvContextBase.StopRendering"/> 释放;
+    /// 宿主随后再 Dispose mpv 核心(此时 render context 已为空,Dispose 不会再在非 GL 线程释放它)。
+    /// </para>
     /// </summary>
     private sealed class VideoGlRenderer : OpenGlControlBase
     {
@@ -1615,6 +1712,12 @@ public sealed class VideoBackgroundControl : Grid
         private readonly object _sync = new();
         private bool _glReady;
         private BackgroundMpvContext? _mpv;
+
+        /// <summary>BeginShutdown 已调用:不再渲染,但保留 _mpv 供 OnOpenGlDeinit 在 GL 上下文内释放渲染上下文。</summary>
+        private bool _shuttingDown;
+
+        /// <summary>GL 上下文已丢失:此时不能再调用 GL 相关释放,交给 mpv Dispose 兜底。</summary>
+        private bool _contextLost;
 
         public VideoGlRenderer(VideoBackgroundControl owner, TaskCompletionSource<bool> glReadyTcs)
         {
@@ -1706,8 +1809,25 @@ public sealed class VideoBackgroundControl : Grid
         {
             lock (_sync)
             {
+                var ctx = _mpv;
+                var hadContext = _glReady || _shuttingDown;
                 _glReady = false;
                 _mpv = null;
+                // GL 上下文此刻为当前上下文:在这里释放 mpv 渲染上下文(StopRendering 停回调并 free render context)。
+                // 只释放本渲染器创建过的上下文;上下文已丢失时跳过,交给 mpv Dispose 兜底。
+                // 还要求 ctx 仍是宿主当前的 mpv(正常 DisposePlayer 顺序:先移除本控件 → 本回调 → 再 Dispose mpv);
+                // 过期会话的 mpv 可能已被 Dispose,不能再碰。
+                if (ctx is not null && hadContext && !_contextLost && ReferenceEquals(ctx, Volatile.Read(ref _owner._mpv)))
+                {
+                    try
+                    {
+                        ctx.StopRendering();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[libmpv] GL 渲染上下文释放失败: {ex.Message}");
+                    }
+                }
             }
             _glReadyTcs.TrySetResult(false);
         }
@@ -1717,6 +1837,7 @@ public sealed class VideoBackgroundControl : Grid
             lock (_sync)
             {
                 _glReady = false;
+                _contextLost = true;
             }
         }
 
@@ -1740,13 +1861,20 @@ public sealed class VideoBackgroundControl : Grid
             }
         }
 
-        /// <summary>释放前调用:停止渲染并等待在途帧完成(与 OnOpenGlRender 互斥)。</summary>
+        /// <summary>
+        /// 释放前调用:停止渲染并等待在途帧完成(与 OnOpenGlRender 互斥)。
+        /// 不清 _mpv:渲染上下文须由随后移出视觉树触发的 <see cref="OnOpenGlDeinit"/> 在 GL 上下文内释放。
+        /// </summary>
         public void BeginShutdown()
         {
             lock (_sync)
             {
+                _shuttingDown = _glReady;
                 _glReady = false;
-                _mpv = null;
+                if (!_shuttingDown)
+                {
+                    _mpv = null; // 从未建立渲染上下文:没有需要在 GL 线程释放的东西
+                }
             }
             _glReadyTcs.TrySetResult(false);
         }

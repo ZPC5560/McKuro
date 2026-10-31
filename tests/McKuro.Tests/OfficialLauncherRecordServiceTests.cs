@@ -379,13 +379,34 @@ public class OfficialLauncherRecordServiceTests : IDisposable
 
     // ---------- 移除 ----------
 
+    /// <summary>M5:服务端包名含路径穿越时整套记录放弃写入,且不会在游戏目录外落下任何 .json。</summary>
     [Fact]
-    public void Remove_Deletes_Records_But_Keeps_Directory_And_Other_Files()
+    public async Task Write_Rejects_Unsafe_Pack_Name_And_Writes_Nothing()
+    {
+        CreateGameExe();
+        var evilName = "evil-" + Guid.NewGuid().ToString("N");
+        var record = new OfficialInstallRecord(
+            "10003",
+            "HD",
+            [new OfficialPackVersion("../../" + evilName, "3.7.1"), new OfficialPackVersion("hd", "3.7.1")]);
+        var svc = CreateService();
+
+        var result = await svc.WriteInstallRecordAsync(_root, record);
+
+        Assert.True(result.HasFailed);
+        Assert.False(File.Exists(Path.Combine(_root, OfficialLauncherRecordService.InstalledConfigFileName)));
+        Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(_root)!, evilName + ".json")));
+        Assert.False(File.Exists(Path.Combine(_root, OfficialLauncherRecordService.PackVersionDirName, "hd.json")));
+    }
+
+    [Fact]
+    public void Remove_Deletes_TopLevel_Records_But_Keeps_Pack_Markers()
     {
         CreateGameExe();
         var markerDir = Path.Combine(_root, OfficialLauncherRecordService.PackVersionDirName);
         Directory.CreateDirectory(markerDir);
         File.WriteAllText(Path.Combine(markerDir, "hd.json"), """{"packName":"hd","version":"3.7.1"}""");
+        File.WriteAllText(Path.Combine(markerDir, "common.json"), """{"packName":"common","version":"3.7.1"}""");
         File.WriteAllText(Path.Combine(markerDir, "keep.txt"), "official own file");
         File.WriteAllText(
             Path.Combine(_root, OfficialLauncherRecordService.InstalledConfigFileName),
@@ -396,9 +417,13 @@ public class OfficialLauncherRecordServiceTests : IDisposable
         var result = svc.RemoveRecords(_root);
 
         Assert.False(result.HasFailed);
+        Assert.Equal(2, result.RemovedCount);
         Assert.False(File.Exists(Path.Combine(_root, OfficialLauncherRecordService.InstalledConfigFileName)));
         Assert.False(File.Exists(Path.Combine(_root, OfficialLauncherRecordService.LocalIndexFileName)));
-        Assert.False(File.Exists(Path.Combine(markerDir, "hd.json")));
+        // M4:分包标记与官方启动器共用、无法区分来源,资源包已安装判定与 -krqlv 检测都依赖它们 —— 必须保留
+        Assert.True(File.Exists(Path.Combine(markerDir, "hd.json")));
+        Assert.True(File.Exists(Path.Combine(markerDir, "common.json")));
+        Assert.Equal("hd", LaunchArguments.DetectInstalledResourceLevel(_root));
         // 目录本身与非记录内容必须保留
         Assert.True(Directory.Exists(markerDir));
         Assert.True(File.Exists(Path.Combine(markerDir, "keep.txt")));

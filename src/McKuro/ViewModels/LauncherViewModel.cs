@@ -15,8 +15,13 @@ namespace McKuro.ViewModels;
 /// <summary>启动器页:游戏状态、检查更新、预下载、安装、启动、封面轮播。</summary>
 public sealed partial class LauncherViewModel : ViewModelBase
 {
+    /// <summary>
+    /// 底部状态栏文案。<b>初始为空</b>:此前初始值是「就绪」,而它是一个静态占位词 ——
+    /// 没有任何操作发生时也一直挂在启动页左下角,既不传达信息、又让人以为还有事没做完
+    /// (2026-10 用户反馈「一直显示就绪,这种没必要显示」)。状态栏只承载"操作结果"。
+    /// </summary>
     [ObservableProperty]
-    private string _statusText = LanguageService.Format("Roles.Ready");
+    private string _statusText = "";
 
     /// <summary>
     /// 「游戏已是最新」这类**一次性结果提示**在状态栏停留多久后自动消失。
@@ -39,6 +44,16 @@ public sealed partial class LauncherViewModel : ViewModelBase
     private bool _isStatusTransient;
 
     /// <summary>
+    /// 仅在 <see cref="SetTransientStatus"/> 内部赋值期间为 true。
+    /// <para>
+    /// <see cref="OnStatusTextChanged"/> 靠它区分"这次赋值来自一次性提示"还是"普通赋值"。
+    /// 旧实现拿 <see cref="_isStatusTransient"/> 判断,而它在一次性提示挂着的 8 秒里一直为 true,
+    /// 于是这 8 秒内的普通赋值(如「正在修复…」)不会取消计时器,到点被一起清掉(M33)。
+    /// </para>
+    /// </summary>
+    private bool _assigningTransient;
+
+    /// <summary>
     /// 设一条"会自动消失"的状态提示,并把它标记为 transient。
     /// <para>
     /// <b>只用于没有后续动作的结论</b>(如「游戏已是最新」)。失败/进行中/需要用户处理的
@@ -48,7 +63,15 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// </summary>
     private void SetTransientStatus(string text)
     {
-        StatusText = text;
+        _assigningTransient = true;
+        try
+        {
+            StatusText = text;
+        }
+        finally
+        {
+            _assigningTransient = false;
+        }
         _isStatusTransient = true;
         StartTransientStatusTimer();
     }
@@ -85,10 +108,15 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// 不取消的后果:先弹了「游戏已是最新」(8 秒后清),用户立刻点「修复游戏」,
     /// 状态栏换成「正在修复…」—— 8 秒一到,那条**正在修复**被清空,看起来像卡住了。
     /// </para>
+    /// <para>
+    /// 判据是 <see cref="_assigningTransient"/>(只在 SetTransientStatus 赋值那一刻为 true),
+    /// 而不是 <see cref="_isStatusTransient"/>(整段 8 秒都为 true)。计时器到点清空时
+    /// 已先把计时器置空,这里再取消一次是无副作用操作。
+    /// </para>
     /// </summary>
     partial void OnStatusTextChanged(string value)
     {
-        if (!_isStatusTransient)
+        if (!_assigningTransient)
         {
             CancelTransientStatusTimer();
         }
@@ -186,9 +214,41 @@ public sealed partial class LauncherViewModel : ViewModelBase
         OnPropertyChanged(nameof(PreDownloadButtonVisible));
         OnPropertyChanged(nameof(IsPreDownloadActive));
         OnPropertyChanged(nameof(ShowDownloadCard));
-        // 下载/安装期间隐藏资源等级面板(与进度卡同列,避免重叠)
+        // 下载/安装期间隐藏资源等级小按钮/面板/画质包面板(与进度卡同列,避免重叠)
+        OnPropertyChanged(nameof(ShowResourceLevelPill));
         OnPropertyChanged(nameof(ShowResourceLevelPanel));
+        OnPropertyChanged(nameof(ShowPackManager));
+        NotifyOperationStateChanged();
+    }
+
+    partial void OnIsBusyChanged(bool value) => NotifyOperationStateChanged();
+
+    /// <summary>
+    /// 是否有长操作在进行:检查更新(IsBusy)/ 安装·预下载·修复(IsDownloading)/
+    /// 画质切换 / 删除画质包。
+    /// <para>
+    /// <b>所有长操作共用这一道门</b>(M36):旧实现里检查更新只看 IsBusy、下载类只看 IsDownloading、
+    /// 选择版本完全不看,于是下载中回到本页会触发静默检查改写 HasUpdate/PredownloadCompleted,
+    /// 选择版本也可能在安装中途写版本记录。新操作入口统一判 <c>IsOperationRunning</c>。
+    /// </para>
+    /// </summary>
+    public bool IsOperationRunning =>
+        IsBusy || IsDownloading || IsSwitchingResourceLevel || IsDeletingResourcePack;
+
+    /// <summary>能否发起新的长操作(菜单项「检查更新」与安装按钮的 IsEnabled)。</summary>
+    public bool CanStartOperation => !IsOperationRunning;
+
+    /// <summary>已安装且没有长操作在进行(菜单项「选择版本/修复/检查重复文件」的 IsEnabled)。</summary>
+    public bool CanStartInstalledOperation => IsInstalled && !IsOperationRunning;
+
+    /// <summary>任一忙碌标志变化后统一刷新依赖它们的计算属性(否则绑定不会更新,L26)。</summary>
+    private void NotifyOperationStateChanged()
+    {
+        OnPropertyChanged(nameof(IsOperationRunning));
+        OnPropertyChanged(nameof(CanStartOperation));
+        OnPropertyChanged(nameof(CanStartInstalledOperation));
         OnPropertyChanged(nameof(ResourceLevelEnabled));
+        UpdateLaunchButtonEnabled();
     }
 
     partial void OnHasPredownloadChanged(bool value)
@@ -236,6 +296,13 @@ public sealed partial class LauncherViewModel : ViewModelBase
             OnPropertyChanged(nameof(PreDownloadButtonText));
             OnPropertyChanged(nameof(PauseResumeText));
             OnPropertyChanged(nameof(DownloadPaused));
+
+            // 暂停/恢复都要清掉剩余时间与速度读数:
+            // 暂停期间速度窗口里的字节增量趋零,ETA 会被算成越来越大(甚至"剩余 8 小时"),
+            // 而实际只是没在下。恢复后由下一次 HandleProgress 自然重算。
+            // (原先这段只在无人绑定的 TogglePauseDownload 里,已合并到这里并删除那份副本,L28。)
+            RemainingTimeText = "";
+            ClearSpeedDisplay();
         }
         else if (!PredownloadCompleted)
         {
@@ -267,13 +334,22 @@ public sealed partial class LauncherViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowInstallUpdate));
         OnPropertyChanged(nameof(ShowLaunchButton));
         OnPropertyChanged(nameof(ShowInstallButton));
+        OnPropertyChanged(nameof(CanStartInstalledOperation));
         UpdateLaunchButtonEnabled();
     }
 
-    /// <summary>启动按钮可用性:已安装且无正在进行的游戏会话。</summary>
+    /// <summary>
+    /// 是否有操作正在改写游戏文件(安装/预下载/修复/画质切换都置 IsDownloading,外加删除画质包)。
+    /// 此时启动游戏会锁住待替换文件或运行写了一半的客户端(M35)。
+    /// 只读的检查更新(IsBusy)不算:它不碰游戏文件,不该让启动按钮在进页时闪一下灰。
+    /// </summary>
+    private bool IsModifyingGameFiles => IsDownloading || IsDeletingResourcePack;
+
+    /// <summary>启动按钮可用性:已安装、无正在进行的游戏会话、且没有操作在改写游戏文件。</summary>
     private void UpdateLaunchButtonEnabled()
     {
         LaunchButtonEnabled = IsInstalled
+            && !IsModifyingGameFiles
             && AppServices.GameMonitor.State == GameSessionState.Idle;
     }
 
@@ -365,15 +441,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
             return;
         }
 
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = item.JumpUrl,
-                UseShellExecute = true,
-            });
-        }
-        catch (Exception)
+        // JumpUrl 来自服务端:只放行 http/https(file:/UNC/ms-msdt: 等协议处理器一律拒绝,M32)
+        if (!SafeUrl.TryOpen(item.JumpUrl))
         {
             StatusText = LanguageService.Format("Status.OpenWebFailed");
         }
@@ -468,10 +537,11 @@ public sealed partial class LauncherViewModel : ViewModelBase
             Dispatcher.UIThread.Post(() => r.OnGameDirectoryChanged(m.Value));
         });
 
-        // 已设置目录则自动检查更新(对齐 Haiyu 加载后自动检查)
+        // 已设置目录则自动检查更新(对齐 Haiyu 加载后自动检查)。
+        // 静默:结论落在标题卡/按钮/版本号,不刷状态栏(用户反馈"每次进页都弹一句已是最新")。
         if (IsInstalled)
         {
-            _ = CheckUpdateAsync();
+            _ = CheckUpdateSilentlyAsync();
         }
     }
 
@@ -482,7 +552,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
         _ = LoadLauncherInfoAsync();
         if (IsInstalled)
         {
-            _ = CheckUpdateAsync();
+            _ = CheckUpdateSilentlyAsync();
         }
         else
         {
@@ -524,7 +594,9 @@ public sealed partial class LauncherViewModel : ViewModelBase
         // 官方 URL 往往与上次一致(LocalLauncherInfo 有缓存),重载不产生可观察变化,
         // 撤回官方要靠 ApplyCustomVideoOverride 就地恢复缓存的官方 URL 与首帧图。
         var wantVideo = s.BackgroundVideoEnabled;
-        if (wantVideo != _lastLoadedVideoSetting || serverChanged)
+        // 官方背景若尚未成功加载过(没有可恢复的缓存),来源变化时也要补一次加载(见下方注释)。
+        // 两个条件合并成一次调用:旧实现分两处各发一次,同一次导航可能并发两次加载(L25)。
+        if (wantVideo != _lastLoadedVideoSetting || serverChanged || (sourceChanged && !_officialBackgroundKnown))
         {
             _lastLoadedVideoSetting = wantVideo;
             _ = LoadLauncherInfoAsync();
@@ -540,16 +612,14 @@ public sealed partial class LauncherViewModel : ViewModelBase
         // 旧实现只在 customActive 时改动视频,撤回官方时不碰 BackgroundVideoUrl,
         // 于是自定义路径一直留着 —— 只有「关掉再打开视频」触发 LoadLauncherInfoAsync
         // (其间把 BackgroundVideoUrl 清空重设)才会恢复官方视频(用户报告的现象)。
-        // 官方背景若尚未成功加载过(没有可恢复的缓存),则补一次加载。
-        if (sourceChanged && !_officialBackgroundKnown)
-        {
-            _ = LoadLauncherInfoAsync();
-        }
+        // 官方背景若尚未成功加载过(没有可恢复的缓存),则补一次加载(已并入上面的那次调用)。
         ApplyCustomVideoOverride();
 
-        if (IsInstalled && !IsBusy)
+        // 下载/修复/画质切换期间不做自动检查:检查结果会改写 HasUpdate/PredownloadCompleted,
+        // 可能让预下载按钮在下载途中重新出现(M36)。
+        if (IsInstalled && !IsOperationRunning)
         {
-            _ = CheckUpdateAsync();
+            _ = CheckUpdateSilentlyAsync();
         }
 
         // 资源等级面板随渠道/安装状态刷新(渠道决定端点是否可用)
@@ -670,13 +740,23 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// </summary>
     private GameServerType ServerType => GameServerResolver.Resolve(AppServices.Settings, AppServices.Paths);
 
+    /// <summary>官方内容加载请求序号:只有最新一次加载能落地结果(L25)。</summary>
+    private int _launcherInfoRequestId;
+
     /// <summary>拉取官方封面轮播图、公告与背景封面(失败静默,不影响其余功能)。</summary>
     private async Task LoadLauncherInfoAsync()
     {
+        // 切换区服/开关视频会连续触发加载:旧区服的请求可能最后才回来,把新区服的轮播/背景覆盖掉。
+        // 每次 await 之后比对序号,过期就直接丢弃。
+        var requestId = ++_launcherInfoRequestId;
         try
         {
             var server = ServerType;
             var info = await AppServices.LauncherInfo.GetLauncherInfoAsync(server);
+            if (requestId != _launcherInfoRequestId)
+            {
+                return;
+            }
             if (info is not null)
             {
                 Slideshows.Clear();
@@ -732,6 +812,10 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
             // 背景封面(首帧图 + 视频 URL + 版本 Logo)
             var background = await AppServices.LauncherInfo.GetLauncherBackgroundAsync(server);
+            if (requestId != _launcherInfoRequestId)
+            {
+                return;
+            }
             if (background is not null)
             {
                 // 先记录官方侧真相(与是否 customActive 无关):撤回官方时 ApplyCustomVideoOverride
@@ -810,6 +894,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
             PredownloadStateText = "";
             GameVersionText = LanguageService.Format("Launcher.PlatformUnsupported");
             InstallStateText = PlatformGameNotice;
+            // 作废仍在后台跑的组件探测,免得它回来后把文案写回去
+            _graphicsRequestId++;
             GraphicsComponentsText = "";
             OnPropertyChanged(nameof(GraphicsComponentsText));
             return;
@@ -828,7 +914,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
             : installIncomplete
                 ? LanguageService.Format("Launcher.InstallIncomplete")
                 : LanguageService.Format("Launcher.NotInstalled");
-        RefreshGraphicsComponents();
+        // 组件探测要读游戏目录:后台执行,RefreshState 不等它(H10)
+        _ = RefreshGraphicsComponentsAsync();
 
         if (!IsInstalled)
         {
@@ -843,30 +930,102 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>DLSS/XeSS 组件版本显示(对齐 Haiyu GetLocalDLSSAsync)。</summary>
     public string GraphicsComponentsText { get; private set; } = "";
 
-    private void RefreshGraphicsComponents()
+    /// <summary>组件探测请求序号:连续 RefreshState 时只落地最后一次结果。</summary>
+    private int _graphicsRequestId;
+
+    /// <summary>
+    /// 刷新 DLSS/XeSS 组件版本。
+    /// <para>
+    /// 旧实现在 UI 线程同步调用 <c>GetLocalGraphicsComponentVersions()</c>,
+    /// RefreshState 每次都会卡在读盘上(构造、换目录、安装/修复后都会调,H10)。
+    /// 现在走 Core 的后台版本,结果回到 UI 线程再写绑定属性。
+    /// </para>
+    /// </summary>
+    private async Task RefreshGraphicsComponentsAsync()
     {
-        var versions = AppServices.GameUpdater.GetLocalGraphicsComponentVersions();
-        GraphicsComponentsText = versions.Count == 0
-            ? ""
-            : string.Join(" · ", versions.Select(v => $"{v.DisplayName} v{v.Version}"));
-        OnPropertyChanged(nameof(GraphicsComponentsText));
+        var requestId = ++_graphicsRequestId;
+        string text;
+        try
+        {
+            var versions = await AppServices.GameUpdater.GetLocalGraphicsComponentVersionsAsync();
+            text = versions.Count == 0
+                ? ""
+                : string.Join(" · ", versions.Select(v => $"{v.DisplayName} v{v.Version}"));
+        }
+        catch (Exception)
+        {
+            // 组件版本只是展示信息,读不到就不显示
+            text = "";
+        }
+
+        void Apply()
+        {
+            if (requestId != _graphicsRequestId)
+            {
+                return;
+            }
+            GraphicsComponentsText = text;
+            OnPropertyChanged(nameof(GraphicsComponentsText));
+        }
+
+        // 调用方通常在 UI 线程(await 会回到这里),但构造期可能没有同步上下文:统一保证在 UI 线程落地
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            Apply();
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(Apply);
+        }
     }
 
     [RelayCommand]
-    private async Task CheckUpdateAsync()
+    private Task CheckUpdateAsync() => CheckUpdateCoreAsync(interactive: true);
+
+    /// <summary>
+    /// 安装/修复/选择版本收尾时的复查:调用方自己就是那个"正在进行的长操作"(IsDownloading 仍为 true),
+    /// 必须绕过操作门,否则这一步会被自己挡掉。
+    /// </summary>
+    private Task CheckUpdateAfterOperationAsync() => CheckUpdateCoreAsync(interactive: true, insideOperation: true);
+
+    /// <summary>
+    /// 自动触发的检查更新(进页/选完目录/安装完):<b>不写状态栏</b>。
+    /// <para>
+    /// <b>为什么区分 interactive:</b>「切换到启动页就弹一句"游戏已是最新"再消失」是用户明确
+    /// 反馈的扰民行为 —— 每次进页都刷一次同样的结论,既没有信息量、又让状态栏看起来在抖。
+    /// 自动检查的结论该落在<b>常驻</b>位置(启动器标题卡 / 按钮 / 版本号),那里本来就有;
+    /// 状态栏只保留给"用户主动做了某件事之后的反馈"。
+    /// </para>
+    /// <para>
+    /// 失败也不说话:自动检查失败时页面其余部分仍显示上次的版本信息,不值得弹一句
+    /// 「检查更新失败」吓人 —— 用户想看结果可以点菜单里的「检查更新」。
+    /// </para>
+    /// </summary>
+    private Task CheckUpdateSilentlyAsync() => CheckUpdateCoreAsync(interactive: false);
+
+    /// <param name="interactive">是否写状态栏(用户主动检查)。</param>
+    /// <param name="insideOperation">由正在进行的长操作在收尾时调用(只防重入 IsBusy,不判下载门)。</param>
+    private async Task CheckUpdateCoreAsync(bool interactive, bool insideOperation = false)
     {
         if (!NativeGameManagementSupported)
         {
-            StatusText = PlatformGameNotice;
+            if (interactive)
+            {
+                StatusText = PlatformGameNotice;
+            }
             return;
         }
-        if (IsBusy)
+        // 统一操作门(M36):下载/修复/画质切换期间不检查 —— 结果会改写 HasUpdate/PredownloadCompleted
+        if (insideOperation ? IsBusy : IsOperationRunning)
         {
             return;
         }
 
         IsBusy = true;
-        StatusText = LanguageService.Format("Launcher.Checking");
+        if (interactive)
+        {
+            StatusText = LanguageService.Format("Launcher.Checking");
+        }
         try
         {
             var result = await AppServices.GameUpdater.CheckUpdateAsync(ServerType);
@@ -875,7 +1034,10 @@ public sealed partial class LauncherViewModel : ViewModelBase
             {
                 // 检查失败:清除旧的有更新横幅,避免残留误导
                 HasUpdate = false;
-                StatusText = result.Message ?? LanguageService.Format("Launcher.CheckFailed");
+                if (interactive)
+                {
+                    StatusText = result.Message ?? LanguageService.Format("Launcher.CheckFailed");
+                }
                 return;
             }
 
@@ -928,22 +1090,29 @@ public sealed partial class LauncherViewModel : ViewModelBase
                 InstallStateText = LanguageService.Format("Launcher.UpToDate", result.ServerVersion);
             }
 
-            // 「已是最新」没有后续动作,让它自动消失;「发现新版本」必须留着提醒,走普通赋值。
-            // 注意:无更新时启动器标题卡整张隐藏(<c>IsVisible="{Binding HasUpdate}"</c>),
-            // 所以状态栏是这句话的唯一出口 —— 消失后页面回到干净状态,正是想要的结果
-            // (「没有更新」是常态,不需要一直占着一行)。
-            if (result.HasUpdate)
+            // 「已是最新」/「发现新版本」都只在**用户主动检查**时才刷状态栏:
+            // 自动检查(进页/切目录/装完)不打扰 —— 进页就弹一句"游戏已是最新"再消失,
+            // 是用户明确反馈的扰民行为。自动检查的结论已经有常驻出口(标题卡/按钮/版本号)。
+            // 主动检查时:「发现新版本」留着提醒(需要用户处理),「已是最新」自动消失
+            // (没有后续动作;无更新时标题卡整张隐藏,消失后页面回到干净状态)。
+            if (interactive)
             {
-                StatusText = LanguageService.Format("Launcher.UpdateAvailable");
-            }
-            else
-            {
-                SetTransientStatus(LanguageService.Format("Launcher.Latest"));
+                if (result.HasUpdate)
+                {
+                    StatusText = LanguageService.Format("Launcher.UpdateAvailable");
+                }
+                else
+                {
+                    SetTransientStatus(LanguageService.Format("Launcher.Latest"));
+                }
             }
         }
         catch (Exception ex)
         {
-            StatusText = LanguageService.Format("Launcher.CheckFailedWith", ex.Message);
+            if (interactive)
+            {
+                StatusText = LanguageService.Format("Launcher.CheckFailedWith", ex.Message);
+            }
         }
         finally
         {
@@ -959,7 +1128,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             StatusText = PlatformGameNotice;
             return;
         }
-        if (IsBusy || IsDownloading)
+        if (IsOperationRunning)
         {
             return;
         }
@@ -1017,7 +1186,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             StatusText = PlatformGameNotice;
             return;
         }
-        if (IsBusy || IsDownloading)
+        if (IsOperationRunning)
         {
             return;
         }
@@ -1062,7 +1231,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
             if (success)
             {
                 RefreshState();
-                await CheckUpdateAsync();
+                // 此刻 IsDownloading 仍为 true(外层 finally 未执行):走绕过操作门的收尾复查
+                await CheckUpdateAfterOperationAsync();
                 // 安装成功后做一次体积自检(后台,不阻塞状态栏):多次断连留下的备份/半成品
                 // 会让目录比清单大出几十 GB,发现"明显有过大残留"时弹窗问用户是否删除。
                 await CheckResidueAfterInstallAsync();
@@ -1141,27 +1311,6 @@ public sealed partial class LauncherViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void TogglePauseDownload()
-    {
-        if (AppServices.Downloader.IsPaused)
-        {
-            AppServices.Downloader.Resume();
-        }
-        else
-        {
-            AppServices.Downloader.Pause();
-        }
-        OnPropertyChanged(nameof(DownloadPaused));
-        OnPropertyChanged(nameof(PauseResumeText));
-
-        // 暂停/恢复都要清掉剩余时间与速度读数:
-        // 暂停期间速度窗口里的字节增量趋零,ETA 会被算成越来越大(甚至"剩余 8 小时"),
-        // 而实际只是没在下。恢复后由下一次 HandleProgress 自然重算。
-        RemainingTimeText = "";
-        ClearSpeedDisplay();
-    }
-
-    [RelayCommand]
     private async Task RepairGameAsync()
     {
         if (!NativeGameManagementSupported)
@@ -1169,7 +1318,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             StatusText = PlatformGameNotice;
             return;
         }
-        if (IsBusy || IsDownloading)
+        if (IsOperationRunning)
         {
             return;
         }
@@ -1195,7 +1344,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
             if (success)
             {
                 RefreshState();
-                await CheckUpdateAsync();
+                // 同安装:IsDownloading 仍为 true,收尾复查绕过操作门
+                await CheckUpdateAfterOperationAsync();
                 // 修复同样是"反复下载"的高发场景(每次修复都会给被替换文件再留一份备份)
                 await CheckResidueAfterInstallAsync();
             }
@@ -1257,7 +1407,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
             StatusText = PlatformGameNotice;
             return;
         }
-        if (!skipBusyGuard && (IsBusy || IsDownloading))
+        if (!skipBusyGuard && IsOperationRunning)
         {
             return;
         }
@@ -1284,7 +1434,9 @@ public sealed partial class LauncherViewModel : ViewModelBase
             var result = await AppServices.GameUpdater.ScanResidueAsync(progress: scanProgress);
             if (!result.Report.HasResidue)
             {
-                StatusText = LanguageService.Format("Launcher.Residue.NoneFound");
+                // 「未发现可清理的重复文件」和「游戏已是最新」同类:一次性结论、没有后续动作。
+                // 一直挂着会让人以为还有事没处理(用户反馈);给 8 秒后自动消失。
+                SetTransientStatus(LanguageService.Format("Launcher.Residue.NoneFound"));
                 return;
             }
             // 自动检查走策略门槛;手动检查如实呈现
@@ -1299,15 +1451,18 @@ public sealed partial class LauncherViewModel : ViewModelBase
             var confirmed = await McKuro.Views.ResidueCleanupWindow.ShowAsync(owner, result);
             if (!confirmed)
             {
-                StatusText = LanguageService.Format("Launcher.Residue.Kept");
+                // 「已保留」同样是一次性结论(用户已经做了选择,不需要这句话常驻)
+                SetTransientStatus(LanguageService.Format("Launcher.Residue.Kept"));
                 return;
             }
 
             StatusText = LanguageService.Format("Launcher.Residue.Deleting");
             var (freed, failures) = await Task.Run(() => AppServices.GameUpdater.DeleteResidue(result));
-            StatusText = failures > 0
+            // 删除完成也是一次性结论(具体清理了多少、有无失败),同样自动消失;
+            // 失败信息会在消失前停留 8 秒,足够看清,且真有问题用户可再点一次。
+            SetTransientStatus(failures > 0
                 ? LanguageService.Format("Launcher.Residue.Partial", FormatSize(freed), failures)
-                : LanguageService.Format("Launcher.Residue.Cleaned", FormatSize(freed));
+                : LanguageService.Format("Launcher.Residue.Cleaned", FormatSize(freed)));
             RefreshState();
         }
         catch (Exception ex)
@@ -1341,6 +1496,11 @@ public sealed partial class LauncherViewModel : ViewModelBase
         {
             return;
         }
+        // 统一操作门(M36):安装/修复中途写版本记录会让安装器与记录对不上
+        if (IsOperationRunning)
+        {
+            return;
+        }
 
         try
         {
@@ -1357,6 +1517,11 @@ public sealed partial class LauncherViewModel : ViewModelBase
                 () => AppServices.GameUpdater.GetKnownVersionsAsync(ServerType),
                 installed);
             if (version is null)
+            {
+                return;
+            }
+            // 弹窗前的 CheckUpdateAsync 不是模态的:这期间用户可能已开始安装/修复,写记录前再判一次门
+            if (IsOperationRunning)
             {
                 return;
             }
@@ -1388,6 +1553,12 @@ public sealed partial class LauncherViewModel : ViewModelBase
         if (!NativeGameManagementSupported)
         {
             StatusText = PlatformGameNotice;
+            return;
+        }
+        // 按钮已按 LaunchButtonEnabled 禁用;命令入口再挡一次(M35):
+        // 替换文件途中启动会锁住待替换文件,或运行写了一半的客户端
+        if (IsModifyingGameFiles)
+        {
             return;
         }
         var ok = AppServices.GameUpdater.LaunchGame(out var error);
@@ -1442,6 +1613,10 @@ public sealed partial class LauncherViewModel : ViewModelBase
             _ => LanguageService.Format("Launcher.Launch"),
         };
         UpdateLaunchButtonEnabled();
+        // 这两个是读 GameMonitor.State 的计算属性,不通知的话「强制退出游戏」菜单项与
+        // 画质包管理入口永远停在构造时的可用性(M34)
+        OnPropertyChanged(nameof(CanForceExitGame));
+        OnPropertyChanged(nameof(HasDeletablePacks));
         StatusText = state switch
         {
             GameSessionState.Launching => LanguageService.Format("Launcher.StateLaunchingStatus"),
@@ -1458,12 +1633,16 @@ public sealed partial class LauncherViewModel : ViewModelBase
     {
         if (reason == GameSessionEndReason.Failed)
         {
+            // 启动失败要**常驻**:用户需要知道"刚才没启动起来"以及原因,
+            // 自动消失就等于什么都没说(与「游戏已退出」性质不同 —— 后者是正常结束、无后续动作)。
             StatusText = LanguageService.Format("Launcher.LaunchProcessDied");
             ShowMainWindowFromHidden();
             return;
         }
 
-        StatusText = LanguageService.Format("Launcher.GameExited");
+        // 正常退出是一次性结论(用户刚玩完、不需要再做什么),8 秒后自动消失。
+        // 原先一直挂在状态栏,回到启动页总看到一句过期的"游戏已退出"(2026-10 用户反馈)。
+        SetTransientStatus(LanguageService.Format("Launcher.GameExited"));
         // 广播会话结束(主页重拉今日数据、游玩统计页重新解析日志刷新今日游玩时间)
         WeakReferenceMessenger.Default.Send(new GameSessionEndedMessage(reason));
         switch (AppServices.Settings.Current.AfterGameExitAction)

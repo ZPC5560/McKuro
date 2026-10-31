@@ -49,6 +49,9 @@ public static class AppServices
     public static ISettingsService Settings => Services.GetRequiredService<ISettingsService>();
     public static AppDatabase Database => Services.GetRequiredService<AppDatabase>();
     public static HttpClient Http => Services.GetRequiredService<HttpClient>();
+
+    /// <summary>大文件下载客户端(无总超时、不解压;挂死保护由调用方的空闲超时负责)。</summary>
+    public static HttpClient DownloadHttp => Services.GetRequiredService<GameDownloadHttpClient>().Client;
     public static GamePathResolver Paths => Services.GetRequiredService<GamePathResolver>();
     public static GameManifestLoader ManifestLoader => Services.GetRequiredService<GameManifestLoader>();
     public static DownloadEngine Downloader => Services.GetRequiredService<DownloadEngine>();
@@ -205,6 +208,8 @@ public static class AppServices
         // 所有 DI 注入的 ILogger<T>(如 GeetVerifyService)不会写任何日志
         RegisterCore(services, AppDataDir, LoggerFactory);
         Services = services.BuildServiceProvider();
+        // Wiki 攻略权重抓取是静态类:注入共享客户端,走系统代理与连接池(未注入时用其内置短超时客户端)
+        WikiGuideService.UseHttpClient(Services.GetRequiredService<HttpClient>());
         _initialized = true;
     }
 
@@ -302,7 +307,9 @@ public static class AppServices
             sp.GetRequiredService<IKuroClient>(),
             sp.GetRequiredService<KuroAccountService>(),
             logger: sp.GetRequiredService<ILoggerFactory>().CreateLogger<TowerService>(),
-            database: sp.GetRequiredService<AppDatabase>()));
+            database: sp.GetRequiredService<AppDatabase>(),
+            // 深塔页按设置里的角色 ID 选角色(与角色页一致),未配置时才取第一个
+            settings: sp.GetRequiredService<ISettingsService>()));
         services.AddSingleton<DailyDataService>(sp => new DailyDataService(
             sp.GetRequiredService<KujiequApiClient>(),
             sp.GetRequiredService<IKuroClient>(),

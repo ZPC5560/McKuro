@@ -44,11 +44,18 @@ public sealed class RoleDataService : IRoleDataService
     private readonly KuroAccountService _accounts;
     private readonly ILogger<RoleDataService> _logger;
 
-    /// <summary>最近一次列表同步获得的访问令牌(详情按需加载时复用,避免每次点击重复 getGamer/requestToken)。</summary>
-    private string? _accessToken;
+    /// <summary>
+    /// 数据中心访问会话:B-At 令牌 + 它所属的登录 token / 角色条目 roleId / 库街区 userId。
+    /// <para>不可变记录、整体替换(评审反馈):旧实现 <c>_accessToken</c>/<c>_userId</c> 两个字段分别无锁读写,
+    /// 且不绑定 roleId —— 换角色/换号后会拿旧令牌请求新角色,或读到"新 token + 旧 userId"的撕裂组合。</para>
+    /// </summary>
+    private sealed record AccessSession(string LoginToken, string RoleId, string UserId, string AccessToken);
 
-    /// <summary>最近一次列表同步获得的库街区 userId(与 <see cref="_accessToken"/> 配套)。</summary>
-    private string _userId = "";
+    /// <summary>
+    /// 最近一次换取的访问会话(详情按需加载时复用,避免每次点击重复 getGamer/requestToken)。
+    /// 引用整体读写(原子);读取用 Volatile.Read,作废用 Interlocked.CompareExchange。
+    /// </summary>
+    private AccessSession? _session;
 
     public RoleDataService(
         KujiequApiClient api,
@@ -120,11 +127,11 @@ public sealed class RoleDataService : IRoleDataService
                     Message = CoreStrings.T("Core.Roles.RoleNotFound", "未找到该角色条目(请确认角色 ID 与当前账号一致)"),
                 };
             }
-            _userId = item.UserId ?? _accounts.Current?.UserId ?? "";
+            var userId = item.UserId ?? _accounts.Current?.UserId ?? "";
 
             // 2. requestToken 换 B-At 令牌(对齐 WutheringWavesTool BaseTask.requestToken)
             var accessToken = await _api.GetAccessTokenAsync(
-                token, deviceId, roleId, _userId, "android", ct).ConfigureAwait(false);
+                token, deviceId, roleId, userId, "android", ct).ConfigureAwait(false);
             if (string.IsNullOrEmpty(accessToken))
             {
                 _logger.LogWarning("获取角色数据访问令牌失败: roleId={RoleId}", roleId);
@@ -134,7 +141,7 @@ public sealed class RoleDataService : IRoleDataService
                     Message = CoreStrings.T("Core.Roles.TokenFailed", "获取角色数据访问令牌失败(Token 可能已失效,请重新登录)"),
                 };
             }
-            _accessToken = accessToken;
+            Volatile.Write(ref _session, new AccessSession(token, roleId, userId, accessToken));
 
             // 3. 触发服务端刷新(refreshData):数据中心接口(roleData/getRoleDetail)返回的是
             //    库街区服务端自己的缓存快照,不先刷新拿到的都是上次快照
@@ -156,12 +163,12 @@ public sealed class RoleDataService : IRoleDataService
 
             // 5. 列表项合并本地缓存中已同步过的完整详情(按 cardRoleId 匹配):
             //    上次同步/已点击查看过的角色详情区在页面加载后即有数据,未命中的由点击时按需拉取
-            MergeCachedDetails(list, _userId, roleId);
+            MergeCachedDetails(list, userId, roleId);
 
             // 6. 把合并后的整份列表写回缓存:旧实现只在单角色详情拉取成功时回写,列表同步本身不落盘,
             //    导致「同步拿到的新角色关掉页面就没了、重开又退回上次缓存里那几个」。
             //    合并写回会按 cardRoleId 保留缓存中已有的详情区块,不会丢上次的完整数据。
-            MergeListIntoCachedRoles(_userId, roleId, list);
+            MergeListIntoCachedRoles(userId, roleId, list);
 
             return new RoleDataLoadResult
             {
@@ -202,10 +209,13 @@ public sealed class RoleDataService : IRoleDataService
             await EnsurePublicIpAsync(ct).ConfigureAwait(false);
             var deviceId = _accounts.Current?.DeviceId ?? Guid.NewGuid().ToString("N");
 
-            // 1. 复用在用的访问令牌(列表同步后点击);否则完整走 getGamer → requestToken
-            if (string.IsNullOrEmpty(_accessToken))
+            // 1. 复用在用的访问会话(列表同步后点击);会话须属于同一登录 token + 同一角色条目,
+            //    否则(换号/换角色后)完整走 getGamer → requestToken
+            var session = Volatile.Read(ref _session);
+            if (session is null || session.LoginToken != token || session.RoleId != roleId)
             {
-                if (!await EnsureAccessTokenAsync(token, roleId, deviceId, ct).ConfigureAwait(false))
+                session = await EnsureAccessTokenAsync(token, roleId, deviceId, ct).ConfigureAwait(false);
+                if (session is null)
                 {
                     return new KujiequApiClient.RoleDetailResult(null, false);
                 }
@@ -213,10 +223,10 @@ public sealed class RoleDataService : IRoleDataService
 
             // 2. 单角色详情(单次请求;与用户点击节流,不并发批量)
             var result = await _api.GetRoleDetailResultAsync(
-                _accessToken!, deviceId, roleId, targetRoleId, "android", ct).ConfigureAwait(false);
+                session.AccessToken, deviceId, roleId, targetRoleId, "android", ct).ConfigureAwait(false);
             if (result.Detail is not null)
             {
-                UpdateCacheRole(_userId, roleId, result.Detail);
+                UpdateCacheRole(session.UserId, roleId, result.Detail);
                 return result;
             }
             if (result.GeeTest)
@@ -225,16 +235,20 @@ public sealed class RoleDataService : IRoleDataService
                 return result;
             }
 
-            // 3. 非风控失败(如令牌过期):重新鉴权后重试一次(250ms 间隔,保持串行节流)
-            _accessToken = null;
-            if (await EnsureAccessTokenAsync(token, roleId, deviceId, ct).ConfigureAwait(false))
+            // 3. 非风控失败(如令牌过期):重新鉴权后重试一次(250ms 间隔,保持串行节流)。
+            //    被取消的加载不能走到这里清掉仍然有效的会话(评审反馈):先确认未取消。
+            ct.ThrowIfCancellationRequested();
+            // 只清掉"本次用过的那个"会话:并发的列表同步可能已换上新会话,不能误清
+            Interlocked.CompareExchange(ref _session, null, session);
+            var renewed = await EnsureAccessTokenAsync(token, roleId, deviceId, ct).ConfigureAwait(false);
+            if (renewed is not null)
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(250), ct).ConfigureAwait(false);
                 result = await _api.GetRoleDetailResultAsync(
-                    _accessToken!, deviceId, roleId, targetRoleId, "android", ct).ConfigureAwait(false);
+                    renewed.AccessToken, deviceId, roleId, targetRoleId, "android", ct).ConfigureAwait(false);
                 if (result.Detail is not null)
                 {
-                    UpdateCacheRole(_userId, roleId, result.Detail);
+                    UpdateCacheRole(renewed.UserId, roleId, result.Detail);
                 }
             }
             return result;
@@ -267,8 +281,8 @@ public sealed class RoleDataService : IRoleDataService
         _api.PublicIp = _kuro.Ip;
     }
 
-    /// <summary>getGamer → 校验角色条目 → requestToken;成功写入 <see cref="_accessToken"/>/<see cref="_userId"/> 并返回 true。</summary>
-    private async Task<bool> EnsureAccessTokenAsync(string token, string roleId, string deviceId, CancellationToken ct)
+    /// <summary>getGamer → 校验角色条目 → requestToken;成功写入并返回新的 <see cref="AccessSession"/>,失败返回 null。</summary>
+    private async Task<AccessSession?> EnsureAccessTokenAsync(string token, string roleId, string deviceId, CancellationToken ct)
     {
         var gamer = await _kuro.GetGamerAsync(
             new KuroAccount { Token = token, DeviceId = deviceId },
@@ -278,24 +292,25 @@ public sealed class RoleDataService : IRoleDataService
         {
             _logger.LogWarning("库街区角色列表接口返回非 200(可能 token 失效): code={Code} msg={Msg}",
                 gamer.Code, gamer.Msg);
-            return false;
+            return null;
         }
         var item = gamer?.Data?.FirstOrDefault(r => r.RoleId == roleId);
         if (item is null)
         {
             _logger.LogWarning("未找到角色条目(角色 ID 与账号不匹配): roleId={RoleId}", roleId);
-            return false;
+            return null;
         }
-        _userId = item.UserId ?? _accounts.Current?.UserId ?? "";
+        var userId = item.UserId ?? _accounts.Current?.UserId ?? "";
         var accessToken = await _api.GetAccessTokenAsync(
-            token, deviceId, roleId, _userId, "android", ct).ConfigureAwait(false);
+            token, deviceId, roleId, userId, "android", ct).ConfigureAwait(false);
         if (string.IsNullOrEmpty(accessToken))
         {
             _logger.LogWarning("获取角色数据访问令牌失败: roleId={RoleId}", roleId);
-            return false;
+            return null;
         }
-        _accessToken = accessToken;
-        return true;
+        var session = new AccessSession(token, roleId, userId, accessToken);
+        Volatile.Write(ref _session, session);
+        return session;
     }
 
     /// <summary>
@@ -317,6 +332,9 @@ public sealed class RoleDataService : IRoleDataService
         {
             return; // 空列表多为接口异常,不覆盖已有缓存(与"风控不覆盖完整缓存"同一原则)
         }
+        // 读-合并-写整体持有连接闸门(评审反馈):读与写分别加锁时,并发的详情回写
+        // (UpdateCacheRole)可能夹在中间,随后这里的写回会把那份详情覆盖丢失。闸门可重入,内部读写照常取锁。
+        using var _gate = _db.Enter();
         var cached = ReadCacheRoles(userId, roleId) ?? ReadCacheRoles("", roleId) ?? [];
         var cachedByCardId = new Dictionary<int, RoleDetail>();
         foreach (var r in cached)
@@ -455,6 +473,8 @@ public sealed class RoleDataService : IRoleDataService
         {
             return; // 无 cardRoleId 的详情不参与缓存,避免污染现有行
         }
+        // 读-合并-写整体持有连接闸门(同 MergeListIntoCachedRoles):防止并发合并互相覆盖丢详情
+        using var _gate = _db.Enter();
         var roles = ReadCacheRoles(userId, roleId) ?? ReadCacheRoles("", roleId) ?? new List<RoleDetail>();
         var idx = roles.FindIndex(r => (r.Role?.RoleId ?? 0) == cardId);
         if (idx >= 0)
@@ -535,8 +555,9 @@ public sealed class RoleDataService : IRoleDataService
             }
             return new RoleDataLoadResult { Source = RoleDataSource.None, Message = CoreStrings.T("Core.Roles.NoCache", "无缓存(或账号不一致)") };
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "读取角色缓存失败: playerId={PlayerId}", playerId);
             return new RoleDataLoadResult { Source = RoleDataSource.None, Message = CoreStrings.T("Core.Roles.CacheReadFailed", "缓存读取失败") };
         }
     }
@@ -582,7 +603,7 @@ public sealed class RoleDataService : IRoleDataService
         return filled ? accountRoles : null;
     }
 
-    /// <summary>读缓存行(account_id, player_id);无记录返回 null。</summary>
+    /// <summary>读缓存行(account_id, player_id);无记录或该行已损坏(无法反序列化)返回 null。</summary>
     private List<RoleDetail>? ReadCacheRoles(string accountId, string playerId)
     {
         using var _gate = _db.Enter();
@@ -591,9 +612,26 @@ public sealed class RoleDataService : IRoleDataService
         cmd.Parameters.AddWithValue("$account", accountId ?? "");
         cmd.Parameters.AddWithValue("$playerId", playerId);
         var json = cmd.ExecuteScalar() as string;
-        return string.IsNullOrEmpty(json)
-            ? null
-            : JsonSerializer.Deserialize(json, RoleJsonContext.Default.ListRoleDetail);
+        return string.IsNullOrEmpty(json) ? null : DeserializeCacheRow(json, playerId);
+    }
+
+    /// <summary>
+    /// 反序列化一行角色缓存;损坏行(结构变更后的旧数据等)记日志并返回 null。
+    /// <para>不能抛出(评审反馈):该读取位于网络成功后的合并流程中,一行坏数据会让整次同步报
+    /// "库街区请求失败",<see cref="SaveCache"/> 也就永远不会执行,坏行永远不会被覆盖。
+    /// 返回 null 后合并流程按"无缓存"继续,随后的写回自然把坏行覆盖掉。</para>
+    /// </summary>
+    private List<RoleDetail>? DeserializeCacheRow(string json, string playerId)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize(json, RoleJsonContext.Default.ListRoleDetail);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "角色缓存行已损坏,按无缓存处理(下次同步写回时覆盖): playerId={PlayerId}", playerId);
+            return null;
+        }
     }
 
     /// <summary>读缓存并校验详情齐全;缺失/不完整返回 null。</summary>
@@ -629,7 +667,7 @@ public sealed class RoleDataService : IRoleDataService
         {
             return null;
         }
-        var roles = JsonSerializer.Deserialize(json, RoleJsonContext.Default.ListRoleDetail);
+        var roles = DeserializeCacheRow(json, playerId);
         return roles is { Count: > 0 } ? roles : null;
     }
 

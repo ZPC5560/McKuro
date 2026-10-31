@@ -31,7 +31,15 @@ public sealed class LocalRoleDataReader
         var results = new List<RoleDetail>();
         try
         {
-            using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
+            // 游戏自己的库:只读打开、不进连接池(评审反馈)。旧实现以读写 + 连接池模式打开,
+            // 连接串还是字符串插值(路径含 ';' 等字符时会被解析成额外的连接串参数)。
+            var connectionString = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+            {
+                DataSource = dbPath,
+                Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly,
+                Pooling = false,
+            }.ToString();
+            using var connection = new Microsoft.Data.Sqlite.SqliteConnection(connectionString);
             connection.Open();
 
             // LocalStorage.db 是键值表结构,扫描包含角色数据的 JSON
@@ -53,7 +61,8 @@ public sealed class LocalRoleDataReader
                 try
                 {
                     using var scan = connection.CreateCommand();
-                    scan.CommandText = $"SELECT * FROM \"{table}\"";
+                    // 表名来自外部库的 sqlite_master,不可信:按 SQL 标识符规则转义内嵌双引号
+                    scan.CommandText = $"SELECT * FROM {QuoteIdentifier(table)}";
                     using var dataReader = scan.ExecuteReader();
                     var columns = Enumerable.Range(0, dataReader.FieldCount)
                         .Select(dataReader.GetName)
@@ -90,6 +99,10 @@ public sealed class LocalRoleDataReader
 
         return results;
     }
+
+    /// <summary>SQL 标识符加双引号并把内嵌的 <c>"</c> 转义为 <c>""</c>(SQLite 标识符规则)。</summary>
+    internal static string QuoteIdentifier(string name)
+        => "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
 
     /// <summary>
     /// 从 JSON 文件导入角色数据(支持玩家卡导出)。

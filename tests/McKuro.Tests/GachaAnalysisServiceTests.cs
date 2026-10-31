@@ -282,6 +282,38 @@ public class GachaAnalysisServiceTests
         Assert.Equal("角色活动", day2.Pools[0].PoolName);
     }
 
+    [Fact]
+    public void Analyze_DailyPulls_UseServerWallClock_NoTimezoneShift()
+    {
+        // 记录时间是不带时区的服务器本地时间:23:30 的抽卡就属于当天,
+        // 不能按 UTC 解析再转本地(UTC+8 下会被算到第二天)。
+        var records = new List<GachaRecord>
+        {
+            R(1, 101, 4, "A", "2024-01-01 16:30:00"),
+            R(1, 102, 4, "B", "2024-01-01 23:30:00"),
+        };
+
+        var result = new GachaAnalysisService().Analyze("p1", records);
+
+        var day = Assert.Single(result.DailyPulls);
+        Assert.Equal(new DateOnly(2024, 1, 1), day.Date);
+        Assert.Equal(2, day.Count);
+    }
+
+    [Fact]
+    public void Analyze_Score_OffBannerRate_Weighs_Forty_Percent()
+    {
+        // OffBannerRate 是 0~1 的比例:全歪(1.0)比全不歪(0.0)应低 40 分,而不是只差 0.4 分。
+        var upIds = new Dictionary<CardPoolType, HashSet<int>> { [CardPoolType.RoleActivity] = [900] };
+        var lucky = new List<GachaRecord> { R(1, 900, 5, "UP", "2024-01-01 10:00:00") };
+        var unlucky = new List<GachaRecord> { R(1, 901, 5, "OFF", "2024-01-01 10:00:00") };
+
+        var luckyScore = new GachaAnalysisService().Analyze("p1", lucky, upIds).Score;
+        var unluckyScore = new GachaAnalysisService().Analyze("p1", unlucky, upIds).Score;
+
+        Assert.Equal(40.0, luckyScore - unluckyScore, 6);
+    }
+
     // ---- "预计下一抽"概率模型(统计卡片) ----
 
     [Fact]

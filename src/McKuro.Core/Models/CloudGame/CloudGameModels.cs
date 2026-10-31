@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using McKuro.Core.Infrastructure;
 
 namespace McKuro.Core.Models.CloudGame;
 
@@ -28,15 +29,18 @@ public sealed class CloudAccount
     /// 稳定标识:手机号(有则用),否则账号名,再否则创建时生成的 GUID。
     /// 切换/移除按 Id 定位 —— 手机号可能为空(旧版迁移条目)或重复,不能作唯一键。
     /// </summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string Id { get; set; } = "";
 
     /// <summary>登录手机号(显示与同账号判定用;允许为空)。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string Phone { get; set; } = "";
 
     /// <summary>账号名(SDK 返回的 username,显示用)。</summary>
     public string Name { get; set; } = "";
 
     /// <summary>云游戏登录数据 JSON(CloudGameLoginData 序列化)。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string LoginDataJson { get; set; } = "";
 }
 

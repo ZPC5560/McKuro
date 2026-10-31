@@ -113,6 +113,35 @@ public class WikiPriorityWeightsTests
     }
 
     [Fact]
+    public void Full_Width_Equals_Is_A_Tie_Not_A_Tier()
+    {
+        // 回归(M14):全角「＝」曾在并列拆分之前被替换成 `>`,TierSeparators 里的 '＝' 永远匹配不到 ——
+        // 「暴击＝暴击伤害＞攻击」解析成暴击 2.0、暴击伤害 1.0,其后每组都降一级。
+        var w = WikiGuideService.ParsePriorityWeights("暴击＝暴击伤害＞攻击＞共鸣技能");
+        Assert.NotNull(w);
+        Assert.Equal(2.0, w!["暴击"]);
+        Assert.Equal(2.0, w["暴击伤害"]);
+        Assert.Equal(1.0, w["攻击百分比"]);
+        Assert.Equal(0.75, w["共鸣技能伤害加成"]);
+    }
+
+    [Fact]
+    public void Heading_Prefix_Does_Not_Drop_Leading_Crit()
+    {
+        // 回归(M15):标题与值在同一段时首个 token 变成「声骸词条：暴击」,精确匹配 `t is "暴击"` 失败,
+        // DPS 角色排第一的暴击被静默丢掉
+        var w = WikiGuideService.ParsePriorityWeights("声骸词条：暴击＞暴击伤害＞攻击");
+        Assert.NotNull(w);
+        Assert.Equal(2.0, w!["暴击"]);
+        Assert.Equal(1.0, w["暴击伤害"]);
+        Assert.Equal(0.75, w["攻击百分比"]);
+
+        // 标签与值之间夹了说明词(「推荐」):EndsWith 仍能认出暴击
+        var w2 = WikiGuideService.ParsePriorityWeights("推荐暴击＞暴击伤害");
+        Assert.Equal(2.0, w2!["暴击"]);
+    }
+
+    [Fact]
     public void Returns_Null_For_Empty_Or_Unmappable_Input()
     {
         Assert.Null(WikiGuideService.ParsePriorityWeights(null));

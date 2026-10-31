@@ -37,8 +37,6 @@ public partial class MainWindow : Window
     /// <summary>标记正在执行纠正(其引发的 SizeChanged 不得再次调度纠正)。</summary>
     private bool _applyingAspect;
 
-    private IntPtr _hwnd;
-
     /// <summary>首次布局提交里程碑是否已记录(诊断用)。</summary>
     private bool _firstLayoutMarked;
 
@@ -52,7 +50,12 @@ public partial class MainWindow : Window
         InitializeComponent();
         // 窗口可缩放但保持固定比例(1180:650)
         SizeChanged += OnWindowSizeChanged;
-        _aspectTimer.Tick += (_, _) => ApplyAspectCorrection();
+        // 一次性防抖:到期先停表再纠正(DispatcherTimer 默认重复触发,不停会每 120ms 纠正一次直到退出)
+        _aspectTimer.Tick += (_, _) =>
+        {
+            _aspectTimer.Stop();
+            ApplyAspectCorrection();
+        };
         PropertyChanged += OnWindowPropertyChanged;
         Opened += (_, _) => InstallSizeAspectHook();
         // 诊断里程碑:窗口创建/打开/首次布局提交(配合 MCKURO-NOTIF 与 UI 心跳定位延迟所处阶段)
@@ -542,16 +545,9 @@ public partial class MainWindow : Window
         {
             return false;
         }
-        if (_hwnd == IntPtr.Zero)
-        {
-            // Title 为空时 FindWindow(null, null) 会匹配任意无标题窗口(可能拿到别人的句柄),必须显式跳过
-            var title = Title;
-            if (!string.IsNullOrEmpty(title))
-            {
-                _hwnd = FindWindow(null, title);
-            }
-        }
-        if (_hwnd == IntPtr.Zero)
+        // 用本窗口自己的平台句柄(旧实现 FindWindow(null, Title) 可能匹配到其他同名窗口)
+        var hwnd = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (hwnd == IntPtr.Zero)
         {
             return false;
         }
@@ -559,7 +555,7 @@ public partial class MainWindow : Window
         {
             length = Marshal.SizeOf<WINDOWPLACEMENT>(),
         };
-        return GetWindowPlacement(_hwnd, ref placement) && placement.showCmd == SW_SHOW_MAXIMIZED;
+        return GetWindowPlacement(hwnd, ref placement) && placement.showCmd == SW_SHOW_MAXIMIZED;
     }
 
     private const int SW_SHOW_MAXIMIZED = 3;
@@ -579,9 +575,6 @@ public partial class MainWindow : Window
         public int rcNormalPositionRight;
         public int rcNormalPositionBottom;
     }
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern IntPtr FindWindow(string? lpClassName, string lpWindowName);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -786,6 +779,14 @@ public partial class MainWindow : Window
         AddHandler(PointerPressedEvent, OnShellPointerPressedForDrag, RoutingStrategies.Tunnel);
         AddHandler(KeyDownEvent, OnShellKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
         Deactivated += (_, _) => OnShellDeactivated();
+        // 重新激活(含从托盘/最小化恢复):恢复轮询(失焦后两栏已收起时轮询会自行停下,见 OnAutoHideTick)
+        Activated += (_, _) =>
+        {
+            if (IsAutoHideEnabled)
+            {
+                StartAutoHideTimer();
+            }
+        };
 
         if (settings.AutoHideNavRail || settings.AutoHideTitleBar)
         {
@@ -916,6 +917,8 @@ public partial class MainWindow : Window
         if (changed)
         {
             ApplyAutoHideVisuals();
+            // 失焦期间轮询已停:悬停唤出后需要轮询负责收起,这里按需恢复
+            StartAutoHideTimer();
         }
     }
 
@@ -989,11 +992,26 @@ public partial class MainWindow : Window
         _autoHideTimer?.Stop();
     }
 
+    /// <summary>是否启用了任一自动隐藏(导航栏 / 沉浸模式下的操作栏)。</summary>
+    private bool IsAutoHideEnabled
+        => AppServices.Settings.Current.AutoHideNavRail
+           || (_immersive && AppServices.Settings.Current.AutoHideTitleBar);
+
     /// <summary>自动隐藏轮询:取指针位置 → 喂给两个状态机 → 按结果驱动动画。</summary>
     private void OnAutoHideTick(object? sender, EventArgs e)
     {
         if (!IsVisible || WindowState == WindowState.Minimized)
         {
+            // 隐藏/最小化:停表,Activated 时恢复(不再以 25 Hz 空转)
+            StopAutoHideTimer();
+            return;
+        }
+        // 失焦(切到游戏或其他程序)且两栏都已收起、未固定:停表省电;
+        // 指针重新移入(OnShellPointerMoved 唤出)或窗口重新激活时再恢复。冒烟伪指针模式不停,保证脚本可复现。
+        if (!IsActive && !_smokePointerEnabled
+            && !_navReveal.Shown && !_titleReveal.Shown && !_navPinned && !_titlePinned)
+        {
+            StopAutoHideTimer();
             return;
         }
 

@@ -131,6 +131,27 @@ public static class DesktopShortcutService
         return sb.ToString();
     }
 
-    /// <summary>PowerShell 单引号字符串字面量(内部的 ' 翻倍转义)。</summary>
-    private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
+    /// <summary>
+    /// PowerShell 单引号字符串字面量(内部的单引号翻倍转义)。
+    /// <para>
+    /// PowerShell 把 U+2018~U+201B(‘ ’ ‚ ‛)也当单引号,只转义 ASCII <c>'</c> 时,
+    /// <c>Bob’s Games</c> 这类目录名会提前结束字符串。逐个把这些字符翻倍(用它自身翻倍,
+    /// 解析后保留原字符,路径不变)。
+    /// </para>
+    /// </summary>
+    private static string Quote(string value)
+    {
+        var sb = new StringBuilder(value.Length + 2);
+        sb.Append('\'');
+        foreach (var c in value)
+        {
+            sb.Append(c);
+            if (c is '\'' or '\u2018' or '\u2019' or '\u201A' or '\u201B')
+            {
+                sb.Append(c);
+            }
+        }
+        sb.Append('\'');
+        return sb.ToString();
+    }
 }

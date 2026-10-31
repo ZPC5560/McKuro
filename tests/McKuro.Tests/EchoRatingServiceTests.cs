@@ -136,6 +136,25 @@ public class EchoRatingServiceTests
     }
 
     [Fact]
+    public void RateRole_Empty_Slots_Count_As_Zero()
+    {
+        // 回归:均分曾按"已装备件数"计算 —— 只装 1 件 50 分、空 4 个槽时,
+        // 显示达成率 50%/毕业(SSS),总分却只有 50/500。空槽位必须按 0 分计入 5 个槽位的均分。
+        var one = Echo(("暴击", "10.5%"), ("暴击伤害", "21%"), ("攻击", "60"), ("生命", "580"), ("防御", "70"));
+        var rating = EchoRatingService.RateRole([one, null!, null!, null!, null!]);
+        Assert.Single(rating.Echoes);
+        Assert.Equal(50.0, rating.TotalScore);
+        Assert.Equal(500.0, rating.MaxScore);
+        Assert.Equal(10, rating.AchievementPercent); // 50 / 5 槽
+        Assert.Equal(EchoRatingLevel.S, rating.Level); // 均分 10 < 兼容口径 SS 阈值 20
+
+        // 列表里干脆没有空槽占位(接口只给已装备的那件)时口径相同
+        var sparse = EchoRatingService.RateRole([one]);
+        Assert.Equal(10, sparse.AchievementPercent);
+        Assert.Equal(EchoRatingLevel.S, sparse.Level);
+    }
+
+    [Fact]
     public void GraduationTextOf_Maps_Four_Tiers()
     {
         Assert.Equal("完美毕业", EchoRatingService.GraduationTextOf(EchoRatingLevel.Ace));

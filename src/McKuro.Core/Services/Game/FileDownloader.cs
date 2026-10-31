@@ -95,7 +95,8 @@ public sealed class FileDownloader
         CancellationToken ct = default,
         DownloadRateLimiter? rateLimiter = null,
         PauseTokenSource? pauseToken = null,
-        Action<string, string>? onReplace = null)
+        Action<string, string>? onReplace = null,
+        bool skipExistingCheck = false)
     {
         var dir = Path.GetDirectoryName(destPath);
         if (!string.IsNullOrEmpty(dir))
@@ -111,7 +112,9 @@ public sealed class FileDownloader
         // 这属于防御性处理 —— 宁可多下一次也不谎报成功。
         // 判据与判定逻辑由 LocalFileMatches 单点提供,与校验侧(UpdateInstaller)共用,
         // 避免同一条清单行两侧给出相反结论。
-        if (LocalFileMatches(destPath, entry))
+        // skipExistingCheck:调用方(ComputeDiff 之后)已判定目标文件缺失或过期,
+        // 再整份算一次 MD5 只会得出同样的结论,白读一遍大文件。
+        if (!skipExistingCheck && LocalFileMatches(destPath, entry))
         {
             return new FileDownloadResult
             {
@@ -237,6 +240,9 @@ public sealed class FileDownloader
                 FileShare.Read,
                 BufferSize,
                 useAsync: true);
+            // 预分配前的长度:超出它的区域是 SetLength 补出来的全零,绝不可能通过分片哈希,
+            // 对它们做预检只是白算(新下载的 18.6 GB pak 会因此先空读 18.6 GB)。
+            var existingLength = target.Length;
             if (entry.Size > 0)
             {
                 target.SetLength(entry.Size);
@@ -251,7 +257,9 @@ public sealed class FileDownloader
                     continue;
                 }
 
-                if (await IsChunkValidAsync(target, chunk, ct).ConfigureAwait(false))
+                // 只有完全落在原有字节范围内的分片才可能已下载过(续传),才值得预检。
+                if (chunk.End < existingLength
+                    && await IsChunkValidAsync(target, chunk, ct).ConfigureAwait(false))
                 {
                     continue;
                 }
@@ -596,9 +604,12 @@ public sealed class FileDownloader
     private static bool IsTransient(HttpRequestException exception)
         => exception.StatusCode is null || IsTransientStatusCode(exception.StatusCode.Value);
 
-    /// <summary>分片哈希复核:与快速校验共用 <see cref="FastVerify.ChunkHashMatches"/>,避免两份实现漂移。</summary>
+    /// <summary>
+    /// 分片哈希复核:真正的异步读盘(<see cref="FastVerify.ChunkHashMatchesAsync"/>,与同步版放在一起避免漂移)。
+    /// 以前是 <c>Task.FromResult</c> 包着同步读取,最多 8 路并发下载会各占一个线程池线程做阻塞 IO。
+    /// </summary>
     private static Task<bool> IsChunkValidAsync(FileStream file, GameChunkInfo chunk, CancellationToken ct)
-        => Task.FromResult(FastVerify.ChunkHashMatches(file, chunk, ct));
+        => FastVerify.ChunkHashMatchesAsync(file, chunk, ct);
 
     private static void TryDeletePart(string path)
     {

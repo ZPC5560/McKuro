@@ -1,3 +1,4 @@
+using System.Globalization;
 using McKuro.Core.Models.Tower;
 
 namespace McKuro.Core.Services.Notification;
@@ -157,7 +158,13 @@ public static class TowerReminderPolicy
     /// 「当天不再重复」由台账的「Key + 当天日期」判据负责
     /// (<see cref="ReminderLedgerService.TryMarkShown"/>),这里只管"哪一期的哪一种玩法"。
     /// </para>
+    /// <para>
+    /// 日期取<b>服务器时间</b>(<see cref="ReminderWindows.ToServerTime"/>):赛季在服务器 04:00 结束,
+    /// 折算到本机时间后,某些时区(如 UTC+4 → 本机 00:00)恰好落在午夜,剩余毫秒的秒级抖动就会让
+    /// 本机日期来回翻转,同一期换出两个 Key、重复提醒。服务器日期离 04:00 边界很远,不受抖动影响。
+    /// </para>
     /// </summary>
     public static string ReminderKey(TowerSeasonExpiry expiry)
-        => $"tower:{expiry.Kind}:{expiry.EndAt:yyyyMMdd}";
+        => string.Create(CultureInfo.InvariantCulture,
+            $"tower:{expiry.Kind}:{ReminderWindows.ToServerTime(expiry.EndAt):yyyyMMdd}");
 }

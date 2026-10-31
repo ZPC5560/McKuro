@@ -1,6 +1,8 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using McKuro.Controls;
+using McKuro.Services;
 using McKuro.ViewModels;
 
 namespace McKuro.Views;
@@ -25,6 +27,15 @@ public partial class WikiView : UserControl
     /// <summary>当前直接视频的显示比例(w/h,分辨率解析后记录)。</summary>
     private double? _videoAspect;
 
+    /// <summary>挂起监听的宿主窗口(最小化/隐藏到托盘时回收内嵌播放器)。</summary>
+    private Window? _watchedWindow;
+
+    /// <summary>
+    /// 内嵌播放器是否处于挂起:窗口最小化/隐藏或游戏会话进行中(与 VideoBackgroundControl 同一挂起规则)。
+    /// 挂起时直接回收 WebView(B站/YouTube 页面在 iframe 里,无法可靠地从外部暂停),恢复时重建。
+    /// </summary>
+    private bool _embedSuspended;
+
     /// <summary>静音脚本:把当前页面内 video/audio 静音(幂等,单次执行,不持续干预);
     /// 由注入定时器分多次调用以覆盖播放器延迟创建 video 元素的时序,
     /// 注入结束后用户可通过播放器音量控制手动恢复声音。</summary>
@@ -41,7 +52,59 @@ public partial class WikiView : UserControl
         BannerHost.SizeChanged += OnBannerHostSizeChanged;
 
         DataContextChanged += OnDataContextChanged;
-        DetachedFromVisualTree += (_, _) => UnhookViewModel();
+        AttachedToVisualTree += OnAttachedToVisualTree;
+        DetachedFromVisualTree += (_, _) =>
+        {
+            UnhookViewModel();
+            UnhookSuspendSources();
+        };
+    }
+
+    private void OnAttachedToVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        UnhookSuspendSources();
+        // 挂起源①:宿主窗口最小化/隐藏(托盘);挂起源②:游戏会话进行中
+        _watchedWindow = TopLevel.GetTopLevel(this) as Window;
+        if (_watchedWindow is not null)
+        {
+            _watchedWindow.PropertyChanged += OnWatchedWindowPropertyChanged;
+        }
+        AppServices.GameMonitor.StateChanged += OnGameStateChanged;
+        UpdateEmbedSuspendState();
+    }
+
+    private void UnhookSuspendSources()
+    {
+        if (_watchedWindow is not null)
+        {
+            _watchedWindow.PropertyChanged -= OnWatchedWindowPropertyChanged;
+            _watchedWindow = null;
+        }
+        AppServices.GameMonitor.StateChanged -= OnGameStateChanged;
+    }
+
+    private void OnWatchedWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == Window.WindowStateProperty || e.Property == IsVisibleProperty)
+        {
+            UpdateEmbedSuspendState();
+        }
+    }
+
+    private void OnGameStateChanged(GameSessionState state) => UpdateEmbedSuspendState();
+
+    /// <summary>挂起状态变化时刷新覆盖层:挂起 → 回收内嵌播放器;恢复 → 按当前轮播项重建。</summary>
+    private void UpdateEmbedSuspendState()
+    {
+        var suspended = _watchedWindow?.WindowState == WindowState.Minimized
+            || _watchedWindow is { IsVisible: false }
+            || AppServices.GameMonitor.State != GameSessionState.Idle;
+        if (suspended == _embedSuspended)
+        {
+            return;
+        }
+        _embedSuspended = suspended;
+        UpdateVideoOverlay();
     }
 
     /// <summary>当前已挂钩的 WikiViewModel(用于成对解绑,避免匿名 lambda 无法 -=)。</summary>
@@ -114,7 +177,8 @@ public partial class WikiView : UserControl
     private void UpdateVideoOverlay()
     {
         var vm = DataContext as WikiViewModel;
-        var banner = vm?.CurrentBannerIsWebVideo == true ? vm.CurrentBanner : null;
+        // 挂起期间(最小化/托盘/游戏中)不保留内嵌播放器,避免后台继续解码
+        var banner = !_embedSuspended && vm?.CurrentBannerIsWebVideo == true ? vm.CurrentBanner : null;
         // 会话键:B站用 BV 号,YouTube 用视频 ID(前缀区分来源)
         string? sessionKey = banner switch
         {

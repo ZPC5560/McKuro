@@ -17,11 +17,31 @@ public sealed partial class RolesViewModel : ViewModelBase
 {
     private readonly IMessenger _messenger;
 
-    /// <summary>mcguide 详情填充进行中(避免并发重复请求)。</summary>
-    private bool _guideDetailFilling;
+    /// <summary>
+    /// mcguide 详情填充进行中的 cardRoleId(只挡同一角色的重复请求)。
+    /// <para>旧实现是一个全局布尔:快速从 A 切到 B 时,B 的调用被 A 挡掉直接返回,
+    /// A 的结果又因已切角色被丢弃,B 永远不填充(M30)。</para>
+    /// </summary>
+    private readonly HashSet<int> _guideDetailFillingIds = [];
 
     /// <summary>按需详情请求的取消源(切换角色时取消上一个,保持 getRoleDetail 串行不并发)。</summary>
     private CancellationTokenSource? _detailFetchCts;
+
+    /// <summary>
+    /// 上一条按需详情请求(含取消后的收尾)。新请求先等它真正结束再发,
+    /// 「取消上一个」才真正等于串行(L24:旧实现只取消不等待,新旧请求仍会并发)。
+    /// </summary>
+    private Task _detailFetchTask = Task.CompletedTask;
+
+    /// <summary>
+    /// 角色列表同步代次:收到账号刷新消息时自增并取消在途同步。
+    /// <c>LoadFromKujiequAsync</c> 在 await 之后比对代次/账号,变了就丢弃结果,
+    /// 避免切号前发起的同步把旧账号的角色列表覆盖到新账号上(M31)。
+    /// </summary>
+    private int _roleSyncGeneration;
+
+    /// <summary>在途角色列表同步的取消源(账号刷新时取消)。</summary>
+    private CancellationTokenSource? _roleSyncCts;
 
     /// <summary>最近一次被 mcguide 填充的角色(其图标是 guide-res B 域名,不写入磁盘缓存)。</summary>
     private RoleDetail? _guideFilledRole;
@@ -43,8 +63,9 @@ public sealed partial class RolesViewModel : ViewModelBase
     public static string SortByStar => LanguageService.Format("Roles.SortStar");
     public static string SortByName => LanguageService.Format("Roles.SortName");
 
+    /// <summary>标题区状态文案。初始为空:静态占位词「就绪」没有信息量(同启动页的处理)。</summary>
     [ObservableProperty]
-    private string _statusText = LanguageService.Format("Roles.Ready");
+    private string _statusText = "";
 
     [ObservableProperty]
     private string _sourceText = LanguageService.Format("Roles.SourceNone");
@@ -642,6 +663,8 @@ public sealed partial class RolesViewModel : ViewModelBase
         // 登录/切号后自动同步 → 仅读缓存:在线列表获取依赖用户点击「同步」,详情按选择角色时拉取
         _messenger.Register<RolesViewModel, RolesRefreshRequestedMessage>(this, static (recipient, message) =>
         {
+            // 账号可能已切换:作废在途的角色列表同步(其结果属于旧账号,M31)
+            recipient.CancelRoleSync();
             recipient.TokenText = AppServices.Settings.Current.KujiequToken;
             recipient.RoleIdText = AppServices.Settings.Current.RoleId;
             recipient.LoadFromLocal();
@@ -754,49 +777,73 @@ public sealed partial class RolesViewModel : ViewModelBase
             RoleNameBrush = null;
             return;
         }
+        List<Avalonia.Media.Color> colors;
         try
         {
-            // 复用一个轻量 HttpClient 下载图片并解码(AOT 安全)
-            var bitmap = await AppServices.Http.GetByteArrayAsync(url);
-            if (bitmap.Length == 0)
+            // 立绘可能已被 ApplyCachedRoleIcons 换成本地缓存路径:本地直接读文件,
+            // 拿本地路径去 GetByteArrayAsync 必然失败(M38)
+            var bytes = IsRemoteUrl(url)
+                ? await AppServices.Http.GetByteArrayAsync(url)
+                : await System.IO.File.ReadAllBytesAsync(url);
+            // 解码 + 取色放后台线程,并直接按 64px 宽解码:旧实现在 UI 线程解码全尺寸立绘,
+            // 且 Bitmap 从不释放,每切一次角色泄露一个原生 Skia 位图(M38)
+            if (bytes.Length == 0)
             {
-                return;
+                colors = [];
             }
-            using var ms = new System.IO.MemoryStream(bitmap, writable: false);
-            var bmp = new Avalonia.Media.Imaging.Bitmap(ms);
-            var colors = ColorThiefHelper.GetDominantColors(bmp, 2);
-            if (role != SelectedRole)
+            else
             {
-                return; // 已切换角色,丢弃过期结果
-            }
-            if (colors.Count >= 1)
-            {
-                // 右下角放射渐变:主色 → 两个过渡色 → 白色(主色只集中在右下,过渡柔和)
-                var main = colors[0];
-                var white = Avalonia.Media.Colors.White;
-                RoleHeaderBackground = new Avalonia.Media.RadialGradientBrush
+                colors = await Task.Run(() =>
                 {
-                    Center = new Avalonia.RelativePoint(1, 1, Avalonia.RelativeUnit.Relative),
-                    GradientOrigin = new Avalonia.RelativePoint(1, 1, Avalonia.RelativeUnit.Relative),
-                    RadiusX = new Avalonia.RelativeScalar(1.2, Avalonia.RelativeUnit.Relative),
-                    RadiusY = new Avalonia.RelativeScalar(1.2, Avalonia.RelativeUnit.Relative),
-                    GradientStops =
-                    {
-                        new Avalonia.Media.GradientStop(main, 0),
-                        new Avalonia.Media.GradientStop(Mix(main, white, 1.0 / 3.0), 0.33),
-                        new Avalonia.Media.GradientStop(Mix(main, white, 2.0 / 3.0), 0.66),
-                        new Avalonia.Media.GradientStop(white, 1),
-                    },
-                };
-                // 前景文字按渐变主色(右下)亮度决定,保证右下主色区文字可读
-                RoleNameBrush = ForegroundFor(main);
+                    using var ms = new System.IO.MemoryStream(bytes, writable: false);
+                    using var bmp = Avalonia.Media.Imaging.Bitmap.DecodeToWidth(ms, 64);
+                    return ColorThiefHelper.GetDominantColors(bmp, 2);
+                });
             }
         }
         catch (Exception)
         {
-            // 取色失败:保留默认背景,不影响主流程
+            // 取色失败:回到默认背景(下面统一处理),不影响主流程
+            colors = [];
         }
+
+        if (role != SelectedRole)
+        {
+            return; // 已切换角色,丢弃过期结果(不能动新角色的画刷)
+        }
+        if (colors.Count == 0)
+        {
+            // 失败/无主色时清掉画刷:否则残留上一个角色的颜色
+            RoleHeaderBackground = null;
+            RoleNameBrush = null;
+            return;
+        }
+
+        // 右下角放射渐变:主色 → 两个过渡色 → 白色(主色只集中在右下,过渡柔和)
+        var main = colors[0];
+        var white = Avalonia.Media.Colors.White;
+        RoleHeaderBackground = new Avalonia.Media.RadialGradientBrush
+        {
+            Center = new Avalonia.RelativePoint(1, 1, Avalonia.RelativeUnit.Relative),
+            GradientOrigin = new Avalonia.RelativePoint(1, 1, Avalonia.RelativeUnit.Relative),
+            RadiusX = new Avalonia.RelativeScalar(1.2, Avalonia.RelativeUnit.Relative),
+            RadiusY = new Avalonia.RelativeScalar(1.2, Avalonia.RelativeUnit.Relative),
+            GradientStops =
+            {
+                new Avalonia.Media.GradientStop(main, 0),
+                new Avalonia.Media.GradientStop(Mix(main, white, 1.0 / 3.0), 0.33),
+                new Avalonia.Media.GradientStop(Mix(main, white, 2.0 / 3.0), 0.66),
+                new Avalonia.Media.GradientStop(white, 1),
+            },
+        };
+        // 前景文字按渐变主色(右下)亮度决定,保证右下主色区文字可读
+        RoleNameBrush = ForegroundFor(main);
     }
+
+    /// <summary>是否为 http/https 远程地址(否则按本地文件路径处理)。</summary>
+    private static bool IsRemoteUrl(string url) =>
+        url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+        || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>线性插值两个颜色(t=0→a,t=1→b)。</summary>
     private static Avalonia.Media.Color Mix(Avalonia.Media.Color a, Avalonia.Media.Color b, double t)
@@ -931,11 +978,9 @@ public sealed partial class RolesViewModel : ViewModelBase
             OnPropertyChanged(nameof(HasGuideOptions));
 
             // 2. 默认加载攻略详情:优先恢复用户上次选中的那篇(缓存里有 selected_id),否则取点赞最高
+            // 选择规则与后台预取共用 GuideAchievementService.PickIntroductionId,避免两处判定漂移
             var cachedEntry = AppServices.Guide.TryGetCachedGuide(cardRoleId);
-            var targetId = cachedEntry is { SelectedId: > 0 }
-                && list.Any(i => i.Id == cachedEntry.SelectedId)
-                ? cachedEntry.SelectedId
-                : list.FirstOrDefault()?.Id ?? 0;
+            var targetId = GuideAchievementService.PickIntroductionId(list, cachedEntry?.SelectedId ?? 0) ?? 0;
             var info = targetId > 0
                 ? await AppServices.Guide.GetAchievementByIdAsync(role.RoleName, cardRoleId, targetId, ct: default, forceRefresh: force)
                 : (cachedEntry?.Detail is { } cachedDetail && list.Count == 0 ? cachedDetail : null);
@@ -1566,6 +1611,11 @@ public sealed partial class RolesViewModel : ViewModelBase
     /// </summary>
     private async Task LoadRoleDetailFromKujiequAsync(RoleDetail role)
     {
+        // 选中角色已变:上一条请求无论本次是否发新请求都已过期,先取消(L24)。
+        // 旧实现只在"本次要发请求"时才取消,切到详情已完整的角色时旧请求会一直跑完。
+        _detailFetchCts?.Cancel();
+        _detailFetchCts = null;
+
         var cardRoleId = role.Role?.RoleId ?? 0;
         var forceRefresh = cardRoleId > 0 && _pendingDetailRefresh.Contains(cardRoleId);
 
@@ -1588,14 +1638,22 @@ public sealed partial class RolesViewModel : ViewModelBase
             return;
         }
 
-        // 切换角色时取消上一条请求:单发 getRoleDetail 保持串行,并发请求易触发极验风控
-        _detailFetchCts?.Cancel();
+        // 切换角色时取消上一条请求(见方法开头),并等它真正结束再发新请求:
+        // 单发 getRoleDetail 保持串行,并发请求易触发极验风控。只取消不等待的话,
+        // 旧请求在服务端仍可能与新请求重叠(L24)。
         var cts = new CancellationTokenSource();
         _detailFetchCts = cts;
+        var previous = _detailFetchTask;
+        // 续体异步执行:避免后继请求在本次 finally 里被同步拉起(重入)
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _detailFetchTask = done.Task;
 
-        StatusText = LanguageService.Format("Roles.FetchingDetail", role.RoleName);
+        var fetchingText = LanguageService.Format("Roles.FetchingDetail", role.RoleName);
+        StatusText = fetchingText;
         try
         {
+            await previous;
+            cts.Token.ThrowIfCancellationRequested();
             // 不挂 ConfigureAwait(false):后续要 Clear/Add 多个绑定 ItemsControl 的
             // ObservableCollection(BuildSkillCards/RebuildAttributeItems 等),必须回 UI 线程。
             var result = await AppServices.Roles.LoadRoleDetailAsync(
@@ -1651,11 +1709,29 @@ public sealed partial class RolesViewModel : ViewModelBase
                 StatusText = LanguageService.Format("Roles.DetailFailedWith", role.RoleName, ex.Message);
             }
         }
+        finally
+        {
+            // 过期请求退场时,状态栏若还挂着它的"正在获取 X 的详情"就清掉:
+            // 新选中的角色可能根本不发请求(详情已完整),否则这句会一直停在那里(L24)。
+            // 有更新的请求在跑(_detailFetchCts 非空)时不动:它会自己写结果;
+            // 漂泊者各形态同名,文案相同不代表是本次请求写的。
+            if (!ReferenceEquals(role, SelectedRole) && _detailFetchCts is null && StatusText == fetchingText)
+            {
+                StatusText = "";
+            }
+            if (ReferenceEquals(_detailFetchCts, cts))
+            {
+                _detailFetchCts = null;
+            }
+            // 先登记完成再释放:后继请求只等 done.Task,不再碰本次的取消源
+            done.TrySetResult();
+            cts.Dispose();
+        }
     }
 
     /// <summary>
     /// 角色详情合并后异步回填「声骸词条」权重(每角色;联名角色/无攻略回退官方 valid/通用权重)。
-    /// <para>fire-and-forget:结果按角色名缓存,回填走 UI 线程(INPC 通知刷新评级徽章)。</para>
+    /// <para>fire-and-forget:结果按 cardRoleId(漂泊者各属性分开)缓存,回填走 UI 线程(INPC 通知刷新评级徽章)。</para>
     /// </summary>
     private static void QueueEchoWeightsLoad(RoleDetail? role)
     {
@@ -1668,9 +1744,12 @@ public sealed partial class RolesViewModel : ViewModelBase
         {
             return;
         }
+        // 按 cardRoleId + 属性取权重:漂泊者各属性同名不同 id,只按名字会共用一套权重(M18)
+        var cardRoleId = role.Role?.RoleId ?? 0;
+        var attributeName = role.Role?.AttributeName;
         _ = Task.Run(async () =>
         {
-            var weights = await WikiGuideService.GetPriorityWeightsAsync(roleName);
+            var weights = await WikiGuideService.GetPriorityWeightsAsync(roleName, cardRoleId, attributeName);
             if (weights is null)
             {
                 return;
@@ -1763,7 +1842,7 @@ public sealed partial class RolesViewModel : ViewModelBase
     private async Task FillRoleDetailFromGuideIfEmptyAsync()
     {
         var role = SelectedRole;
-        if (role is null || _guideDetailFilling)
+        if (role is null)
         {
             return;
         }
@@ -1782,7 +1861,11 @@ public sealed partial class RolesViewModel : ViewModelBase
             return;
         }
 
-        _guideDetailFilling = true;
+        // 只挡同一角色的重复填充;不同角色各自进行(M30)
+        if (!_guideDetailFillingIds.Add(cardRoleId))
+        {
+            return;
+        }
         try
         {
             var detail = await AppServices.Guide.GetRoleDetailFromGuideAsync(role.RoleName, cardRoleId);
@@ -1815,7 +1898,7 @@ public sealed partial class RolesViewModel : ViewModelBase
         }
         finally
         {
-            _guideDetailFilling = false;
+            _guideDetailFillingIds.Remove(cardRoleId);
         }
     }
 
@@ -1936,13 +2019,23 @@ public sealed partial class RolesViewModel : ViewModelBase
 
         IsBusy = true;
         StatusText = LanguageService.Format("Roles.Syncing");
+        // 发起时快照代次与账号:多步网络同步期间用户可能切号/退出(M31)
+        var generation = _roleSyncGeneration;
+        var accountId = CurrentAccountId;
+        var cts = new CancellationTokenSource();
+        _roleSyncCts = cts;
         try
         {
             // 记录同步前的角色集合,用于识别"新增角色"(只为新增角色预取攻略/图标)
             var previousIds = Roles.Select(r => r.Role?.RoleId ?? 0).Where(id => id > 0).ToHashSet();
 
             // 仅同步角色列表(roleData);角色详情在点击具体角色时按需单发(高频接口批量易触发极验风控)
-            var result = await AppServices.Roles.LoadRoleListAsync(TokenText, RoleIdText);
+            var result = await AppServices.Roles.LoadRoleListAsync(TokenText, RoleIdText, cts.Token);
+            if (generation != _roleSyncGeneration || accountId != CurrentAccountId)
+            {
+                // 账号已切换:结果属于旧账号,丢弃(刷新消息已按新账号读过缓存,状态栏也已更新)
+                return;
+            }
             if (result.IsSuccess)
             {
                 // 同步拿到的列表项会被服务层用本地缓存补全详情(IsDetailComplete=true),
@@ -1978,7 +2071,7 @@ public sealed partial class RolesViewModel : ViewModelBase
                 // 新角色才有新攻略/新 logo 要拉,避免每次同步把全部角色重扫一遍。
                 var currentIds = _pendingDetailRefresh;
                 var newIds = currentIds.Where(id => !previousIds.Contains(id)).ToList();
-                _ = PrefetchGuidesAsync(result.Roles.Where(r => newIds.Contains(r.Role?.RoleId ?? 0)).ToList());
+                _ = PrefetchGuidesAsync(result.Roles.Where(r => newIds.Contains(r.Role?.RoleId ?? 0)).ToList(), generation);
                 // 清理已不在列表中的角色攻略缓存(换号/移除角色后的孤儿数据)。
                 // SQLite DELETE 是同步 I/O,放后台线程,不卡 UI(失败静默:下次同步再清)。
                 // 账号键必须在这里(UI 线程)先快照:后台执行时若用户已切号,取当时的值会
@@ -2002,14 +2095,34 @@ public sealed partial class RolesViewModel : ViewModelBase
                 LoadCachedOrHint(result.Message ?? LanguageService.Format("Roles.SyncFailed"));
             }
         }
+        catch (OperationCanceledException) when (generation != _roleSyncGeneration)
+        {
+            // 账号刷新取消了本次同步:新账号的缓存已由刷新消息加载,这里什么都不做
+        }
         catch (Exception ex)
         {
-            LoadCachedOrHint(LanguageService.Format("Roles.FetchFailed", ex.Message));
+            if (generation == _roleSyncGeneration && accountId == CurrentAccountId)
+            {
+                LoadCachedOrHint(LanguageService.Format("Roles.FetchFailed", ex.Message));
+            }
         }
         finally
         {
+            if (ReferenceEquals(_roleSyncCts, cts))
+            {
+                _roleSyncCts = null;
+            }
+            cts.Dispose();
             IsBusy = false;
         }
+    }
+
+    /// <summary>作废在途的角色列表同步(账号刷新时调用,M31)。</summary>
+    private void CancelRoleSync()
+    {
+        _roleSyncGeneration++;
+        _roleSyncCts?.Cancel();
+        _roleSyncCts = null;
     }
 
     /// <summary>
@@ -2020,7 +2133,7 @@ public sealed partial class RolesViewModel : ViewModelBase
     /// 预取在后台进行,不阻塞界面;失败静默(用户点该角色时会再按需拉一次)。
     /// </para>
     /// </summary>
-    private async Task PrefetchGuidesAsync(IReadOnlyList<RoleDetail> newRoles)
+    private async Task PrefetchGuidesAsync(IReadOnlyList<RoleDetail> newRoles, int generation)
     {
         if (newRoles.Count == 0 || !AppServices.Guide.HasToken)
         {
@@ -2028,6 +2141,11 @@ public sealed partial class RolesViewModel : ViewModelBase
         }
         foreach (var role in newRoles)
         {
+            // 预取期间切了账号:剩下的是旧账号的角色,不再继续(M31)
+            if (generation != _roleSyncGeneration)
+            {
+                return;
+            }
             var cardRoleId = role.Role?.RoleId ?? 0;
             if (cardRoleId <= 0)
             {
@@ -2046,12 +2164,10 @@ public sealed partial class RolesViewModel : ViewModelBase
             }
             try
             {
-                // 拉取即回写缓存在 GuideAchievementService 内统一完成,预取只负责触发
-                var list = await AppServices.Guide.GetIntroductionListAsync(role.RoleName, cardRoleId);
-                if (list.Count > 0)
-                {
-                    await AppServices.Guide.GetAchievementByIdAsync(role.RoleName, cardRoleId, list[0].Id);
-                }
+                // 拉取即回写缓存在 GuideAchievementService 内统一完成,预取只负责触发。
+                // 用 GetAchievementAsync 而不是「列表 + list[0]」:后者会把缓存的 selected_id
+                // 改写成点赞最高的那篇,覆盖用户手动选过的攻略(M17)。
+                await AppServices.Guide.GetAchievementAsync(role.RoleName, cardRoleId);
             }
             catch (Exception)
             {

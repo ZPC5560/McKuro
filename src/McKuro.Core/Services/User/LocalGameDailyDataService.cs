@@ -84,7 +84,7 @@ public sealed class LocalGameDailyDataService
         }
         foreach (var account in accounts)
         {
-            foreach (var (player, server) in await QueryPlayersAsync(account, ct).ConfigureAwait(false))
+            foreach (var (player, server) in await TryQueryPlayersAsync(account, ct).ConfigureAwait(false))
             {
                 if (string.IsNullOrEmpty(player.RoleId))
                 {
@@ -126,14 +126,14 @@ public sealed class LocalGameDailyDataService
             _logger.LogInformation("本地启动器缓存中找不到账号 {Uid}", kuroUid);
             return null;
         }
-        foreach (var (player, server) in await QueryPlayersAsync(account, ct).ConfigureAwait(false))
+        foreach (var (player, server) in await TryQueryPlayersAsync(account, ct).ConfigureAwait(false))
         {
             // 指定了角色就只取那个角色(同账号多服务器时不会串号);没指定则取第一个成功的
             if (wantedRoleId.Length > 0 && player.RoleId != wantedRoleId)
             {
                 continue;
             }
-            var daily = await QueryRoleAsync(account, player, server, ct).ConfigureAwait(false);
+            var daily = await TryQueryRoleAsync(account, player, server, ct).ConfigureAwait(false);
             if (daily is not null)
             {
                 return daily;
@@ -295,6 +295,47 @@ public sealed class LocalGameDailyDataService
         _localPlayersFailedAt = DateTimeOffset.MinValue;
     }
 
+    /// <summary>
+    /// <see cref="QueryPlayersAsync"/> 的容错版:单个凭证的网络错误 / 超时 / WAF 返回 HTML 导致的解析异常
+    /// 只跳过该凭证(记警告),不让整个账号列表加载失败;调用方取消时照常抛出。
+    /// </summary>
+    private async Task<List<(PcPlayerItem Player, string Server)>> TryQueryPlayersAsync(
+        LauncherCacheAccount account, CancellationToken ct)
+    {
+        try
+        {
+            return await QueryPlayersAsync(account, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "本地启动器凭证 {Uid} 查询角色列表失败,已跳过", ToUid(account));
+            return [];
+        }
+    }
+
+    /// <summary><see cref="QueryRoleAsync"/> 的容错版(语义同 <see cref="TryQueryPlayersAsync"/>)。</summary>
+    private async Task<RoleDailyData?> TryQueryRoleAsync(
+        LauncherCacheAccount account, PcPlayerItem player, string server, CancellationToken ct)
+    {
+        try
+        {
+            return await QueryRoleAsync(account, player, server, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "本地启动器凭证 {Uid} 查询角色每日数据失败,已跳过", ToUid(account));
+            return null;
+        }
+    }
+
     /// <summary>用一个凭证查它的游戏角色列表(服务器名 → 角色)。</summary>
     private async Task<List<(PcPlayerItem Player, string Server)>> QueryPlayersAsync(
         LauncherCacheAccount account, CancellationToken ct)
@@ -375,9 +416,9 @@ public sealed class LocalGameDailyDataService
             // 遍历账号,跳过无效/未绑定账号(1005 等),用第一个成功且有玩家的
             foreach (var account in accounts)
             {
-                foreach (var (player, server) in await QueryPlayersAsync(account, ct).ConfigureAwait(false))
+                foreach (var (player, server) in await TryQueryPlayersAsync(account, ct).ConfigureAwait(false))
                 {
-                    var daily = await QueryRoleAsync(account, player, server, ct).ConfigureAwait(false);
+                    var daily = await TryQueryRoleAsync(account, player, server, ct).ConfigureAwait(false);
                     if (daily is not null)
                     {
                         return daily;

@@ -16,7 +16,15 @@ namespace McKuro.Controls;
 /// </summary>
 public sealed class AsyncImage : Avalonia.Controls.Image
 {
-    private static readonly HttpClient Http = CreateClient();
+    /// <summary>
+    /// 惰性创建:首次下载图片时才探测系统代理(避免静态初始化早于 App 启动、也不在类型加载时跑 scutil)。
+    /// </summary>
+    private static readonly Lazy<HttpClient> LazyHttp = new(CreateClient);
+
+    private static HttpClient Http => LazyHttp.Value;
+
+    /// <summary>单张图片下载上限(防异常/恶意响应撑爆内存;角色立绘/横幅远小于此)。</summary>
+    internal const long MaxImageBytes = 20L * 1024 * 1024;
 
     /// <summary>并发下载上限,防止角色列表/详情大量图片同时下载造成卡顿(WutheringWavesTool 用本地缓冲 + 虚拟化)。</summary>
     private static readonly SemaphoreSlim DownloadGate = new(initialCount: 6, maxCount: 6);
@@ -39,6 +47,11 @@ public sealed class AsyncImage : Avalonia.Controls.Image
             ConnectTimeout = TimeSpan.FromSeconds(10),
             PooledConnectionLifetime = TimeSpan.FromMinutes(5),
         };
+        // 系统代理:macOS 上 HttpClient.DefaultProxy 不读系统代理,与 AppServices 的共享客户端一样显式注入
+        if (McKuro.Core.Services.Infrastructure.SystemProxyDetector.Detect() is { } proxy)
+        {
+            handler.Proxy = proxy;
+        }
         var client = new HttpClient(handler)
         {
             Timeout = TimeSpan.FromSeconds(15),
@@ -118,7 +131,7 @@ public sealed class AsyncImage : Avalonia.Controls.Image
                         await SetSourceOnUiIfCurrent(url, gateCached);
                         return;
                     }
-                    bytes = await Http.GetByteArrayAsync(url).ConfigureAwait(false);
+                    bytes = await DownloadCappedAsync(url).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -147,6 +160,30 @@ public sealed class AsyncImage : Avalonia.Controls.Image
         {
             // 网络/文件失败:保持空白,不抛到 UI
         }
+    }
+
+    /// <summary>下载图片字节,超过 <see cref="MaxImageBytes"/> 时放弃(返回空数组 = 保持空白)。</summary>
+    private static async Task<byte[]> DownloadCappedAsync(string url)
+    {
+        using var resp = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+        resp.EnsureSuccessStatusCode();
+        if (resp.Content.Headers.ContentLength is long declared && declared > MaxImageBytes)
+        {
+            return [];
+        }
+        await using var src = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        using var ms = new MemoryStream();
+        var buffer = new byte[81920];
+        int n;
+        while ((n = await src.ReadAsync(buffer).ConfigureAwait(false)) > 0)
+        {
+            if (ms.Length + n > MaxImageBytes)
+            {
+                return [];
+            }
+            ms.Write(buffer, 0, n);
+        }
+        return ms.ToArray();
     }
 
     /// <summary>在 UI 线程校验 ImageUrl 仍是目标 URL 后设置 Source(线程安全 + 避免过期赋值)。</summary>

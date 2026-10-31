@@ -40,8 +40,11 @@ public sealed partial class LauncherViewModel
     [ObservableProperty]
     private string _resourceLevelHintUrl = "";
 
-    /// <summary>是否显示「画质怎么选」入口。</summary>
-    public bool HasResourceLevelHint => !string.IsNullOrWhiteSpace(ResourceLevelHintUrl);
+    /// <summary>
+    /// 是否显示「画质怎么选」入口。链接来自服务端,只认 http/https(M32):
+    /// 其它协议(file:/UNC/协议处理器)直接不给入口,而不是给一个点了会执行别的东西的按钮。
+    /// </summary>
+    public bool HasResourceLevelHint => SafeUrl.IsWebUrl(ResourceLevelHintUrl);
 
     partial void OnResourceLevelHintUrlChanged(string value) =>
         OnPropertyChanged(nameof(HasResourceLevelHint));
@@ -50,7 +53,8 @@ public sealed partial class LauncherViewModel
     [RelayCommand]
     private async Task OpenResourceLevelHintAsync()
     {
-        if (!HasResourceLevelHint)
+        // 协议校验与入口可见性同一判据(SafeUrl):只把校验过的 http/https Uri 交给系统
+        if (!SafeUrl.IsWebUrl(ResourceLevelHintUrl, out var uri) || uri is null)
         {
             return;
         }
@@ -59,7 +63,7 @@ public sealed partial class LauncherViewModel
             if (Avalonia.Application.Current?.ApplicationLifetime
                 is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime { MainWindow: { } window })
             {
-                await window.Launcher.LaunchUriAsync(new Uri(ResourceLevelHintUrl));
+                await window.Launcher.LaunchUriAsync(uri);
             }
         }
         catch (Exception)
@@ -97,6 +101,7 @@ public sealed partial class LauncherViewModel
         }
         OnPropertyChanged(nameof(ShowResourceLevelPill));
         OnPropertyChanged(nameof(ShowResourceLevelPanel));
+        OnPropertyChanged(nameof(ShowPackManager));
     }
 
     /// <summary>等级列表是否正在加载。</summary>
@@ -118,15 +123,16 @@ public sealed partial class LauncherViewModel
     /// <summary>渠道是否支持资源等级(国服官方/B站/国际服支持;WeGame 等隐藏面板而不是给必失败按钮)。</summary>
     public bool ResourceLevelSupported => ResourceLevelService.SupportsResourceLevels(ServerType);
 
-    /// <summary>当前是否可交互(未在下载/切换中)。</summary>
-    public bool ResourceLevelEnabled => !IsBusy && !IsDownloading && !IsSwitchingResourceLevel;
+    /// <summary>当前是否可交互(没有任何长操作在进行;与其它长操作共用 <see cref="IsOperationRunning"/>)。</summary>
+    public bool ResourceLevelEnabled => !IsOperationRunning;
 
     partial void OnIsSwitchingResourceLevelChanged(bool value)
     {
-        OnPropertyChanged(nameof(ResourceLevelEnabled));
         OnPropertyChanged(nameof(IsResourceLevelLocked));
         OnPropertyChanged(nameof(ShowResourceLevelPill));
         OnPropertyChanged(nameof(ShowResourceLevelPanel));
+        OnPropertyChanged(nameof(ShowPackManager));
+        NotifyOperationStateChanged();
     }
 
     /// <summary>切换期间锁定其它操作(避免同时下载导致计费/磁盘混乱)。</summary>
@@ -239,7 +245,7 @@ public sealed partial class LauncherViewModel
     [RelayCommand]
     private async Task SelectResourceLevelAsync(ResourceLevelItem? item)
     {
-        if (item is null || IsBusy || IsDownloading || IsSwitchingResourceLevel)
+        if (item is null || IsOperationRunning)
         {
             return;
         }
@@ -274,6 +280,11 @@ public sealed partial class LauncherViewModel
 
         var confirmed = await ConfirmLevelSwitchAsync(item);
         if (!confirmed)
+        {
+            return;
+        }
+        // 确认弹窗期间可能已有别的长操作开始(如自动检查/菜单修复):落地前再判一次门
+        if (IsOperationRunning)
         {
             return;
         }
@@ -357,7 +368,8 @@ public sealed partial class LauncherViewModel
     partial void OnIsDeletingResourcePackChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowPackManager));
-        OnPropertyChanged(nameof(ResourceLevelEnabled));
+        // 含 ResourceLevelEnabled 与启动按钮(删包途中不能启动游戏)
+        NotifyOperationStateChanged();
     }
 
     /// <summary>是否存在可删除的包(没有可删包时隐藏入口,不给空面板)。</summary>
@@ -459,7 +471,7 @@ public sealed partial class LauncherViewModel
     [RelayCommand]
     private async Task DeleteResourcePackAsync(ResourcePackItem? item)
     {
-        if (item is null || !item.CanDelete || IsDownloading || IsSwitchingResourceLevel || IsDeletingResourcePack)
+        if (item is null || !item.CanDelete || IsOperationRunning)
         {
             return;
         }

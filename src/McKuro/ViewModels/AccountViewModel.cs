@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Avalonia;
@@ -494,18 +493,38 @@ public sealed partial class AccountViewModel : ViewModelBase
         try
         {
             var gamer = await AppServices.Kuro.GetGamerAsync(account, (int)KuroGameType.Waves).ConfigureAwait(true);
+            // 校验期间可能已切到别的账号:失效集合按 UserId 记录仍然成立,
+            // 但状态点 / 状态文案属于"当前账号",旧账号的结论不得覆盖新账号(否则 A 的过期提示挂在 B 上)
+            var stillCurrent = AppServices.KuroAccounts.Current?.UserId == account.UserId;
             switch (AccountLoginStateLogic.ProbeKuroSession(gamer))
             {
                 case AccountLoginStateLogic.KuroSessionProbe.Valid:
                     // 服务端确认有效:清除失效标记,橙点恢复绿点
                     ClearKuroSessionExpired(account.UserId);
-                    KuroLoginState = InterfaceLoginState.Ok;
+                    if (stillCurrent)
+                    {
+                        // 状态文案若仍是本页写下的"登录已失效"提示,一并清掉(否则绿点配过期提示)
+                        if (_kuroExpiredStatusText is not null && StatusText == _kuroExpiredStatusText)
+                        {
+                            StatusText = "";
+                        }
+                        _kuroExpiredStatusText = null;
+                        // 重建列表:行内状态点(InterfaceAccountItem.State 只能初始化时赋值)与「同一账号」徽标随之更新
+                        RefreshAccounts();
+                        KuroLoginState = InterfaceLoginState.Ok;
+                    }
                     return; // 有效,不打扰
                 case AccountLoginStateLogic.KuroSessionProbe.Rejected:
                     // 服务端明确拒绝 → 橙点(异常登录);记入失效集合,页面重绘后仍是橙点。
                     _expiredKuroUserIds.Add(account.UserId);
-                    KuroLoginState = InterfaceLoginState.Error;
-                    StatusText = LanguageService.Format("Account.KuroSessionExpired", gamer?.Msg ?? $"code={gamer?.Code}");
+                    if (stillCurrent)
+                    {
+                        // 重建列表:行内状态点转橙,「同一账号」徽标转为"需要重新登录"
+                        RefreshAccounts();
+                        KuroLoginState = InterfaceLoginState.Error;
+                        StatusText = _kuroExpiredStatusText = LanguageService.Format(
+                            "Account.KuroSessionExpired", gamer?.Msg ?? $"code={gamer?.Code}");
+                    }
                     return;
                 case AccountLoginStateLogic.KuroSessionProbe.Unreachable:
                 default:
@@ -517,9 +536,16 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            StatusText = LanguageService.Format("Account.KuroCheckFailed", ex.Message);
+            // 同上:已切到别的账号时不拿旧账号的失败覆盖状态文案
+            if (AppServices.KuroAccounts.Current?.UserId == account.UserId)
+            {
+                StatusText = LanguageService.Format("Account.KuroCheckFailed", ex.Message);
+            }
         }
     }
+
+    /// <summary>最近一次写入状态栏的"库街区登录已失效"文案(校验转为有效时据此清除,不误清其他提示)。</summary>
+    private string? _kuroExpiredStatusText;
 
     /// <summary>云鸣潮:静默续期一次判定会话有效性;失效自动退出登录并展开登录表单。</summary>
     private async Task ValidateCloudSessionAsync()
@@ -675,13 +701,6 @@ public sealed partial class AccountViewModel : ViewModelBase
         return name;
     }
 
-    /// <summary>库街区列表当前选中(= 当前账号)行下标;未登录返回 -1。</summary>
-    private int KuroSelectedIndex()
-    {
-        var currentId = AppServices.KuroAccounts.Current?.UserId;
-        return string.IsNullOrEmpty(currentId) ? -1 : _accountOptionKeys.IndexOf(currentId);
-    }
-
     /// <summary>
     /// 把接口账号映射到本地启动器凭证里的游戏角色(按手机号 → 账号名 → 库街区 UID)。
     /// 本地列表尚未枚举完时返回 null,调用方退回接口自己的文案。
@@ -819,19 +838,34 @@ public sealed partial class AccountViewModel : ViewModelBase
         // 先记点选目标(退出登录用),再切换当前账号
         _kuroPickedUserId = accounts[index].UserId;
         var account = accounts[index];
+        var switched = AppServices.KuroAccounts.Current?.UserId != account.UserId;
         AppServices.KuroAccounts.Current = account;
         // 切到该账号视为"重新开始":清除上一次的失效判定,由本次会话校验重新确认
         ClearKuroSessionExpired(account.UserId);
         // 同步 token 到设置:角色数据页自动加载依赖 KujiequToken
         AppServices.Settings.Current.KujiequToken = account.Token;
+        if (switched)
+        {
+            // 角色 ID 属于上一个账号:先清掉,避免角色页 / 导航栏头像拿"新 token + 旧角色 ID"
+            // (SyncFirstRoleAsync 拉到新账号的角色后再写回)
+            AppServices.Settings.Current.RoleId = "";
+        }
         AppServices.Settings.Save();
         RefreshAccounts();
         StatusText = LanguageService.Format("Account.Switched", string.IsNullOrEmpty(account.Nickname) ? account.UserId : account.Nickname);
-        // 通知角色数据页按新账号刷新
-        WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(account.UserId));
         // 退出按钮的门禁随点选态变化
         OnPropertyChanged(nameof(CanLogoutKuro));
         OnPropertyChanged(nameof(LogoutKuroTip));
+        if (switched)
+        {
+            // 同步新账号的首个角色 ID,再通知角色数据页 / 签到页按新账号刷新(消息由 SyncFirstRoleAsync 发送)
+            _ = SyncFirstRoleAsync(account);
+        }
+        else
+        {
+            // 点的仍是当前账号:角色 ID 不变,直接通知刷新
+            WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(account.UserId));
+        }
         // 切换后立即校验新账号的会话(切到已失效的账号时,账号页马上显示橙点与提示)
         _ = ValidateSessionsAsync();
     }
@@ -904,27 +938,49 @@ public sealed partial class AccountViewModel : ViewModelBase
     [RelayCommand]
     private void Logout()
     {
-        var current = AppServices.KuroAccounts.Current;
-        if (current is null)
-        {
-            // 无账号:按钮已隐藏,理论不可达;防御一次避免空操作
-            return;
-        }
         if (!CanLogoutKuro)
         {
             StatusText = LanguageService.Format("Account.LogoutPickFirst");
             return;
         }
-        var removedName = KuroAccountItems.ElementAtOrDefault(KuroSelectedIndex())?.Display ?? "";
-        AppServices.KuroAccounts.Remove(current.UserId);
+        // 退出目标 = 用户点选的行(与 CanLogoutKuro 的门禁同一口径);未点选时(单账号)退当前账号。
+        // 此前固定删 Current:短信登录新账号后 Current 变成新号而高亮仍停在旧选择上,点退出删掉的是刚登录的号。
+        var accounts = AppServices.KuroAccounts.GetAccounts();
+        var targetUserId = _kuroPickedUserId
+            ?? AppServices.KuroAccounts.Current?.UserId
+            ?? (accounts.Count == 1 ? accounts[0].UserId : null);
+        if (string.IsNullOrEmpty(targetUserId) || accounts.All(a => a.UserId != targetUserId))
+        {
+            // 无账号:按钮已隐藏,理论不可达;防御一次避免空操作
+            return;
+        }
+        // 显示名也按退出目标取(不是当前账号那一行)
+        var removedName = KuroAccountItems.ElementAtOrDefault(IndexByKey(_accountOptionKeys, targetUserId))?.Display ?? "";
+        var wasCurrent = AppServices.KuroAccounts.Current?.UserId == targetUserId;
+        AppServices.KuroAccounts.Remove(targetUserId);
         // 账号已移除:清掉失效标记,避免残留(重新登录同一 UserId 时不应继承旧结论)
-        ClearKuroSessionExpired(current.UserId);
-        if (_kuroPickedUserId == current.UserId)
+        ClearKuroSessionExpired(targetUserId);
+        if (_kuroPickedUserId == targetUserId)
         {
             _kuroPickedUserId = null;
         }
+        // 设置里的 token / 角色 ID 跟随退出后的当前账号:否则角色页收到消息后继续用已移除账号的 token,
+        // token 也一直留在磁盘上。退的是当前账号(Remove 后已无当前账号)→ 清空;
+        // 退的是其他账号 → 当前账号不变,token 按它重设,角色 ID 保留。
+        var settings = AppServices.Settings.Current;
+        var newCurrent = AppServices.KuroAccounts.Current;
+        if (newCurrent is null || wasCurrent)
+        {
+            settings.KujiequToken = "";
+            settings.RoleId = "";
+        }
+        else
+        {
+            settings.KujiequToken = newCurrent.Token;
+        }
+        AppServices.Settings.Save();
         // 通知签到/角色等页同步登出态(与登录消息同源)
-        WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(current.UserId));
+        WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(targetUserId));
         RefreshAccounts();
         StatusText = string.IsNullOrEmpty(removedName)
             ? LanguageService.Format("Account.LoggedOut")
@@ -1002,13 +1058,10 @@ public sealed partial class AccountViewModel : ViewModelBase
                                 geetestWindow = null;
                                 SmsStatusText = LanguageService.Format("Account.GeetestFallback");
                                 _loginLog?.LogWarning("内置极验窗口不可用,自动回退系统浏览器");
-                                try
+                                // 统一走 SafeUrl(只放行 http/https;本地回环验证页 http://127.0.0.1 可通过)
+                                if (!SafeUrl.TryOpen(url))
                                 {
-                                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-                                }
-                                catch (Exception ex)
-                                {
-                                    SmsStatusText = LanguageService.Format("Account.OpenBrowserFailed", ex.Message);
+                                    SmsStatusText = LanguageService.Format("Status.OpenWebFailed");
                                 }
                             });
                             if (owner is not null)
@@ -1025,7 +1078,11 @@ public sealed partial class AccountViewModel : ViewModelBase
                     {
                         // 平台无内置 WebView 或 WebView2 运行时缺失:维持原有系统浏览器流程
                         SmsStatusText = LanguageService.Format("Account.OpeningBrowser");
-                        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                        if (!SafeUrl.TryOpen(url))
+                        {
+                            // 抛给 GeetVerifyService:它会立即结束等待(返回 null),不必空等超时
+                            throw new InvalidOperationException("无法打开系统浏览器: " + url);
+                        }
                     }
                 });
             if (string.IsNullOrEmpty(geeTestJson))
@@ -1033,7 +1090,7 @@ public sealed partial class AccountViewModel : ViewModelBase
                 SmsStatusText = geetestWindow is null
                     ? LanguageService.Format("Account.GeetestCancelled")
                     : LanguageService.Format("Account.GeetestTimeout");
-                _loginLog?.LogWarning("极验验证未完成或超时(返回 null),手机号: {Mobile}", mobile);
+                _loginLog?.LogWarning("极验验证未完成或超时(返回 null),手机号: {Mobile}", MaskMobile(mobile));
                 return;
             }
 
@@ -1119,6 +1176,8 @@ public sealed partial class AccountViewModel : ViewModelBase
                 Mobile = mobile,
                 Nickname = result.Data.UserName ?? "",
             };
+            // 登录的是另一个账号:旧账号的角色 ID 不能沿用(SyncFirstRoleAsync 失败时也不留"新 token + 旧角色")
+            var switchedAccount = AppServices.KuroAccounts.Current?.UserId != account.UserId;
             AppServices.KuroAccounts.AddOrUpdate(account);
 
             string note;
@@ -1143,6 +1202,10 @@ public sealed partial class AccountViewModel : ViewModelBase
             VerifyCodeInput = "";
             // 同步 Token 到设置:角色数据页自动加载依赖 KujiequToken
             AppServices.Settings.Current.KujiequToken = account.Token;
+            if (switchedAccount)
+            {
+                AppServices.Settings.Current.RoleId = "";
+            }
             AppServices.Settings.Save();
             // 重新登录成功 → 清除该账号的失效标记(橙点恢复为绿点)
             ClearKuroSessionExpired(account.UserId);
@@ -1169,29 +1232,46 @@ public sealed partial class AccountViewModel : ViewModelBase
         }
     }
 
-    /// <summary>同步首个角色 ID 到设置并发送角色刷新消息(原签到页登录后行为)。</summary>
+    /// <summary>
+    /// 同步首个角色 ID 到设置并发送角色刷新消息(原签到页登录后行为;切换账号时同样调用)。
+    /// <para>
+    /// 已配置的角色 ID 仍属于该账号时保留(不覆盖用户在角色页选定的同账号其他角色),否则改为首个角色。
+    /// await 返回时若当前账号已不是 <paramref name="account"/>(期间又切了号),不写设置也不发消息:
+    /// 后一次切换会自己同步并通知。
+    /// </para>
+    /// </summary>
     private async Task SyncFirstRoleAsync(KuroAccount account)
     {
         try
         {
             var roles = await AppServices.Kuro.GetGamerAsync(account, (int)KuroGameType.Waves);
+            if (AppServices.KuroAccounts.Current?.UserId != account.UserId)
+            {
+                return;
+            }
             if (roles is { Code: 200, Data: not null })
             {
-                var firstRoleId = roles.Data.FirstOrDefault(r => !string.IsNullOrEmpty(r.RoleId))?.RoleId;
-                if (!string.IsNullOrEmpty(firstRoleId))
+                var roleIds = roles.Data
+                    .Select(r => r.RoleId)
+                    .Where(id => !string.IsNullOrEmpty(id))
+                    .Select(id => id!)
+                    .ToList();
+                var firstRoleId = roleIds.FirstOrDefault();
+                var settings = AppServices.Settings.Current;
+                if (!string.IsNullOrEmpty(firstRoleId) && !roleIds.Contains(settings.RoleId, StringComparer.Ordinal))
                 {
-                    var settings = AppServices.Settings.Current;
-                    if (settings.RoleId != firstRoleId)
-                    {
-                        settings.RoleId = firstRoleId!;
-                        AppServices.Settings.Save();
-                    }
+                    settings.RoleId = firstRoleId;
+                    AppServices.Settings.Save();
                 }
             }
         }
         catch (Exception)
         {
             // 角色 ID 同步失败不阻塞登录流程(签到页刷新时会再次同步)
+            if (AppServices.KuroAccounts.Current?.UserId != account.UserId)
+            {
+                return;
+            }
         }
         WeakReferenceMessenger.Default.Send(new RolesRefreshRequestedMessage(account.UserId));
     }

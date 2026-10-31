@@ -370,4 +370,47 @@ public static class FastVerify
             ArrayPool<byte>.Shared.Return(buffer);
         }
     }
+
+    /// <summary>
+    /// <see cref="ChunkHashMatches"/> 的异步读盘版本(语义逐条相同:无哈希 / 文件短于分片末尾 / 提前读到 EOF /
+    /// 哈希不符均返回 false)。供下载器在并发下载中复核分片,避免阻塞线程池线程。
+    /// <b>两份实现必须同步修改。</b>
+    /// </summary>
+    public static async Task<bool> ChunkHashMatchesAsync(FileStream file, GameChunkInfo chunk, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(chunk.Md5) || file.Length < chunk.End + 1)
+        {
+            return false;
+        }
+
+        file.Position = chunk.Start;
+        using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+        var buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
+        try
+        {
+            var remaining = chunk.Length;
+            while (remaining > 0)
+            {
+                ct.ThrowIfCancellationRequested();
+                var read = await file.ReadAsync(buffer.AsMemory(0, (int)Math.Min(BufferSize, remaining)), ct)
+                    .ConfigureAwait(false);
+                if (read == 0)
+                {
+                    return false;
+                }
+
+                md5.AppendData(buffer, 0, read);
+                remaining -= read;
+            }
+
+            return string.Equals(
+                Convert.ToHexStringLower(md5.GetHashAndReset()),
+                chunk.Md5,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
 }

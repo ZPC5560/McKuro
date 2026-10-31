@@ -103,10 +103,27 @@ public sealed partial class SignViewModel : ViewModelBase
         var accounts = AppServices.KuroAccounts.GetAccounts();
         IsLoggedIn = accounts.Count > 0;
         AccountText = BuildAccountText(accounts);
+        OnPropertyChanged(nameof(AccountTooltipText));
         if (accounts.Count > 0)
         {
-            // 异步校验各账号 token 并拉取全部角色(失效账号自动移除并提示)
+            // 异步校验各账号 token 并拉取全部角色(失效账号只提示,不自动移除)
             _ = RefreshAllAccountsAsync(accounts);
+        }
+        else if (_refreshingRoles)
+        {
+            // 刷新进行中退出了最后一个账号:结束后重跑一轮(届时走下面的清空分支)
+            _rerunRefreshPending = true;
+        }
+        else
+        {
+            // 已无账号:清掉上一个账号残留的角色与签到信息(否则页面继续显示已移除账号的角色)
+            _refreshGeneration++;
+            Roles.Clear();
+            SignGoods.Clear();
+            SignHistory.Clear();
+            TodaySignText = "";
+            SignCountText = "";
+            StatusText = "";
         }
     }
 
@@ -178,16 +195,30 @@ public sealed partial class SignViewModel : ViewModelBase
             : (string.IsNullOrEmpty(account.Nickname) ? $"ID {account.UserId}" : account.Nickname);
     }
 
-    /// <summary>遍历全部已保存账号:拉取角色、失效账号自动移除、汇总签到状态。</summary>
+    /// <summary>
+    /// 遍历全部已保存账号:拉取角色、汇总签到状态。
+    /// <para>
+    /// 服务端拒绝(非 200)的账号<b>不再自动移除</b>:限流/服务器错误同样返回非 200,
+    /// 自动删除会让用户被迫重走短信 + 极验。这里只提示"登录已失效",由账号页处理(与账号页同一判定口径
+    /// <see cref="AccountLoginStateLogic.ProbeKuroSession"/>);只有未拿到响应(null/异常)才算网络异常。
+    /// </para>
+    /// </summary>
     private async Task RefreshAllAccountsAsync(IReadOnlyList<KuroAccount> accounts)
     {
-        // 重入保护:消息与按钮可能同时触发,两次并发刷新会交错 Clear/Add 产生重复条目
+        // 重入保护:消息与按钮可能同时触发,两次并发刷新会交错 Clear/Add 产生重复条目。
+        // 刷新期间的账号变更(切换/退出/登录)不能丢:记下待重跑,在 finally 中按最新账号列表再跑一轮。
         if (_refreshingRoles)
         {
+            _rerunRefreshPending = true;
             return;
         }
         _refreshingRoles = true;
+        _rerunRefreshPending = false;
         IsBusy = true;
+        // 本轮代次:旧一轮遗留的签到状态查询(后台)据此丢弃,不覆盖新一轮的奖励格子/历史
+        var generation = ++_refreshGeneration;
+        // 取快照:传入的是设置里的实时列表,遍历中途账号页切换/退出会改动它(枚举器抛 InvalidOperationException)
+        accounts = accounts.ToList();
         // 整个方法体(含 try 之前的准备步骤)都必须包在 try 内:此前 _refreshingRoles/IsBusy
         // 在 try 之外置位、只在 finally 复位,准备阶段一旦抛异常(枚举本地角色/取账号/清列表)
         // 就会永久卡住 —— 之后每次刷新都在上面那个重入判断处直接 return,角色列表再也不刷新,
@@ -201,8 +232,15 @@ public sealed partial class SignViewModel : ViewModelBase
             AccountText = BuildAccountText(refreshedAccounts);
             OnPropertyChanged(nameof(AccountTooltipText));
             Roles.Clear();
-            var removed = new List<string>();
+            var issues = new List<string>();
             var seenRoleIds = new HashSet<string>();
+            // 签到奖励格子与历史只为一个账号填一次:当前账号在列表中则取它,否则取第一个账号
+            var currentUserId = AppServices.KuroAccounts.Current?.UserId;
+            var summaryUserId = accounts.Any(a => a.UserId == currentUserId)
+                ? currentUserId
+                : accounts.FirstOrDefault()?.UserId;
+            // 当前账号自己的角色(角色 ID 同步只看它,不能拿别的账号的角色充数)
+            var currentRoleIds = new List<string>();
             foreach (var account in accounts)
             {
                 // 单账号标签:不显示(底部行已有账号语义);多账号:用游戏角色身份/账号名区分同名角色
@@ -210,71 +248,95 @@ public sealed partial class SignViewModel : ViewModelBase
                 try
                 {
                     var resp = await AppServices.Kuro.GetGamerAsync(account, (int)KuroGameType.Waves);
-                    if (resp is { Code: 200 } && resp.Data is not null)
+                    switch (AccountLoginStateLogic.ProbeKuroSession(resp))
                     {
-                        foreach (var role in resp.Data)
+                        case AccountLoginStateLogic.KuroSessionProbe.Valid:
                         {
-                            // 去重兜底:同 RoleId 只保留一份(接口重复返回或并发残留不再显示两行)
-                            if (!seenRoleIds.Add(role.RoleId ?? ""))
+                            // 本账号自己的角色:签到状态只拿该账号的 token 查这些角色
+                            var ownItems = new List<RoleSignItem>();
+                            var roleList = resp!.Data!;
+                            foreach (var role in roleList)
                             {
-                                continue;
+                                // 去重兜底:同 RoleId 只保留一份(接口重复返回或并发残留不再显示两行)
+                                if (!seenRoleIds.Add(role.RoleId ?? ""))
+                                {
+                                    continue;
+                                }
+                                var item = new RoleSignItem
+                                {
+                                    GameName = LanguageService.Format("Nav.Launcher"),
+                                    RoleName = role.RoleName ?? LanguageService.Format("Sign.UnknownRole"),
+                                    ServerName = role.ServerName ?? "",
+                                    Level = role.GameLevel,
+                                    Source = role,
+                                    AccountLabel = label,
+                                };
+                                Roles.Add(item);
+                                ownItems.Add(item);
+                                ResolveRoleHeadAsync(item, role);
                             }
-                            var item = new RoleSignItem
+                            if (account.UserId == currentUserId)
                             {
-                                GameName = LanguageService.Format("Nav.Launcher"),
-                                RoleName = role.RoleName ?? LanguageService.Format("Sign.UnknownRole"),
-                                ServerName = role.ServerName ?? "",
-                                Level = role.GameLevel,
-                                Source = role,
-                                AccountLabel = label,
-                            };
-                            Roles.Add(item);
-                            ResolveRoleHeadAsync(item, role);
+                                currentRoleIds.AddRange(roleList
+                                    .Select(r => r.RoleId)
+                                    .Where(id => !string.IsNullOrEmpty(id))
+                                    .Select(id => id!));
+                            }
+                            // 异步查询本账号各角色当日签到状态(已签到→更新状态;失败保持"待签到")
+                            _ = RefreshSignStatusAsync(account, ownItems, account.UserId == summaryUserId, generation);
+                            break;
                         }
-                        // 异步查询各角色当日签到状态(已签到→更新状态;失败保持"待签到")
-                        _ = RefreshSignStatusAsync(account);
-                    }
-                    else if (resp is not null)
-                    {
-                        // token 失效(如账号在其他设备登录):自动移除该账号
-                        AppServices.KuroAccounts.Remove(account.UserId);
-                        removed.Add($"{DescribeAccount(account)}: {resp.Msg ?? $"code={resp.Code}"}");
-                    }
-                    else
-                    {
-                        removed.Add(LanguageService.Format("Sign.NetError", DescribeAccount(account)));
+                        case AccountLoginStateLogic.KuroSessionProbe.Rejected:
+                            // 服务端明确拒绝(token 失效 / 限流 / 服务器错误都可能):只提示,不删除账号
+                            issues.Add(LanguageService.Format("Sign.SessionExpired",
+                                DescribeAccount(account), resp!.Msg ?? $"code={resp!.Code}"));
+                            break;
+                        default:
+                            // 未拿到响应:网络异常,无法判定
+                            issues.Add(LanguageService.Format("Sign.NetError", DescribeAccount(account)));
+                            break;
                     }
                 }
                 catch (Exception)
                 {
-                    removed.Add(LanguageService.Format("Sign.NetError", DescribeAccount(account)));
+                    issues.Add(LanguageService.Format("Sign.NetError", DescribeAccount(account)));
                 }
             }
 
-            // 同步角色 ID 到设置(取当前账号的第一个有效角色;角色数据页自动加载依赖)
-            var current = AppServices.KuroAccounts.Current;
-            if (current is not null)
+            // 同步角色 ID 到设置(角色数据页自动加载依赖):只在已配置的角色不属于当前账号时,
+            // 改为当前账号的第一个有效角色(不覆盖用户在角色页选定的同账号其他角色)
+            var firstRoleId = currentRoleIds.FirstOrDefault();
+            if (!string.IsNullOrEmpty(firstRoleId)
+                && !currentRoleIds.Contains(AppServices.Settings.Current.RoleId, StringComparer.Ordinal))
             {
-                var firstRoleId = Roles.FirstOrDefault(r => r.Source.RoleId is not null)?.Source.RoleId;
-                if (!string.IsNullOrEmpty(firstRoleId) && AppServices.Settings.Current.RoleId != firstRoleId)
-                {
-                    AppServices.Settings.Current.RoleId = firstRoleId;
-                    AppServices.Settings.Save();
-                }
+                AppServices.Settings.Current.RoleId = firstRoleId;
+                AppServices.Settings.Save();
             }
 
-            StatusText = removed.Count > 0
-                ? LanguageService.Format("Sign.RolesSummaryRemoved", Roles.Count, string.Join("; ", removed))
+            StatusText = issues.Count > 0
+                ? LanguageService.Format("Sign.RolesSummaryIssues", Roles.Count, string.Join("; ", issues))
                 : LanguageService.Format("Sign.RolesSummary", Roles.Count);
         }
         finally
         {
             _refreshingRoles = false;
             IsBusy = false;
+            // 刷新期间收到账号变更:按最新账号列表重跑(RefreshAccount 会同步标题文案并决定刷新或清空)
+            if (_rerunRefreshPending)
+            {
+                _rerunRefreshPending = false;
+                RefreshAccount();
+            }
         }
     }
 
     private bool _refreshingRoles;
+
+    /// <summary>刷新进行中又收到账号变更:结束后重跑一轮(替代原先直接丢弃)。</summary>
+    private bool _rerunRefreshPending;
+
+    /// <summary>全账号刷新代次(每轮 +1;旧一轮的后台签到查询据此丢弃结果)。</summary>
+    private int _refreshGeneration;
 
     /// <summary>
     /// 解析角色头像(对齐主页头像链路):磁盘缓存命中直接用本地路径;
@@ -323,10 +385,17 @@ public sealed partial class SignViewModel : ViewModelBase
         await RefreshAllAccountsAsync(accounts);
     }
 
-    /// <summary>并行查询各角色当日签到状态,更新列表中的 SignStatus(已签到/待签到)。</summary>
-    private async Task RefreshSignStatusAsync(KuroAccount account)
+    /// <summary>
+    /// 并行查询<b>该账号自己</b>各角色的当日签到状态,更新列表中的 SignStatus(已签到/待签到)。
+    /// <para>
+    /// 只查 <paramref name="items"/>(该账号的角色):此前对已累积的全部角色发请求,
+    /// N 个账号约 N²/2 次调用且用错 token,结果还会互相覆盖。
+    /// <paramref name="fillSummary"/> 为 true 时(每轮只有一个账号)才填充签到奖励格子与历史;
+    /// <paramref name="generation"/> 过期(已开始新一轮刷新)时丢弃结果。
+    /// </para>
+    /// </summary>
+    private async Task RefreshSignStatusAsync(KuroAccount account, List<RoleSignItem> items, bool fillSummary, int generation)
     {
-        var items = Roles.ToList();
         if (items.Count == 0)
         {
             return;
@@ -339,16 +408,22 @@ public sealed partial class SignViewModel : ViewModelBase
                 {
                     var info = await AppServices.Kuro.GetSignInDataAsync(account, item.Source);
                     bool signed = info is { Code: 200, Data.IsSigIn: true };
-                    bool isFirst = ReferenceEquals(item, items[0]);
+                    // 主角色 = 汇总账号的第一个角色(每轮只填一次奖励格子与历史)
+                    bool isFirst = fillSummary && ReferenceEquals(item, items[0]);
                     // 回到 UI 线程更新(角色可能已被重新加载,按 Source 定位)
                     await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
                     {
+                        if (generation != _refreshGeneration)
+                        {
+                            // 已开始新一轮刷新:本次结果属于旧列表,丢弃
+                            return;
+                        }
                         var target = Roles.FirstOrDefault(r => ReferenceEquals(r.Source, item.Source));
                         if (target is not null)
                         {
                             target.SignStatus = signed ? LanguageService.Format("Sign.Signed") : LanguageService.Format("Sign.Pending");
                         }
-                        // 主角色(列表第一项)同时填充签到奖励格子与今日状态
+                        // 主角色同时填充签到奖励格子与今日状态
                         if (isFirst && info?.Data is { } data)
                         {
                             SignGoods.Clear();
@@ -378,6 +453,10 @@ public sealed partial class SignViewModel : ViewModelBase
                                 : null;
                             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
                             {
+                                if (generation != _refreshGeneration)
+                                {
+                                    return;
+                                }
                                 SignHistory.Clear();
                                 if (aggregated is not null)
                                 {

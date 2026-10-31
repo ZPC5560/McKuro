@@ -84,6 +84,36 @@ public class WallpaperEngineScannerTests : IDisposable
     }
 
     [Fact]
+    public void Scan_Preview_Field_Escaping_Directory_Is_Ignored()
+    {
+        // 安全回归:preview 曾无目录包含检查(file 有)。指向包外的 preview 必须被忽略,
+        // 回退到包内封面;UNC 形态还会让 File.Exists 发起 SMB 连接泄露 NTLM 哈希。
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(Path.Combine(_root, "outside.jpg"), "x");
+        MakeWallpaper("550", """{"type":"video","file":"f.mp4","preview":"../outside.jpg"}""",
+            "f.mp4", "preview.png");
+
+        var entries = WallpaperEngineScanner.Scan(_root);
+
+        var entry = Assert.Single(entries);
+        Assert.EndsWith("preview.png", entry.CoverPath);
+    }
+
+    [Fact]
+    public void ResolveInsidePackage_Rejects_Rooted_Unc_And_Traversal()
+    {
+        var dir = Path.Combine(_root, "560");
+        Assert.Null(WallpaperEngineScanner.ResolveInsidePackage(dir, @"\\attacker\share\x.jpg"));
+        Assert.Null(WallpaperEngineScanner.ResolveInsidePackage(dir, "//attacker/share/x.jpg"));
+        Assert.Null(WallpaperEngineScanner.ResolveInsidePackage(dir, Path.Combine(Path.GetTempPath(), "x.jpg")));
+        Assert.Null(WallpaperEngineScanner.ResolveInsidePackage(dir, "../x.jpg"));
+        Assert.Null(WallpaperEngineScanner.ResolveInsidePackage(dir, "C:x.jpg"));
+        Assert.Null(WallpaperEngineScanner.ResolveInsidePackage(dir, "  "));
+        Assert.Equal(Path.GetFullPath(Path.Combine(dir, "sub", "p.jpg")),
+            WallpaperEngineScanner.ResolveInsidePackage(dir, "sub/p.jpg"));
+    }
+
+    [Fact]
     public void Scan_Single_Wallpaper_Dir_As_Root_Works()
     {
         // 直接选中单个壁纸包目录(而非工坊父目录)

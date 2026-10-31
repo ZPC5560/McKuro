@@ -263,6 +263,7 @@ public sealed partial class ActivityViewModel : ViewModelBase
             var hots = await AppServices.Wiki.GetEventDataAsync(WikiType.Waves).WaitAsync(TimeSpan.FromSeconds(15));
             if (hots is not null)
             {
+                var candidates = new List<(string Title, DateTime Start, DateTime End, string? ImageUrl)>();
                 foreach (var hot in hots.Where(h => h.CountDown?.DateRange is { Count: 2 }))
                 {
                     if (!TryParseRange(hot.CountDown!.DateRange!, out var start, out var end))
@@ -274,12 +275,19 @@ public sealed partial class ActivityViewModel : ViewModelBase
                     {
                         continue;
                     }
-                    // 从活动图取主色(甘特条颜色,失败回退主题色)
-                    var brush = await LoadActivityColorAsync(hot.ContentUrl);
+                    candidates.Add((hot.Title ?? LanguageService.Format("Activity.FallbackTitle"), start, end, hot.ContentUrl));
+                }
+                // 从活动图取主色(甘特条颜色,失败回退主题色):各图并行下载 + 取色(每张图单独超时),
+                // 此前在 foreach 里逐张串行 await,任一张图慢就拖住整页
+                var colors = await Task.WhenAll(candidates.Select(c => LoadActivityColorAsync(c.ImageUrl)));
+                // 回到 UI 线程后再创建 Brush(Avalonia Brush 线程亲和)
+                for (var i = 0; i < candidates.Count; i++)
+                {
+                    var (title, start, end, imageUrl) = candidates[i];
                     // 当前进度:now 在 [Start,End] 区间的位置(未开始=0,已结束=100)
                     double progress = now <= start ? 0 : now >= end ? 100
                         : (now - start).TotalSeconds / (end - start).TotalSeconds * 100;
-                    rawHots.Add((hot.Title ?? LanguageService.Format("Activity.FallbackTitle"), start, end, brush, end >= now, progress, hot.ContentUrl));
+                    rawHots.Add((title, start, end, new Avalonia.Media.SolidColorBrush(colors[i]), end >= now, progress, imageUrl));
                 }
             }
 
@@ -433,40 +441,51 @@ public sealed partial class ActivityViewModel : ViewModelBase
         }
     }
 
-    /// <summary>下载活动图并提取主色(甘特条颜色);失败回退主题强调色(#f8f05c)。
+    /// <summary>单张活动图下载 + 取色的超时(超时用回退色,不拖住整页加载)。</summary>
+    private static readonly TimeSpan ActivityColorTimeout = TimeSpan.FromSeconds(8);
+
+    /// <summary>取色解码宽度(px):ColorThief 本身只用 ~64px 的降采样,无需解码全尺寸大图。</summary>
+    private const int ActivityColorDecodeWidth = 64;
+
+    /// <summary>下载活动图并提取主色(甘特条颜色);失败/超时回退主题强调色(#f8f05c)。
     /// 取出现次数前 5 候选色中「最鲜明」的颜色(高饱和主题色优先,避免大面积暗灰背景色)。
-    /// 注意:Avalonia Brush 必须在 UI 线程创建,否则渲染时跨线程访问崩溃。</summary>
-    private async Task<Avalonia.Media.IBrush> LoadActivityColorAsync(string? url)
+    /// 只返回 <see cref="Avalonia.Media.Color"/>(值类型,线程无关);Brush 由调用方在 UI 线程创建。
+    /// 解码与取色在线程池执行:按 64px 宽解码(不解码全尺寸)且用完立即释放原生位图。</summary>
+    private static async Task<Avalonia.Media.Color> LoadActivityColorAsync(string? url)
     {
         var fallbackColor = Avalonia.Media.Color.Parse("#f8f05c");
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return fallbackColor;
+        }
         try
         {
-            if (!string.IsNullOrWhiteSpace(url))
+            using var cts = new CancellationTokenSource(ActivityColorTimeout);
+            using var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, url);
+            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
+            using var resp = await AppServices.Http.SendAsync(req, cts.Token).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
             {
-                using var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, url);
-                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
-                var bytes = await AppServices.Http.SendAsync(req).ConfigureAwait(false) is { IsSuccessStatusCode: true } resp
-                    ? await resp.Content.ReadAsByteArrayAsync().ConfigureAwait(false)
-                    : [];
-                if (bytes.Length > 0)
-                {
-                    using var ms = new System.IO.MemoryStream(bytes, writable: false);
-                    var bmp = new Avalonia.Media.Imaging.Bitmap(ms);
-                    var vivid = McKuro.Services.ColorThiefHelper.GetVividDominantColor(bmp);
-                    if (vivid is { } color)
-                    {
-                        fallbackColor = color;
-                    }
-                }
+                return fallbackColor;
             }
+            var bytes = await resp.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false);
+            if (bytes.Length == 0)
+            {
+                return fallbackColor;
+            }
+            var vivid = await Task.Run(() =>
+            {
+                using var ms = new System.IO.MemoryStream(bytes, writable: false);
+                using var bmp = Avalonia.Media.Imaging.Bitmap.DecodeToWidth(ms, ActivityColorDecodeWidth);
+                return McKuro.Services.ColorThiefHelper.GetVividDominantColor(bmp);
+            }, cts.Token).ConfigureAwait(false);
+            return vivid ?? fallbackColor;
         }
         catch (Exception)
         {
-            // 下载/解码失败:用回退色
+            // 下载/解码失败或超时:用回退色
+            return fallbackColor;
         }
-        // 回到 UI 线程创建 Brush(Avalonia Brush 线程亲和)
-        return await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
-            () => (Avalonia.Media.IBrush)new Avalonia.Media.SolidColorBrush(fallbackColor));
     }
 
     private static bool TryParseRange(IReadOnlyList<string> range, out DateTime start, out DateTime end)

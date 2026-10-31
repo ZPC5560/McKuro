@@ -11,7 +11,7 @@ namespace McKuro.Tests;
 
 /// <summary>
 /// 「边下载边更新」流式安装端到端测试(3.6 → 3.6.1):
-/// 全量清单路径直接把下载文件落位到游戏根目录,替换前备份旧文件到 .McKuro_backup,
+/// 全量清单路径直接把下载文件落位到游戏根目录,替换前把旧文件移动到 .McKuro_backup(成功后删除),
 /// 不再经过 install_tmp 暂存目录(该目录已挪到游戏目录下的 DiffData/install_tmp)。
 /// 用带闸门的 HTTP handler 模拟 CDN,证明「下载尚未全部完成时,已下载文件已就位」。
 /// </summary>
@@ -119,10 +119,10 @@ public sealed class StreamingInstallTests : IDisposable
         // patched.pak 已替换为新内容
         Assert.Equal("patched-3.6.1", File.ReadAllText(patchedFull));
 
-        // 旧文件已备份到 .McKuro_backup
-        var backup = Path.Combine(_gameRoot, ".McKuro_backup", patchedPath.Replace('/', Path.DirectorySeparatorChar));
-        Assert.True(File.Exists(backup), "替换前旧文件应备份到 .McKuro_backup");
-        Assert.Equal("patched-3.6.0", File.ReadAllText(backup));
+        // 替换前旧文件被同卷移动到 .McKuro_backup;最终校验通过后整个备份目录被删除(M3:没有任何恢复逻辑用它)
+        Assert.False(
+            Directory.Exists(Path.Combine(_gameRoot, UpdateInstaller.BackupDirName)),
+            "最终校验通过后应删除替换前备份目录");
 
         // 流式安装直接落位,不经过任何暂存目录:数据目录不出现 install_tmp,
         // 游戏目录下也不应留下 DiffData(预载/补丁暂存都归它管)

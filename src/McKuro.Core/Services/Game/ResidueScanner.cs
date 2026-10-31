@@ -16,8 +16,8 @@ namespace McKuro.Core.Services.Game;
 public enum ResidueKind
 {
     /// <summary>
-    /// 替换前备份(<c>.McKuro_backup/</c>)。流式安装/修复替换目标文件前先复制一份,
-    /// <b>安装成功后没有任何代码清它</b> → 每次更新都留下与被替换文件等量的一份。
+    /// 替换前备份(<c>.McKuro_backup/</c>)。流式安装/修复替换目标文件前把旧文件移进来;
+    /// 最终校验通过后由 GameUpdater 删除,只有中断/校验失败/删除失败时才会残留。
     /// </summary>
     Backup,
 
@@ -28,7 +28,8 @@ public enum ResidueKind
     PartialDownload,
 
     /// <summary>
-    /// 补丁包临时下载目录(<c>DiffData/install_tmp/*</c>)。补丁装完即删,中断则残留。
+    /// 补丁包临时下载目录(<c>DiffData/install_tmp/*</c>)。补丁装完即删;按补丁固定命名(<c>p-&lt;key&gt;</c>),
+    /// 中断后保留以便续传 —— 当前本地版本对应的那个由调用方放进 inUsePaths,其它补丁/旧版 GUID 目录才是残留。
     /// </summary>
     PatchTemp,
 
@@ -149,14 +150,18 @@ public static class ResidueScanner
             tracker);
 
         // ---------- ② 补丁包临时目录 ----------
-        AddDirectory(
-            report,
-            root,
-            Path.Combine(root, GamePathResolver.DiffDataDirName, GamePathResolver.InstallTempDirName),
-            ResidueKind.PatchTemp,
-            inUsePaths,
-            ct,
-            tracker);
+        // 官方补丁临时目录按补丁固定命名(install_tmp/p-<key>),下载中断后保留以便续传;
+        // 当前补丁那个子目录会出现在 inUsePaths 里。此时不能把整个 install_tmp 当一条残留(会连它一起删),
+        // 改为逐个子目录统计:当前补丁的跳过,其它补丁/旧版 GUID 目录照常报告。
+        var installTemp = Path.Combine(root, GamePathResolver.DiffDataDirName, GamePathResolver.InstallTempDirName);
+        if (ContainsInUsePath(installTemp, inUsePaths))
+        {
+            AddChildDirectories(report, root, installTemp, ResidueKind.PatchTemp, inUsePaths, ct, tracker);
+        }
+        else
+        {
+            AddDirectory(report, root, installTemp, ResidueKind.PatchTemp, inUsePaths, ct, tracker);
+        }
 
         // ---------- ③ 分组差分临时目录 ----------
         AddDirectory(
@@ -342,6 +347,55 @@ public static class ResidueScanner
         {
             // 枚举中途失败:保留已收集的部分结果
         }
+    }
+
+    /// <summary>逐个子目录统计(每个子目录各自做"在用"判定与体积门槛)。</summary>
+    private static void AddChildDirectories(
+        ResidueReport report,
+        string root,
+        string dir,
+        ResidueKind kind,
+        IReadOnlySet<string>? inUsePaths,
+        CancellationToken ct,
+        ProgressTracker tracker)
+    {
+        List<string> children;
+        try
+        {
+            children = Directory.Exists(dir) ? Directory.EnumerateDirectories(dir).ToList() : [];
+        }
+        catch (Exception)
+        {
+            return;
+        }
+        foreach (var child in children)
+        {
+            ct.ThrowIfCancellationRequested();
+            AddDirectory(report, root, child, kind, inUsePaths, ct, tracker);
+        }
+    }
+
+    /// <summary>某个"仍在使用"的路径是否位于 <paramref name="dir"/> 之内(严格的后代,不含它本身)。</summary>
+    private static bool ContainsInUsePath(string dir, IReadOnlySet<string>? inUsePaths)
+    {
+        if (inUsePaths is null || inUsePaths.Count == 0)
+        {
+            return false;
+        }
+        var prefix = Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        foreach (var used in inUsePaths)
+        {
+            if (string.IsNullOrWhiteSpace(used))
+            {
+                continue;
+            }
+            if (Path.GetFullPath(used).StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>路径是否落在"仍在使用"的目录内。</summary>

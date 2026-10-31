@@ -90,9 +90,16 @@ public sealed partial class LauncherViewModel
             workingDir: Path.GetDirectoryName(exe),
             description: name);
 
-        StatusText = created is not null
-            ? LanguageService.Format("Launcher.ShortcutCreated")
-            : LanguageService.Format("Launcher.ShortcutFailed");
+        // 成功 = 一次性结论(用户已经拿到快捷方式,不需要再做什么)→ 自动消失;
+        // 失败要常驻,让用户看见"为什么没建成"。
+        if (created is not null)
+        {
+            SetTransientStatus(LanguageService.Format("Launcher.ShortcutCreated"));
+        }
+        else
+        {
+            StatusText = LanguageService.Format("Launcher.ShortcutFailed");
+        }
     }
 
     /// <summary>游戏是否正在运行(决定「强制退出游戏」是否可用)。</summary>
@@ -116,11 +123,58 @@ public sealed partial class LauncherViewModel
             : LanguageService.Format("Launcher.GameForceExitFailed");
     }
 
-    /// <summary>结束所有命中的游戏进程(客户端 + 根 exe)。</summary>
+    /// <summary>
+    /// 强制退出允许匹配的进程名:只认游戏自己的 exe(根 exe + 客户端 exe,外加用户在设置里
+    /// 指定的、位于游戏目录内的启动 exe)。
+    /// <para>
+    /// <b>不复用 <see cref="BuildGameProcessNames"/>(L27)</b>:进程监控为了识别「游戏中」会把自定义启动程序
+    /// 也加进名单,而它可能是 python / powershell / cmd 这类通用宿主 —— 按名字 Kill 整棵进程树会误杀
+    /// 系统里所有同名的无关进程。Core 的 LaunchGame 目前不回传 PID,没法只杀"本次启动的那棵树",
+    /// 所以退而求其次:只按已知的游戏 exe 名匹配。
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<string> BuildKillableProcessNames()
+    {
+        var names = new List<string>
+        {
+            Path.GetFileNameWithoutExtension(GamePathResolver.ExeRootName),
+            Path.GetFileNameWithoutExtension(GamePathResolver.ExeClientRelative),
+        };
+
+        // 自定义启动程序不在此列;普通启动的 exe 只有位于游戏目录内才视为游戏进程
+        if (!AppServices.Settings.Current.CustomLauncherEnabled
+            && AppServices.GameUpdater.ResolveLaunchExePath() is { Length: > 0 } launched
+            && AppServices.Paths.GameRootDir is { Length: > 0 } root
+            && IsPathUnderRoot(root, launched))
+        {
+            var name = Path.GetFileNameWithoutExtension(launched);
+            if (!names.Contains(name, StringComparer.OrdinalIgnoreCase))
+            {
+                names.Add(name);
+            }
+        }
+        return names;
+    }
+
+    /// <summary>路径是否位于 root 之内(路径格式非法时按"不在"处理,不抛异常)。</summary>
+    private static bool IsPathUnderRoot(string root, string path)
+    {
+        try
+        {
+            return McKuro.Core.Infrastructure.ArchivePathGuard.IsUnderRoot(
+                Path.GetFullPath(root), Path.GetFullPath(path));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>结束命中的游戏进程(只按游戏自身 exe 名匹配,见 <see cref="BuildKillableProcessNames"/>)。</summary>
     private int KillGameProcesses()
     {
         int killed = 0;
-        foreach (var name in BuildGameProcessNames())
+        foreach (var name in BuildKillableProcessNames())
         {
             Process[] procs;
             try

@@ -37,8 +37,14 @@ public interface IGameUpdater
     /// </summary>
     string? ResolveLaunchExePath();
 
-    /// <summary>本地 DLSS/XeSS 图形组件版本(对齐 Haiyu GetLocalDLSSAsync)。</summary>
+    /// <summary>
+    /// 本地 DLSS/XeSS 图形组件版本(对齐 Haiyu GetLocalDLSSAsync)。
+    /// 同步读盘(已改为探测已知位置 + 剪枝遍历 + 缓存),UI 线程请用 <see cref="GetLocalGraphicsComponentVersionsAsync"/>。
+    /// </summary>
     IReadOnlyList<LocalFileVersion> GetLocalGraphicsComponentVersions();
+
+    /// <summary>在线程池上执行 <see cref="GetLocalGraphicsComponentVersions"/>(供 UI 线程调用,不阻塞界面)。</summary>
+    Task<IReadOnlyList<LocalFileVersion>> GetLocalGraphicsComponentVersionsAsync(CancellationToken ct = default);
 
     /// <summary>
     /// 读取本地已安装的游戏主版本(未设置目录/无记录时返回 null)。

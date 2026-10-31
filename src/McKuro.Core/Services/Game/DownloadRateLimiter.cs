@@ -91,39 +91,74 @@ public sealed class DownloadRateLimiter
 /// 暂停门(对齐 Haiyu DownloadState.IsPaused + PauseDownloadAsync/ResumeDownloadAsync)。
 /// Pause() 后所有等待方阻塞,Resume() 放行。
 /// </summary>
+/// <remarks>
+/// 状态(是否暂停 + 当前门)由一把锁保护,读写总是成对一致。
+/// 旧实现先置 <c>_paused</c> 再换新门,读者若在两步之间读到初始那个<b>永远不会完成</b>的门就会永久挂起;
+/// Pause/Resume 交错时也可能留下"未暂停却挂着未完成门"的状态。现在初始门是已完成的,
+/// 换门与改标志在同一把锁内完成。
+/// </remarks>
 public sealed class PauseTokenSource
 {
-    private volatile TaskCompletionSource<bool> _gate =
-        new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private int _paused;
+    private readonly object _lock = new();
+    private TaskCompletionSource<bool> _gate = CreateCompletedGate();
+    private volatile bool _paused;
+
+    private static TaskCompletionSource<bool> CreateCompletedGate()
+    {
+        var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        gate.SetResult(true);
+        return gate;
+    }
 
     /// <summary>是否处于暂停状态。</summary>
-    public bool IsPaused => Volatile.Read(ref _paused) == 1;
+    public bool IsPaused => _paused;
 
     /// <summary>暂停:关闭门(幂等)。</summary>
     public void Pause()
     {
-        if (Interlocked.Exchange(ref _paused, 1) == 0)
+        lock (_lock)
         {
+            if (_paused)
+            {
+                return;
+            }
             _gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _paused = true;
         }
     }
 
     /// <summary>恢复:打开门(幂等)。</summary>
     public void Resume()
     {
-        if (Interlocked.Exchange(ref _paused, 0) == 1)
+        TaskCompletionSource<bool> gate;
+        lock (_lock)
         {
-            _gate.TrySetResult(true);
+            if (!_paused)
+            {
+                return;
+            }
+            _paused = false;
+            gate = _gate;
         }
+        // 门是 RunContinuationsAsynchronously:放行不会在锁内/本线程同步执行等待方的续体。
+        gate.TrySetResult(true);
     }
 
     /// <summary>暂停时等待放行;未暂停立即返回。可被取消。</summary>
-    public async Task WaitAsync(CancellationToken ct = default)
+    public Task WaitAsync(CancellationToken ct = default)
     {
-        if (IsPaused)
+        // 快速路径:下载热循环每次读取都会调用,未暂停时不取锁。
+        // 即使这里读到旧值,也只是"晚一次读取才停下"或"多等一次已完成的门",不会挂起。
+        if (!_paused)
         {
-            await _gate.Task.WaitAsync(ct).ConfigureAwait(false);
+            return Task.CompletedTask;
         }
+        Task gateTask;
+        lock (_lock)
+        {
+            // 锁内读到的门与标志一致:未暂停时门必定已完成
+            gateTask = _gate.Task;
+        }
+        return gateTask.WaitAsync(ct);
     }
 }

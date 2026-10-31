@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
@@ -20,20 +21,6 @@ namespace McKuro.Services;
 public sealed partial class GeetVerifyService
 {
     private const int TimeoutSeconds = 120;
-
-    /// <summary>极验加载性能排查用毫秒级侧日志(临时)。</summary>
-    internal static readonly System.Diagnostics.Stopwatch TimingSw = System.Diagnostics.Stopwatch.StartNew();
-
-    internal static void TimingLog(string s)
-    {
-        try
-        {
-            File.AppendAllText(@"E:\donet\geet_timing.log", $"{TimingSw.ElapsedMilliseconds}ms {s}\n");
-        }
-        catch
-        {
-        }
-    }
 
     private readonly ILogger<GeetVerifyService> _logger;
 
@@ -111,13 +98,18 @@ public sealed partial class GeetVerifyService
 
         html ??= File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Assets", "geetest.html"));
 
-        // 回调地址 = 同一监听端口的 /cb;验证页 = 同一端口的 /verify?cb=...
-        var cb = $"http://127.0.0.1:{port}/cb";
+        // 回调地址 = 同一监听端口的 /cb/{nonce};验证页 = 同一端口的 /verify?cb=...
+        // nonce 每次验证随机生成:其他本地进程/浏览器网页即使扫到端口,也猜不出回调路径,无法提交伪造结果。
+        var nonce = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
+        var host = $"127.0.0.1:{port}";
+        var cbPath = $"/cb/{nonce}";
+        var cb = $"http://{host}{cbPath}";
         // 回调地址与主题直接注入页面(替换占位符),不依赖浏览器解析 location.search
         html = html.Replace("__MCKURO_CB__", cb, StringComparison.Ordinal);
         html = html.Replace("__MCKURO_THEME__", ResolveTheme(), StringComparison.Ordinal);
         var pageUrl = $"http://127.0.0.1:{port}/verify?cb={Uri.EscapeDataString(cb)}";
-        _logger.LogInformation("极验验证启动: 页面={PageUrl} 回调={Cb}", pageUrl, cb);
+        // 只记端口:回调路径含 nonce,不写进日志
+        _logger.LogInformation("极验验证启动: 本地端口={Port}", port);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(TimeoutSeconds));
@@ -132,7 +124,7 @@ public sealed partial class GeetVerifyService
                 try
                 {
                     var client = await listener.AcceptTcpClientAsync(cts.Token);
-                    _ = HandleClientAsync(client, html, readJs!, tcs, cts.Token);
+                    _ = HandleClientAsync(client, html, readJs!, host, cbPath, tcs, cts.Token);
                 }
                 catch (OperationCanceledException)
                 {
@@ -174,6 +166,8 @@ public sealed partial class GeetVerifyService
         TcpClient client,
         string html,
         Func<string, string?> readJs,
+        string expectedHost,
+        string callbackPath,
         TaskCompletionSource<string?> tcs,
         CancellationToken ct)
     {
@@ -201,23 +195,30 @@ public sealed partial class GeetVerifyService
             }
             var request = sb.ToString();
             var path = GetPath(request);
-            TimingLog($"请求到达 {path}");
-            _logger.LogInformation("极验本地服务收到请求: {Path}", path);
+            // 只记不含查询串的路径:回调查询串里是 lot_number/pass_token/captcha_output
+            var pathOnly = path.Split('?')[0];
+            var isCallback = string.Equals(pathOnly, callbackPath, StringComparison.Ordinal);
+            _logger.LogInformation("极验本地服务收到请求: {Path}", isCallback ? "/cb/<nonce>" : pathOnly);
 
             string body;
             var contentType = "text/html; charset=utf-8";
-            if (path.StartsWith("/cb", StringComparison.Ordinal))
+            if (!IsExpectedHost(request, expectedHost))
+            {
+                // Host 不是 127.0.0.1:{port}(如 DNS 重绑定的外部网页):一律拒绝,不提供页面也不接受回调
+                _logger.LogWarning("极验本地服务拒绝 Host 不匹配的请求");
+                body = "<html><body><h3>403</h3></body></html>";
+            }
+            else if (isCallback)
             {
                 // 极验回调:提取 data 并完成验证
                 var data = ExtractData(request);
                 if (data is null)
                 {
-                    _logger.LogWarning("回调 /cb 未提取到 data(请求行: {Line})", request.Split('\n')[0].Trim());
+                    _logger.LogWarning("回调 /cb 未提取到 data");
                 }
                 else
                 {
-                    _logger.LogInformation("回调 /cb 提取到极验结果: 长度={Len} 摘要={Summary}",
-                        data.Length, data.Length <= 80 ? data : data[..80] + "…");
+                    _logger.LogInformation("回调 /cb 提取到极验结果: 长度={Len}", data.Length);
                 }
                 body = data is null
                     ? "<html><body><h3>验证失败:未收到极验结果,请关闭本页返回启动器重试</h3></body></html>"
@@ -262,7 +263,6 @@ public sealed partial class GeetVerifyService
             var respBytes = Encoding.UTF8.GetBytes(response);
             await stream.WriteAsync(respBytes.AsMemory(), ct);
             await stream.FlushAsync(ct);
-            TimingLog($"响应已写入 {path} ({respBytes.Length}B)");
         }
         catch (Exception ex)
         {
@@ -281,6 +281,27 @@ public sealed partial class GeetVerifyService
         var firstLine = request.Split('\n')[0].Trim();
         var parts = firstLine.Split(' ');
         return parts.Length >= 2 ? parts[1] : "/";
+    }
+
+    /// <summary>
+    /// 校验 Host 头必须是 <paramref name="expectedHost"/>(<c>127.0.0.1:{port}</c>,不区分大小写)。
+    /// 缺少 Host 头视为不匹配(HTTP/1.1 浏览器请求总会带 Host)。
+    /// </summary>
+    internal static bool IsExpectedHost(string request, string expectedHost)
+    {
+        foreach (var rawLine in request.Split('\n').Skip(1))
+        {
+            var line = rawLine.TrimEnd('\r');
+            if (line.Length == 0)
+            {
+                break; // 头部结束
+            }
+            if (line.StartsWith("Host:", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(line[5..].Trim(), expectedHost, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        return false;
     }
 
     /// <summary>从 HTTP 请求行提取 data 查询参数(URL 解码)。</summary>

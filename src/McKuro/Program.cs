@@ -15,6 +15,9 @@ class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // 全局异常记录尽早挂上(不依赖 Avalonia):逃逸的异常至少留一条文件日志
+        GlobalExceptionLogger.RegisterProcessHandlers();
+
         // 单实例:重复启动唤起已有窗口后退出。
         // 冒烟/自检模式(McKuro_SMOKE / McKuro_GEETEST_SMOKE)放行并行——验证脚本需要在
         // 用户实例运行期间也能独立起实例,且次实例秒退会让冒烟"假通过"掩盖问题。

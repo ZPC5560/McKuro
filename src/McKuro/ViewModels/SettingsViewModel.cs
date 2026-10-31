@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Core.Models.Game;
 using McKuro.Core.Services.Game;
+using McKuro.Core.Services.Settings;
 using McKuro.Core.Services.Update;
 using McKuro.Core.Services.Wallpaper;
 using McKuro.Services;
@@ -107,7 +108,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     partial void OnStartGameArgumentsChanged(string value)
     {
         AppServices.Settings.Current.StartGameArguments = value;
-        AppServices.Settings.Save();
+        // 文本框逐键触发:走合并写入,连续输入只落盘一次(M39)
+        _ = AppServices.Settings.SaveAsync();
     }
 
     /// <summary>
@@ -125,9 +127,56 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private int _resourceLevelIndex = 1;
 
+    /// <summary>从配置重新同步画质下拉时为 true:此时不回写配置(只是显示跟上,不是用户改了)。</summary>
+    private bool _syncingResourceLevel;
+
+    /// <summary>
+    /// 配置里的资源等级 → 下拉索引。
+    /// 空 = 未设置(旧配置/首次运行):按游戏目录里已装的资源包探测,探测不到则官方默认 hd。
+    /// </summary>
+    private static int ResourceLevelIndexFromSettings(AppSettings s)
+    {
+        var effectiveLevel = string.IsNullOrWhiteSpace(s.ResourceLevel)
+            ? LaunchArguments.DetectInstalledResourceLevel(s.GameRootDir) ?? LaunchArguments.DefaultResourceLevel
+            : s.ResourceLevel;
+        return LaunchArguments.FromValue(effectiveLevel) switch
+        {
+            GameResourceLevel.Ultra => 0,
+            GameResourceLevel.Smooth => 2,
+            _ => 1,
+        };
+    }
+
+    /// <summary>
+    /// 导航到设置页时调用:画质可能已在启动器页/ResourceLevelService 里改过(它们直接写
+    /// <c>Settings.Current.ResourceLevel</c>),而本 VM 只在构造时读过一次 —— 进页时重新同步显示(M37)。
+    /// <para>需要由 MainWindowViewModel.NavigateTo 在切到设置页时调用。</para>
+    /// </summary>
+    public void OnNavigatedTo()
+    {
+        var index = ResourceLevelIndexFromSettings(AppServices.Settings.Current);
+        if (index == ResourceLevelIndex)
+        {
+            return;
+        }
+        _syncingResourceLevel = true;
+        try
+        {
+            ResourceLevelIndex = index;
+        }
+        finally
+        {
+            _syncingResourceLevel = false;
+        }
+    }
+
     /// <summary>资源等级即时保存(改动即生效,无需点保存)。</summary>
     partial void OnResourceLevelIndexChanged(int value)
     {
+        if (_syncingResourceLevel)
+        {
+            return;
+        }
         AppServices.Settings.Current.ResourceLevel = value switch
         {
             0 => "uhd",
@@ -143,7 +192,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     partial void OnStartGameExeNameChanged(string value)
     {
         AppServices.Settings.Current.StartGameExeName = value;
-        AppServices.Settings.Save();
+        _ = AppServices.Settings.SaveAsync(); // 文本框逐键触发:合并写入
     }
 
     // ---------- 自定义启动程序(mod 加载器等外部程序) ----------
@@ -175,7 +224,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     partial void OnCustomLauncherArgumentsChanged(string value)
     {
         AppServices.Settings.Current.CustomLauncherArguments = value;
-        AppServices.Settings.Save();
+        _ = AppServices.Settings.SaveAsync(); // 文本框逐键触发:合并写入
     }
 
     /// <summary>选择自定义启动程序(文件选择器);选完即时保存。</summary>
@@ -544,12 +593,38 @@ public sealed partial class SettingsViewModel : ViewModelBase
     partial void OnLive2DOpacityChanged(float value)
         => SaveLive2DFloat(v => AppServices.Settings.Current.Live2DOpacity = Math.Clamp(v, 0f, 1f), Math.Clamp(value, 0f, 1f));
 
+    /// <summary>Live2D 滑块落盘/通知的防抖间隔:拖动停下这么久之后才写盘并通知首页。</summary>
+    private static readonly TimeSpan Live2DSaveDebounce = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>Live2D 滑块防抖计时器(首次拖动时创建;每次值变化重新计时)。</summary>
+    private Avalonia.Threading.DispatcherTimer? _live2DSaveTimer;
+
+    /// <summary>
+    /// 滑块值变化:立即写入内存配置(设置页预览读的是绑定值,本身就是实时的),
+    /// 落盘与 <see cref="Live2DSettingsChangedMessage"/> 防抖 300 ms 再做。
+    /// <para>
+    /// 旧实现每个值变化都同步 Save() 并发消息,HomeViewModel.RefreshLive2D() 随之重新检查模型目录,
+    /// 拖动时每秒几十次写盘(M39)。没有只含变换参数的轻量消息,沿用现有消息,只是降频。
+    /// </para>
+    /// </summary>
     private void SaveLive2DFloat(Action<float> apply, float clamped)
     {
         apply(clamped);
-        AppServices.Settings.Save();
         OnPropertyChanged(nameof(IsLive2DPreviewVisible));
-        WeakReferenceMessenger.Default.Send(new Live2DSettingsChangedMessage(Live2DEnabled));
+
+        if (_live2DSaveTimer is null)
+        {
+            _live2DSaveTimer = new Avalonia.Threading.DispatcherTimer { Interval = Live2DSaveDebounce };
+            _live2DSaveTimer.Tick += (_, _) =>
+            {
+                _live2DSaveTimer?.Stop();
+                _ = AppServices.Settings.SaveAsync();
+                WeakReferenceMessenger.Default.Send(new Live2DSettingsChangedMessage(Live2DEnabled));
+            };
+        }
+        // 重新计时:拖动期间不断推迟,停手 300 ms 后只落盘/通知一次
+        _live2DSaveTimer.Stop();
+        _live2DSaveTimer.Start();
     }
 
     /// <summary>打开(必要时创建)首选 Live2D 目录(程序目录下 live2d\,无写权限回退用户数据目录),
@@ -616,14 +691,19 @@ public sealed partial class SettingsViewModel : ViewModelBase
         // 未导入:扫【全部发现根】—— 随包模型在程序目录 live2d\ 下,而装到 Program Files 时
         // 那里不可写(EnsurePreferredDir 会回退用户数据目录),只扫首选目录会漏掉随包模型。
         var importedRoot = string.IsNullOrWhiteSpace(Live2DModelDir) ? null : Live2DModelDir;
-        var roots = importedRoot is null
-            ? Live2DLocator.DiscoveryRoots().ToList()
-            : [importedRoot];
+        // 递归根之外再加程序根(只查顶层):DiscoveryRoots 已不含程序根,避免递归扫整个安装目录,
+        // 但直接放在 exe 旁的模型仍应出现在列表里(与 FindDefaultModelAnywhere 一致)。
+        var searches = importedRoot is null
+            ? Live2DLocator.DiscoveryRoots()
+                .Select(r => (Root: r, Option: SearchOption.AllDirectories))
+                .Append((Root: Live2DLocator.FlatRoot, Option: SearchOption.TopDirectoryOnly))
+                .ToList()
+            : [(Root: importedRoot, Option: SearchOption.AllDirectories)];
         try
         {
-            var models = roots
-                .Where(Directory.Exists)
-                .SelectMany(dir => Directory.EnumerateFiles(dir, "*.model3.json", SearchOption.AllDirectories))
+            var models = searches
+                .Where(s => Directory.Exists(s.Root))
+                .SelectMany(s => Directory.EnumerateFiles(s.Root, "*.model3.json", s.Option))
                 .Select(f => Live2DLocator.NormalizeModelName(Path.GetFileName(f)))
                 .Where(n => !string.IsNullOrEmpty(n))
                 .Distinct(StringComparer.Ordinal)
@@ -862,6 +942,18 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private bool _appUpdateIntegrityVisible;
 
     private AppUpdateInfo? _pendingUpdate;
+
+    /// <summary>
+    /// 待装更新是否带 SHA-256 摘要。无摘要的包无法校验(开启加速镜像时包还来自第三方),
+    /// <b>自动安装路径必须先判它</b>,为 false 时不得零点击安装(M8)。
+    /// </summary>
+    public bool PendingUpdateHasChecksum => _pendingUpdate?.HasChecksum == true;
+
+    /// <summary>
+    /// 设置页「下载更新」遇到无摘要的包时,第一次点击只提示风险并置位,第二次点击才真正下载。
+    /// 每次检查到新结果/跳过版本时复位。
+    /// </summary>
+    private bool _noChecksumConfirmed;
 
     /// <summary>当前应用版本(读程序集版本;四段版本号完整显示,见 AppUpdateService.FormatVersion)。</summary>
     public string CurrentAppVersionText =>
@@ -1162,16 +1254,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _customLauncherEnabled = s.CustomLauncherEnabled;
         _customLauncherPath = s.CustomLauncherPath;
         _customLauncherArguments = s.CustomLauncherArguments;
-        // 空 = 未设置(旧配置/首次运行):按游戏目录里已装的资源包探测,探测不到则官方默认 hd
-        var effectiveLevel = string.IsNullOrWhiteSpace(s.ResourceLevel)
-            ? LaunchArguments.DetectInstalledResourceLevel(s.GameRootDir) ?? LaunchArguments.DefaultResourceLevel
-            : s.ResourceLevel;
-        _resourceLevelIndex = LaunchArguments.FromValue(effectiveLevel) switch
-        {
-            GameResourceLevel.Ultra => 0,
-            GameResourceLevel.Smooth => 2,
-            _ => 1,
-        };
+        _resourceLevelIndex = ResourceLevelIndexFromSettings(s);
         _minimizeOnLaunch = s.MinimizeOnLaunch;
         _minimizeLocationIndex = s.MinimizeLocationOnLaunch == "Tray" ? 1 : 0;
         _afterGameExitIndex = s.AfterGameExitAction switch
@@ -1394,7 +1477,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         SkipVerifyFiles.Add(path);
         SkipVerifyInput = "";
-        Save(); // 即时写回配置
+        SaveSkipVerifyFiles(); // 即时写回配置
         StatusText = LanguageService.Format("Status.SkipAdded", path);
     }
 
@@ -1402,71 +1485,22 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private void RemoveSkipVerifyFile(string path)
     {
         SkipVerifyFiles.Remove(path);
-        Save();
+        SaveSkipVerifyFiles();
         StatusText = LanguageService.Format("Status.SkipRemoved", path);
     }
 
-    /// <summary>把所有界面设置项写回配置并保存(各设置项改动时已即时保存,此方法为幂等兜底)。</summary>
-    private void Save()
+    /// <summary>
+    /// 只写回跳过校验列表并保存。
+    /// <para>
+    /// 旧实现调用全量 Save(),把本 VM 构造时的整份快照(含 ResourceLevelIndex)写回配置,
+    /// 撤销启动器页之后选择的画质,下次以错误的 -krqlv 启动(M37)。
+    /// 其它设置项改动时都已即时保存,这里不需要也不应该再写别的字段。
+    /// </para>
+    /// </summary>
+    private void SaveSkipVerifyFiles()
     {
-        var s = AppServices.Settings.Current;
-        s.GameRootDir = GameRootDir;
-        s.ServerType = SelectedServerIndex switch
-        {
-            1 => GameServerType.Official,
-            2 => GameServerType.Bilibili,
-            3 => GameServerType.WeGame,
-            4 => GameServerType.Global,
-            _ => GameServerType.Unknown,
-        };
-        s.DownloadConcurrency = Math.Clamp(DownloadConcurrency, 1, 32);
-        s.LimitSpeedMbps = Math.Max(0, LimitSpeedMbps);
-        s.UseDx11 = UseDx11;
-        s.DisableDlss = DisableDlss;
-        s.StartGameArguments = StartGameArguments;
-        s.StartGameExeName = StartGameExeName;
-        s.CustomLauncherEnabled = CustomLauncherEnabled;
-        s.CustomLauncherPath = CustomLauncherPath;
-        s.CustomLauncherArguments = CustomLauncherArguments;
-        s.ResourceLevel = ResourceLevelIndex switch
-        {
-            0 => "uhd",
-            2 => "sd",
-            _ => "hd",
-        };
-        s.MinimizeOnLaunch = MinimizeOnLaunch;
-        s.MinimizeLocationOnLaunch = MinimizeLocationIndex == 1 ? "Tray" : "Taskbar";
-        s.AfterGameExitAction = AfterGameExitIndex switch
-        {
-            1 => "ShowMainWindow",
-            2 => "ExitApp",
-            _ => "KeepCurrent",
-        };
-        s.BackgroundVideoEnabled = BackgroundVideoEnabled;
-        s.Live2DModelDir = Live2DModelDir;
-        s.SkipVerifyFiles = [.. SkipVerifyFiles];
-        s.AutoSkipVerifyDelete = AutoSkipVerifyDelete;
-        s.FastVerifyEnabled = FastVerifyEnabled;
-        s.InstallResidueCheckEnabled = InstallResidueCheckEnabled;
-        s.NotifEnabled = NotifEnabled;
-        s.Language = LanguageIndex == 1 ? "en-US" : "zh-Hans";
-        s.StartupPage = StartupPageIndex == 1 ? "Launcher" : "Home";
-        s.AutoHideNavRail = AutoHideNavRail;
-        s.AutoHideTitleBar = AutoHideTitleBar;
-        s.Theme = ThemeIndex switch
-        {
-            1 => "Light",
-            2 => "Dark",
-            _ => "Default",
-        };
+        AppServices.Settings.Current.SkipVerifyFiles = [.. SkipVerifyFiles];
         AppServices.Settings.Save();
-
-        // 重新应用并发数与限速(无需重启);路径解析器已通过 Func<string?> 自动读取最新值
-        AppServices.Downloader.SetConcurrency(s.DownloadConcurrency);
-        AppServices.Downloader.SetSpeedLimit((long)s.LimitSpeedMbps * 1024 * 1024);
-
-        // 主题即时生效(对齐 Haiyu 设置主题;选择时已即时应用,保存时再确保一致)
-        ApplyThemeVariant(s.Theme);
     }
 
     // ---------- 应用自更新(对齐 Haiyu UpdateAppViewModel) ----------
@@ -1510,7 +1544,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     partial void OnAppUpdateAcceleratorChanged(string value)
     {
         AppServices.Settings.Current.AppUpdateAccelerator = value ?? "";
-        AppServices.Settings.Save();
+        _ = AppServices.Settings.SaveAsync(); // 文本框逐键触发:合并写入
     }
 
 
@@ -1545,6 +1579,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppUpdateStatusText = LanguageService.Format("Update.Checking");
         AppUpdateAvailable = false;
         _pendingUpdate = null;
+        _noChecksumConfirmed = false;
+        OnPropertyChanged(nameof(PendingUpdateHasChecksum));
         try
         {
             var info = await AppServices.AppUpdate.CheckAsync(
@@ -1572,6 +1608,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             }
 
             _pendingUpdate = info;
+            OnPropertyChanged(nameof(PendingUpdateHasChecksum));
             AppUpdateAvailable = true;
             AppUpdateVersionText = LanguageService.Format("Update.NewVersionWith", info.Version);
             // HTML 回退通道拿不到文件大小(AssetSize=0),省略大小段
@@ -1594,12 +1631,54 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
     }
 
-    /// <summary>下载并安装应用更新(zip 绿色包解压替换;exe 安装包静默安装)。public:供主窗口自动升级调用。</summary>
+    /// <summary>
+    /// 下载并安装应用更新(zip 绿色包解压替换;exe 安装包静默安装)。
+    /// <para>
+    /// <b>仅用于用户已明确确认的路径</b>(主窗口更新弹窗「立即更新」等):无摘要的包也会下载安装。
+    /// 零点击的自动安装请用 <see cref="AutoInstallAppUpdateAsync"/>;设置页按钮走
+    /// <see cref="ConfirmDownloadAppUpdateAsync"/>(无摘要时先二次确认)。
+    /// </para>
+    /// </summary>
     [RelayCommand]
-    public async Task DownloadAppUpdateAsync()
+    public Task DownloadAppUpdateAsync() => DownloadAppUpdateCoreAsync(requireChecksum: false);
+
+    /// <summary>
+    /// 自动安装入口(零点击升级,M8):要求更新包带 SHA-256 摘要,没有就拒绝下载安装并在状态行说明。
+    /// 调用方(主窗口 AppUpdateAutoInstall 分支)应先判 <see cref="PendingUpdateHasChecksum"/>,
+    /// 为 false 时改为弹窗询问;这里的 requireChecksum 是兜底。
+    /// </summary>
+    public Task AutoInstallAppUpdateAsync() => DownloadAppUpdateCoreAsync(requireChecksum: true);
+
+    /// <summary>
+    /// 设置页「下载安装」按钮:更新包没有摘要时,第一次点击只提示风险,再点一次才下载(M8)。
+    /// 有摘要时与 <see cref="DownloadAppUpdateAsync"/> 相同。
+    /// </summary>
+    [RelayCommand]
+    private Task ConfirmDownloadAppUpdateAsync()
     {
         if (_pendingUpdate is null || AppUpdateDownloading)
         {
+            return Task.CompletedTask;
+        }
+        if (!PendingUpdateHasChecksum && !_noChecksumConfirmed)
+        {
+            _noChecksumConfirmed = true;
+            AppUpdateStatusText = LanguageService.Format("Update.NoChecksumConfirm");
+            return Task.CompletedTask;
+        }
+        return DownloadAppUpdateCoreAsync(requireChecksum: false);
+    }
+
+    private async Task DownloadAppUpdateCoreAsync(bool requireChecksum)
+    {
+        if (_pendingUpdate is null || AppUpdateDownloading)
+        {
+            return;
+        }
+        if (requireChecksum && !PendingUpdateHasChecksum)
+        {
+            // 无摘要的包不做零点击安装(加速镜像可以为任何无摘要版本提供任意包)
+            AppUpdateStatusText = LanguageService.Format("Update.AutoInstallNoChecksum");
             return;
         }
 
@@ -1611,7 +1690,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
             var destDir = Path.Combine(AppServices.AppDataDir, "updates");
             var localPath = await AppServices.AppUpdate.DownloadAsync(
                 _pendingUpdate.DownloadUrl, destDir, progress,
-                expectedSha256: _pendingUpdate.Sha256);
+                expectedSha256: _pendingUpdate.Sha256,
+                requireChecksum: requireChecksum);
             if (localPath is null)
             {
                 AppUpdateStatusText = LanguageService.Format("Update.DownloadFailed");
@@ -1840,7 +1920,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 }
                 entry.ExtractToFile(target, overwrite: true);
                 done++;
-                progress?.Report(done * 100.0 / total);
+                // 报告 0~1 比例:处理器(installProgress)会再 ×100 换算成百分比。
+                // 旧实现这里已乘 100,界面显示「正在安装 10000%」且进度条顶满(L23)
+                progress?.Report(done / (double)total);
             }
         }).ConfigureAwait(false);
     }
@@ -1855,6 +1937,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         AppServices.Settings.Current.SkipAppVersion = _pendingUpdate.Version;
         AppServices.Settings.Save();
+        _noChecksumConfirmed = false;
         AppUpdateAvailable = false;
         AppUpdateVersionText = "";
         AppUpdateStatusText = LanguageService.Format("Update.SkippedNow", _pendingUpdate.Version);

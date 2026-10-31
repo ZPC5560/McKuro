@@ -509,6 +509,30 @@ public class KujiequApiClientTests
         }
     }
 
+    [Fact]
+    public async Task GetRoleDetailResultAsync_Rethrows_On_Cancellation()
+    {
+        // 评审反馈(L14):getRoleDetail 的 catch-all 曾吞掉取消并返回"非风控失败",
+        // RoleDataService 据此清掉仍然有效的访问令牌并重新鉴权。取消必须向上传播。
+        var (baseUrl, listener, _) = StartServer(new Dictionary<string, string>
+        {
+            ["/aki/roleBox/akiBox/getRoleDetail"] =
+                """{"code":200,"msg":"","data":"{}","success":true}""",
+        });
+        try
+        {
+            var client = CreateApi(baseUrl);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => client.GetRoleDetailResultAsync("at-1", DeviceId, RoleId, 1209, ct: cts.Token));
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
     // ---------------- 全息战略(challengeIndex / challengeDetails) ----------------
 
     [Fact]

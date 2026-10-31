@@ -209,15 +209,8 @@ public sealed partial class WikiViewModel : ViewModelBase
         {
             return;
         }
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = url,
-                UseShellExecute = true,
-            });
-        }
-        catch (Exception)
+        // 横幅/公告链接来自远程数据:只放行 http/https,不把 file:、UNC、ms-msdt: 之类交给 shell
+        if (!SafeUrl.TryOpen(url))
         {
             StatusText = LanguageService.Format("Status.OpenWebFailed");
         }
@@ -235,18 +228,17 @@ public sealed partial class WikiViewModel : ViewModelBase
     /// </summary>
     public void OnNavigatedTo()
     {
-        var resolved = ServerType;
-        if (resolved == _lastLoadedServer)
+        if (ServerType == _lastLoadedServer)
         {
             return;
         }
-        _lastLoadedServer = resolved;
-        // 渠道变更必须强制重拉:LoadInternalAsync 内部有 IsBusy 门,
-        // 正在加载时直接 return 即可(下次进来渠道已被记录,不会重复触发)。
+        // 渠道变更必须重拉。_lastLoadedServer 由 LoadInternalAsync 在真正开始加载时记录:
+        // 此前在这里提前记下,而加载中 LoadInternalAsync 直接 return,换区服会被误记为"已加载";
+        // 加载中调用时由 LoadInternalAsync 结束后按最新渠道补跑一轮。
         _ = LoadInternalAsync();
     }
 
-    /// <summary>上一次加载资讯内容时使用的渠道(用于导航时判断是否需要重载)。</summary>
+    /// <summary>上一次加载资讯内容时使用的渠道(用于导航时判断是否需要重载;构造时的首次加载同样记录)。</summary>
     private GameServerType _lastLoadedServer = GameServerType.Unknown;
 
     /// <summary>服务器渠道:与启动器页一致(设置优先,自动检测兜底)。判定收敛在 <see cref="GameServerResolver"/>。</summary>
@@ -263,10 +255,14 @@ public sealed partial class WikiViewModel : ViewModelBase
     {
         if (IsBusy)
         {
+            // 加载中:结束时若渠道已变会自动补跑(见 finally 之后)
             return;
         }
 
         IsBusy = true;
+        // 本轮使用的渠道:各段加载统一用它,并记为"已加载"(构造时的首次加载也记,首次进入页面不再重复下载)
+        var server = ServerType;
+        _lastLoadedServer = server;
         StatusText = LanguageService.Format("Wiki.StatusLoading");
         try
         {
@@ -280,12 +276,12 @@ public sealed partial class WikiViewModel : ViewModelBase
             _coverByPostId.Clear();
             _coverByTitle.Clear();
 
-            int banners = await LoadBannersAsync();
+            int banners = await LoadBannersAsync(server);
             // 重置轮播到首项并刷新视频覆盖层状态(Banners 重建后索引不变也要通知)
             SelectedBannerIndex = 0;
             RaiseCurrentBannerChanged();
             var (news, anns, acts) = await LoadKurobbsEventsAsync();
-            int notices = await LoadLauncherGuidanceAsync();
+            int notices = await LoadLauncherGuidanceAsync(server);
 
             StatusText = LanguageService.Format("Wiki.StatusLoaded", banners, news, anns, acts, notices);
         }
@@ -297,13 +293,18 @@ public sealed partial class WikiViewModel : ViewModelBase
         {
             IsBusy = false;
         }
+        // 加载期间换了区服(设置页切换后导航进来):按新渠道补跑一轮
+        if (ServerType != server)
+        {
+            _ = LoadInternalAsync();
+        }
     }
 
     /// <summary>封面主图:官方启动器轮播图优先(带跳转),失败回退 wiki 首页 banner。返回数量。
     /// 跳转链接为B站视频(页面/短链)时并行解析出 BV 号,供原控件内嵌播放器播放。</summary>
-    private async Task<int> LoadBannersAsync()
+    private async Task<int> LoadBannersAsync(GameServerType server)
     {
-        var info = await AppServices.LauncherInfo.GetLauncherInfoAsync(ServerType);
+        var info = await AppServices.LauncherInfo.GetLauncherInfoAsync(server);
         if (info?.Slideshow is { Count: > 0 })
         {
             var slides = info.Slideshow.Where(s => !string.IsNullOrWhiteSpace(s.Url)).ToList();
@@ -404,7 +405,9 @@ public sealed partial class WikiViewModel : ViewModelBase
         var newsTask = AppServices.Wiki.GetOfficialEventsAsync(eventType: 2, pageSize: 50);
         var annTask = AppServices.Wiki.GetOfficialEventsAsync(eventType: 3, pageSize: 50);
         var actTask = AppServices.Wiki.GetOfficialEventsAsync(eventType: 1, pageSize: 50);
-        await Task.WhenAll(newsTask, annTask, actTask).ConfigureAwait(false);
+        // 不能 ConfigureAwait(false):之后要在 UI 线程填充绑定的 ObservableCollection。
+        // (对已完成任务的 await xTask.ConfigureAwait(true) 会同步继续,切不回 UI 线程。)
+        await Task.WhenAll(newsTask, annTask, actTask);
 
         int Fill(ObservableCollection<OfficialEventCard> target, List<OfficialEventItem>? items)
         {
@@ -444,10 +447,10 @@ public sealed partial class WikiViewModel : ViewModelBase
             }
         }
 
-        // 回到 UI 线程再填充 ObservableCollection
-        var news = await newsTask.ConfigureAwait(true);
-        var anns = await annTask.ConfigureAwait(true);
-        var acts = await actTask.ConfigureAwait(true);
+        // 任务均已完成,这里只是取结果(仍在 UI 线程上,随后填充 ObservableCollection)
+        var news = await newsTask;
+        var anns = await annTask;
+        var acts = await actTask;
         IndexCover(news);
         IndexCover(anns);
         IndexCover(acts);
@@ -455,9 +458,9 @@ public sealed partial class WikiViewModel : ViewModelBase
     }
 
     /// <summary>启动器公告组件(Haiyu 左下角同源数据):活动/公告/新闻三组。返回总条数。</summary>
-    private async Task<int> LoadLauncherGuidanceAsync()
+    private async Task<int> LoadLauncherGuidanceAsync(GameServerType server)
     {
-        var info = await AppServices.LauncherInfo.GetLauncherInfoAsync(ServerType);
+        var info = await AppServices.LauncherInfo.GetLauncherInfoAsync(server);
         var guidance = info?.Guidance;
         if (guidance is null)
         {

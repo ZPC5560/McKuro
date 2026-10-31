@@ -94,7 +94,7 @@
   if (!CALLBACK || CALLBACK.indexOf("__MCKURO_CB__") === 0) {
     var m = location.search.match(/[?&]cb=([^&]+)/);
     if (m) { CALLBACK = decodeURIComponent(m[1]); }
-    else if (location.protocol === "http:") { CALLBACK = location.origin + "/cb"; }
+    // 回调路径含每次随机的 nonce(/cb/{nonce}),只能由启动器注入,不能自行拼 origin + "/cb"
     else { CALLBACK = ""; }
   }
 

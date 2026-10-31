@@ -153,6 +153,59 @@ public sealed class FileDownloaderTests : IDisposable
         Assert.False(result.Success);
     }
 
+    /// <summary>
+    /// L2:默认仍"目标已匹配即跳过";调用方已用 ComputeDiff 判定过期时传 skipExistingCheck,
+    /// 跳过对旧文件的整文件 MD5,直接下载。
+    /// </summary>
+    [Fact]
+    public async Task DownloadAsync_SkipExistingCheck_DownloadsEvenWhenTargetMatches()
+    {
+        var payload = Encoding.UTF8.GetBytes("abcdefghijklmnopqrstuvwxyz");
+        var entry = Entry("data.bin", payload);
+        var destination = Path.Combine(_root, "data.bin");
+        await File.WriteAllBytesAsync(destination, payload);
+
+        var defaultHandler = new RangeHandler(payload);
+        using (var http = new HttpClient(defaultHandler))
+        {
+            var skipped = await new FileDownloader(http).DownloadAsync(entry, "", destination);
+            Assert.True(skipped.Success, skipped.Error);
+        }
+        Assert.Equal(0, defaultHandler.Requests);
+
+        var forcedHandler = new RangeHandler(payload);
+        using (var http = new HttpClient(forcedHandler))
+        {
+            var forced = await new FileDownloader(http).DownloadAsync(entry, "", destination, skipExistingCheck: true);
+            Assert.True(forced.Success, forced.Error);
+        }
+        Assert.True(forcedHandler.Requests > 0);
+        Assert.Equal(payload, await File.ReadAllBytesAsync(destination));
+    }
+
+    /// <summary>
+    /// L1 不能误伤续传:.part 里已完整写好的分片(落在预分配前的原有长度内)仍要预检并跳过,
+    /// 只请求缺的那一片。
+    /// </summary>
+    [Fact]
+    public async Task DownloadAsync_ChunkResume_OnlyFetchesMissingChunk()
+    {
+        var payload = Encoding.UTF8.GetBytes("abcdefghijklmnopqrstuvwxyz");
+        var entry = Entry("data.bin", payload);
+        entry.ChunkInfos.Add(new GameChunkInfo { Start = 0, End = 12, Md5 = Hash(payload[..13]) });
+        entry.ChunkInfos.Add(new GameChunkInfo { Start = 13, End = payload.Length - 1, Md5 = Hash(payload[13..]) });
+        var destination = Path.Combine(_root, "resume.bin");
+        await File.WriteAllBytesAsync(destination + ".part", payload[..13]);
+        var handler = new RangeHandler(payload);
+        using var http = new HttpClient(handler);
+
+        var result = await new FileDownloader(http).DownloadAsync(entry, "", destination);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(1, handler.Requests);
+        Assert.Equal(payload, await File.ReadAllBytesAsync(destination));
+    }
+
     private static GameFileEntry Entry(string path, byte[] payload) => new()
     {
         Path = path,
@@ -165,8 +218,12 @@ public sealed class FileDownloaderTests : IDisposable
 
     private sealed class RangeHandler(byte[] payload, bool ignoreRange = false) : HttpMessageHandler
     {
+        /// <summary>收到的请求数(用于断言"没有/只有部分"走网络)。</summary>
+        public int Requests;
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            Interlocked.Increment(ref Requests);
             var range = request.Headers.Range?.Ranges.SingleOrDefault();
             if (!ignoreRange && range?.From is long start)
             {

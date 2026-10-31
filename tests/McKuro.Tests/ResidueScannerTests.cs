@@ -173,6 +173,30 @@ public class ResidueScannerTests : IDisposable
         Assert.False(report.HasResidue);
     }
 
+    /// <summary>
+    /// M1:当前补丁的固定临时目录(install_tmp/p-&lt;key&gt;)在 inUsePaths 里 —— 它要留着续传,
+    /// 不能因为父目录 install_tmp 被整条报告而连带删掉;其它补丁/旧版 GUID 目录仍照常报告。
+    /// </summary>
+    [Fact]
+    public void InUsePatchTempChild_IsKept_WhileStaleSiblingsAreReported()
+    {
+        var installTemp = $"DiffData/{GamePathResolver.InstallTempDirName}";
+        WriteFile($"{installTemp}/{GamePathResolver.PatchInstallTempPrefix}aaaaaaaaaaaaaaaa/big.pak.part", 300L * 1024 * 1024);
+        WriteFile($"{installTemp}/{GamePathResolver.PatchInstallTempPrefix}bbbbbbbbbbbbbbbb/old.krdiff", 40L * 1024 * 1024);
+        WriteFile($"{installTemp}/0123456789abcdef0123456789abcdef/legacy.krdiff", 20L * 1024 * 1024);
+        var current = Path.Combine(
+            _root, "DiffData", GamePathResolver.InstallTempDirName, GamePathResolver.PatchInstallTempPrefix + "aaaaaaaaaaaaaaaa");
+        var inUse = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { current };
+
+        var report = ResidueScanner.Scan(_root, inUsePaths: inUse);
+
+        var temps = report.Items.Where(i => i.Kind == ResidueKind.PatchTemp).ToList();
+        Assert.Equal(2, temps.Count);
+        Assert.DoesNotContain(temps, i => i.FullPath.StartsWith(current, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(report.Items, i => i.FullPath.StartsWith(current, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(60L * 1024 * 1024, temps.Sum(i => i.Size));
+    }
+
     [Fact]
     public void NonexistentRoot_ReturnsEmpty_WithoutThrowing()
     {

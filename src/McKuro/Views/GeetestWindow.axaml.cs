@@ -33,6 +33,16 @@ public partial class GeetestWindow : Window
     {
         InitializeComponent();
         ApplyTheme();
+        // 用户取消 / CreationFailed 回退 / 看门狗关窗时页面可能还没加载完(FadeAndHide 未执行):
+        // 转圈计时器必须随窗口停掉,否则约 33 Hz 空转并钉住已关闭的窗口与 WebView2Control
+        Closing += (_, _) => StopSpinner();
+        Closed += (_, _) => StopSpinner();
+    }
+
+    private void StopSpinner()
+    {
+        _spinnerTimer?.Stop();
+        _spinnerTimer = null;
     }
 
     /// <summary>按应用主题配色(与极验页注入的主题一致,避免加载态与页面态闪色)。</summary>
@@ -107,8 +117,7 @@ public partial class GeetestWindow : Window
 
     private void FadeAndHide()
     {
-        _spinnerTimer?.Stop();
-        _spinnerTimer = null;
+        StopSpinner();
         LoadingOverlay.Transitions = new Transitions
         {
             new DoubleTransition { Property = Visual.OpacityProperty, Duration = TimeSpan.FromMilliseconds(280) },

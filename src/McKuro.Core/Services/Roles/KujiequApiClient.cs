@@ -339,6 +339,12 @@ public sealed class KujiequApiClient
         {
             env = await SendEnvelopeAsync(RoleDetailUrlValue, headers, body, ct, throwOnError: false).ConfigureAwait(false);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // 调用方取消必须向上传播(评审反馈):吞掉会让 RoleDataService 误判为"令牌失效"并清掉有效会话。
+            // HttpClient 超时(令牌未取消)仍按普通请求失败处理。
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "getRoleDetail 请求异常: roleId={RoleId} id={TargetRoleId}", roleId, targetRoleId);
@@ -601,6 +607,10 @@ public sealed class KujiequApiClient
         {
             env = await SendEnvelopeAsync(BaseDataUrlValue, headers, body, ct).ConfigureAwait(false);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw; // 取消向上传播;超时仍按请求失败返回 null
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "baseData 请求异常: roleId={RoleId}", roleId);
@@ -641,6 +651,10 @@ public sealed class KujiequApiClient
             env = await SendEnvelopeAsync(
                 ExploreIndexUrlValue, headers, body, ct,
                 extraSuccessCodes: KujiequSoftSuccessCodes).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw; // 取消向上传播;超时仍按请求失败返回 null(不连累整页)
         }
         catch (Exception ex)
         {
@@ -738,9 +752,11 @@ public sealed class KujiequApiClient
         var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         // 完整请求体可能含 token 等凭据:降为 Debug 级(默认 Information 门槛下不落盘),
         // 且 IsEnabled 守卫避免每请求急切执行 Truncate + 多 provider 格式化。
+        // requestToken 的响应含 accessToken、请求体可能含 token:写日志前脱敏(先脱敏再截断,见 SensitiveLogMasker)
         if (_logger.IsEnabled(LogLevel.Debug))
         {
-            _logger.LogDebug("库街区数据中心请求: url={Url} body={Body} 响应前300={Resp}", url, body, Truncate(json, 300));
+            _logger.LogDebug("库街区数据中心请求: url={Url} body={Body} 响应前300={Resp}",
+                url, SensitiveLogMasker.Mask(body), Truncate(SensitiveLogMasker.Mask(json), 300));
         }
 
         var env = JsonSerializer.Deserialize(json, KujiequJsonContext.Default.KujiequEnvelope);

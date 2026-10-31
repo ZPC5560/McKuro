@@ -185,4 +185,49 @@ public class UpdateInstallerTests : IDisposable
         Assert.NotEmpty(failures);
         Assert.False(File.Exists(Path.Combine(_gameDir, "Client", "Data", "a.bin")));
     }
+
+    /// <summary>M3:备份是同卷移动(不再整文件复制),原路径随即腾空、内容进入 .McKuro_backup。</summary>
+    [Fact]
+    public void BackupFile_MovesOriginal_IntoBackupDir()
+    {
+        var original = Path.Combine(_gameDir, "Client", "Data", "a.bin");
+        Directory.CreateDirectory(Path.GetDirectoryName(original)!);
+        File.WriteAllText(original, "old");
+
+        UpdateInstaller.BackupFile(original, _gameDir);
+
+        Assert.False(File.Exists(original));
+        var backup = Path.Combine(_gameDir, UpdateInstaller.BackupDirName, "Client", "Data", "a.bin");
+        Assert.Equal("old", File.ReadAllText(backup));
+
+        // 同一路径再备份一次:覆盖旧备份而不是抛异常
+        File.WriteAllText(original, "older");
+        UpdateInstaller.BackupFile(original, _gameDir);
+        Assert.Equal("older", File.ReadAllText(backup));
+    }
+
+    /// <summary>L6:工作区跳过规则按目录边界判断,DiffDataX/ 这类同前缀目录不能被当成 DiffData/。</summary>
+    [Fact]
+    public void RemoveObsolete_UsesDirectoryBoundary_ForWorkspaceDirs()
+    {
+        var manifest = new GameManifest { Version = "1.0", Files = [Entry("keep.bin", "k")] };
+        void Write(string relative)
+        {
+            var full = Path.Combine(_gameDir, relative.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllText(full, "x");
+        }
+        Write("keep.bin");
+        Write("DiffData/3.7.0/patch.krdiff");
+        Write("DiffDataX/stray.bin");
+        Write(UpdateInstaller.BackupDirName + "/old.bin");
+
+        var removed = new UpdateInstaller().RemoveObsolete(manifest, _gameDir);
+
+        Assert.Equal(1, removed);
+        Assert.True(File.Exists(Path.Combine(_gameDir, "keep.bin")));
+        Assert.True(File.Exists(Path.Combine(_gameDir, "DiffData", "3.7.0", "patch.krdiff")));
+        Assert.True(File.Exists(Path.Combine(_gameDir, UpdateInstaller.BackupDirName, "old.bin")));
+        Assert.False(File.Exists(Path.Combine(_gameDir, "DiffDataX", "stray.bin")));
+    }
 }

@@ -78,14 +78,18 @@ public sealed partial class KuroClient
         return JsonSerializer.Deserialize(json, KuroJsonContext.Default.SignRecordInfo);
     }
 
-    /// <summary>库街区库洛币每日签到(user/signIn)。code 200 或 1511 为正常。</summary>
+    /// <summary>库街区库洛币每日签到(user/signIn)。code 200 或 1511(今日已签)为正常。</summary>
     public Task<KuroClientReturnCode<KuroClientSignInModel>?> SignInClientAsync(KuroAccount account, CancellationToken ct = default)
         => _kuro.SendTaskRequestAsync(
             account,
             BaseUrl + "/user/signIn",
             new Dictionary<string, string> { { "gameId", "2" }, { "geeTestData", "" } },
             KuroJsonContext.Default.KuroClientReturnCodeKuroClientSignInModel,
-            ct);
+            ct,
+            // 用户在官方 App 签过或重跑任务时返回 1511;当成失败会让浏览/点赞/分享整体跳过。
+            acceptCodes: SignInAcceptCodes);
+
+    private static readonly int[] SignInAcceptCodes = [1511];
 
     /// <summary>首页帖子流。</summary>
     public Task<KuroClientReturnCode<KuroClientHomeFeedModel>?> FeedHomeListsAsync(

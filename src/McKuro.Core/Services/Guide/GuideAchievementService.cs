@@ -154,12 +154,38 @@ public sealed partial class GuideAchievementService
             return null;
         }
 
-        // 多攻略默认取点赞最高的一篇(GetIntroductionListAsync 已按点赞数降序)
+        // 多攻略:用户此前选过且仍在列表中的那篇优先,否则取点赞最高的一篇
+        // (GetIntroductionListAsync 已按点赞数降序)。不能无条件取 list[0]:
+        // GetAchievementByIdAsync 成功后会把 selected_id 写成传入的 id,后台预取/兜底填充
+        // 会因此覆盖用户手动选择的攻略。
         var list = await GetIntroductionListAsync(roleName, cardRoleId, ct, forceRefresh).ConfigureAwait(false);
-        var top = list.FirstOrDefault();
-        return top is null
+        var targetId = PickIntroductionId(list, _cache?.TryGet(GuideCacheAccountKey, cardRoleId)?.SelectedId ?? 0);
+        return targetId is not { } id
             ? null
-            : await GetAchievementByIdAsync(roleName, cardRoleId, top.Id, ct, forceRefresh).ConfigureAwait(false);
+            : await GetAchievementByIdAsync(roleName, cardRoleId, id, ct, forceRefresh).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 决定要展示/预取哪篇攻略:<paramref name="selectedId"/>(缓存里记住的用户选择)仍在列表中时沿用它,
+    /// 否则取列表第一篇(点赞最高);列表为空返回 null。
+    /// </summary>
+    public static long? PickIntroductionId(IReadOnlyList<GuideIntroductionItem> list, long selectedId)
+    {
+        if (list.Count == 0)
+        {
+            return null;
+        }
+        if (selectedId > 0)
+        {
+            foreach (var item in list)
+            {
+                if (item.Id == selectedId)
+                {
+                    return selectedId;
+                }
+            }
+        }
+        return list[0].Id;
     }
 
     /// <summary>

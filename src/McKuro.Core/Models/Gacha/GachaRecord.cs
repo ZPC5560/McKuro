@@ -29,7 +29,20 @@ public sealed class GachaRecord
     /// <summary>归属玩家 ID(本地存储时写入)。</summary>
     [JsonIgnore] public string PlayerId { get; set; } = "";
 
-    /// <summary>卡池标识 → 枚举(分析/存储用)。优先按数字 ID 解析,再按名称包含关键词映射;
+    /// <summary>
+    /// 已确定的卡池枚举(存储层/同步层写入)。非 null 时 <see cref="PoolType"/> 直接返回它,
+    /// 不再解析 <see cref="CardPoolType"/> 文本。
+    /// <para>
+    /// 为什么需要:库里存的是卡池整数,早先读出时转成本地化显示名再靠中文关键词解析回枚举,
+    /// 英文界面下("Character Event" 等)全部落到 RoleActivity 兜底,所有卡池被当成同一条保底序列;
+    /// 中文下"感恩定向"也匹配不到。卡池以查询时的池号为准,所以读库时直接用整数赋值。
+    /// </para>
+    /// </summary>
+    [JsonIgnore]
+    public CardPoolTypeEnum? StoredPoolType { get; set; }
+
+    /// <summary>卡池标识 → 枚举(分析/存储用)。<see cref="StoredPoolType"/> 有值时直接返回;
+    /// 否则优先按数字 ID 解析,再按名称包含关键词映射;
     /// 常驻池为混合池(角色+武器),按资源类型拆分为角色常驻/武器常驻。
     /// <para>结果按实例缓存:分析路径(分组/每日统计)会对同一记录多次访问 PoolType,
     /// 且关键词匹配必须走 Ordinal(文化敏感 Contains 慢 5-10 倍)。</para></summary>
@@ -38,6 +51,10 @@ public sealed class GachaRecord
     {
         get
         {
+            if (StoredPoolType is { } stored)
+            {
+                return stored;
+            }
             if (_poolTypeCache is { } cached)
             {
                 return cached;
@@ -51,7 +68,9 @@ public sealed class GachaRecord
             }
             else if (name.Contains("忆旅", StringComparison.Ordinal)) result = name.Contains("武器", StringComparison.Ordinal) ? CardPoolTypeEnum.WeaponMemoryJourney : CardPoolTypeEnum.CharacterMemoryJourney;
             else if (name.Contains("联动", StringComparison.Ordinal)) result = name.Contains("武器", StringComparison.Ordinal) ? CardPoolTypeEnum.WeaponCollaboration : CardPoolTypeEnum.CharacterCollaboration;
-            else if (name.Contains("新手", StringComparison.Ordinal) && name.Contains("感恩", StringComparison.Ordinal)) result = CardPoolTypeEnum.GratitudeOrientation;
+            // "感恩定向"本身不含"新手",所以只看"感恩";须排在"新手"之前("新手自选唤取（感恩定向唤取）"归感恩定向)。
+            else if (name.Contains("感恩", StringComparison.Ordinal)) result = CardPoolTypeEnum.GratitudeOrientation;
+            else if (name.Contains("新手", StringComparison.Ordinal) && name.Contains("自选", StringComparison.Ordinal)) result = CardPoolTypeEnum.BeginnerChoice;
             else if (name.Contains("新手", StringComparison.Ordinal)) result = CardPoolTypeEnum.Beginner;
             else if (name.Contains("常驻", StringComparison.Ordinal)) result = IsRole ? CardPoolTypeEnum.RoleResident : CardPoolTypeEnum.WeaponsResident;
             else if (name.Contains("新旅", StringComparison.Ordinal)) result = name.Contains("武器", StringComparison.Ordinal) ? CardPoolTypeEnum.WeaponNovice : CardPoolTypeEnum.CharacterNovice;

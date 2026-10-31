@@ -99,8 +99,11 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <!-- ─── 右:角色资料卡 + 每日数据(参考 Java WutheringWavesTool 首页布局) ─── -->
-                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                    <!-- ─── 右:角色资料卡 + 每日数据(参考 Java WutheringWavesTool 首页布局) ───
+                         上/下留白加在 ScrollViewer 自身(而不是内部 StackPanel):
+                         StackPanel 的 Margin 会随内容一起滚走,滚到顶时卡片上边缘又会贴上窗口边框。 -->
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto"
+                                  Margin="0,14,0,14">
                         <StackPanel Spacing="16">
                             <!-- 资料卡:头像/昵称/等级/开服玩家徽章/游玩天数 -->
                             <Border CornerRadius="16" Background="{DynamicResource McKuroGlassFill}"

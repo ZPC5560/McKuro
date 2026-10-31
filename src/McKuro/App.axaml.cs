@@ -21,6 +21,9 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // UI 线程未处理异常记录(进程级处理器已在 Program.Main 挂好);容器未初始化前回退直写文件日志
+        GlobalExceptionLogger.RegisterDispatcherHandler();
+
         // 诊断:确认启动线程模型(App 初始化线程 vs 平台线程是否同一条)
         System.Console.Error.WriteLine(
             $"MCKURO-THREAD app-init tid={Environment.CurrentManagedThreadId} apt={Thread.CurrentThread.GetApartmentState()}");
@@ -71,7 +74,7 @@ public partial class App : Application
             _ => Avalonia.Styling.ThemeVariant.Default,
         };
 
-        // 每日自动签到调度(每天 8:00 + 启动后一次)
+        // 每日自动签到调度(启动 15 秒后检查一次,之后每小时检查;按天去重,当天只签一次)
         _scheduler = new DailyTaskScheduler();
         _scheduler.Start();
 
@@ -166,6 +169,20 @@ public partial class App : Application
                             DispatcherTimer.RunOnce(
                                 () => launcherVm.CheckResidueCommand.Execute(null),
                                 TimeSpan.FromSeconds(2));
+                        }
+                    }
+
+                    // 「游戏已退出」状态文案自动消失的目视验证(McKuro_SMOKE_SESSION_END=1):
+                    // 伪造一次正常结束(不是 Failed,失败文案要常驻),用于确认 8 秒后状态栏清空。
+                    if (Environment.GetEnvironmentVariable("McKuro_SMOKE_SESSION_END") == "1")
+                    {
+                        var launcherItem = vm.NavigationItems.FirstOrDefault(n => n.ViewModel is LauncherViewModel);
+                        if (launcherItem?.ViewModel is LauncherViewModel launcherVm)
+                        {
+                            vm.NavigateTo(launcherItem);
+                            DispatcherTimer.RunOnce(
+                                () => AppServices.GameMonitor.SimulateSessionEndedForSmoke(GameSessionEndReason.Finished),
+                                TimeSpan.FromSeconds(3));
                         }
                     }
 

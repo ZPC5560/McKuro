@@ -61,6 +61,11 @@ public sealed class CloudGameService
                 | System.Net.DecompressionMethods.Brotli,
             UseCookies = false,
         };
+        // 独立 handler 不会继承共享客户端的代理设置;macOS 上 DefaultProxy 不读系统代理,需显式注入。
+        if (McKuro.Core.Services.Infrastructure.SystemProxyDetector.Detect() is { } proxy)
+        {
+            handler.Proxy = proxy;
+        }
         var client = new HttpClient(handler) { BaseAddress = new Uri(baseUrl), Timeout = TimeSpan.FromSeconds(30) };
         client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
         client.DefaultRequestHeaders.TryAddWithoutValidation("Kr-Ver", "1.9.0");

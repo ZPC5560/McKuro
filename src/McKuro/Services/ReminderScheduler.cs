@@ -6,6 +6,7 @@ using McKuro.Core.Services.Gacha;
 using McKuro.Core.Services.Notification;
 using McKuro.Core.Services.Tower;
 using McKuro.ViewModels;
+using Microsoft.Extensions.Logging;
 
 namespace McKuro.Services;
 
@@ -93,15 +94,20 @@ public sealed class ReminderScheduler : IDisposable
                 }
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // 正常退出
+            // 正常退出(只认本调度器自己的取消;HttpClient 超时等其他取消已在 SafeAsync 内吞掉)
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // 调度循环异常静默:提醒属辅助功能,不因轮询失败影响主程序
+            Log()?.LogWarning(ex, "提醒调度循环异常退出");
         }
     }
+
+    /// <summary>日志(容器未初始化时为 null,例如单测)。</summary>
+    private static ILogger? Log()
+        => AppServices.LoggerFactory?.CreateLogger<ReminderScheduler>();
 
     private async Task RunDueChecksAsync(CancellationToken ct)
     {
@@ -119,23 +125,23 @@ public sealed class ReminderScheduler : IDisposable
         if (settings.NotifLoginEnabled && now - _lastLogin >= LoginInterval)
         {
             _lastLogin = now;
-            due.Add(SafeAsync(() => CheckLoginAsync(ct)));
+            due.Add(SafeAsync(() => CheckLoginAsync(ct), nameof(CheckLoginAsync), ct));
         }
         if (settings.NotifActivityEnabled && now - _lastActivity >= ActivityInterval)
         {
             _lastActivity = now;
-            due.Add(SafeAsync(() => CheckActivityAsync(ct)));
+            due.Add(SafeAsync(() => CheckActivityAsync(ct), nameof(CheckActivityAsync), ct));
         }
         if (ReminderWindows.IsDailyProgressDue(now) && now - _lastProgress >= ProgressInterval)
         {
             _lastProgress = now;
-            due.Add(SafeAsync(() => CheckDailyProgressAsync(ct)));
+            due.Add(SafeAsync(() => CheckDailyProgressAsync(ct), nameof(CheckDailyProgressAsync), ct));
         }
         // 赛季临期(深塔/海墟/矩阵):不受时间窗限制,任何时刻剩余 ≤3 天都算(与活动临期同口径)
         if (settings.NotifTowerEnabled && now - _lastTower >= TowerInterval)
         {
             _lastTower = now;
-            due.Add(SafeAsync(() => CheckTowerSeasonAsync(ct)));
+            due.Add(SafeAsync(() => CheckTowerSeasonAsync(ct), nameof(CheckTowerSeasonAsync), ct));
         }
         if (due.Count > 0)
         {
@@ -143,19 +149,25 @@ public sealed class ReminderScheduler : IDisposable
         }
     }
 
-    private static async Task SafeAsync(Func<Task> check)
+    /// <summary>
+    /// 单项检查失败静默(记日志)。只有调度器自身取消才向上抛:
+    /// HttpClient.Timeout 触发的 <see cref="TaskCanceledException"/> 也是 <see cref="OperationCanceledException"/>,
+    /// 若一律重抛,一次网络超时就会让整个提醒循环在本次会话内永久停止。
+    /// </summary>
+    private static async Task SafeAsync(Func<Task> check, string name, CancellationToken ct)
     {
         try
         {
             await check().ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // 单项检查失败静默
+            // 单项检查失败静默(网络抖动/超时),下一轮再试
+            Log()?.LogInformation("提醒检查 {Check} 失败: {Error}", name, ex.Message);
         }
     }
 
@@ -304,7 +316,8 @@ public sealed class ReminderScheduler : IDisposable
         {
             var limit = data.LivenessLimit > 0 ? data.LivenessLimit : 100;
             AppServices.Reminders.Raise(
-                $"progress:liveness:{now:yyyyMMdd}",
+                // 按游戏日(服务器 UTC+8、4 点重置)去重,与本机时区无关
+                $"progress:liveness:{ReminderWindows.DayKey(now)}",
                 NotificationKind.DailyLiveness,
                 LanguageService.Format("Notif.LivenessTitle"),
                 LanguageService.Format("Notif.LivenessMessage", limit),

@@ -140,21 +140,74 @@ public sealed class TimeLineChart : Control
         TipsProperty.Changed.AddClassHandler<TimeLineChart>((o, _) => o.OnDataChanged());
     }
 
+    // 当前订阅的三个集合(同 SpeedTrendChart:具名处理器 + 换集合时退订)。
+    // 集合属于常驻的 GachaViewModel,每次进入抽卡页都会新建视图和图表:
+    // 旧写法每次设置数据源都追加匿名处理器且从不移除,旧图表全部被集合钉住无法回收。
+    private INotifyCollectionChanged? _observedValues;
+    private INotifyCollectionChanged? _observedLabels;
+    private INotifyCollectionChanged? _observedTips;
+    private bool _attached;
+
     private void OnDataChanged()
     {
-        Subscribe(Values);
-        Subscribe(Labels);
-        Subscribe(Tips);
+        if (_attached)
+        {
+            ResubscribeAll();
+        }
         _hoverIndex = -1;
         Dispatcher.UIThread.Post(InvalidateVisual);
     }
 
-    private void Subscribe(IEnumerable? collection)
+    /// <summary>按当前属性值重订阅(实例未变则不动,避免叠加处理器)。</summary>
+    private void ResubscribeAll()
     {
-        if (collection is INotifyCollectionChanged oc)
+        Resubscribe(ref _observedValues, Values);
+        Resubscribe(ref _observedLabels, Labels);
+        Resubscribe(ref _observedTips, Tips);
+    }
+
+    private void UnsubscribeAll()
+    {
+        Resubscribe(ref _observedValues, null);
+        Resubscribe(ref _observedLabels, null);
+        Resubscribe(ref _observedTips, null);
+    }
+
+    private void Resubscribe(ref INotifyCollectionChanged? observed, IEnumerable? collection)
+    {
+        var next = collection as INotifyCollectionChanged;
+        if (ReferenceEquals(observed, next))
         {
-            oc.CollectionChanged += (_, _) => Dispatcher.UIThread.Post(InvalidateVisual);
+            return;
         }
+        if (observed is not null)
+        {
+            observed.CollectionChanged -= OnCollectionChanged;
+        }
+        observed = next;
+        if (observed is not null)
+        {
+            observed.CollectionChanged += OnCollectionChanged;
+        }
+    }
+
+    private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => Dispatcher.UIThread.Post(InvalidateVisual);
+
+    /// <summary>挂上视觉树才订阅:视图被丢弃(离开抽卡页)时退订,常驻 ViewModel 的集合不再引用本控件。</summary>
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _attached = true;
+        ResubscribeAll();
+        InvalidateVisual();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _attached = false;
+        UnsubscribeAll();
     }
 
     private static readonly Typeface LabelTypeface = new(FontFamily.Default);

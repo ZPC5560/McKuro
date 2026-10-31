@@ -113,4 +113,28 @@ public class ClassHandlerHygieneTests
             "AddClassHandler 只能写在静态构造函数里(类型级事件,实例构造里挂会随实例数累积不解除的处理器):\n  "
             + string.Join("\n  ", offenders));
     }
+
+    /// <summary>
+    /// 控件订阅外部集合(常驻 ViewModel 持有)的 CollectionChanged 不得用匿名 lambda:
+    /// lambda 无法退订,集合会把每一代控件实例都钉住(TimeLineChart 曾因此泄漏,见 SpeedTrendChart 的具名写法)。
+    /// </summary>
+    [Fact]
+    public void Controls_Do_Not_Subscribe_CollectionChanged_With_Lambdas()
+    {
+        var root = Path.Combine(RepositoryRoot(), "src", "McKuro", "Controls");
+        var offenders = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+        {
+            var lines = File.ReadAllLines(file);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"CollectionChanged\s*\+=\s*(\(|delegate|\w+\s*=>)"))
+                {
+                    offenders.Add($"{Path.GetFileName(file)}:{i + 1}  {lines[i].Trim()}");
+                }
+            }
+        }
+        Assert.True(offenders.Count == 0,
+            "控件订阅 CollectionChanged 必须用具名处理器并在换集合/脱离视觉树时退订:\n  " + string.Join("\n  ", offenders));
+    }
 }

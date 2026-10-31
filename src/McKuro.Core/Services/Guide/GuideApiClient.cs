@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using McKuro.Core.Models.Guide;
+using McKuro.Core.Services.Roles;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -167,7 +168,7 @@ public sealed class GuideApiClient
         // 每请求完整响应降 Debug + IsEnabled 守卫(默认 Information 门槛不落盘,免急切 Truncate)。
         if (_logger.IsEnabled(LogLevel.Debug))
         {
-            _logger.LogDebug("mcguide 请求: GET {Path} 响应前300={Resp}", path, Truncate(json));
+            _logger.LogDebug("mcguide 请求: GET {Path} 响应前300={Resp}", path, Truncate(SensitiveLogMasker.Mask(json)));
         }
         return json;
     }
@@ -185,9 +186,11 @@ public sealed class GuideApiClient
         using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
         var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         // POST body 含登录手机号等凭据:降 Debug,默认不落盘(对齐 KujiequApiClient 的处理)。
+        // user/login/sdk 的请求体含 accessToken、响应含 x-token:写日志前脱敏(先脱敏再截断)
         if (_logger.IsEnabled(LogLevel.Debug))
         {
-            _logger.LogDebug("mcguide 请求: POST {Path} body={Body} 响应前300={Resp}", path, payload, Truncate(json));
+            _logger.LogDebug("mcguide 请求: POST {Path} body={Body} 响应前300={Resp}",
+                path, SensitiveLogMasker.Mask(payload), Truncate(SensitiveLogMasker.Mask(json)));
         }
         return json;
     }
@@ -199,7 +202,8 @@ public sealed class GuideApiClient
     {
         request.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
         request.Headers.TryAddWithoutValidation("Accept-Language", "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5");
-        request.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip, deflate, br, zstd");
+        // 不手动声明 Accept-Encoding:旧值含 zstd,而 .NET 10 的 handler 解不了 zstd(CDN 一旦返回 zstd,
+        // 所有调用都会报"响应解析失败")。压缩协商交给 HttpClient 的 AutomaticDecompression。
         request.Headers.TryAddWithoutValidation("x-fe-trace-id", FeTraceId);
         request.Headers.TryAddWithoutValidation("x-language", Language);
         if (!string.IsNullOrWhiteSpace(xToken))

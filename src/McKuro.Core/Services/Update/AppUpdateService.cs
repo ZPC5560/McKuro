@@ -13,8 +13,19 @@ public sealed class AppUpdateInfo
     public required long AssetSize { get; init; }
     public required string DownloadUrl { get; init; }
 
-    /// <summary>发布方提供的 sha256(小写 hex);未提供时为 null,此时跳过校验不阻断更新。</summary>
+    /// <summary>
+    /// 发布方提供的 sha256(小写 hex);未提供时为 null。
+    /// 无摘要时下载包无法校验(启用加速镜像时包还来自第三方),<b>不得自动安装</b>,见 <see cref="HasChecksum"/>。
+    /// </summary>
     public string? Sha256 { get; init; }
+
+    /// <summary>
+    /// 是否有可用于校验下载包的 sha256。为 false 时调用方必须让用户明确确认后才能安装,
+    /// 不能走"发现新版直接静默升级"(<c>AppUpdateAutoInstall</c>)路径。
+    /// <para>TODO: 长期应对发布包签名(Authenticode 或 minisign)并用内置公钥校验;
+    /// 目前摘要与安装包来自同一 GitHub 渠道,只能防传输损坏与镜像篡改。</para>
+    /// </summary>
+    public bool HasChecksum => !string.IsNullOrWhiteSpace(Sha256);
 
     /// <summary>Release 页面地址(供 UI「查看发布说明」跳转);可能为 null。</summary>
     public string? ReleaseUrl { get; init; }
@@ -398,15 +409,23 @@ public sealed class AppUpdateService
     /// 系统代理自动注入(macOS 上 DefaultProxy 不读系统设置);
     /// GitHub IP 域前置(见 <see cref="GitHubIpFronting"/>,默认关闭,应对 DNS 污染/解析不可达);
     /// 断点续传(.part 分块 + HTTP Range)+ 卡死重试(单次读取 60s 无数据即断,最多 4 次)。
-    /// <paramref name="expectedSha256"/> 非空时校验下载产物,摘要不符则丢弃并重试(见 <see cref="UpdateChecksum"/>)。</summary>
+    /// <paramref name="expectedSha256"/> 非空时校验下载产物,摘要不符则丢弃并重试(见 <see cref="UpdateChecksum"/>)。
+    /// <paramref name="requireChecksum"/> 为真且没有摘要时直接返回 null 不下载(自动安装路径应传 true,
+    /// 见 <see cref="AppUpdateInfo.HasChecksum"/>)。</summary>
     public async Task<string?> DownloadAsync(
         string url,
         string destDir,
         IProgress<double>? progress = null,
         CancellationToken ct = default,
-        string? expectedSha256 = null)
+        string? expectedSha256 = null,
+        bool requireChecksum = false)
     {
         const int maxAttempts = 4;
+        if (requireChecksum && string.IsNullOrWhiteSpace(expectedSha256))
+        {
+            System.Console.Error.WriteLine("MCKURO-UPDATE dl: 无 sha256 摘要且要求校验,拒绝下载");
+            return null;
+        }
         try
         {
             Directory.CreateDirectory(destDir);
@@ -439,43 +458,67 @@ public sealed class AppUpdateService
                     using var response = await downloader
                         .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
                         .ConfigureAwait(false);
-                    response.EnsureSuccessStatusCode();
-                    var resumed = (int)response.StatusCode == 206 && resumeFrom > 0;
-                    var total = response.Content.Headers.ContentLength.HasValue
-                        ? response.Content.Headers.ContentLength.Value + (resumed ? resumeFrom : 0)
-                        : -1;
-                    if (!resumed)
+                    // .part 已完整但上次在改名前退出:Range: bytes=<全长>- 会得到 416。
+                    // 远端 Content-Range 报的总长与 .part 一致 → 直接进入校验/改名;
+                    // 否则 .part 与远端不一致,删掉让下一轮从头下载(不删的话四次重试全是 416,且 .part 永远留着)。
+                    var rangeNotSatisfiable = response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable && resumeFrom > 0;
+                    var partComplete = rangeNotSatisfiable
+                        && response.Content.Headers.ContentRange?.Length == resumeFrom;
+                    if (rangeNotSatisfiable && !partComplete)
                     {
-                        resumeFrom = 0;
-                    }
-
-                    await using var source = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-                    await using (var target = new FileStream(partPath, resumed ? FileMode.Append : FileMode.Create,
-                        FileAccess.Write, FileShare.None, 128 * 1024, useAsync: true))
-                    {
-                        var buffer = new byte[128 * 1024];
-                        var downloaded = resumeFrom;
-                        while (true)
+                        try
                         {
-                            // 单次读取 60 秒无数据视为连接卡死 → 抛出重试(断点续传)
-                            using var readCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                            readCts.CancelAfter(TimeSpan.FromSeconds(60));
-                            int read;
-                            try
+                            File.Delete(partPath);
+                        }
+                        catch (Exception)
+                        {
+                            // 删除失败:下一轮仍会续传失败,最终返回 null
+                        }
+                    }
+                    if (partComplete)
+                    {
+                        progress?.Report(1);
+                    }
+                    else
+                    {
+                        response.EnsureSuccessStatusCode();
+                        var resumed = (int)response.StatusCode == 206 && resumeFrom > 0;
+                        var total = response.Content.Headers.ContentLength.HasValue
+                            ? response.Content.Headers.ContentLength.Value + (resumed ? resumeFrom : 0)
+                            : -1;
+                        if (!resumed)
+                        {
+                            resumeFrom = 0;
+                        }
+
+                        await using var source = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                        await using (var target = new FileStream(partPath, resumed ? FileMode.Append : FileMode.Create,
+                            FileAccess.Write, FileShare.None, 128 * 1024, useAsync: true))
+                        {
+                            var buffer = new byte[128 * 1024];
+                            var downloaded = resumeFrom;
+                            while (true)
                             {
-                                read = await source.ReadAsync(buffer, readCts.Token).ConfigureAwait(false);
+                                // 单次读取 60 秒无数据视为连接卡死 → 抛出重试(断点续传)
+                                using var readCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                                readCts.CancelAfter(TimeSpan.FromSeconds(60));
+                                int read;
+                                try
+                                {
+                                    read = await source.ReadAsync(buffer, readCts.Token).ConfigureAwait(false);
+                                }
+                                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                                {
+                                    throw new TimeoutException("下载连接 60 秒无数据");
+                                }
+                                if (read == 0)
+                                {
+                                    break;
+                                }
+                                await target.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                                downloaded += read;
+                                progress?.Report(total > 0 ? (double)downloaded / total : 0);
                             }
-                            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-                            {
-                                throw new TimeoutException("下载连接 60 秒无数据");
-                            }
-                            if (read == 0)
-                            {
-                                break;
-                            }
-                            await target.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
-                            downloaded += read;
-                            progress?.Report(total > 0 ? (double)downloaded / total : 0);
                         }
                     }
                     // 完整性校验:仅在发布方提供摘要时执行。不符说明传输损坏或被篡改,

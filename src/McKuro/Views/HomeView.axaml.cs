@@ -18,9 +18,8 @@ public partial class HomeView : UserControl
     /// 确定后由 VM 持久化绑定并重新拉取数据。
     /// <para>
     /// <b>必须整体 try/catch</b>:<c>async void</c> 的异常无法被调用方捕获(按钮点击没有等待者),
-    /// 会直接抛到 UI 线程;而本仓没有任何全局异常兜底(无 UnhandledException/
-    /// DispatcherUnhandledException/UnobservedTaskException 处理器),逃逸即终止进程 ——
-    /// 对一颗昵称旁的按钮来说代价过大。弹窗显示失败(owner 不可见等)与构造失败都会走到这里。
+    /// 会直接抛到 UI 线程;全局处理器(<see cref="GlobalExceptionLogger"/>)只记日志、不吞异常,
+    /// 逃逸仍会终止进程 —— 对一颗昵称旁的按钮来说代价过大。弹窗显示失败(owner 不可见等)与构造失败都会走到这里。
     /// </para>
     /// </summary>
     private async void OnSwitchAccountClick(object? sender, RoutedEventArgs e)

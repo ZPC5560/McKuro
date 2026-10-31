@@ -268,7 +268,9 @@ public sealed class TintedAsyncImage : Grid
             var src = source;
             var tintValue = tint.Value;
             shared = Task.Run(() => CreateTinted(src, tintValue));
-            TintCache.Set(key, shared, weight: 0);
+            // 着色图与源图同尺寸(Bgra8888):按源图像素估算权重,让 32 MB 上限真正生效
+            // (旧实现权重恒为 0,实际只有 64 条的数量上限)
+            TintCache.Set(key, shared, weight: ImageBitmapLruCache.EstimateBytes(src));
         }
         _ = ApplyAsync(gen, source, shared);
     }

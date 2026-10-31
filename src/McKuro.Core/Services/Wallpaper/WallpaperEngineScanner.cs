@@ -103,15 +103,10 @@ public static class WallpaperEngineScanner
 
     private static string? ResolveVideoPath(string dir, string? fileField)
     {
-        if (!string.IsNullOrWhiteSpace(fileField))
+        // 防越界:file 字段含 .. 或绝对/UNC 路径指向包外时忽略,回退到目录内探测
+        if (ResolveInsidePackage(dir, fileField) is { } p && File.Exists(p))
         {
-            var p = Path.GetFullPath(Path.Combine(dir, fileField.Trim()));
-            // 防越界:file 字段含 .. 指向包外时忽略,回退到目录内探测
-            if (p.StartsWith(dir.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
-                    StringComparison.OrdinalIgnoreCase) && File.Exists(p))
-            {
-                return p;
-            }
+            return p;
         }
         try
         {
@@ -124,24 +119,54 @@ public static class WallpaperEngineScanner
         }
     }
 
+    /// <summary>
+    /// 把 project.json 中的相对路径字段解析为包目录内的绝对路径;越界(含 ..)、绝对路径、
+    /// UNC/设备路径一律返回 null。<b>先做纯字符串判定,不触碰文件系统</b>(File.Exists 对 UNC 会发起网络访问)。
+    /// </summary>
+    internal static string? ResolveInsidePackage(string dir, string? field)
+    {
+        if (string.IsNullOrWhiteSpace(field))
+        {
+            return null;
+        }
+        var rel = field.Trim();
+        // 拒绝根路径/UNC/盘符相对路径:Path.Combine 遇到根路径会直接丢弃 dir
+        if (Path.IsPathRooted(rel) || rel.StartsWith(@"\\", StringComparison.Ordinal) || rel.StartsWith("//", StringComparison.Ordinal)
+            || rel.Contains(':'))
+        {
+            return null;
+        }
+        string full;
+        string root;
+        try
+        {
+            full = Path.GetFullPath(Path.Combine(dir, rel));
+            root = Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                   + Path.DirectorySeparatorChar;
+        }
+        catch (Exception)
+        {
+            return null; // 非法字符等
+        }
+        return full.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? full : null;
+    }
+
     /// <summary>按回退链解析目录内的封面图;找不到返回 null。previewField 为 project.json 的 preview 字段(可空)。</summary>
     public static string? FindCoverIn(string dir, string? previewField = null)
     {
-        if (!string.IsNullOrWhiteSpace(previewField))
+        // preview 与 file 同样来自不可信的工坊内容:必须限制在包目录内。
+        // 否则 \\attacker\share\x.jpg 这类 UNC 路径会让 File.Exists 发起 SMB 连接并泄露 NTLM 哈希。
+        if (ResolveInsidePackage(dir, previewField) is { } p && File.Exists(p))
         {
-            var p = Path.GetFullPath(Path.Combine(dir, previewField.Trim()));
-            if (File.Exists(p))
-            {
-                return p;
-            }
+            return p;
         }
         // 回退链:常见封面文件名 → 目录内首个图片(实测 5/20 包无 preview.jpg,仅有 preview.gif)
         foreach (var name in new[] { "preview.jpg", "preview0.jpg", "preview.gif", "preview.webp", "preview.png" })
         {
-            var p = Path.Combine(dir, name);
-            if (File.Exists(p))
+            var candidate = Path.Combine(dir, name);
+            if (File.Exists(candidate))
             {
-                return p;
+                return candidate;
             }
         }
         try

@@ -238,6 +238,58 @@ public class TowerModelTests
     }
 
     [Fact]
+    public void RankText_HandlesRanksAboveSixGrades()
+    {
+        // 实机截图(用户提供)确认:奇点扩张 58454 分 rank=7 在游戏里是「皇冠」徽记,
+        // 不是字母 SSS —— 上一版把 rank≥5 一律当 SSS 是错的,已按实证改为皇冠。
+        // rank=6 尚无实机数据,按"介于 SSS 与皇冠之间"同样取皇冠(宁高勿低)。
+        Assert.Equal(TowerViewModel.RankCrownText, TowerViewModel.RankTextOf(6));
+        Assert.Equal(TowerViewModel.RankCrownText, TowerViewModel.RankTextOf(7));
+        Assert.Equal(TowerViewModel.RankCrownText, TowerViewModel.RankTextOf(99));
+        Assert.Equal("C", TowerViewModel.RankTextOf(-1));
+    }
+
+    [Fact]
+    public void RankText_IsMonotonicallyNonDecreasing()
+    {
+        // 分数越高档位不能越低:rank 递增时档位只能持平或上升(防止再次出现"高分显示 C")
+        var order = new[] { "C", "B", "A", "S", "SS", "SSS", TowerViewModel.RankCrownText };
+        var previous = -1;
+        for (var rank = 0; rank <= 10; rank++)
+        {
+            var index = Array.IndexOf(order, TowerViewModel.RankTextOf(rank));
+            Assert.True(index >= 0, $"rank={rank} 映射出了未知档位 {TowerViewModel.RankTextOf(rank)}");
+            Assert.True(index >= previous, $"rank={rank} 的档位低于 rank={rank - 1}(高低分档位倒挂)");
+            previous = index;
+        }
+    }
+
+    [Fact]
+    public void BuildModeItem_KeepsHighRankInsteadOfClampingToC()
+    {
+        // 回归:调用方曾把 rank 钳在 0..5,rank=7 落回 0 → 显示 C。
+        // 用实机数据结构(奇点扩张 58454 分 rank=7)验证:显示为皇冠档、且不显示字母。
+        var detail = new NewTowerModeDetail { ModeId = 1, Score = 58454, Rank = 7, HasRecord = true };
+        var item = TowerViewModel.BuildModeItem(detail);
+        Assert.Equal(TowerViewModel.RankCrownText, item.RankText);
+        Assert.True(item.RankIsCrown, "rank=7 应走皇冠徽记分支(界面不显示字母)");
+        Assert.Equal(TowerViewModel.SlashRankColor(TowerViewModel.RankCrownText), item.RankColor);
+    }
+
+    [Fact]
+    public void BuildModeItem_LetterRanksAreNotCrown()
+    {
+        // 字母档不能误进皇冠分支:实机稳态协议 rank=3(S)、上期奇点扩张 rank=5(SSS)
+        foreach (var (rank, expected) in new[] { (3, "S"), (5, "SSS") })
+        {
+            var item = TowerViewModel.BuildModeItem(
+                new NewTowerModeDetail { ModeId = rank == 3 ? 0 : 1, Score = 1000, Rank = rank, HasRecord = true });
+            Assert.Equal(expected, item.RankText);
+            Assert.False(item.RankIsCrown, $"rank={rank}({expected})不应显示为皇冠");
+        }
+    }
+
+    [Fact]
     public void SlashRankColor_MapsTopGradesDistinctly()
     {
         // 海墟第 12 关「无尽湍渊」满档 SSS 原先落进默认分支显示灰色(用户反馈),

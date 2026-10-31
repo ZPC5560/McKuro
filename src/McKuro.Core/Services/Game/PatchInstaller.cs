@@ -20,13 +20,46 @@ public sealed class PatchInstaller
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PatchInstaller>.Instance;
     }
 
+    /// <summary>
+    /// 按补丁计划安装。
+    /// </summary>
+    /// <param name="onGameFolderModified">
+    /// 第一次开始写游戏目录<b>之前</b>回调一次(启动原地 hpatchz、删除分组源文件、解压 krzip、移动普通资源)。
+    /// 调用方据此在取消时判断"游戏目录是否可能已被半改写";返回值里的
+    /// <see cref="PatchInstallResult.GameFolderModified"/> 给出同样的信息(失败结果也带)。
+    /// </param>
     public async Task<PatchInstallResult> InstallAsync(
         GamePatchPlan plan,
         string stagingDir,
         string gameRootDir,
         IReadOnlyList<GameFileEntry> patchFiles,
         IProgress<DownloadProgress>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Action? onGameFolderModified = null)
+    {
+        var modified = false;
+        void MarkModified()
+        {
+            if (!modified)
+            {
+                modified = true;
+                onGameFolderModified?.Invoke();
+            }
+        }
+
+        var result = await InstallCoreAsync(plan, stagingDir, gameRootDir, patchFiles, progress, MarkModified, ct)
+            .ConfigureAwait(false);
+        return modified ? result.WithGameFolderModified() : result;
+    }
+
+    private async Task<PatchInstallResult> InstallCoreAsync(
+        GamePatchPlan plan,
+        string stagingDir,
+        string gameRootDir,
+        IReadOnlyList<GameFileEntry> patchFiles,
+        IProgress<DownloadProgress>? progress,
+        Action markModified,
+        CancellationToken ct)
     {
         if (plan.DiffPackages.Count > 0 || plan.DiffGroups.Count > 0)
         {
@@ -51,6 +84,8 @@ public sealed class PatchInstaller
                 {
                     return PatchInstallResult.Failed($"差分安装空间不足: 需要 {FormatBytes(package.Package.Size)}");
                 }
+                // krdiff 的输出目录就是游戏目录(原地改写):进程一启动就视为已动过游戏目录。
+                markModified();
                 var result = await ApplyDiffAsync(hpatchz, gameRootDir, diffPath, gameRootDir, ct).ConfigureAwait(false);
                 if (!result.Success)
                 {
@@ -60,7 +95,7 @@ public sealed class PatchInstaller
 
             if (plan.DiffGroups.Count > 0)
             {
-                var groupResult = await InstallGroupsAsync(hpatchz, plan.DiffGroups, stagingDir, gameRootDir, progress, ct)
+                var groupResult = await InstallGroupsAsync(hpatchz, plan.DiffGroups, stagingDir, gameRootDir, progress, markModified, ct)
                     .ConfigureAwait(false);
                 if (!groupResult.Success)
                 {
@@ -79,6 +114,7 @@ public sealed class PatchInstaller
             {
                 return PatchInstallResult.Failed($"压缩包不存在: {zip.Package.Path}");
             }
+            markModified();
             var result = await ExtractZipAsync(zipPath, gameRootDir, ct).ConfigureAwait(false);
             if (!result.Success)
             {
@@ -93,6 +129,7 @@ public sealed class PatchInstaller
         if (ordinary.Length > 0)
         {
             ReportStage(progress, $"正在安装资源文件 ({ordinary.Length} 个)…");
+            markModified();
             var fileResult = await Task.Run(
                 () => _fileInstaller.InstallFilesFromStaging(stagingDir, gameRootDir, ordinary),
                 ct).ConfigureAwait(false);
@@ -119,6 +156,7 @@ public sealed class PatchInstaller
         string stagingDir,
         string gameRootDir,
         IProgress<DownloadProgress>? progress,
+        Action markModified,
         CancellationToken ct)
     {
         // 与 Haiyu 一致:分组差分输出位于游戏盘,避免预载目录在另一盘时耗尽错误磁盘。
@@ -176,6 +214,8 @@ public sealed class PatchInstaller
                 }
             }
 
+            // 分组差分只往临时目录输出;从这里开始才真正改动游戏目录(删源文件、移入生成文件)。
+            markModified();
             foreach (var source in sourcesToDelete)
             {
                 if (File.Exists(source))
@@ -373,6 +413,24 @@ public sealed class PatchInstallResult
     public int Installed { get; private init; }
     public string? Message { get; private init; }
 
+    /// <summary>
+    /// 本次安装是否已经写入过游戏目录(原地 hpatchz 已启动 / 分组源文件已删 / krzip 已解压 / 普通资源已移入)。
+    /// <para>
+    /// 为 false 的失败(如缺 hpatchz.exe、空间预检失败、差分包缺失)没有动过游戏目录,
+    /// 预载包仍可原样复用,调用方不应删除它;为 true 时目录可能已被半改写,同一份差分不能再应用。
+    /// </para>
+    /// </summary>
+    public bool GameFolderModified { get; private init; }
+
     public static PatchInstallResult Succeeded(int installed) => new() { Success = true, Installed = installed };
     public static PatchInstallResult Failed(string message) => new() { Success = false, Message = message };
+
+    /// <summary>复制一份并标记 <see cref="GameFolderModified"/> = true。</summary>
+    internal PatchInstallResult WithGameFolderModified() => new()
+    {
+        Success = Success,
+        Installed = Installed,
+        Message = Message,
+        GameFolderModified = true,
+    };
 }

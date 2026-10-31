@@ -129,6 +129,43 @@ public class PredownloadCompletionTests : IDisposable
         Assert.NotNull(FindStaging(updater, "2.1.0", GameServerType.Official, "2.0.0"));
     }
 
+    /// <summary>
+    /// M6:上次迁移被打断(新目录已有部分文件但没有标记,旧目录仍带标记)时必须继续迁移,
+    /// 而不是永远"跳过迁移"让旧目录一直缺文件。
+    /// </summary>
+    [Fact]
+    public async Task Migration_Resumes_After_Interruption()
+    {
+        var updater = CreateUpdater();
+        WriteLegacyMeta("2.1.0", "2.0.0", GameServerType.Official, completed: true);
+        var legacyA = Path.Combine(LegacyStageDir("2.1.0"), "a.krdiff");
+        var legacyB = Path.Combine(LegacyStageDir("2.1.0"), "b.krdiff");
+        File.WriteAllText(legacyA, "aaaa");
+        File.WriteAllText(legacyB, "bbbb");
+        // 模拟中断:a 已搬到新位置(旧副本已删),b 与标记还在旧位置
+        Directory.CreateDirectory(StageDir("2.1.0"));
+        File.Move(legacyA, Path.Combine(StageDir("2.1.0"), "a.krdiff"));
+
+        await updater.MigrateLegacyPredownloadAsync(_gameRoot);
+
+        Assert.Equal("aaaa", File.ReadAllText(Path.Combine(StageDir("2.1.0"), "a.krdiff")));
+        Assert.Equal("bbbb", File.ReadAllText(Path.Combine(StageDir("2.1.0"), "b.krdiff")));
+        Assert.True(File.Exists(Path.Combine(StageDir("2.1.0"), "predownload.json")));
+        Assert.False(Directory.Exists(LegacyStageDir("2.1.0")));
+        Assert.NotNull(FindStaging(updater, "2.1.0", GameServerType.Official, "2.0.0"));
+    }
+
+    /// <summary>H3:服务端版本号不合法(如 "..")时不拼路径,也就不会把游戏根目录当成暂存目录。</summary>
+    [Fact]
+    public void Unsafe_Version_Does_Not_Resolve_To_Game_Root()
+    {
+        var updater = CreateUpdater();
+        // 在"DiffData/.." = 游戏根目录放一个看似完整的标记:旧实现会把游戏根目录当成预载包
+        WriteMetaTo(_gameRoot, "..", "2.0.0", GameServerType.Official, completed: true);
+
+        Assert.Null(FindStaging(updater, "..", GameServerType.Official, "2.0.0"));
+    }
+
     /// <summary>[过渡代码] 没有旧数据时迁移是空操作,不创建 DiffData。</summary>
     [Fact]
     public async Task Migration_Without_Legacy_Data_Is_Noop()

@@ -97,4 +97,34 @@ public class RoleCacheAccountTests : IDisposable
         Assert.False(string.IsNullOrEmpty(json));
         Assert.Contains("漂泊者", json!);
     }
+
+    [Fact]
+    public void LoadFromCache_Corrupt_Row_Is_Treated_As_Missing_Not_Thrown()
+    {
+        // 回归(M20):一行无法反序列化的缓存(结构变更后的旧数据)曾直接抛 JsonException ——
+        // 在线同步的合并流程因此一直报"库街区请求失败",坏行也永远不会被覆盖。
+        // 现在坏行按"无缓存"处理:不抛、返回"无缓存",由下次写回覆盖。
+        using var db = new AppDatabase(_tmpDir);
+        using (var insert = db.Connection.CreateCommand())
+        {
+            insert.CommandText =
+                """
+                INSERT INTO role_cache (account_id, player_id, json, update_time)
+                VALUES ('account-a', 'player-1', '{"not":"a list"', '2026-01-01 00:00:00')
+                """;
+            insert.ExecuteNonQuery();
+        }
+        var service = new RoleDataService(
+            api: null!,
+            localReader: null!,
+            db: db,
+            kuro: null!,
+            accounts: null!,
+            logger: NullLogger<RoleDataService>.Instance);
+
+        var result = service.LoadFromCache("account-a", "player-1");
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("无缓存", result.Message ?? "");
+    }
 }

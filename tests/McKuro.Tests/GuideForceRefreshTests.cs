@@ -234,4 +234,40 @@ public class GuideForceRefreshTests : IDisposable
         var fallback = await service.GetIntroductionListAsync("莫宁", 1209, forceRefresh: true);
         Assert.Single(fallback);
     }
+
+    private const string TwoGuidesListBody =
+        """{"code":200,"message":"ok","data":[{"id":10161,"likeCount":99},{"id":20002,"likeCount":5}]}""";
+
+    [Fact]
+    public async Task GetAchievementAsync_Keeps_User_Selected_Guide_After_Cache_Expiry()
+    {
+        // 回归(M17):后台预取/兜底填充在缓存过期后取 list[0] 拉详情,SaveDetail 把 selected_id
+        // 写成点赞最高的那篇 —— 用户下次打开该角色时,手动选的攻略被换回默认。
+        using var server = new FakeGuideServer(Responses(TwoGuidesListBody, InfoBody));
+        var service = CreateService(server.BaseUrl);
+
+        await service.GetIntroductionListAsync("莫宁", 1209);
+        // 用户手动切到第二篇(点赞较少)
+        await service.GetAchievementByIdAsync("莫宁", 1209, 20002);
+        Assert.Equal(20002, service.TryGetCachedGuide(1209)!.SelectedId);
+
+        // 预取/兜底路径(forceRefresh 模拟缓存已过期,列表与详情都会重拉)
+        await service.GetAchievementAsync("莫宁", 1209, forceRefresh: true);
+        Assert.Equal(20002, service.TryGetCachedGuide(1209)!.SelectedId);
+    }
+
+    [Fact]
+    public void PickIntroductionId_Prefers_Selection_Still_In_List()
+    {
+        var list = new List<McKuro.Core.Models.Guide.GuideIntroductionItem>
+        {
+            new() { Id = 1, LikeCount = 10 },
+            new() { Id = 2, LikeCount = 3 },
+        };
+        Assert.Equal(2L, GuideAchievementService.PickIntroductionId(list, 2));
+        // 选中的攻略已下架 / 未选过:回到点赞最高的第一篇
+        Assert.Equal(1L, GuideAchievementService.PickIntroductionId(list, 99));
+        Assert.Equal(1L, GuideAchievementService.PickIntroductionId(list, 0));
+        Assert.Null(GuideAchievementService.PickIntroductionId([], 2));
+    }
 }

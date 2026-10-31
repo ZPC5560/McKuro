@@ -851,6 +851,48 @@ public class ResourceLevelServiceTests : IDisposable
         Assert.False(ResourceLevelService.IsPackInstalledAtVersion(_root, "sd", "3.7.0"));
     }
 
+    /// <summary>M5:包名来自服务端,含路径分隔符/..的名字不能拼成标记路径(否则可写/删游戏目录外的 .json)。</summary>
+    [Theory]
+    [InlineData("../evil")]
+    [InlineData("..\\..\\evil")]
+    [InlineData("a/b")]
+    [InlineData("hd.json")]
+    [InlineData("")]
+    [InlineData("C:\\evil")]
+    public void MarkerPath_Rejects_Unsafe_Pack_Names(string packName)
+    {
+        Assert.False(ResourceLevelService.IsSafePackName(packName));
+        Assert.Null(ResourceLevelService.MarkerPath(_root, packName));
+        Assert.Null(ResourceLevelService.ReadInstalledMarkerVersion(_root, packName));
+    }
+
+    [Theory]
+    [InlineData("common")]
+    [InlineData("HD")]
+    [InlineData("uhd_2-x")]
+    public void MarkerPath_Accepts_Normal_Pack_Names(string packName)
+    {
+        Assert.True(ResourceLevelService.IsSafePackName(packName));
+        Assert.Equal(
+            Path.Combine(_root, "launcherDownloadConfig", packName.ToLowerInvariant() + ".json"),
+            ResourceLevelService.MarkerPath(_root, packName));
+    }
+
+    /// <summary>M5:标记用源生成 JSON 序列化,版本号带引号/反斜杠也必须生成合法 JSON 并能读回原值。</summary>
+    [Fact]
+    public void MarkerJson_Escapes_Version_And_Round_Trips()
+    {
+        const string weird = "3.7\"0\\x";
+        var json = ResourceLevelService.MarkerJson("HD", weird);
+
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        Assert.Equal("hd", doc.RootElement.GetProperty("packName").GetString());
+        Assert.Equal(weird, doc.RootElement.GetProperty("version").GetString());
+
+        File.WriteAllText(ResourceLevelService.MarkerPath(_root, "hd")!, json);
+        Assert.Equal(weird, ResourceLevelService.ReadInstalledMarkerVersion(_root, "hd"));
+    }
+
     /// <summary>服务端没给版本(清单异常)时不谎报落后:有版本记录的标记即视为已装。</summary>
     [Fact]
     public void IsPackInstalledAtVersion_With_Unknown_Expected_Accepts_Recorded()

@@ -174,8 +174,16 @@
                     <!-- 操作区:左侧菜单按钮(点击展开功能项,对齐官方启动器左上角菜单)。
                          原「打开目录/修复游戏」已并入菜单,保持界面简洁。
                          外层 Grid 无列定义 → 菜单面板是纯覆盖层:它再宽也不会改变按钮的布局尺寸
-                         (曾与按钮同处一个 Auto 列,面板 MinWidth 把该列撑宽导致按钮拉伸、图标位移)。 -->
-                    <Grid Margin="0,6,0,0">
+                         (曾与按钮同处一个 Auto 列,面板 MinWidth 把该列撑宽导致按钮拉伸、图标位移)。
+
+                         【为什么要往中间挪 · 2026-10 用户反馈】
+                         导航栏/操作栏自动隐藏时,内容区从窗口边缘起算,而本按钮原先落在约 (16,16) ——
+                         正好**同时**在两个唤出带里(导航栏距左 ≤38、操作栏距顶 ≤38,操作栏保持区到 38+20=58)。
+                         于是鼠标一伸过去点它,两个隐藏条一起滑出、把内容推开,按钮位置随之跳动,
+                         表现为"这个键很难点"。必须同时越过两道门槛:x > 58+余量、y > 58+余量,
+                         否则只是把"碰导航栏"换成"碰操作栏"。
+                         无更新时标题卡整体隐藏,本按钮会顶到最上面 —— 所以偏移量按**最坏情况**(卡片隐藏)标定。 -->
+                    <Grid Margin="44,58,0,0">
                         <!-- 游戏功能菜单按键:与资源分级、账号切换同一套(mcChrome 透明底 + 半透明图标)。
                              它同样<b>直接压在视频上、没有自己的面板底</b>,所以前景用不随主题翻转的
                              McKuroTextOnVideo + 反向投影阴影,否则亮色主题下暗场景里会看不见。 -->
@@ -199,21 +207,23 @@
                                 HorizontalAlignment="Left" VerticalAlignment="Top"
                                 IsVisible="{Binding IsGameMenuOpen}">
                             <StackPanel Spacing="2" Margin="6">
-                                <Button Classes="menuItem" Command="{Binding CheckGameUpdateCommand}">
+                                <!-- 长操作(下载/修复/画质切换/检查中)进行时禁用:与 VM 的统一操作门同一判据 -->
+                                <Button Classes="menuItem" Command="{Binding CheckGameUpdateCommand}"
+                                        IsEnabled="{Binding CanStartOperation}">
                                     <TextBlock Text="{loc:Localize Key=Launcher.Menu.CheckUpdate}" FontSize="12" />
                                 </Button>
                                 <!-- 外部渠道(官方启动器)更新后版本记录滞后:手动指定本地实际版本 -->
                                 <Button Classes="menuItem" Command="{Binding SelectVersionCommand}"
-                                        IsEnabled="{Binding IsInstalled}">
+                                        IsEnabled="{Binding CanStartInstalledOperation}">
                                     <TextBlock Text="{loc:Localize Key=Launcher.Menu.SelectVersion}" FontSize="12" />
                                 </Button>
                                 <Button Classes="menuItem" Command="{Binding RepairGameFromMenuCommand}"
-                                        IsEnabled="{Binding IsInstalled}">
+                                        IsEnabled="{Binding CanStartInstalledOperation}">
                                     <TextBlock Text="{loc:Localize Key=Launcher.Menu.Repair}" FontSize="12" />
                                 </Button>
                                 <!-- 手动体积自检:每次断连/修复都会留下备份与半成品,给用户一个随时可用的入口 -->
                                 <Button Classes="menuItem" Command="{Binding CheckResidueFromMenuCommand}"
-                                        IsEnabled="{Binding IsInstalled}">
+                                        IsEnabled="{Binding CanStartInstalledOperation}">
                                     <TextBlock Text="{loc:Localize Key=Launcher.Menu.CheckResidue}" FontSize="12" />
                                 </Button>
                                 <Button Classes="menuItem" Command="{Binding CreateDesktopShortcutCommand}">
@@ -236,10 +246,14 @@
                  仍不重叠。旧版三列全写死(340 / * / 220)且卡片再写死 430,900 宽下卡片必然
                  顶进「下载安装」按钮。 -->
             <Grid Grid.Row="1" ColumnDefinitions="*,430,220" ColumnSpacing="16" Margin="0,8,0,0">
-                <!-- 轮播图(信息横幅) -->
+                <!-- 轮播图(信息横幅)
+                     对齐:必须 Left 而不是 Stretch —— 卡片 MaxWidth 340,而窗口 1180 时
+                     本列能分到 ~470;Stretch 会在超宽列里把卡片**居中**,多出的 ~130 被左右均分,
+                     左侧就出现一条明显的空白(2026-10 用户反馈"轮播图左边预留的宽度太大")。
+                     改成 Left 后卡片贴住内容区左缘,多出来的宽度全给右侧留白。 -->
                 <Border Grid.Column="0"
                         MaxWidth="340" Height="190"
-                        HorizontalAlignment="Stretch"
+                        HorizontalAlignment="Left"
                         VerticalAlignment="Bottom" Margin="0,0,0,8"
                         CornerRadius="12"
                         Background="{DynamicResource SemiColorBg2}"
@@ -602,7 +616,7 @@
                             CornerRadius="18"
                             Foreground="#F2F6FF"
                             Command="{Binding InstallCommand}"
-                            IsEnabled="{Binding !IsBusy}"
+                            IsEnabled="{Binding CanStartOperation}"
                             IsVisible="{Binding ShowInstallButton}"
                             HorizontalAlignment="Stretch">
                         <Button.Styles>
@@ -658,7 +672,7 @@
                             BorderThickness="0"
                             CornerRadius="18"
                             Command="{Binding InstallCommand}"
-                            IsEnabled="{Binding !IsBusy}"
+                            IsEnabled="{Binding CanStartOperation}"
                             IsVisible="{Binding ShowInstallUpdate}"
                             HorizontalAlignment="Stretch">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" VerticalAlignment="Center">

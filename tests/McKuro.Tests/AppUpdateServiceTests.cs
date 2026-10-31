@@ -429,6 +429,90 @@ public class AppUpdateServiceTests
         }
     }
 
+    [Fact]
+    public async Task Download_CompletePart_416_IsAcceptedInsteadOfRetryingForever()
+    {
+        // .part 已完整但上次在改名前退出:续传请求 Range: bytes=<全长>- 得到 416,
+        // 远端 Content-Range 总长与 .part 一致时应直接改名完成,而不是四次重试全失败。
+        var payload = new byte[64 * 1024];
+        new Random(7).NextBytes(payload);
+        var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)).ToLowerInvariant();
+
+        using var listener = new System.Net.HttpListener();
+        var prefix = $"http://127.0.0.1:{GetFreePort()}/";
+        listener.Prefixes.Add(prefix);
+        listener.Start();
+        _ = Task.Run(async () =>
+        {
+            while (listener.IsListening)
+            {
+                try
+                {
+                    var ctx = await listener.GetContextAsync();
+                    if (ctx.Request.Headers["Range"] is { Length: > 0 })
+                    {
+                        ctx.Response.StatusCode = 416;
+                        ctx.Response.Headers.Add("Content-Range", $"bytes */{payload.Length}");
+                        ctx.Response.ContentLength64 = 0;
+                    }
+                    else
+                    {
+                        ctx.Response.ContentLength64 = payload.Length;
+                        await ctx.Response.OutputStream.WriteAsync(payload);
+                    }
+                    ctx.Response.Close();
+                }
+                catch
+                {
+                    break;
+                }
+            }
+        });
+
+        var service = new AppUpdateService(new HttpClient()) { RetryDelay = (_, _) => Task.CompletedTask };
+        var destDir = Path.Combine(Path.GetTempPath(), "mckuro-upd416-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(destDir);
+        File.WriteAllBytes(Path.Combine(destDir, "McKuro-Setup.exe.part"), payload);
+        try
+        {
+            var path = await service.DownloadAsync(prefix + "McKuro-Setup.exe", destDir, expectedSha256: sha);
+            Assert.NotNull(path);
+            Assert.Equal(payload, File.ReadAllBytes(path!));
+            Assert.False(File.Exists(path + ".part"));
+        }
+        finally
+        {
+            listener.Stop();
+            try { Directory.Delete(destDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Download_RequireChecksum_WithoutSha256_RefusesWithoutNetwork()
+    {
+        // 无摘要时不得自动安装:自动安装路径传 requireChecksum,连下载都不发起
+        var handler = new RecordingHandler();
+        var service = new AppUpdateService(new HttpClient(handler));
+        var destDir = Path.Combine(Path.GetTempPath(), "mckuro-upd-nosha-" + Guid.NewGuid().ToString("N"));
+
+        var path = await service.DownloadAsync("http://127.0.0.1:1/McKuro-Setup.exe", destDir,
+            expectedSha256: null, requireChecksum: true);
+
+        Assert.Null(path);
+        Assert.False(Directory.Exists(destDir));
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("  ", false)]
+    [InlineData("abcdef", true)]
+    public void UpdateInfo_HasChecksum_ReflectsSha256(string? sha, bool expected)
+    {
+        var info = new AppUpdateInfo { Version = "1.0.0", AssetName = "a.zip", AssetSize = 0, DownloadUrl = "https://x/a.zip", Sha256 = sha };
+        Assert.Equal(expected, info.HasChecksum);
+    }
+
     private static int GetFreePort()
     {
         var l = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);

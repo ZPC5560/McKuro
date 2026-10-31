@@ -1189,7 +1189,8 @@
                         <StackPanel Orientation="Horizontal" Spacing="8" >
                             <Button Content="{loc:Localize Key=Common.CheckUpdate}" Command="{Binding CheckAppUpdateCommand}"
                                     IsEnabled="{Binding !AppUpdateChecking}" />
-                            <Button Content="{loc:Localize Key=Common.DownloadInstall}" Classes="primary" Command="{Binding DownloadAppUpdateCommand}"
+                            <!-- 无 SHA-256 摘要的包:第一次点击只提示风险,再点一次才下载(M8) -->
+                            <Button Content="{loc:Localize Key=Common.DownloadInstall}" Classes="primary" Command="{Binding ConfirmDownloadAppUpdateCommand}"
                                     IsVisible="{Binding AppUpdateAvailable}"
                                     IsEnabled="{Binding !AppUpdateDownloading}" />
                             <Button Content="{loc:Localize Key=Update.SkipVersion}" Command="{Binding SkipAppUpdateCommand}"

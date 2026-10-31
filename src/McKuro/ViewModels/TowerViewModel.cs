@@ -56,6 +56,8 @@ public sealed class TowerModeItem
     /// <summary>通关进度,如 "2/5"。</summary>
     public required string ProgressText { get; init; }
     public required string RankText { get; init; }
+    /// <summary>评级是否为最高档「皇冠」:游戏内最高档不画字母,画的是皇冠徽记(实机 rank=7)。</summary>
+    public bool RankIsCrown => RankText == TowerViewModel.RankCrownText;
     public required string RankColor { get; init; }
     public required List<NewTowerRole> Roles { get; init; }
     public required List<TowerBuffItem> Buffs { get; init; }
@@ -84,6 +86,17 @@ public sealed class TowerTeamItem
     public required string PassText { get; init; }
     public required List<NewTowerRole> Roles { get; init; }
     public required List<TowerBuffItem> Buffs { get; init; }
+
+    /// <summary>
+    /// 首条增益(实机每队只有一个增益)。界面按固定宽度只渲染这一个 pill,
+    /// 而不是用可变宽度的列表 —— 各队增益名长短不同会让「2/5」与 pill 逐行左右错位。
+    /// </summary>
+    public TowerBuffItem? PrimaryBuff => Buffs.Count > 0 ? Buffs[0] : null;
+
+    /// <summary>首条增益的提示文本(悬停显示完整说明;名称过长时界面会省略)。</summary>
+    public string? BuffTooltip => PrimaryBuff is { } b
+        ? string.IsNullOrWhiteSpace(b.BuffDescription) ? b.BuffName : $"{b.BuffName}\n{b.BuffDescription}"
+        : null;
 }
 
 /// <summary>终焉矩阵往期历史条目(一期,按赛季结束时间标识,对齐 WutheringWavesTool initHistory)。</summary>
@@ -831,9 +844,15 @@ public sealed partial class TowerViewModel : ViewModelBase
     /// <summary>加载某期历史详情(对齐 WutheringWavesTool changHistory/updateHistoryData:取第一条模式记录)。</summary>
     private async Task LoadNewTowerHistoryDetailAsync(NewTowerHistoryItem item)
     {
+        var roleId = _newTowerRoleId;
         try
         {
-            var json = await Task.Run(() => AppServices.Database.GetNewTowerHistory(_newTowerRoleId, item.EndTimeMillis));
+            var json = await Task.Run(() => AppServices.Database.GetNewTowerHistory(roleId, item.EndTimeMillis));
+            // 先点 A 再点 B:A 后返回时不得覆盖 B 的详情(也可能已切回本期模式或重新加载)
+            if (!ReferenceEquals(SelectedNewTowerHistory, item))
+            {
+                return;
+            }
             if (json is null)
             {
                 NewTowerHistoryDetail = null;
@@ -847,6 +866,10 @@ public sealed partial class TowerViewModel : ViewModelBase
         }
         catch (Exception)
         {
+            if (!ReferenceEquals(SelectedNewTowerHistory, item))
+            {
+                return;
+            }
             NewTowerHistoryDetail = null;
             NewTowerDetailTitle = "";
         }
@@ -882,10 +905,13 @@ public sealed partial class TowerViewModel : ViewModelBase
             })
             .ToList();
 
-    /// <summary>把矩阵模式详情映射为展示项(rank 0-5 → C/B/A/S/SS/SSS,见 RankTextOf)。</summary>
-    private static TowerModeItem BuildModeItem(NewTowerModeDetail m, string prefix = "")
+    /// <summary>把矩阵模式详情映射为展示项(rank → C/B/A/S/SS/SSS,见 RankTextOf)。公开供单测。</summary>
+    public static TowerModeItem BuildModeItem(NewTowerModeDetail m, string prefix = "")
     {
-        var rank = m.Rank is >= 0 and <= 5 ? m.Rank : 0;
+        // 不能把 rank 钳在上限内:服务端本期返回值已到 7(58454 分),旧实现
+        // `m.Rank is >= 0 and <= 5 ? m.Rank : 0` 把它钳成 0 → 显示 C(高分低等级)。
+        // 只钳下界,上界交给 RankTextOf 取顶档;负数(无记录占位)按 0 处理。
+        var rank = m.Rank > 0 ? m.Rank : 0;
         var teams = m.Teams ?? [];
         // 按轮次分组(每轮给出轮内合计积分,便于对照"每轮队伍分数")
         var rounds = GroupTeamsByRound(teams);
@@ -959,15 +985,38 @@ public sealed partial class TowerViewModel : ViewModelBase
     {
         if (IsBusy)
         {
+            // 加载中切了账号:结束后按新账号重载(LoadAsync 的 finally 里补跑)
+            if (CurrentLoadKey() != _loadingKey)
+            {
+                _reloadPending = true;
+            }
             return;
         }
-        // 刚拉过就不重复拉(切页很频繁;接口还有风控风险)
-        if (DateTime.Now - _lastLoadAt < TimeSpan.FromSeconds(ReloadMinIntervalSeconds))
+        // 刚拉过就不重复拉(切页很频繁;接口还有风控风险)。
+        // 但账号变了必须重拉:否则切号后一分钟内看到的是上一个账号的塔、矩阵、全息和探索数据
+        if (CurrentLoadKey() == _lastLoadedKey
+            && DateTime.Now - _lastLoadAt < TimeSpan.FromSeconds(ReloadMinIntervalSeconds))
         {
             return;
         }
         _ = LoadAsync();
     }
+
+    /// <summary>
+    /// 本页数据归属:当前库街区账号 UserId(TowerService 按当前账号取数)。
+    /// 不含角色 ID:切号时角色 ID 会先清空、稍后由账号页回填,带上它会让一次切号触发两次重拉。
+    /// </summary>
+    private static string CurrentLoadKey()
+        => AppServices.KuroAccounts.Current?.UserId ?? "";
+
+    /// <summary>上次发起加载时的账号键(与当前不同则跳过 60 秒节流)。</summary>
+    private string? _lastLoadedKey;
+
+    /// <summary>正在进行的加载对应的账号键。</summary>
+    private string? _loadingKey;
+
+    /// <summary>加载期间账号发生变化:结束后再按新账号加载一轮。</summary>
+    private bool _reloadPending;
 
     [RelayCommand]
     private async Task LoadAsync()
@@ -978,9 +1027,12 @@ public sealed partial class TowerViewModel : ViewModelBase
         }
         IsBusy = true;
         _lastLoadAt = DateTime.Now;
+        _reloadPending = false;
         StatusText = LanguageService.Format("Common.Loading");
         try
         {
+            // 记录本轮数据归属的账号键(放在 try 内:取账号失败也要走 finally 复位 IsBusy)
+            _lastLoadedKey = _loadingKey = CurrentLoadKey();
             var data = await AppServices.Tower.GetTowerDataAsync();
             var (tower, newTower, slash, error, roleId) =
                 (data.Tower, data.NewTower, data.Slash, data.Error, data.RoleId);
@@ -1221,6 +1273,12 @@ public sealed partial class TowerViewModel : ViewModelBase
         finally
         {
             IsBusy = false;
+            // 加载期间切了账号并进入了本页:本轮数据属于旧账号,按新账号再拉一轮
+            if (_reloadPending)
+            {
+                _reloadPending = false;
+                _ = LoadAsync();
+            }
         }
     }
 
@@ -1235,20 +1293,30 @@ public sealed partial class TowerViewModel : ViewModelBase
             : TowerSeasonParser.RefreshText(remainingMillis);
 
     /// <summary>
-    /// 矩阵评级 rank → 字母(公开供单测)。实机数据 rank 值域 0..5(稳态协议 3=S、奇点扩张 44065 分 rank=5),
-    /// 参考实现只有 4 级 {"C","B","A","S"},rank≥4 会落到范围外被显示成 C(实测 44065 分被标成 C),
-    /// 故按库街区 6 级补全:sss/ss/s/a/b/c。
+    /// 矩阵评级 rank → 档位标识(公开供单测)。
+    /// <para>
+    /// 已观测的实机值:稳态协议 3=S(10823 分)、奇点扩张 5=SSS(44065 分)、
+    /// <b>7=皇冠</b>(58454 分,游戏内最高档用皇冠徽记而非字母)。
+    /// 早先版本把 rank 钳在 0..5,7 被钳成 0 → 显示 C(分数越高档位越低的倒挂 bug)。
+    /// </para>
+    /// <para>
+    /// rank=6 尚未观测到实机数据:按"介于 SSS 与皇冠之间"处理,同样取皇冠
+    /// (宁可提前给最高档,也不能把高分标成低档)。
+    /// </para>
     /// </summary>
     public static string RankTextOf(int rank) => rank switch
     {
-        0 => "C",
+        <= 0 => "C",
         1 => "B",
         2 => "A",
         3 => "S",
         4 => "SS",
         5 => "SSS",
-        _ => "?",
+        _ => RankCrownText,   // 6 及更高(实测 7):皇冠
     };
+
+    /// <summary>最高档「皇冠」的内部标识。界面上不以字母呈现,而是画皇冠徽记(见 TowerView.axaml)。</summary>
+    public const string RankCrownText = "Crown";
 
     /// <summary>数值档评级色:先转文字档,再走与 <see cref="SlashRankColor"/> 同一份档位→色值表
     /// (评审反馈:此前 4/5 仍落 S 的黄色,同一页两套顶级档配色不一致)。</summary>
@@ -1267,6 +1335,7 @@ public sealed partial class TowerViewModel : ViewModelBase
     /// </summary>
     public static string SlashRankColor(string? rank) => (rank ?? "").ToUpperInvariant() switch
     {
+        "CROWN" => "#d4a017", // 皇冠(矩阵最高档):金,高于 SSS 红
         "SSS" => "#e33737",   // 满档 SSS:红(参照角色页声骸 ACE 红档)
         "SS" => "#ff9800",    // 次满档 SS:橙
         "S" => "#f8f05c",

@@ -190,18 +190,20 @@ public static class Live2DLocator
     }
 
     /// <summary>
-    /// 全部可发现模型的根目录(只读探测,不创建):程序目录(live2d\ 与程序根)+ 用户数据目录。
+    /// 可<b>递归</b>发现模型的根目录(只读探测,不创建):程序目录 live2d\ + 用户数据目录。
     ///
     /// <para><b>为什么必须同时搜程序目录</b>:随包分发的模型放在程序目录的 <c>live2d\</c> 下。
     /// 装到 Program Files 时该目录<b>不可写</b>,于是 <see cref="EnsurePreferredDir"/> 会回退到
     /// 用户数据目录 —— 而那里没有随包模型。若发现逻辑只认"首选可写目录",随包模型将永远不可见
     /// (表现为"装了却看不到模型")。故「可写目录」与「发现目录」必须是两套概念。</para>
     ///
-    /// <para>程序根也算一个根:便于把模型直接平铺在 exe 同级(与 Core 探测顺序一致)。</para>
+    /// <para><b>程序根不在这里</b>:旧实现把程序根也当递归根,便携版解压到 Downloads 这类大目录时
+    /// 首页构造会在 UI 线程同步遍历整棵目录树,启动卡住。平铺在 exe 同级的模型改由
+    /// <see cref="FlatRoot"/> 只查顶层(见 <see cref="ResolveModelDirAnywhere"/>/<see cref="FindDefaultModelAnywhere"/>)。</para>
     /// </summary>
     public static IEnumerable<string> DiscoveryRoots()
     {
-        foreach (var dir in new[] { ProgramDir, AppContext.BaseDirectory, UserDir })
+        foreach (var dir in new[] { ProgramDir, UserDir })
         {
             bool exists;
             try
@@ -219,14 +221,40 @@ public static class Live2DLocator
         }
     }
 
+    /// <summary>程序根(exe 同级):只查顶层的模型位置(平铺放置的模型),不递归。</summary>
+    public static string FlatRoot => AppContext.BaseDirectory;
+
     /// <summary>
-    /// 在所有发现根目录中定位指定模型名(先程序目录再用户目录,各根内先根后递归)。
+    /// 在所有发现根目录中定位指定模型名(先程序目录 live2d\,再程序根顶层,再用户目录;各递归根内先根后递归)。
     /// 找不到返回 null。
     /// </summary>
     public static string? ResolveModelDirAnywhere(string? name)
     {
+        var programHit = ResolveModelDir(ProgramDir, name);
+        if (programHit is not null)
+        {
+            return programHit;
+        }
+        // 程序根只查顶层(平铺在 exe 同级),不递归整个程序目录
+        var normalized = NormalizeModelName(name);
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(normalized)
+                && File.Exists(Path.Combine(FlatRoot, normalized + ".model3.json")))
+            {
+                return FlatRoot;
+            }
+        }
+        catch (Exception)
+        {
+            // 探测失败:继续找用户目录
+        }
         foreach (var root in DiscoveryRoots())
         {
+            if (string.Equals(root, ProgramDir, StringComparison.Ordinal))
+            {
+                continue; // 已查过
+            }
             var hit = ResolveModelDir(root, name);
             if (hit is not null)
             {
@@ -252,9 +280,14 @@ public static class Live2DLocator
         (string Dir, string Name)? best = null;
         var bestRank = int.MaxValue;
 
-        foreach (var root in roots ?? DiscoveryRoots())
+        // 默认根:递归根 + 程序根(仅顶层,见 DiscoveryRoots 注释)
+        var searches = roots is not null
+            ? roots.Select(r => (Root: r, Option: SearchOption.AllDirectories))
+            : DiscoveryRoots().Select(r => (Root: r, Option: SearchOption.AllDirectories))
+                .Append((Root: FlatRoot, Option: SearchOption.TopDirectoryOnly));
+        foreach (var (root, option) in searches)
         {
-            foreach (var (dir, name) in EnumerateModels(root))
+            foreach (var (dir, name) in EnumerateModels(root, option))
             {
                 var rank = PreferenceRank(name);
                 if (rank < bestRank)
@@ -274,7 +307,7 @@ public static class Live2DLocator
     }
 
     /// <summary>枚举单个根目录下的全部模型(目录, 裸名)。失败返回空序列。</summary>
-    private static IEnumerable<(string Dir, string Name)> EnumerateModels(string root)
+    private static IEnumerable<(string Dir, string Name)> EnumerateModels(string root, SearchOption option)
     {
         List<(string Dir, string Name)> found = [];
         try
@@ -284,7 +317,7 @@ public static class Live2DLocator
                 return found;
             }
 
-            foreach (var file in Directory.EnumerateFiles(root, "*.model3.json", SearchOption.AllDirectories))
+            foreach (var file in Directory.EnumerateFiles(root, "*.model3.json", option))
             {
                 var name = NormalizeModelName(Path.GetFileName(file));
                 var dir = Path.GetDirectoryName(file);

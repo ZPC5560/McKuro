@@ -11,25 +11,10 @@
              x:Class="McKuro.Views.TowerView"
              x:DataType="vm:TowerViewModel">
     <UserControl.Resources>
-        <!-- 增益标签(海墟/终焉矩阵共用)。
-             注意:库街区部分 buff 图标是**纯白剪影**(RGB 255,255,255 + alpha,如
-             buff_Img/1787186054722.png 声骸技能强化),放在浅色底上会"看不见"——
-             故图标统一加一层深色底衬,白剪影与彩色图标都能看清。 -->
-        <DataTemplate x:Key="BuffTemplate" x:DataType="vm:TowerBuffItem">
-            <Border CornerRadius="8" Background="{DynamicResource SemiColorBg2}" Padding="8,5"
-                    ToolTip.Tip="{Binding BuffDescription}">
-                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <Border Width="20" Height="20" CornerRadius="5" ClipToBounds="True"
-                            Background="#9BA0AE">
-                        <controls:AsyncImage ImageUrl="{Binding BuffIcon}" Width="20" Height="20"
-                                             Stretch="UniformToFill" />
-                    </Border>
-                    <TextBlock Text="{Binding BuffName}" FontSize="12.5" VerticalAlignment="Center"
-                               Foreground="{DynamicResource SemiColorText2}" MaxWidth="260"
-                               TextTrimming="CharacterEllipsis" />
-                </StackPanel>
-            </Border>
-        </DataTemplate>
+        <!-- 增益图标的深色底衬(海墟/终焉矩阵共用规则):
+             库街区部分 buff 图标是**纯白剪影**(RGB 255,255,255 + alpha,如
+             buff_Img/1787186054722.png 声骸技能强化),直接放浅色底上会"看不见"——
+             故两处 pill 的图标容器都用 #9BA0AE / SemiColorBg1 打底,白剪影与彩色图标都能看清。 -->
 
         <!-- 地图探索度-区域卡片(一行两张,行内等高、行高只由这一行决定 → 行间距恒为 12px)。
              主图通栏在上(Padding 归零让图贴边),数据在下;主图高度固定 150,
@@ -371,11 +356,21 @@
                                                 <Border CornerRadius="6" Padding="0" Width="46" Height="22"
                                                         Background="{Binding RankColor}"
                                                         VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding RankText}" FontSize="11.5" FontWeight="Bold"
-                                                               Foreground="Black"
-                                                               HorizontalAlignment="Center"
-                                                               VerticalAlignment="Center"
-                                                               TextAlignment="Center" />
+                                                    <Panel>
+                                                        <!-- 字母档(C/B/A/S/SS/SSS):居中字母 -->
+                                                        <TextBlock Text="{Binding RankText}" FontSize="11.5" FontWeight="Bold"
+                                                                   Foreground="Black"
+                                                                   IsVisible="{Binding !RankIsCrown}"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"
+                                                                   TextAlignment="Center" />
+                                                        <!-- 最高档皇冠:游戏内该档不画字母,而是皇冠徽记(实机 rank=7) -->
+                                                        <ic:FluentIcon Icon="Crown" IconVariant="Filled" IconSize="Size16"
+                                                                      Foreground="Black"
+                                                                      IsVisible="{Binding RankIsCrown}"
+                                                                      HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center" />
+                                                    </Panel>
                                                 </Border>
                                             </StackPanel>
                                         </Grid>
@@ -462,8 +457,15 @@
                                             </StackPanel>
                                             <Border Grid.Column="2" CornerRadius="8" Padding="12,6"
                                                     Background="{Binding NewTowerDetail.RankColor}" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding NewTowerDetail.RankText}" FontSize="15" FontWeight="Bold"
-                                                           Foreground="Black" />
+                                                <Panel>
+                                                    <TextBlock Text="{Binding NewTowerDetail.RankText}" FontSize="15" FontWeight="Bold"
+                                                               Foreground="Black"
+                                                               IsVisible="{Binding !NewTowerDetail.RankIsCrown}" />
+                                                    <!-- 最高档皇冠:与游戏内一致,不显示字母而显示皇冠徽记 -->
+                                                    <ic:FluentIcon Icon="Crown" IconVariant="Filled" IconSize="Size20"
+                                                                  Foreground="Black"
+                                                                  IsVisible="{Binding NewTowerDetail.RankIsCrown}" />
+                                                </Panel>
                                             </Border>
                                         </Grid>
                                         <!-- 每轮队伍分数:矩阵按轮次分队,每队独立积分/进度/角色/增益 -->
@@ -513,7 +515,10 @@
                                                                         <Border CornerRadius="8"
                                                                                 Background="{DynamicResource SemiColorBg2}"
                                                                                 Padding="10,8">
-                                                                            <Grid ColumnDefinitions="Auto,Auto,*,Auto"
+                                                                            <!-- 列宽全部固定:每行是独立 Grid,分数 4 位(8803)与 5 位(18345)宽度不同,
+                                                                                 用 Auto 会让后面的角色头像逐行左右错开(用户反馈"分数和角色没对齐")。
+                                                                                 第0列固定容纳「第N队」,第1列固定容纳「分数 + 小字」,数字右对齐。 -->
+                                                                            <Grid ColumnDefinitions="52,86,*,Auto"
                                                                                   ColumnSpacing="10">
                                                                                 <TextBlock Text="{Binding TeamNoText}"
                                                                                            FontSize="12" FontWeight="Bold"
@@ -521,19 +526,25 @@
                                                                                            Foreground="{DynamicResource SemiColorText2}" />
                                                                                 <!-- 分数与「分数」小字同排:两行竖排时大号数值只占块的上半,
                                                                                      视觉中心会比头像高约 5px(用户反馈「分数数据和头像需要上下对齐」)。
-                                                                                     改为单行(数值 + 小字标注)后整行中心即与头像中心重合。 -->
-                                                                                <StackPanel Grid.Column="1" Orientation="Horizontal"
-                                                                                            Spacing="3"
-                                                                                            VerticalAlignment="Center">
+                                                                                     改为单行(数值 + 小字标注)后整行中心即与头像中心重合。
+                                                                                     数字右对齐 + 整块定宽:位数变化时小字与头像起点都不动。 -->
+                                                                                <Grid Grid.Column="1" ColumnDefinitions="*,Auto"
+                                                                                      VerticalAlignment="Center">
+                                                                                    <!-- 必须 HorizontalAlignment="Stretch":`*` 列里 TextBlock 默认按内容宽度
+                                                                                         布局,TextAlignment=Right 只在自身宽度内右对齐 —— 4 位数字(8803)与
+                                                                                         5 位(18345)的内容宽度不同,右边缘就落在不同横坐标(实测差约 20px)。 -->
                                                                                     <TextBlock Text="{Binding ScoreText}"
                                                                                                FontSize="15" FontWeight="Bold"
+                                                                                               TextAlignment="Right"
+                                                                                               HorizontalAlignment="Stretch"
                                                                                                VerticalAlignment="Center"
                                                                                                Foreground="{DynamicResource SemiColorPrimary}" />
-                                                                                    <TextBlock Text="{loc:Localize Key=Tower.Score}"
+                                                                                    <TextBlock Grid.Column="1" Text="{loc:Localize Key=Tower.Score}"
                                                                                                FontSize="10"
+                                                                                               Margin="3,0,0,0"
                                                                                                VerticalAlignment="Center"
                                                                                                Foreground="{DynamicResource SemiColorText3}" />
-                                                                                </StackPanel>
+                                                                                </Grid>
                                                                                 <!-- 该队角色:与分数块同高居中 -->
                                                                                 <ItemsControl Grid.Column="2"
                                                                                               ItemsSource="{Binding Roles}"
@@ -558,17 +569,43 @@
                                                                                         </DataTemplate>
                                                                                     </ItemsControl.ItemTemplate>
                                                                                 </ItemsControl>
-                                                                                <StackPanel Grid.Column="3" Orientation="Horizontal"
-                                                                                            Spacing="8"
-                                                                                            VerticalAlignment="Center">
-                                                                                    <TextBlock Text="{Binding PassText}"
+                                                                                <Grid Grid.Column="3"
+                                                                                      ColumnDefinitions="34,*"
+                                                                                      ColumnSpacing="8"
+                                                                                      VerticalAlignment="Center"
+                                                                                      HorizontalAlignment="Right">
+                                                                                    <!-- 固定 Width + 右对齐:每行是独立 Grid,若用 Auto 列,增益块宽度随名称长短变化,
+                                                                                         「2/5」「1/5」就会逐行左右错位(用户反馈右侧不规整) -->
+                                                                                    <TextBlock Grid.Column="0" Text="{Binding PassText}"
                                                                                                FontSize="12" FontWeight="Bold"
+                                                                                               Width="34" TextAlignment="Right"
                                                                                                VerticalAlignment="Center"
                                                                                                Foreground="{DynamicResource SemiColorText2}" />
-                                                                                    <ItemsControl ItemsSource="{Binding Buffs}"
-                                                                                                  ItemTemplate="{StaticResource BuffTemplate}"
-                                                                                                  VerticalAlignment="Center" />
-                                                                                </StackPanel>
+                                                                                    <!-- 增益:固定宽度的单个 pill(图标 + 定宽名称),名称过长省略,
+                                                                                         所有行的 pill 起点与宽度一致 -->
+                                                                                    <Border Grid.Column="1" CornerRadius="8"
+                                                                                            Background="{DynamicResource SemiColorBg2}"
+                                                                                            Padding="8,4" VerticalAlignment="Center"
+                                                                                            HorizontalAlignment="Right"
+                                                                                            Width="150"
+                                                                                            IsVisible="{Binding PrimaryBuff,
+                                                                                            Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                                                            ToolTip.Tip="{Binding BuffTooltip}">
+                                                                                        <Grid ColumnDefinitions="20,*" ColumnSpacing="6">
+                                                                                            <Border Width="20" Height="20" CornerRadius="5"
+                                                                                                    ClipToBounds="True" Background="#9BA0AE">
+                                                                                                <controls:AsyncImage ImageUrl="{Binding PrimaryBuff.BuffIcon}"
+                                                                                                                     Width="20" Height="20"
+                                                                                                                     Stretch="UniformToFill" />
+                                                                                            </Border>
+                                                                                            <TextBlock Grid.Column="1" Text="{Binding PrimaryBuff.BuffName}"
+                                                                                                       FontSize="12.5"
+                                                                                                       VerticalAlignment="Center"
+                                                                                                       Foreground="{DynamicResource SemiColorText2}"
+                                                                                                       TextTrimming="CharacterEllipsis" />
+                                                                                        </Grid>
+                                                                                    </Border>
+                                                                                </Grid>
                                                                             </Grid>
                                                                         </Border>
                                                                     </DataTemplate>
@@ -667,30 +704,32 @@
                                                 </ItemsControl.ItemsPanel>
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:SlashTeamItem">
-                                                        <Grid ColumnDefinitions="Auto,Auto,Auto,*" ColumnSpacing="12">
+                                                        <Grid ColumnDefinitions="Auto,Auto,156,*" ColumnSpacing="12">
                                                             <TextBlock Text="{Binding TeamName}" FontSize="13.5" FontWeight="Bold"
                                                                        Foreground="{DynamicResource SemiColorText2}"
                                                                        VerticalAlignment="Center" MinWidth="34" />
                                                             <TextBlock Grid.Column="1" Text="{Binding ScoreText}" FontSize="16" FontWeight="Bold"
                                                                        VerticalAlignment="Center" MinWidth="46" />
-                                                            <!-- 增益 pill -->
+                                                            <!-- 增益 pill:固定 156 宽,名称过长省略 ——
+                                                                 上下半两行的增益名长短不同,用 Auto 会让后面的角色头像逐行左右错位 -->
                                                             <Border Grid.Column="2" CornerRadius="7" Padding="8,4"
                                                                     Background="{DynamicResource SemiColorBg2}"
                                                                     VerticalAlignment="Center"
                                                                     ToolTip.Tip="{Binding BuffDescription}"
-                                                                    Margin="0,0,4,0">
-                                                                <StackPanel Orientation="Horizontal" Spacing="6"
-                                                                            VerticalAlignment="Center">
+                                                                    Margin="0,0,4,0"
+                                                                    IsVisible="{Binding BuffName,
+                                                                    Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                                                <Grid ColumnDefinitions="20,*" ColumnSpacing="6">
                                                                     <Border Width="20" Height="20" CornerRadius="5" ClipToBounds="True"
                                                                             Background="{DynamicResource SemiColorBg1}">
                                                                         <controls:AsyncImage ImageUrl="{Binding BuffIcon}" Width="20" Height="20"
                                                                                              Stretch="UniformToFill" />
                                                                     </Border>
-                                                                    <TextBlock Text="{Binding BuffName}" FontSize="12.5"
+                                                                    <TextBlock Grid.Column="1" Text="{Binding BuffName}" FontSize="12.5"
                                                                                Foreground="{DynamicResource SemiColorText2}"
-                                                                               VerticalAlignment="Center" MaxWidth="148"
+                                                                               VerticalAlignment="Center"
                                                                                TextTrimming="CharacterEllipsis" />
-                                                                </StackPanel>
+                                                                </Grid>
                                                             </Border>
                                                             <!-- 配队角色 -->
                                                             <ItemsControl Grid.Column="3" ItemsSource="{Binding Roles}"

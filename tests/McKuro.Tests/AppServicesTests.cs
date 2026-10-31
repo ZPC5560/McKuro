@@ -87,4 +87,19 @@ public class ServiceContainerContractTests : IDisposable
         var store = sp.GetRequiredService<McKuro.Core.Services.Gacha.GachaRecordStore>();
         Assert.NotNull(store);
     }
+
+    [Fact]
+    public void FullContainer_Resolves_Services_Whose_Core_Constructors_Changed()
+    {
+        // 回归:Core 第一轮修复改动/新增了这些服务的构造参数(TowerService 注入设置、兑换码客户端等),
+        // 工厂注册与构造签名不一致会在运行时首次解析才炸,这里一次性解析覆盖。
+        var sp = McKuro.Services.AppServices.BuildForTesting(_dir);
+        Assert.NotNull(sp.GetRequiredService<McKuro.Core.Services.Tower.TowerService>());
+        Assert.NotNull(sp.GetRequiredService<McKuro.Core.Services.Redeem.RedemptionCodeService>());
+        Assert.NotNull(sp.GetRequiredService<McKuro.Core.Services.CloudGame.CloudGameService>());
+        Assert.NotNull(sp.GetRequiredService<McKuro.Core.Services.Gacha.IGachaSyncService>());
+        Assert.NotNull(sp.GetRequiredService<McKuro.Core.Services.User.LocalGameDailyDataService>());
+        Assert.NotNull(sp.GetRequiredService<McKuro.Core.Services.Guide.GuideAchievementService>());
+        Assert.NotNull(sp.GetRequiredService<McKuro.Services.GameDownloadHttpClient>().Client);
+    }
 }

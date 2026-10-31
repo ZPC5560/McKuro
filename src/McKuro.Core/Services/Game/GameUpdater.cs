@@ -163,8 +163,7 @@ public sealed class GameUpdater : IGameUpdater
             }
 
             var bundle = ResourceLevelPlanner.LevelToBundleName(_settings?.Current.ResourceLevel);
-            var markerDir = Path.Combine(root, "launcherDownloadConfig");
-            Directory.CreateDirectory(markerDir);
+            Directory.CreateDirectory(Path.Combine(root, OfficialLauncherRecordService.PackVersionDirName));
 
             var refreshed = 0;
             foreach (var packName in ResourceLevelPlanner.ResolvePackNames(index, bundle))
@@ -175,11 +174,18 @@ public sealed class GameUpdater : IGameUpdater
                     continue;
                 }
 
+                // 包名来自服务端:不合法(含路径分隔符/..)时跳过,不能让它把 .json 写到游戏目录外。
+                var markerPath = ResourceLevelService.MarkerPath(root, packName);
+                if (markerPath is null)
+                {
+                    _logger.LogWarning("资源包名不合法,跳过刷新标记: {Pack}", packName);
+                    continue;
+                }
+
                 // 与官方启动器同格式(官方也会读这个文件),只写 packName + version。
-                var payload = $"{{\"packName\":\"{packName.ToLowerInvariant()}\",\"version\":\"{pack.Version}\"}}";
                 await File.WriteAllTextAsync(
-                    Path.Combine(markerDir, packName.ToLowerInvariant() + ".json"),
-                    payload).ConfigureAwait(false);
+                    markerPath,
+                    ResourceLevelService.MarkerJson(packName, pack.Version)).ConfigureAwait(false);
                 refreshed++;
             }
 
@@ -533,6 +539,12 @@ public sealed class GameUpdater : IGameUpdater
         // 预下载目标版本号记录,暂存目录按版本隔离。保留已有 .part 文件以支持断点续传。
         var downloadBytes = patchFiles.Sum(f => f.Size);
         // 暂存目录在游戏目录下的 DiffData:下载盘即游戏盘。
+        // 版本号来自服务端,PredownloadStagingDir 只接受纯数字版本号(拒绝 ".."/绝对路径等,见 H3)。
+        if (!GamePathResolver.IsSafeVersionSegment(targetVersion))
+        {
+            _logger.LogWarning("服务端预载版本号不合法,拒绝使用: {Version}", targetVersion);
+            return (false, null, CoreStrings.T("Core.Updater.InvalidServerVersion", "服务端返回的版本号无效"));
+        }
         var staging = _paths.PredownloadStagingDir(targetVersion);
         if (string.IsNullOrEmpty(staging))
         {
@@ -557,6 +569,12 @@ public sealed class GameUpdater : IGameUpdater
                 || !string.Equals(existingMeta.SourceVersion, installedVersion, StringComparison.OrdinalIgnoreCase)
                 || existingMeta.ServerType != serverType)
         {
+            // 递归删除前最后一道断言:目标必须是 DiffData 的直接子目录(防御版本号校验之外的任何漏洞)。
+            if (!GamePathResolver.IsDirectChildOf(_paths.DiffDataDir, staging))
+            {
+                _logger.LogError("拒绝删除非 DiffData 直接子目录的暂存目录: {Path}", staging);
+                return (false, null, CoreStrings.T("Core.Updater.InvalidServerVersion", "服务端返回的版本号无效"));
+            }
             Directory.Delete(staging, recursive: true);
             Directory.CreateDirectory(staging);
         }
@@ -611,6 +629,23 @@ public sealed class GameUpdater : IGameUpdater
         return (true, staging, null);
     }
 
+    /// <summary>
+    /// 在补丁清单里找与本地版本<b>精确匹配</b>的那一项(纯内存,不触网);没有或缺 indexFile 时返回 null。
+    /// Haiyu 不会把最新项误当成任意本地版本的补丁。
+    /// </summary>
+    private static KuroPatchConfig? FindPatchConfig(KuroUpdateData? patchData, string? installedVersion)
+    {
+        if (patchData?.Config?.PatchConfig is not { Count: > 0 } configs
+            || string.IsNullOrWhiteSpace(installedVersion))
+        {
+            return null;
+        }
+        var match = configs.FirstOrDefault(p =>
+            p.Version is not null
+            && string.Equals(p.Version, installedVersion, StringComparison.OrdinalIgnoreCase));
+        return match is null || string.IsNullOrWhiteSpace(match.IndexFile) ? null : match;
+    }
+
     /// <summary>精确匹配本地版本的补丁，并探测承载 indexFile 的可用 CDN。</summary>
     private async Task<(string? Url, string? CdnPrefix, KuroPatchConfig? PatchConfig)> ResolvePatchFromIndexAsync(
         KuroUpdateData? patchData,
@@ -618,17 +653,8 @@ public sealed class GameUpdater : IGameUpdater
         string? installedVersion,
         CancellationToken ct)
     {
-        if (patchData?.Config?.PatchConfig is not { Count: > 0 }
-            || string.IsNullOrWhiteSpace(installedVersion))
-        {
-            return (null, null, null);
-        }
-
-        // 必须与当前本地资源版本精确匹配。Haiyu 不会把最新项误当成任意本地版本的补丁。
-        var match = patchData.Config.PatchConfig.FirstOrDefault(p =>
-            p.Version is not null
-            && string.Equals(p.Version, installedVersion, StringComparison.OrdinalIgnoreCase));
-        if (match is null || string.IsNullOrWhiteSpace(match.IndexFile))
+        var match = FindPatchConfig(patchData, installedVersion);
+        if (match?.IndexFile is null)
         {
             return (null, null, null);
         }
@@ -687,6 +713,8 @@ public sealed class GameUpdater : IGameUpdater
         await MigrateLegacyPredownloadAsync(root, progress).WaitAsync(ct).ConfigureAwait(false);
         var stagingDir = FindStaging(manifest.Version, serverType, installedVersion);
         ManifestLoadResult? patchLoad = null;
+        // 本次使用的官方补丁临时目录(按补丁固定命名);为 null 表示没走官方补丁下载。
+        string? patchTempDir = null;
 
         if (stagingDir is not null)
         {
@@ -734,11 +762,15 @@ public sealed class GameUpdater : IGameUpdater
                     var patchDownloadBytes = patchFiles.Sum(f => f.Size);
                     var patchDiskBytes = patchConfig.Ext?.RequiredDiskSpace ?? patchConfig.UnCompressSize ?? 0;
                     // 补丁包临时目录也在游戏目录下的 DiffData:下载盘即游戏盘,装完即删。
-                    var tempDir = _paths.NewInstallTempDir();
+                    // 按补丁固定命名(而不是每次新 GUID):下载中断/取消后下次安装能复用已下文件与 .part 续传。
+                    var tempDir = _paths.PatchInstallTempDir(
+                        GamePathResolver.ComputePatchKey(patchConfig.IndexFile, patchConfig.IndexFileMd5, installedVersion));
                     if (string.IsNullOrEmpty(tempDir))
                     {
                         return (false, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
                     }
+                    // install_tmp 下其它子目录都是别的补丁(或旧版 GUID 目录)留下的,不会再被复用。
+                    CleanStaleInstallTemp(tempDir);
                     if (!HasFreeSpace(tempDir, patchDownloadBytes))
                     {
                         return (false, CoreStrings.F("Core.Updater.DownloadDiskFull", $"更新下载盘空间不足: {FormatBytes(patchDownloadBytes)}", FormatBytes(patchDownloadBytes)));
@@ -748,6 +780,7 @@ public sealed class GameUpdater : IGameUpdater
                         return (false, CoreStrings.F("Core.Updater.GameDiskFull", $"游戏盘空间不足: {FormatBytes(patchDiskBytes)}", FormatBytes(patchDiskBytes)));
                     }
                     stagingDir = tempDir;
+                    patchTempDir = tempDir;
                     Directory.CreateDirectory(stagingDir);
                     var (_, failures) = await _downloader.DownloadManyAsync(
                         patchFiles,
@@ -757,9 +790,10 @@ public sealed class GameUpdater : IGameUpdater
                         ct).ConfigureAwait(false);
                     if (failures.Count > 0)
                     {
-                        _logger.LogWarning("官方补丁下载失败,回退完整清单: {Message}", failures[0]);
+                        // 不删临时目录:已下完的文件与 .part 由 MD5/分片哈希保护,下次安装同一补丁时直接续传。
+                        // 回退完整清单成功后再清理(见下方 patchTempDir)。
+                        _logger.LogWarning("官方补丁下载失败,回退完整清单(保留已下载部分以便续传): {Message}", failures[0]);
                         patchLoad = null;
-                        TryDeleteDirectory(stagingDir);
                         stagingDir = null;
                     }
                 }
@@ -771,35 +805,78 @@ public sealed class GameUpdater : IGameUpdater
             }
         }
 
+        // 补丁没动过游戏目录就失败(如缺 hpatchz、空间预检失败)时保留的暂存目录:
+        // 预载包仍然可用,完整清单回退成功后才清理(失败则留给下次重试补丁)。
+        string? retainedStaging = null;
+
         if (stagingDir is not null && patchLoad?.Manifest?.PatchPlan is not null)
         {
-            var patchResult = await _patchInstaller.InstallAsync(
-                patchLoad.Manifest.PatchPlan,
-                stagingDir,
-                root,
-                patchLoad.Manifest.Files,
-                progress,
-                ct).ConfigureAwait(false);
+            // hpatchz 是原地改写游戏文件的:一旦开始写游戏目录,这份暂存就不能再对同一目录重复应用。
+            var gameTouched = false;
+            PatchInstallResult patchResult;
+            try
+            {
+                patchResult = await _patchInstaller.InstallAsync(
+                    patchLoad.Manifest.PatchPlan,
+                    stagingDir,
+                    root,
+                    patchLoad.Manifest.Files,
+                    progress,
+                    ct,
+                    onGameFolderModified: () => gameTouched = true).ConfigureAwait(false);
+            }
+            catch (Exception) when (gameTouched)
+            {
+                // 取消(或文件被占用等异常)发生在已改写游戏目录之后:清除 Completed 标记,
+                // 避免下次把同一差分盲目应用到半成品目录上。
+                InvalidateStagingAfterPartialPatch(stagingDir, patchTempDir);
+                throw;
+            }
+
             if (patchResult.Success)
             {
-                var verified = await EnsureManifestCompleteAsync(manifest, root, progress, ct).ConfigureAwait(false);
+                (bool Success, string? Message) verified;
+                try
+                {
+                    verified = await EnsureManifestCompleteAsync(manifest, root, progress, ct).ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    // 补丁已完整应用、但最终校验被取消/异常中断:目录已是新版本形态,同样不能再应用一次。
+                    InvalidateStagingAfterPartialPatch(stagingDir, patchTempDir);
+                    throw;
+                }
                 if (verified.Success)
                 {
                     DeletePatchFiles(root, patchLoad.Manifest.PatchPlan.DeleteFiles, manifest);
                     WriteInstalledVersion(root, manifest.Version);
                     await RefreshResourcePackMarkersAsync(serverType).ConfigureAwait(false);
-                    TryDeleteDirectory(stagingDir);
+                    TryDeleteStagingDirectory(stagingDir);
+                    TryDeleteStagingDirectory(patchTempDir);
                     return (true, CoreStrings.F("Core.Updater.PatchInstalled", $"补丁安装完成,版本 {manifest.Version}", manifest.Version));
                 }
                 _logger.LogWarning("补丁安装后最终校验未通过,回退完整清单: {Message}", verified.Message);
             }
             else
             {
-                _logger.LogWarning("补丁安装失败,回退完整清单: {Message}", patchResult.Message);
+                _logger.LogWarning(
+                    "补丁安装失败,回退完整清单(游戏目录{Touched}被改写): {Message}",
+                    patchResult.GameFolderModified ? "已" : "未",
+                    patchResult.Message);
             }
 
-            // 补丁已尝试应用但未完成时,其预载包不能再复用,否则会对已变更目录重复打差分。
-            TryDeleteDirectory(stagingDir);
+            if (patchResult.Success || patchResult.GameFolderModified)
+            {
+                // 补丁已写入游戏目录但未完成时,其预载包不能再复用,否则会对已变更目录重复打差分。
+                TryDeleteStagingDirectory(stagingDir);
+                TryDeleteStagingDirectory(patchTempDir);
+            }
+            else
+            {
+                // 游戏目录没被动过(缺 hpatchz、空间预检失败、差分包缺失…):预载包仍然有效,
+                // 不能删掉后再走需要更多空间的完整下载;完整回退成功后再清理。
+                retainedStaging = stagingDir;
+            }
         }
 
         var fullResult = await EnsureManifestCompleteAsync(manifest, root, progress, ct).ConfigureAwait(false);
@@ -809,7 +886,105 @@ public sealed class GameUpdater : IGameUpdater
         }
         WriteInstalledVersion(root, manifest.Version);
         await RefreshResourcePackMarkersAsync(serverType).ConfigureAwait(false);
+        // 已按完整清单装到目标版本:本次的补丁临时目录与保留下来的预载包都过期了。
+        TryDeleteStagingDirectory(retainedStaging);
+        TryDeleteStagingDirectory(patchTempDir);
         return (true, fullResult.Message ?? CoreStrings.F("Core.Updater.Updated", $"更新完成,版本 {manifest.Version}", manifest.Version));
+    }
+
+    /// <summary>作废预载包时写入 predownload.json 的来源版本:不是合法版本号,永远不会与本地版本匹配。</summary>
+    private const string PartialPatchSourceVersion = "partial-patch";
+
+    /// <summary>
+    /// 补丁已开始改写游戏目录后被取消/中断时,让这份暂存不再被当成"可直接安装"的预载包:
+    /// 预载目录把 predownload.json 的 Completed 改回 false 并作废来源版本(FindStaging 不再命中,
+    /// 再次预下载会清空重下);官方补丁临时目录直接删除(它只服务于"从原版本打这个补丁",目录已变就没用了)。
+    /// </summary>
+    private void InvalidateStagingAfterPartialPatch(string stagingDir, string? patchTempDir)
+    {
+        if (patchTempDir is not null && string.Equals(stagingDir, patchTempDir, StringComparison.OrdinalIgnoreCase))
+        {
+            TryDeleteStagingDirectory(patchTempDir);
+            return;
+        }
+
+        var marker = Path.Combine(stagingDir, MarkerFileName);
+        try
+        {
+            if (!File.Exists(marker))
+            {
+                return;
+            }
+            var meta = JsonSerializer.Deserialize(File.ReadAllText(marker), GameMetaJsonContext.Default.PreDownloadMeta);
+            if (meta is null)
+            {
+                File.Delete(marker);
+                return;
+            }
+            meta.Completed = false;
+            // 来源版本也改成一个不可能匹配的值:只清 Completed 的话,用户再点一次「预下载」时
+            // PreDownloadAsync 会认为这是同版本同来源的续传目录,补齐后又标回 Completed,
+            // 下次安装仍会把同一份差分打到半成品目录上。来源版本对不上 → 预下载会清空重下,FindStaging 也不再命中。
+            meta.SourceVersion = PartialPatchSourceVersion;
+            File.WriteAllText(marker, JsonSerializer.Serialize(meta, GameMetaJsonContext.Default.PreDownloadMeta));
+            _logger.LogWarning("补丁应用中途被取消,已清除预载完成标记: {Path}", stagingDir);
+        }
+        catch (Exception ex)
+        {
+            // 改不了标记就整目录删:宁可重新预下载,也不能对半成品目录重复应用同一份差分。
+            _logger.LogWarning(ex, "清除预载完成标记失败,改为删除暂存目录: {Path}", stagingDir);
+            TryDeleteStagingDirectory(stagingDir);
+        }
+    }
+
+    /// <summary>
+    /// 清掉 install_tmp 下除 <paramref name="keepDir"/> 以外的子目录:同一时刻只会有一个补丁在安装,
+    /// 其余都是别的补丁(或旧版每次新建的 GUID 目录)留下的残留,不会再被复用。
+    /// </summary>
+    private void CleanStaleInstallTemp(string keepDir)
+    {
+        var installTemp = _paths.InstallTempDir;
+        if (string.IsNullOrEmpty(installTemp) || !Directory.Exists(installTemp))
+        {
+            return;
+        }
+        try
+        {
+            var keepFull = Path.GetFullPath(keepDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            foreach (var dir in Directory.EnumerateDirectories(installTemp).ToList())
+            {
+                if (string.Equals(Path.GetFullPath(dir), keepFull, ArchivePathGuard.PathComparison))
+                {
+                    continue;
+                }
+                _logger.LogInformation("清理过期的补丁临时目录: {Path}", dir);
+                TryDeleteStagingDirectory(dir);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "枚举补丁临时目录失败: {Path}", installTemp);
+        }
+    }
+
+    /// <summary>
+    /// 递归删除暂存/临时目录,但只允许删 DiffData、DiffData/install_tmp 或旧版 predownload 根目录的
+    /// <b>直接</b>子目录。路径来自服务端版本号,这是 H3(版本号 ".." 让删除落到游戏根目录)的最后一道防线。
+    /// </summary>
+    private void TryDeleteStagingDirectory(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+        if (!GamePathResolver.IsDirectChildOf(_paths.DiffDataDir, path)
+            && !GamePathResolver.IsDirectChildOf(_paths.InstallTempDir, path)
+            && !GamePathResolver.IsDirectChildOf(LegacyPredownloadRoot, path))
+        {
+            _logger.LogError("拒绝递归删除不在暂存区内的目录: {Path}", path);
+            return;
+        }
+        TryDeleteDirectory(path);
     }
 
     private async Task<(bool Success, string? Message)> EnsureManifestCompleteAsync(
@@ -842,51 +1017,34 @@ public sealed class GameUpdater : IGameUpdater
             ct).ConfigureAwait(false);
         if (!diff.HasChanges)
         {
+            // 清单校验通过:上次中断留下的替换前备份也不再需要(没有任何代码从备份恢复)。
+            DeleteBackupDirectory(root);
             return (true, CoreStrings.T("Core.Updater.FilesComplete", "游戏文件完整,无需额外下载"));
         }
 
         var downloadBytes = diff.ToDownload.Sum(file => file.Size);
-        // 流式安装:直接下载到游戏根目录,边下载边更新(替换前自动备份到 .McKuro_backup)。
-        // 不再需要 appData 上的一份临时暂存,磁盘余量只需满足游戏盘(下载体积 + 备份体积)。
-        // 保守预留备份体积:被替换的旧文件会复制到备份目录,按下载体积估算。
-        var requiredOnDisk = downloadBytes * 2;
+        // 流式安装:直接下载到游戏根目录,边下载边更新(替换前把旧文件同卷移动到 .McKuro_backup)。
+        // 备份是改名而不是复制,不额外占空间;磁盘余量只需满足本次下载体积(.part 落位前与旧文件并存)。
+        var requiredOnDisk = downloadBytes;
         if (!HasFreeSpace(root, requiredOnDisk))
         {
-            return (false, CoreStrings.F("Core.Updater.GameDiskFull", $"游戏盘空间不足(含备份预留): {FormatBytes(requiredOnDisk)}", FormatBytes(requiredOnDisk)));
+            return (false, CoreStrings.F("Core.Updater.GameDiskFull", $"游戏盘空间不足: {FormatBytes(requiredOnDisk)}", FormatBytes(requiredOnDisk)));
         }
 
-        try
+        // 取消/失败时<b>保留</b> .part:FileDownloader 会按长度/分片哈希/MD5 续传,
+        // 18.6 GB 的 pak 下到 15 GB 时取消,下次只需补剩下的部分(此前 finally 里统一删 .part,续传形同虚设)。
+        // ComputeDiff 已判定这些文件缺失或过期,下载侧不必再对旧文件整份算一次 MD5(skipExistingCheck)。
+        var (_, failures) = await _downloader.DownloadManyAsync(
+            diff.ToDownload,
+            baseUrl: "",
+            root,
+            progress,
+            ct,
+            streamingGameRoot: root,
+            skipExistingCheck: true).ConfigureAwait(false);
+        if (failures.Count > 0)
         {
-            var (_, failures) = await _downloader.DownloadManyAsync(
-                diff.ToDownload,
-                baseUrl: "",
-                root,
-                progress,
-                ct,
-                streamingGameRoot: root).ConfigureAwait(false);
-            if (failures.Count > 0)
-            {
-                return (false, CoreStrings.F("Core.Updater.DownloadFailedFirst", $"下载失败: {failures[0]}", failures[0]));
-            }
-        }
-        finally
-        {
-            // 清理残留的 .part(取消/失败时未移动的文件;成功时不存在)
-            foreach (var entry in diff.ToDownload)
-            {
-                try
-                {
-                    var part = GameFilePath.CombineUnderRoot(root, entry.Path) + ".part";
-                    if (File.Exists(part))
-                    {
-                        File.Delete(part);
-                    }
-                }
-                catch
-                {
-                    // 忽略清理失败
-                }
-            }
+            return (false, CoreStrings.F("Core.Updater.DownloadFailedFirst", $"下载失败: {failures[0]}", failures[0]));
         }
 
         // 末次复检降级为抽样核对:本次下载的每个文件在 FileDownloader 落位前已做 MD5 校验,
@@ -894,9 +1052,32 @@ public sealed class GameUpdater : IGameUpdater
         // 抽样优先覆盖关键文件,并随机补充至最多 40 个。
         var (verified, sampleMessage) = await Task.Run(
             () => QuickVerifyAfterInstall(manifest, root, ct), ct).ConfigureAwait(false);
+        if (verified)
+        {
+            // 最终校验通过:替换前移走的旧文件不会再被用到(全仓库没有从备份恢复的逻辑)。
+            DeleteBackupDirectory(root);
+        }
         return verified
             ? (true, CoreStrings.F("Core.Updater.FilesPatched", $"已补齐 {diff.ToDownload.Count} 个文件", diff.ToDownload.Count))
             : (false, sampleMessage!);
+    }
+
+    /// <summary>删除替换前备份目录 <c>.McKuro_backup</c>(安装/修复最终校验通过后调用;失败只记日志)。</summary>
+    private void DeleteBackupDirectory(string root)
+    {
+        try
+        {
+            var backup = GameFilePath.CombineUnderRoot(root, UpdateInstaller.BackupDirName);
+            if (Directory.Exists(backup))
+            {
+                Directory.Delete(backup, recursive: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            // 占用/权限导致删不掉:留给「检查残留」清理,不影响安装结果。
+            _logger.LogWarning(ex, "删除替换前备份目录失败");
+        }
     }
 
     /// <summary>
@@ -1015,6 +1196,7 @@ public sealed class GameUpdater : IGameUpdater
             // 清单总量只用来做"明显过大"的对比;拿不到就算 0(此时只按残留体积判断)。
             long manifestBytes = 0;
             IReadOnlySet<string>? claimed = null;
+            string? currentPatchTemp = null;
             try
             {
                 var serverType = GameServerResolver.Resolve(_settings, _paths);
@@ -1026,6 +1208,14 @@ public sealed class GameUpdater : IGameUpdater
                     claimed = load.Manifest.Files
                         .Select(f => f.Path.Replace('\\', '/'))
                         .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    // 当前本地版本对应的官方补丁临时目录(下载中断后待续传):与预载包一样要保住。
+                    var installedVersion = ReadInstalledVersion(root);
+                    var patchConfig = FindPatchConfig(load.DefaultData, installedVersion);
+                    if (patchConfig is not null)
+                    {
+                        currentPatchTemp = _paths.PatchInstallTempDir(GamePathResolver.ComputePatchKey(
+                            patchConfig.IndexFile, patchConfig.IndexFileMd5, installedVersion));
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -1037,7 +1227,7 @@ public sealed class GameUpdater : IGameUpdater
                 _logger.LogDebug(ex, "残留自检:清单不可用,跳过体积比对");
             }
 
-            var inUse = BuildInUsePaths(claimed);
+            var inUse = BuildInUsePaths(claimed, currentPatchTemp);
 
             var (report, actual) = await Task.Run(
                 () =>
@@ -1087,12 +1277,17 @@ public sealed class GameUpdater : IGameUpdater
     }
 
     /// <summary>
-    /// 仍在使用的目录:当前完整的预下载暂存目录(续传要用,删了重下几十 GB)。
-    /// 备份目录与临时目录不在此列 —— 它们随时可以重建或本来就要删。
+    /// 仍在使用的目录:当前完整的预下载暂存目录(续传要用,删了重下几十 GB),
+    /// 以及<b>当前本地版本对应补丁</b>的固定临时目录 <paramref name="currentPatchTemp"/>(下载中断后待续传)。
+    /// 备份目录与其它补丁的临时目录不在此列 —— 它们随时可以重建或本来就要删。
     /// </summary>
-    private HashSet<string> BuildInUsePaths(IReadOnlySet<string>? claimed)
+    private HashSet<string> BuildInUsePaths(IReadOnlySet<string>? claimed, string? currentPatchTemp = null)
     {
         var inUse = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(currentPatchTemp) && Directory.Exists(currentPatchTemp))
+        {
+            inUse.Add(currentPatchTemp);
+        }
         try
         {
             var diffData = _paths.DiffDataDir;
@@ -1303,21 +1498,28 @@ public sealed class GameUpdater : IGameUpdater
     private async Task<bool> MigrateLegacyVersionAsync(string legacyVersionDir, string destRoot)
     {
         var version = Path.GetFileName(legacyVersionDir);
+        // 旧目录名同样只接受纯数字版本号(它会成为 DiffData 下的目录名并可能被递归删除)。
+        if (!GamePathResolver.IsSafeVersionSegment(version))
+        {
+            _logger.LogWarning("旧预载目录名不是合法版本号,跳过迁移: {Path}", legacyVersionDir);
+            return false;
+        }
         var destDir = Path.Combine(destRoot, version);
         var markerName = MarkerFileName;
 
         if (Directory.Exists(destDir))
         {
-            // 新位置已有同版本目录:标记已就位说明搬完了,清掉旧副本;
-            // 否则(新位置是正在下载的半成品)保留旧数据,等下次再判断。
+            // 新位置已有同版本目录:标记已就位说明搬完了,清掉旧副本。
             var marker = Path.Combine(destDir, markerName);
             if (File.Exists(marker))
             {
                 TryDeleteDirectory(legacyVersionDir);
                 return true;
             }
-            _logger.LogWarning("新位置已有未完成的同版本预载目录,跳过迁移: {Path}", destDir);
-            return false;
+            // 新位置没有标记、旧目录有标记(调用方只挑带标记的旧目录)= 上次迁移被打断的半成品:
+            // 标记文件总是最后搬,所以这里继续迁移(已搬过的同尺寸文件走下方续跑分支直接跳过)。
+            // 若在此直接返回,同尺寸续传分支永远到不了,旧目录也一直缺文件、补丁报"差分包不存在"。
+            _logger.LogInformation("检测到中断的预载迁移,继续迁移: {Path}", destDir);
         }
 
         List<string> files;
@@ -1454,58 +1656,41 @@ public sealed class GameUpdater : IGameUpdater
             return (true, CoreStrings.T("Core.Updater.FilesCompleteRepair", "游戏文件完整,无需修复"));
         }
 
-        // 流式修复:直接下载到游戏根目录,边下载边修复(替换前自动备份到 .McKuro_backup)。
-        // 磁盘余量只需满足游戏盘(下载体积 + 备份预留)。
+        // 流式修复:直接下载到游戏根目录,边下载边修复(替换前把旧文件同卷移动到 .McKuro_backup)。
+        // 备份是改名不是复制,磁盘余量只需满足本次下载体积。
         var repairDownloadBytes = diff.ToDownload.Sum(file => file.Size);
-        var requiredOnDisk = repairDownloadBytes * 2;
+        var requiredOnDisk = repairDownloadBytes;
         if (!HasFreeSpace(root, requiredOnDisk))
         {
-            return (false, CoreStrings.F("Core.Updater.GameDiskFull", $"游戏盘空间不足(含备份预留): {FormatBytes(requiredOnDisk)}", FormatBytes(requiredOnDisk)));
+            return (false, CoreStrings.F("Core.Updater.GameDiskFull", $"游戏盘空间不足: {FormatBytes(requiredOnDisk)}", FormatBytes(requiredOnDisk)));
         }
 
-        try
+        // 取消/失败时保留 .part 以便下次续传(分片哈希/MD5 保证续传内容正确)。
+        // ComputeDiff 刚做过全量校验,下载侧跳过对旧文件的重复 MD5(skipExistingCheck)。
+        var (_, failures) = await _downloader.DownloadManyAsync(
+            diff.ToDownload,
+            baseUrl: "",
+            root,
+            progress,
+            ct,
+            streamingGameRoot: root,
+            skipExistingCheck: true).ConfigureAwait(false);
+        if (failures.Count > 0)
         {
-            var (_, failures) = await _downloader.DownloadManyAsync(
-                diff.ToDownload,
-                baseUrl: "",
-                root,
-                progress,
-                ct,
-                streamingGameRoot: root).ConfigureAwait(false);
-            if (failures.Count > 0)
-            {
-                return (false, CoreStrings.F("Core.Updater.DownloadFailedFirst", $"下载失败: {failures[0]}", failures[0]));
-            }
-
-            // 与 Haiyu 一致:仅在用户选择删除跳过文件时清理,不擅自删除游戏目录中的额外文件。
-            if (deleteSkipped && skipPaths is not null)
-            {
-                int deleted = DeleteSkippedFiles(root, skipPaths);
-                _logger.LogInformation("修复时删除被跳过文件 {Count} 个", deleted);
-            }
-
-            WriteInstalledVersion(root, manifest.Version);
-            return (true, CoreStrings.F("Core.Updater.RepairDone", $"修复完成:重新下载 {diff.ToDownload.Count} 个文件,版本 {manifest.Version}", diff.ToDownload.Count, manifest.Version));
+            return (false, CoreStrings.F("Core.Updater.DownloadFailedFirst", $"下载失败: {failures[0]}", failures[0]));
         }
-        finally
+
+        // 与 Haiyu 一致:仅在用户选择删除跳过文件时清理,不擅自删除游戏目录中的额外文件。
+        if (deleteSkipped && skipPaths is not null)
         {
-            // 清理残留的 .part(取消/失败时未移动的文件;成功时不存在)
-            foreach (var entry in diff.ToDownload)
-            {
-                try
-                {
-                    var part = GameFilePath.CombineUnderRoot(root, entry.Path) + ".part";
-                    if (File.Exists(part))
-                    {
-                        File.Delete(part);
-                    }
-                }
-                catch
-                {
-                    // 忽略清理失败
-                }
-            }
+            int deleted = DeleteSkippedFiles(root, skipPaths);
+            _logger.LogInformation("修复时删除被跳过文件 {Count} 个", deleted);
         }
+
+        // 每个落位文件都已在 FileDownloader 内按 MD5/分片哈希校验:替换前移走的旧文件不再需要。
+        DeleteBackupDirectory(root);
+        WriteInstalledVersion(root, manifest.Version);
+        return (true, CoreStrings.F("Core.Updater.RepairDone", $"修复完成:重新下载 {diff.ToDownload.Count} 个文件,版本 {manifest.Version}", diff.ToDownload.Count, manifest.Version));
     }
 
     private static int DeleteSkippedFiles(string gameRoot, IReadOnlySet<string> skipPaths)
@@ -1684,7 +1869,23 @@ public sealed class GameUpdater : IGameUpdater
         return ResolveLaunchExe(root, string.IsNullOrWhiteSpace(exeName) ? null : exeName);
     }
 
-    /// <summary>本地 DLSS/XeSS 组件版本(对齐 Haiyu GetLocalDLSSAsync / GetLocalXeSSGenerateAsync)。</summary>
+    /// <summary>
+    /// 本地 DLSS/XeSS 组件版本(对齐 Haiyu GetLocalDLSSAsync / GetLocalXeSSGenerateAsync)。
+    /// <para>
+    /// <b>不再对整个游戏目录做递归搜索</b>:Haiyu 原实现对三个 DLL 各做一次
+    /// <c>Directory.GetFiles(root, name, AllDirectories)</c>,在 80~100 GB 的游戏目录上冷缓存可达数秒,
+    /// 而启动页每次 RefreshState 都会调(H10)。现在的做法:
+    /// </para>
+    /// <list type="number">
+    /// <item>先探测 UE 插件的已知相对位置(<see cref="GraphicsComponentKnownDirs"/>,实测鸣潮
+    ///       <c>Engine/Plugins/Runtime/Nvidia/StreamlineCore/Binaries/ThirdParty/Win64/nvngx_dlssg.dll</c>);</item>
+    /// <item>没命中的再从游戏根目录做<b>一次</b>剪枝广度优先遍历(三个文件名一起找,
+    ///       跳过 Content/Saved/DiffData 等装着绝大多数文件的大目录,访问目录数有上限);</item>
+    /// <item>结果按「游戏目录 + 已装版本 + 命中文件的修改时间」缓存,版本/目录/DLL 变化后自动失效;
+    ///       安装/修复写入已装版本时也会主动清掉缓存(见 <see cref="WriteInstalledVersion"/>)。</item>
+    /// </list>
+    /// <para>仍是同步方法(兼容旧调用方);UI 线程请改用 <see cref="GetLocalGraphicsComponentVersionsAsync"/>。</para>
+    /// </summary>
     public IReadOnlyList<LocalFileVersion> GetLocalGraphicsComponentVersions()
     {
         var root = _paths.GameRootDir;
@@ -1693,17 +1894,41 @@ public sealed class GameUpdater : IGameUpdater
             return [];
         }
 
+        string? installedVersion;
+        try
+        {
+            installedVersion = ReadInstalledVersion(root);
+        }
+        catch (Exception ex)
+        {
+            // 版本库读不到不影响组件探测,只是缓存键少了版本这一维
+            _logger.LogDebug(ex, "读取已装版本失败(图形组件缓存键)");
+            installedVersion = null;
+        }
+        var cacheKey = NormalizeRoot(root) + "|" + (installedVersion ?? "");
+        lock (_graphicsCacheLock)
+        {
+            if (_graphicsCache is { } cached
+                && string.Equals(cached.Key, cacheKey, StringComparison.Ordinal)
+                && cached.Stamps.All(s => s.Path is null
+                    || (File.Exists(s.Path) && File.GetLastWriteTimeUtc(s.Path) == s.WriteTimeUtc)))
+            {
+                return cached.Versions;
+            }
+        }
+
+        var located = LocateGraphicsComponents(root);
         var result = new List<LocalFileVersion>();
+        var stamps = new List<(string? Path, DateTime WriteTimeUtc)>();
         foreach (var (fileName, displayName) in GraphicsComponents)
         {
+            located.TryGetValue(fileName, out var file);
             try
             {
-                var file = Directory
-                    .GetFiles(root, fileName, SearchOption.AllDirectories)
-                    .FirstOrDefault();
                 if (file is null)
                 {
                     result.Add(new LocalFileVersion { DisplayName = displayName, Version = "未找到文件" });
+                    stamps.Add((null, default));
                     continue;
                 }
                 var info = System.Diagnostics.FileVersionInfo.GetVersionInfo(file);
@@ -1712,15 +1937,34 @@ public sealed class GameUpdater : IGameUpdater
                     DisplayName = displayName,
                     Version = $"{info.FileMajorPart}.{info.FileMinorPart}.{info.FileBuildPart}.{info.FilePrivatePart}",
                 });
+                stamps.Add((file, File.GetLastWriteTimeUtc(file)));
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "读取图形组件版本失败: {Name}", displayName);
                 result.Add(new LocalFileVersion { DisplayName = displayName, Version = "读取失败" });
+                stamps.Add((null, default));
             }
+        }
+
+        lock (_graphicsCacheLock)
+        {
+            _graphicsCache = (cacheKey, (IReadOnlyList<LocalFileVersion>)result, stamps);
         }
         return result;
     }
+
+    /// <summary>
+    /// <see cref="GetLocalGraphicsComponentVersions"/> 的后台线程版本(UI 线程调用请用这个):
+    /// 首次/缓存失效时仍要读盘探测,不应阻塞界面。
+    /// </summary>
+    public Task<IReadOnlyList<LocalFileVersion>> GetLocalGraphicsComponentVersionsAsync(CancellationToken ct = default) =>
+        Task.Run(() => GetLocalGraphicsComponentVersions(), ct);
+
+    private readonly object _graphicsCacheLock = new();
+
+    /// <summary>上次探测结果:键 = 规范化游戏目录 + 已装版本;Stamps 记录命中文件的修改时间(未命中为 null)。</summary>
+    private (string Key, IReadOnlyList<LocalFileVersion> Versions, List<(string? Path, DateTime WriteTimeUtc)> Stamps)? _graphicsCache;
 
     private static readonly (string FileName, string DisplayName)[] GraphicsComponents =
     [
@@ -1728,6 +1972,106 @@ public sealed class GameUpdater : IGameUpdater
         ("nvngx_dlssg.dll", "DLSS 帧生成"),
         ("libxess.dll", "XeSS"),
     ];
+
+    /// <summary>
+    /// UE 插件放置这些 DLL 的常见相对目录(按命中概率排序)。只是"快速路径":
+    /// 布局变化时由 <see cref="LocateGraphicsComponents"/> 的剪枝遍历兜底。
+    /// </summary>
+    private static readonly string[] GraphicsComponentKnownDirs =
+    [
+        "Engine/Plugins/Runtime/Nvidia/StreamlineCore/Binaries/ThirdParty/Win64",
+        "Engine/Plugins/Runtime/Nvidia/DLSS/Binaries/ThirdParty/Win64",
+        "Engine/Plugins/Runtime/Nvidia/StreamlineDLSSG/Binaries/ThirdParty/Win64",
+        "Engine/Plugins/Runtime/Nvidia/Streamline/Binaries/ThirdParty/Win64",
+        "Engine/Binaries/ThirdParty/Nvidia/NGX/Win64",
+        "Engine/Plugins/Runtime/Intel/XeSS/Binaries/ThirdParty/Win64",
+        "Engine/Plugins/Runtime/Intel/XeSS/Binaries/Win64",
+        "Engine/Plugins/XeSS/Binaries/ThirdParty/Win64",
+        "Engine/Binaries/ThirdParty/Intel/XeSS/Win64",
+        "Client/Binaries/Win64",
+        "Engine/Binaries/Win64",
+    ];
+
+    /// <summary>
+    /// 兜底遍历跳过的目录名:资源/存档/日志/启动器工作区,游戏目录里绝大多数文件都在这些目录下,
+    /// 且不会放图形组件 DLL。其余目录(Engine、Client/Binaries、Client/Plugins…)都会被遍历。
+    /// </summary>
+    private static readonly HashSet<string> GraphicsComponentSkipDirs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Content", "Saved", "Paks", "Intermediate", "Logs", "Shaders", "Config",
+        GamePathResolver.DiffDataDirName, GamePathResolver.PatchTempDirName, UpdateInstaller.BackupDirName,
+        OfficialLauncherRecordService.PackVersionDirName,
+    };
+
+    /// <summary>
+    /// 兜底遍历最多访问的目录数。剪掉资源目录后,引擎/插件/可执行目录通常只有几百到几千个;
+    /// 上限只防异常布局(如用户把别的东西塞进游戏目录)把遍历拖成全盘扫描。
+    /// </summary>
+    private const int GraphicsComponentMaxDirs = 20000;
+
+    /// <summary>定位三个图形组件 DLL:先探已知目录,再一次剪枝遍历找剩下的。返回 文件名 → 完整路径。</summary>
+    private static Dictionary<string, string> LocateGraphicsComponents(string root)
+    {
+        var found = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var names = GraphicsComponents.Select(c => c.FileName).ToArray();
+
+        foreach (var relative in GraphicsComponentKnownDirs)
+        {
+            var dir = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
+            foreach (var name in names)
+            {
+                if (found.ContainsKey(name))
+                {
+                    continue;
+                }
+                var candidate = Path.Combine(dir, name);
+                if (File.Exists(candidate))
+                {
+                    found[name] = candidate;
+                }
+            }
+            if (found.Count == names.Length)
+            {
+                return found;
+            }
+        }
+
+        // 兜底:从游戏根目录广度优先、剪枝、限量;三个文件名在同一趟里一起找。
+        var queue = new Queue<string>();
+        queue.Enqueue(root);
+        var visited = 0;
+        while (queue.Count > 0 && visited < GraphicsComponentMaxDirs && found.Count < names.Length)
+        {
+            var dir = queue.Dequeue();
+            visited++;
+            foreach (var name in names)
+            {
+                if (!found.ContainsKey(name))
+                {
+                    var candidate = Path.Combine(dir, name);
+                    if (File.Exists(candidate))
+                    {
+                        found[name] = candidate;
+                    }
+                }
+            }
+            try
+            {
+                foreach (var sub in Directory.EnumerateDirectories(dir))
+                {
+                    if (!GraphicsComponentSkipDirs.Contains(Path.GetFileName(sub)))
+                    {
+                        queue.Enqueue(sub);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // 无权限/被占用的目录直接跳过
+            }
+        }
+        return found;
+    }
 
     private static bool HasFreeSpace(string path, long requiredBytes)
     {
@@ -1766,6 +2110,11 @@ public sealed class GameUpdater : IGameUpdater
 
     private string? FindStaging(string version, GameServerType? serverType = null, string? sourceVersion = null)
     {
+        // 版本号来自服务端清单:不是纯数字版本号就不拼路径(命中的目录之后会被递归删除,见 H3)。
+        if (!GamePathResolver.IsSafeVersionSegment(version))
+        {
+            return null;
+        }
         // 现行位置:游戏目录下 DiffData/<版本>。
         var staging = _paths.PredownloadStagingDir(version);
         var hit = InspectStaging(staging, version, serverType, sourceVersion);
@@ -2065,6 +2414,11 @@ public sealed class GameUpdater : IGameUpdater
     private void WriteInstalledVersion(string gameRoot, string version)
     {
         gameRoot = NormalizeRoot(gameRoot);
+        // 安装/补丁/修复都可能换掉图形组件 DLL:下次读取时重新探测(H10 缓存)
+        lock (_graphicsCacheLock)
+        {
+            _graphicsCache = null;
+        }
         // 写"已安装版本"= 安装真正成功的唯一收口点(全量安装 / 补丁安装 / 修复三条路径都汇到这里),
         // 因此「未完成」标记在这里统一清除,不必在每个调用点各写一遍(漏一处就会永久误判未装完)。
         ClearIncompleteInstallFlag(gameRoot);

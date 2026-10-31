@@ -167,13 +167,37 @@ public class Live2DLocatorTests : IDisposable
     }
 
     [Fact]
-    public void DiscoveryRoots_IncludesApplicationBaseDirectory()
+    public void DiscoveryRoots_DoesNotRecurseApplicationBaseDirectory()
     {
-        // AppContext.BaseDirectory 必然存在,因此必须出现在发现根中 ——
-        // 这是"随包模型能被找到"的最小保证(程序目录 live2d\ 在其下)。
+        // 程序根不能作为递归根:便携版解压到 Downloads 这类大目录时,首页构造会在 UI 线程
+        // 遍历整棵目录树(启动卡住)。随包模型在程序目录 live2d\ 下,由 ProgramDir 覆盖。
         var roots = Live2DLocator.DiscoveryRoots().ToList();
 
-        Assert.Contains(AppContext.BaseDirectory, roots);
+        Assert.DoesNotContain(AppContext.BaseDirectory, roots);
+    }
+
+    [Fact]
+    public void ResolveModelDirAnywhere_FindsModelFlatAtBaseDirectory_ButNotNestedOutsideLive2D()
+    {
+        // 平铺在 exe 同级的模型仍可用(只查顶层);程序目录里 live2d\ 之外的深层目录不再被递归。
+        var name = "平铺形态-" + Guid.NewGuid().ToString("N");
+        var flat = Path.Combine(AppContext.BaseDirectory, name + ".model3.json");
+        var nestedDir = Path.Combine(AppContext.BaseDirectory, "深层-" + Guid.NewGuid().ToString("N"));
+        var nestedName = Path.GetFileName(nestedDir);
+        try
+        {
+            File.WriteAllText(flat, "{}");
+            Directory.CreateDirectory(nestedDir);
+            File.WriteAllText(Path.Combine(nestedDir, nestedName + ".model3.json"), "{}");
+
+            Assert.Equal(AppContext.BaseDirectory, Live2DLocator.ResolveModelDirAnywhere(name));
+            Assert.Null(Live2DLocator.ResolveModelDirAnywhere(nestedName));
+        }
+        finally
+        {
+            try { File.Delete(flat); } catch { /* ignore */ }
+            try { Directory.Delete(nestedDir, recursive: true); } catch { /* ignore */ }
+        }
     }
 
     [Fact]

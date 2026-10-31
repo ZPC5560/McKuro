@@ -151,7 +151,6 @@ public sealed class Live2DModelHost : Panel
         var p = e.GetPosition(_view);
         if (p.X >= 0 && p.X <= _view.Bounds.Width && p.Y >= 0 && p.Y <= _view.Bounds.Height)
         {
-            System.Console.Error.WriteLine($"[L2D-DBG] forward LookAt {p.X:0},{p.Y:0} (view {_view.Bounds.Width:0}x{_view.Bounds.Height:0})");
             _view.LookAt(p.X, p.Y, _view.Bounds.Width, _view.Bounds.Height);
         }
         else

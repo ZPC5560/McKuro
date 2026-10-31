@@ -315,7 +315,9 @@ public sealed class GachaAnalysisService
         double residentAvg)
     {
         const double w1 = 0.40, w2 = 0.20, w3 = 0.20, w4 = 0.20;
-        const double max1 = 100.0, max2 = 80.0, max3 = 80.0, max4 = 80.0;
+        // guaranteedRange 是 0~1 的比例(PoolStats.OffBannerRate),不是百分数:
+        // 按 100 归一化时这一项只在 40.0~39.6 之间浮动,等于没有权重。
+        const double max1 = 1.0, max2 = 80.0, max3 = 80.0, max4 = 80.0;
 
         double s1 = (1 - Math.Clamp(guaranteedRange, 0, max1) / max1) * w1;
         double s2 = (1 - Math.Clamp(roleAvg, 0, max2) / max2) * w2;
@@ -335,14 +337,24 @@ public sealed class GachaAnalysisService
         _ => CoreStrings.T("Gacha.Luck.VeryLucky", "至尊无敌欧皇"),
     };
 
-    /// <summary>解析记录时间字符串(兼容 ISO 8601 与 "yyyy-MM-dd HH:mm:ss")。</summary>
+    /// <summary>
+    /// 解析记录时间字符串(优先 "yyyy-MM-dd HH:mm:ss",兼容 ISO 8601)。
+    /// <para>
+    /// 记录时间是不带时区的<b>服务器本地</b>时间,按原样当墙上时间使用,不做时区换算:
+    /// 早先用 AssumeUniversal 解析再转本地,UTC+8 下 16:00 以后的抽卡会被算到第二天。
+    /// </para>
+    /// </summary>
     private static DateTime? TryParseTime(string time)
     {
         if (string.IsNullOrWhiteSpace(time))
         {
             return null;
         }
-        return DateTime.TryParse(time, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var dt)
+        if (DateTime.TryParseExact(time, "yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var exact))
+        {
+            return exact;
+        }
+        return DateTime.TryParse(time, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dt)
             ? dt
             : null;
     }
