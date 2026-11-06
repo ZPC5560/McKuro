@@ -87,6 +87,7 @@
             <controls:VideoBackgroundControl VideoUrl="{Binding BackgroundVideoUrl}"
                                               FallbackImageUrl="{Binding BackgroundImageUrl}"
                                               IsVideoEnabled="{Binding VideoEnabled}"
+                                              Quality="{Binding VideoQuality}"
                                               HorizontalAlignment="Stretch"
                                               VerticalAlignment="Stretch" />
             <!-- 版本标语(诗句):与 Haiyu 相同的 background.Slogan 资源(透明画布,诗句画在右缘)。
@@ -265,7 +266,9 @@
                                   DoubleTapped="OnSlideshowDoubleTapped">
                             <Carousel.ItemTemplate>
                                 <DataTemplate x:DataType="game:SlideshowItem">
+                                    <!-- 轮播图显示区约 220 高,按显示尺寸解码(2x 余量),避免官方大图原尺寸常驻缓存 -->
                                     <controls:AsyncImage ImageUrl="{Binding Url}"
+                                                         DecodeHeight="440"
                                                          Stretch="UniformToFill"
                                                          HorizontalAlignment="Stretch"
                                                          VerticalAlignment="Stretch" />

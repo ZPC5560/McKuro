@@ -474,6 +474,19 @@ public sealed partial class LauncherViewModel : ViewModelBase
     private bool _videoEnabled = true;
 
     /// <summary>
+    /// 背景视频解码清晰度档位(与 <see cref="Models.VideoRenderQuality"/> 同一枚举值)。
+    /// 绑定到 VideoBackgroundControl.Quality:改档即重建播放会话,官方 2280p 源降到 1080p
+    /// 可省 400+ MB(零拷贝解码帧池按档位尺寸申请)。
+    /// </summary>
+    [ObservableProperty]
+    private Controls.VideoRenderQuality _videoQuality = Controls.VideoRenderQuality.Hd1080;
+
+    /// <summary>从设置读取清晰度档位(越界钳制到合法枚举)。</summary>
+    private static Controls.VideoRenderQuality QualityFromSettings()
+        => (Controls.VideoRenderQuality)Math.Clamp(
+            AppServices.Settings.Current.BackgroundVideoQuality, 0, 3);
+
+    /// <summary>
     /// 自定义动态壁纸是否生效(视频开启 + mode=1 + 文件存在)。
     /// 官方版本标语(诗句文案图)是为官方宣传视频定制的美术叠加,与自定义壁纸不匹配 → 生效时隐藏。
     /// 由 <see cref="ApplyCustomVideoOverride"/> 在页面刷新/官方背景加载后同步。
@@ -606,6 +619,12 @@ public sealed partial class LauncherViewModel : ViewModelBase
         if (VideoEnabled != wantVideo)
         {
             VideoEnabled = wantVideo;
+        }
+
+        // 清晰度档位:可能在设置页改过,导航回来时同步(VideoBackgroundControl.Quality 变更会重建会话)
+        if (VideoQuality != QualityFromSettings())
+        {
+            VideoQuality = QualityFromSettings();
         }
 
         // 来源变化(尤其自定义 → 官方)必须在这里收敛到最终状态:

@@ -221,6 +221,10 @@ public sealed class Live2DModelHost : Panel
                 IsPointerFollowEnabled = PointerFollow,
                 FramesPerSecond = FramesPerSecond,
                 AutoPauseWhenHidden = true,
+                // 隐藏时卸载模型而不只是停帧:最小化/托盘/挂树但不可见时,红黑模型
+                // 约 105 MiB 的非托管缓冲与两张 2048² 纹理(含 mip)仍常驻;设 true 后
+                // 隐藏即释放,恢复可见时由 ReloadAfterHiddenRelease 自动重载。
+                ReleaseModelWhenHidden = true,
             };
             _view.ModelLoaded += (_, _) =>
             {

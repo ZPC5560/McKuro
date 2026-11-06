@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using McKuro.Core.Models.Kuro;
 using McKuro.Services;
 using McKuro.ViewModels;
 using McKuro.Views;
@@ -17,6 +18,52 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+    }
+
+    /// <summary>
+    /// 已有库街区账号时的按需预热:后台校验当前账号登录态,确认失效才预热 WebView2。
+    /// <para>
+    /// 判据与账号页/提醒调度器完全一致(<see cref="AccountLoginStateLogic.ProbeKuroSession"/>):
+    /// 只有服务端<b>明确拒绝</b>才算失效 —— 网络异常/超时(返回 null)不改结论、也不预热,
+    /// 避免一次网络抖动就把浏览器进程常驻起来。
+    /// </para>
+    /// <para>
+    /// 判据与账号页/提醒调度器完全一致:复用同一份 <c>GetGamerAsync</c> 响应交给
+    /// <see cref="AccountLoginStateLogic.ProbeKuroSession"/> 三态判定,不另造一套逻辑。
+    /// </para>
+    /// </summary>
+    private static async Task PrewarmWhenKuroSessionExpiredAsync()
+    {
+        try
+        {
+            var account = AppServices.KuroAccounts.Current;
+            if (account is null)
+            {
+                // 存过账号但没有「当前账号」:等同于未登录,按要求预热以便直接登录
+                await Dispatcher.UIThread.InvokeAsync(Controls.WebView2Control.PrewarmEnvironment);
+                return;
+            }
+
+            var gamer = await AppServices.Kuro
+                .GetGamerAsync(account, (int)KuroGameType.Waves)
+                .ConfigureAwait(false);
+
+            var probe = AccountLoginStateLogic.ProbeKuroSession(gamer);
+            System.Console.Error.WriteLine($"MCKURO-WV2 启动登录态校验 probe={probe}");
+            if (probe != AccountLoginStateLogic.KuroSessionProbe.Rejected)
+            {
+                // 有效或无法判定:不预热,省下浏览器进程常驻内存
+                return;
+            }
+
+            // 必须在 UI(平台)线程预热:WebView2 环境绑定创建它的线程套间
+            await Dispatcher.UIThread.InvokeAsync(Controls.WebView2Control.PrewarmEnvironment);
+        }
+        catch (Exception ex)
+        {
+            // 校验失败不预热(与原"有账号就跳过"的最坏情况一致),不影响其余启动流程
+            System.Console.Error.WriteLine($"MCKURO-WV2 启动登录态校验失败,跳过预热: {ex.Message}");
+        }
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -41,15 +88,23 @@ public partial class App : Application
         // 再由抽卡分析页按需触发网络刷新。失败静默,不影响启动。
         AppServices.GachaIcons.ApplyCachedCatalog();
 
-        // WebView2 环境预热:仅当库街区账号未登录时(登录验证需要极验;已有账号则无需每次启动加载)。
-        // 当前线程即平台线程(STA),环境对象绑定此线程,后续验证窗口的 Controller 创建与之同套间。
+        // WebView2 环境预热:只在「确实需要重新登录」时才做。
+        //
+        // 旧实现只判断「是否存过账号」,而账号存在 ≠ 登录仍然有效:token 可能已在别处失效、
+        // 或用户主动退出后又没重新登录。于是"有账号但已失效"的用户永远等不到预热,
+        // 真要登录时极验窗口还要冷启动数秒。现在改成:
+        //   ① 无账号 → 必然要登录,直接预热(与原行为一致,不额外发请求);
+        //   ② 有账号 → 先不预热(省掉浏览器进程常驻的内存,实测 6 个 msedgewebview2 子进程
+        //      合计约 320 MB 工作集),后台跑一次轻量登录态校验;只有确认失效才回来预热。
+        // 当前线程即平台线程(STA),环境对象绑定此线程,后续验证窗口的 Controller 创建与之同套间,
+        // 因此后台校验完成后必须经 Dispatcher 回到 UI 线程再预热。
         if (AppServices.KuroAccounts.GetAccounts().Count == 0)
         {
             Controls.WebView2Control.PrewarmEnvironment();
         }
         else
         {
-            System.Console.Error.WriteLine("MCKURO-WV2 已有库街区账号,跳过 WebView2 预热");
+            _ = PrewarmWhenKuroSessionExpiredAsync();
         }
 
         // 异步探测出口 IP(数据中心 Devcode 头需要;避免库街区风控)
@@ -184,6 +239,27 @@ public partial class App : Application
                                 () => AppServices.GameMonitor.SimulateSessionEndedForSmoke(GameSessionEndReason.Finished),
                                 TimeSpan.FromSeconds(3));
                         }
+                    }
+
+                    // WebView2 常驻资源释放自检(McKuro_SMOKE_WV2_RELEASE=<秒>):到点调用
+                    // ReleasePrewarmResources,验证锚点 Controller/隐藏窗口/环境缓存被拆掉、
+                    // msedgewebview2 子进程随后退出。仅开发诊断用,不触碰任何登录接口。
+                    if (double.TryParse(Environment.GetEnvironmentVariable("McKuro_SMOKE_WV2_RELEASE"), out var wv2Release)
+                        && wv2Release > 0)
+                    {
+                        DispatcherTimer.RunOnce(
+                            () => Controls.WebView2Control.ReleasePrewarmResources(),
+                            TimeSpan.FromSeconds(wv2Release));
+                    }
+
+                    // 释放后重建自检(McKuro_SMOKE_WV2_REPREWARM=<秒>):验证 ReleasePrewarmResources
+                    // 清空状态后 PrewarmEnvironment 仍能重新冷启动成功(用于确认"退出登录后再登录"可用)。
+                    if (double.TryParse(Environment.GetEnvironmentVariable("McKuro_SMOKE_WV2_REPREWARM"), out var wv2Reprewarm)
+                        && wv2Reprewarm > 0)
+                    {
+                        DispatcherTimer.RunOnce(
+                            () => Controls.WebView2Control.PrewarmEnvironment(),
+                            TimeSpan.FromSeconds(wv2Reprewarm));
                     }
 
                     // 冒烟时长默认 4s,可用 McKuro_SMOKE_SECONDS 覆盖(验证视频背景等慢加载 UI 用)

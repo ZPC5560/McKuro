@@ -132,6 +132,26 @@ public sealed class AppSettings
     /// <summary>上次扫描的 Wallpaper Engine 内容目录(记忆用,如 steamapps\workshop\content\431960)。</summary>
     public string WallpaperEngineDir { get; set; } = "";
 
+    /// <summary>
+    /// 背景视频解码清晰度档位(0=720p / 1=1080p 默认 / 2=4K / 3=原生)。
+    /// <para>
+    /// 官方宣传片源是 2280p:按原生解码时 d3d11va 零拷贝帧池按源分辨率向 GPU 申请,
+    /// 实测让进程多占 400~500 MB。背景封面在窗口里只显示到约 1100 DIP 宽,
+    /// 1080p 与 4K 肉眼几乎无差,故默认 1080p。
+    /// </para>
+    /// </summary>
+    public int BackgroundVideoQuality { get; set; } = 1;
+
+    /// <summary>角色数据页「技能演示」视频(默认开启;关闭后只显示静态图标,省掉一路 mpv 解码)。</summary>
+    public bool RoleSkillDemoEnabled { get; set; } = true;
+
+    /// <summary>
+    /// 资讯页轮播里的视频(默认开启)。关闭后轮播只显示静态封面图,
+    /// 不创建 mpv 解码器、也不创建 B站/YouTube 内嵌 WebView(后者是独立的浏览器子进程,
+    /// 一个播放器就常驻 150~400 MB)。
+    /// </summary>
+    public bool WikiBannerVideoEnabled { get; set; } = true;
+
     // ---------- 首页 Live2D 模型(仅 Windows x64;依赖 Sparkle.Live2DView + Cubism Core) ----------
 
     /// <summary>首页显示 Live2D 模型(需平台支持 + Cubism Core + 已导入模型)。</summary>

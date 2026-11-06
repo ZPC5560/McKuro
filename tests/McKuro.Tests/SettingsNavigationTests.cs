@@ -21,6 +21,8 @@ public class SettingsNavigationTests : IDisposable
         // SettingsViewModel 构造期即读写 AppServices.Settings / Downloader,必须先初始化 DI。
         InitializeServices();
         _originalNotifEnabled = McKuro.Services.AppServices.Settings.Current.NotifEnabled;
+        var s = McKuro.Services.AppServices.Settings.Current;
+        _originalVideo = (s.BackgroundVideoEnabled, s.BackgroundVideoMode, s.CustomBackgroundVideoPath);
         _vm = new SettingsViewModel();
     }
 
@@ -29,7 +31,14 @@ public class SettingsNavigationTests : IDisposable
         // AppServices 是进程级单例:恢复被本测试改动过的总开关,
         // 否则同一进程内后续测试的 SettingsViewModel 会读到上个测试留下的值(顺序相关失败)。
         McKuro.Services.AppServices.Settings.Current.NotifEnabled = _originalNotifEnabled;
+        var s = McKuro.Services.AppServices.Settings.Current;
+        s.BackgroundVideoEnabled = _originalVideo.Enabled;
+        s.BackgroundVideoMode = _originalVideo.Mode;
+        s.CustomBackgroundVideoPath = _originalVideo.Path;
     }
+
+    /// <summary>预览开关测试会改的三个视频设置(构造期快照,Dispose 恢复)。</summary>
+    private readonly (bool Enabled, int Mode, string Path) _originalVideo;
 
     private static void InitializeServices()
     {
@@ -70,6 +79,44 @@ public class SettingsNavigationTests : IDisposable
         var visible = Panels().Where(p => p.Visible).ToList();
         Assert.Single(visible);
         Assert.Equal(expected, visible[0].Name);
+    }
+
+    [Fact]
+    public void CustomVideoPreview_Only_Active_When_Actually_Visible()
+    {
+        // 预览控件的 IsVideoEnabled 绑定它:任何一层不可见都必须为 false,
+        // 否则隐藏的预览会在后台拉起 mpv 会话解码(IsVisible 只隐藏不卸载)。
+        _vm.BackgroundVideoEnabled = true;
+        _vm.BackgroundVideoMode = 1;
+        _vm.CustomBackgroundVideoPath = @"C:\nonexistent\preview.mp4";
+        var appearance = _vm.Categories.Single(c => c.Key == SettingsCategoryKeys.Appearance);
+        _vm.SelectCategoryCommand.Execute(appearance);
+        _vm.SelectSubTabCommand.Execute(SettingsCategoryKeys.AppearanceVideo);
+        Assert.True(_vm.IsCustomVideoPreviewActive);
+
+        var raised = new List<string?>();
+        _vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        // 切到其它分类:必须停播,且要发通知(绑定才会更新)
+        _vm.SelectCategoryCommand.Execute(_vm.Categories.Single(c => c.Key == SettingsCategoryKeys.Download));
+        Assert.False(_vm.IsCustomVideoPreviewActive);
+        Assert.Contains(nameof(SettingsViewModel.IsCustomVideoPreviewActive), raised);
+
+        _vm.SelectCategoryCommand.Execute(appearance);
+        _vm.SelectSubTabCommand.Execute(SettingsCategoryKeys.AppearanceVideo);
+        Assert.True(_vm.IsCustomVideoPreviewActive);
+
+        // 切回官方模式 / 关背景视频:同样停播并通知
+        raised.Clear();
+        _vm.BackgroundVideoMode = 0;
+        Assert.False(_vm.IsCustomVideoPreviewActive);
+        Assert.Contains(nameof(SettingsViewModel.IsCustomVideoPreviewActive), raised);
+
+        _vm.BackgroundVideoMode = 1;
+        raised.Clear();
+        _vm.BackgroundVideoEnabled = false;
+        Assert.False(_vm.IsCustomVideoPreviewActive);
+        Assert.Contains(nameof(SettingsViewModel.IsCustomVideoPreviewActive), raised);
     }
 
     [Fact]

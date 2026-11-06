@@ -244,8 +244,11 @@
                         <Border CornerRadius="12" Height="430" ClipToBounds="True"
                                 Background="{Binding RoleHeaderBackground}">
                             <Grid>
-                                <!-- 角色大图:右下角完整显示 -->
+                                <!-- 角色大图:右下角完整显示。按显示尺寸解码(立绘源图常为 4K,
+                                     原尺寸解码一张约 31.6 MB,只占 128 MB LRU 预算;显示高度约 410,
+                                     预留 2x 余量保证高分屏清晰) -->
                                 <controls:AsyncImage ImageUrl="{Binding SelectedRole.Role.RolePicUrl}"
+                                                     DecodeHeight="820"
                                                      Stretch="Uniform"
                                                      VerticalAlignment="Bottom"
                                                      HorizontalAlignment="Right"
@@ -723,7 +726,8 @@
                                                     <controls:VideoBackgroundControl
                                                         x:Name="SkillDemoVideo"
                                                         VideoUrl="{Binding CurrentSkillDemoVideo}"
-                                                        IsVideoEnabled="True"
+                                                        IsVideoEnabled="{Binding SkillDemoVideoEnabled}"
+                                                        Quality="Hd720"
                                                         IsMuted="True"
                                                         ShouldLoop="False"
                                                         SyncWindowAspect="False" />

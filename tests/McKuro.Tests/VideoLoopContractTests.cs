@@ -105,6 +105,12 @@ public sealed class VideoLoopContractTests
     }
 
     /// <summary>检查 getter 的 IL 中是否直接加载了期望的字符串常量(ldstr)。</summary>
+    /// <remarks>
+    /// <b>必须按指令边界扫描,不能逐字节扫</b>:<c>ldstr</c>(0x72) 后面紧跟 4 字节元数据 token,
+    /// token 里可能出现任意字节值。原先逐字节扫描时,<c>"no"</c> 的 token(0x70013A7C)里含 0x7C,
+    /// 被误判成 <c>ldflda</c> 而令测试失败 —— 实现是对的,判定方式错了。
+    /// 这里按操作码宽度前进,只在真正的指令位置比较。
+    /// </remarks>
     private static bool GetterReturnsLiteral(MethodInfo getter, string expected)
     {
         var il = getter.GetMethodBody()?.GetILAsByteArray();
@@ -113,39 +119,72 @@ public sealed class VideoLoopContractTests
             return false;
         }
 
-        // 先确认没有读取实例字段(ldfld / ldflda)—— 那是被构造顺序吞掉的特征
-        for (var i = 0; i < il.Length; i++)
+        var module = getter.DeclaringType!.Module;
+        for (var i = 0; i < il.Length;)
         {
-            if (il[i] is 0x7B or 0x7C) // ldfld / ldflda
+            var op = il[i];
+
+            // ldstr = 0x72,占 1 + 4 字节(token)
+            if (op == 0x72)
+            {
+                if (i + 4 >= il.Length)
+                {
+                    return false;
+                }
+                var token = BitConverter.ToInt32(il, i + 1);
+                try
+                {
+                    if (module.ResolveString(token) == expected)
+                    {
+                        return true;
+                    }
+                }
+                catch (Exception)
+                {
+                    // 该 token 不是字符串:跳过
+                }
+                i += 5;
+                continue;
+            }
+
+            // ldfld = 0x7B / ldflda = 0x7C:只有位于指令边界时才算"读了实例字段"
+            if (op is 0x7B or 0x7C)
             {
                 return false;
             }
-        }
 
-        // 再在 #US(用户字符串)堆里查找期望的字面量
-        var module = getter.DeclaringType!.Module;
-        for (var i = 0; i < il.Length; i++)
-        {
-            // ldstr = 0x72,后跟 4 字节元数据 token
-            if (il[i] != 0x72 || i + 4 >= il.Length)
-            {
-                continue;
-            }
-            var token = BitConverter.ToInt32(il, i + 1);
-            try
-            {
-                if (module.ResolveString(token) == expected)
-                {
-                    return true;
-                }
-            }
-            catch (Exception)
-            {
-                // 该 token 不是字符串:跳过
-            }
+            // 其余指令只需正确跳过操作数,避免把操作数字节误当指令。
+            // 本方法只处理表达式体属性返回常量这一种形态(必然极短),
+            // 遇到无法安全判定的操作码时按 1 字节前进即可 —— 真正的字段读取会命中上面的分支。
+            i += OpCodeLength(il, i);
         }
 
         return false;
+    }
+
+    /// <summary>返回从 <paramref name="index"/> 起的指令总长度(操作码 + 操作数)。</summary>
+    private static int OpCodeLength(byte[] il, int index)
+    {
+        var op = il[index];
+
+        // 双字节操作码 0xFE xx
+        if (op == 0xFE)
+        {
+            return index + 1 < il.Length ? 4 : 1;
+        }
+
+        return op switch
+        {
+            // 1 字节操作数(ldarg.s / ldc.i4.s / br.s 等短格式)
+            0x0E or 0x0F or 0x10 or 0x11 or 0x12 or 0x13 or 0x1F
+                or 0x2B or 0x2C or 0x2D or 0x2E or 0x2F
+                or 0x30 or 0x31 or 0x32 or 0x33 or 0x34 or 0x35 or 0x36 or 0x37 => 2,
+            // 4 字节操作数(ldstr / call / newobj / ldc.i4 / ldfld 等,统一按 5 字节处理;
+            // 这样即便 token 内出现 0x7B/0x7C 也不会被误认为指令)
+            0x20 or 0x22 or 0x28 or 0x6F or 0x72 or 0x73 or 0x7B or 0x7C or 0x7E or 0x80 => 5,
+            // 默认:保守按 1 字节前进(表达式体常量 getter 极短,不会漏判)
+            _ => 1,
+        };
     }
 
     /// <summary>

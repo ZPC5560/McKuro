@@ -214,7 +214,8 @@
                             BorderThickness="0,0,1,0"
                             BorderBrush="#1A000000" />
                 </Border>
-                <!-- 滑动选中胶囊:位置由代码后置按选中项实时驱动,BackEase 缓动模拟液态玻璃惯性 -->
+                <!-- 滑动选中胶囊:点击平滑切换;在选中项上按住可拖拽,松手就近吸附。
+                     位于图标下层,不遮挡内容;指针由 NavList 捕获并实时驱动胶囊。 -->
                 <Border x:Name="NavPill" IsHitTestVisible="False"
                         HorizontalAlignment="Left" VerticalAlignment="Top"
                         Width="64" Height="48" CornerRadius="13"

@@ -321,6 +321,54 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         AppServices.Settings.Current.BackgroundVideoEnabled = value;
         AppServices.Settings.Save();
+        OnPropertyChanged(nameof(IsCustomVideoPreviewActive));
+    }
+
+    // ---------- 背景视频清晰度(1080p / 4K) ----------
+
+    /// <summary>解码清晰度档位(0=720p/1=1080p/2=4K/3=原生),即时保存并重建启动页播放会话。</summary>
+    [ObservableProperty]
+    private int _backgroundVideoQuality;
+
+    partial void OnBackgroundVideoQualityChanged(int value)
+    {
+        AppServices.Settings.Current.BackgroundVideoQuality = Math.Clamp(value, 0, 3);
+        AppServices.Settings.Save();
+        // 启动页 VideoBackgroundControl 绑定同一设置项,档位变化会重建会话(见其 QualityProperty 处理器)
+        WeakReferenceMessenger.Default.Send(new BackgroundVideoQualityChangedMessage(value));
+    }
+
+    /// <summary>清晰度下拉项(索引即 BackgroundVideoQuality)。</summary>
+    public ObservableCollection<string> VideoQualities { get; } =
+    [
+        LanguageService.Format("VideoQuality.720p"),
+        LanguageService.Format("VideoQuality.1080p"),
+        LanguageService.Format("VideoQuality.2160p"),
+        LanguageService.Format("VideoQuality.Native"),
+    ];
+
+    // ---------- 其它页面的视频开关(省解码器/浏览器子进程内存) ----------
+
+    /// <summary>角色数据页技能演示视频(关闭后不创建 mpv 解码会话)。</summary>
+    [ObservableProperty]
+    private bool _roleSkillDemoEnabled;
+
+    partial void OnRoleSkillDemoEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.RoleSkillDemoEnabled = value;
+        AppServices.Settings.Save();
+        WeakReferenceMessenger.Default.Send(new RoleSkillDemoSettingsChangedMessage(value));
+    }
+
+    /// <summary>资讯页轮播视频(关闭后不创建 mpv 解码器,也不创建 B站/YouTube 内嵌 WebView)。</summary>
+    [ObservableProperty]
+    private bool _wikiBannerVideoEnabled;
+
+    partial void OnWikiBannerVideoEnabledChanged(bool value)
+    {
+        AppServices.Settings.Current.WikiBannerVideoEnabled = value;
+        AppServices.Settings.Save();
+        WeakReferenceMessenger.Default.Send(new WikiBannerVideoSettingsChangedMessage(value));
     }
 
     // ---------- 启动页视频自定义(本地视频 / Wallpaper Engine 动态壁纸) ----------
@@ -334,6 +382,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Current.BackgroundVideoMode = value;
         AppServices.Settings.Save();
         OnPropertyChanged(nameof(IsCustomVideoMode));
+        OnPropertyChanged(nameof(IsCustomVideoPreviewActive));
     }
 
     /// <summary>是否自定义模式(控制自定义区块显隐)。</summary>
@@ -352,10 +401,23 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppServices.Settings.Current.CustomBackgroundVideoPath = value;
         AppServices.Settings.Save();
         OnPropertyChanged(nameof(HasCustomVideoPath));
+        OnPropertyChanged(nameof(IsCustomVideoPreviewActive));
     }
 
     /// <summary>已选择自定义视频(控制预览区块显隐)。</summary>
     public bool HasCustomVideoPath => !string.IsNullOrWhiteSpace(CustomBackgroundVideoPath);
+
+    /// <summary>
+    /// 自定义视频预览是否真正可见(预览控件的 IsVideoEnabled 绑定它)。
+    /// <para>
+    /// 预览外面套了四层 IsVisible(视频子页 → 背景视频开关 → 自定义模式 → 已选路径),
+    /// 但 IsVisible=false 只隐藏、不卸载:控件仍挂在视觉树上,照样拉起 mpv 会话在后台解码。
+    /// 选过一次自定义视频后,哪怕切回官方模式、或停在设置的其它分类,都会常驻一个
+    /// 看不见的播放会话。这里把四个条件合成一个开关,不可见即不播放。
+    /// </para>
+    /// </summary>
+    public bool IsCustomVideoPreviewActive =>
+        IsAppearanceVideoActive && BackgroundVideoEnabled && IsCustomVideoMode && HasCustomVideoPath;
 
     /// <summary>自定义视频封面路径(WE 包的 preview.jpg;本地文件选择时为空,设置页直接实时预览)。</summary>
     [ObservableProperty]
@@ -1167,6 +1229,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         nameof(IsDownloadActive),
         nameof(IsAboutPlatformActive),
         nameof(IsAboutUpdateActive),
+        // 派生自 IsAppearanceVideoActive:离开视频子页即停掉自定义视频预览
+        nameof(IsCustomVideoPreviewActive),
     ];
 
     /// <summary>把当前分类的子标签同步到左列,并保证有选中项(切回时保留上次的子标签)。</summary>
@@ -1293,6 +1357,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _startupPageIndex = s.StartupPage == "Launcher" ? 1 : 0;
         _autoHideNavRail = s.AutoHideNavRail;
         _autoHideTitleBar = s.AutoHideTitleBar;
+        // 视频清晰度与各页面视频开关(直接写字段:构造期不触发 Changed,避免无谓的 Save/消息)
+        _backgroundVideoQuality = Math.Clamp(s.BackgroundVideoQuality, 0, 3);
+        _roleSkillDemoEnabled = s.RoleSkillDemoEnabled;
+        _wikiBannerVideoEnabled = s.WikiBannerVideoEnabled;
         _appUpdateAutoCheck = s.AppUpdateAutoCheck;
         _appUpdateAutoInstall = s.AppUpdateAutoInstall;
         _appUpdateIpFronting = s.AppUpdateIpFronting;

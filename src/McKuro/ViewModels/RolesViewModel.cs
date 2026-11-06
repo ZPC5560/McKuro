@@ -273,6 +273,14 @@ public sealed partial class RolesViewModel : ViewModelBase
     /// <summary>是否有技能演示/连招可展示。</summary>
     public bool HasSkillDemo => SkillDemos.Count > 0 || !string.IsNullOrWhiteSpace(ComboText);
 
+    /// <summary>
+    /// 技能演示视频开关(设置项)。关闭后 CurrentSkillDemoVideo 仍保留 URL 供图标/文案判断,
+    /// 但 VideoBackgroundControl 的 IsVideoEnabled 绑定为 false —— 它不会创建 mpv 解码会话,
+    /// 只显示静态首帧/占位,省掉一路解码器内存与 GPU 占用。
+    /// </summary>
+    [ObservableProperty]
+    private bool _skillDemoVideoEnabled = true;
+
     /// <summary>选中演示项变化:切换播放视频 + 刷新技能节点的选中高亮。</summary>
     partial void OnSelectedSkillDemoChanged(SkillDemoItem? value)
     {
@@ -650,6 +658,10 @@ public sealed partial class RolesViewModel : ViewModelBase
         _messenger = messenger ?? WeakReferenceMessenger.Default;
         TokenText = AppServices.Settings.Current.KujiequToken;
         RoleIdText = AppServices.Settings.Current.RoleId;
+        SkillDemoVideoEnabled = AppServices.Settings.Current.RoleSkillDemoEnabled;
+        // 设置页改开关后即时同步(关闭时 VideoBackgroundControl 会释放 mpv 解码会话)
+        _messenger.Register<RolesViewModel, RoleSkillDemoSettingsChangedMessage>(this,
+            static (recipient, message) => recipient.SkillDemoVideoEnabled = message.Value);
         GuideLoggedIn = AppServices.Guide.HasToken;
         GuideStatusText = AppServices.Guide.HasToken
             ? LanguageService.Format("Roles.GuideLoggedIn", AppServices.Settings.Current.GuideCName)

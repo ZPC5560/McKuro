@@ -18,6 +18,29 @@ using McKuro.Services;
 namespace McKuro.Controls;
 
 /// <summary>
+/// 背景视频解码分辨率档位。
+/// <para>
+/// 官方宣传片源通常是 2280p:按原分辨率解码时解码帧池/GPU 纹理/驱动映射会让进程
+/// 多占 400~500 MB(实测只开视频就从 429 MB 跳到 917 MB)。背景封面在窗口里实际
+/// 只显示到约 1100 DIP 宽,1080p 与 4K 肉眼几乎无差,所以默认 1080p。
+/// </para>
+/// </summary>
+public enum VideoRenderQuality
+{
+    /// <summary>1280 宽上限(低配/小窗口)。</summary>
+    Hd720 = 0,
+
+    /// <summary>1920 宽上限(默认)。</summary>
+    Hd1080 = 1,
+
+    /// <summary>3840 宽上限(接近源分辨率)。</summary>
+    Uhd2160 = 2,
+
+    /// <summary>不限制,按源分辨率解码(内存占用最高)。</summary>
+    Native = 3,
+}
+
+/// <summary>
 /// 背景封面控件:优先用 libmpv 嵌入式渲染 API 播放宣传视频,无可用 native 库或播放失败时回退到首帧静态图。
 /// 视频不可用不影响其余功能 —— 全程 try-catch,绝不抛出。
 /// <para>
@@ -104,6 +127,33 @@ public sealed class VideoBackgroundControl : Grid
     // 播放启动看门狗:规定时间内没有首帧(网络卡死/解码失败无事件)则回退静态图。
     private CancellationTokenSource? _timeoutCts;
 
+    /// <summary>
+    /// 当前会话的解码宽度上限(像素;0 = 不限制)。由 <see cref="Quality"/> 在启动会话时快照,
+    /// 供 vf 滤镜与软件渲染缓冲共用。背景封面在窗口里实际只显示到约 1100 DIP 宽,
+    /// 4K 源按原分辨率解码会让解码帧池/双缓冲常驻数百 MB(实测 +488 MB)。
+    /// </summary>
+    private int _renderWidthCap;
+
+    /// <summary>
+    /// 取 <see cref="Quality"/> 对应的宽度上限并缓存(会话内不变,避免逐帧读 StyledProperty),
+    /// 同时按它限制底下静态封面的解码尺寸。
+    /// <para>
+    /// 封面(官方 FirstFrameImage 是 3840x2280)在视频播放期间一直压在视频层下面,
+    /// 原尺寸解码常驻 35 MB 位图 + 同等大小的 GPU 纹理,却从来看不见。开着视频时按与视频
+    /// 同一档位解码;不开视频时封面就是正式背景,保持原尺寸。
+    /// <paramref name="fullSizeCover"/> 用于 libmpv 不可用等「封面就是最终画面」的场景。
+    /// </para>
+    /// </summary>
+    private void RefreshRenderWidthCap(bool fullSizeCover = false)
+    {
+        _renderWidthCap = WidthCapFor(Quality);
+        // 宽高同取上限 = 长边不超过上限且不放大(AsyncImage 取更严格的一边,源更小时原样解码)
+        var coverCap = !fullSizeCover && IsVideoEnabled && !string.IsNullOrWhiteSpace(VideoUrl)
+            ? _renderWidthCap
+            : 0;
+        _fallback?.SetDecodeBounds(coverCap, coverCap);
+    }
+
     // ── 挂起(最小化/隐藏/游戏运行中)──────────────────────────────────────────
     // 软件解码 + 2048x1216 帧拷贝常驻约 1~2 核;不挂起时,点「启动游戏」后(最小化主窗口
     // 或留在启动页)会与 UE 的着色器编译/资源加载抢 CPU 与磁盘,游戏启动明显慢于官方
@@ -111,6 +161,21 @@ public sealed class VideoBackgroundControl : Grid
     private volatile bool _suspended;
     private bool _mpvPausedApplied; // 仅渲染线程读写
     private Window? _watchedWindow;
+
+    // ── 长时间挂起释放 ──────────────────────────────────────────────────────────
+    // 挂起只让 mpv 暂停:解码器、帧池、GL FBO 与几十个 mpv 线程仍常驻(实测视频会话约
+    // 250 MB 专用内存)。而「挂起」的典型场景恰恰是开着启动器玩几个小时游戏、或最小化到托盘。
+    // 挂起超过 SuspendReleaseDelay 就整个销毁会话(露出底下的静态封面),恢复时重建;
+    // 短暂最小化再还原不受影响(仍是原位续播)。代价:恢复后视频冷启动约 1 秒、从头播放。
+
+    /// <summary>挂起多久后释放播放会话。</summary>
+    internal static readonly TimeSpan SuspendReleaseDelay = TimeSpan.FromSeconds(10);
+
+    /// <summary>挂起释放计时器(仅 UI 线程读写)。</summary>
+    private IDisposable? _suspendReleaseTimer;
+
+    /// <summary>当前会话是否因长时间挂起被释放(恢复时据此重建;仅 UI 线程读写)。</summary>
+    private bool _releasedForSuspend;
 
     /// <summary>播放会话代号:每次 TryStartVideo 自增,异步回调只对当前会话生效(防旧会话串台)。</summary>
     private long _imageGeneration;
@@ -155,6 +220,43 @@ public sealed class VideoBackgroundControl : Grid
         get => GetValue(ShouldLoopProperty);
         set => SetValue(ShouldLoopProperty, value);
     }
+
+    /// <summary>背景视频解码分辨率档位(默认 1080p)。</summary>
+    public static readonly StyledProperty<VideoRenderQuality> QualityProperty =
+        AvaloniaProperty.Register<VideoBackgroundControl, VideoRenderQuality>(
+            nameof(Quality), defaultValue: VideoRenderQuality.Hd1080);
+
+    /// <summary>
+    /// 解码/渲染分辨率档位。
+    /// <para>
+    /// 官方宣传片源是 2280p(约 4K),按原分辨率解码时 d3d11va 帧池 + ANGLE FBO + 驱动映射
+    /// 会让进程常年多占 400~500 MB(实测只开视频就从 429 MB 跳到 917 MB)。背景封面在窗口里
+    /// 实际只显示到 ~1100 DIP 宽,因此默认按 1080p 解码即可,肉眼无差别。
+    /// </para>
+    /// <para>改档会重建播放会话(与换 URL 同路径),因此切档后无需重启应用。</para>
+    /// </summary>
+    public VideoRenderQuality Quality
+    {
+        get => GetValue(QualityProperty);
+        set => SetValue(QualityProperty, value);
+    }
+
+    /// <summary>档位对应的解码宽度上限(像素);<see cref="VideoRenderQuality.Native"/> 返回 0 = 不限制。</summary>
+    internal static int WidthCapFor(VideoRenderQuality quality) => quality switch
+    {
+        VideoRenderQuality.Hd720 => 1280,
+        VideoRenderQuality.Hd1080 => 1920,
+        VideoRenderQuality.Uhd2160 => 3840,
+        _ => 0,
+    };
+
+    /// <summary>
+    /// 档位是否允许「零拷贝硬件解码直出」。只有 Native 档才直出:直出时 d3d11va 帧池
+    /// 必须按源分辨率向 GPU 申请纹理(4K 源约 300~400 MB 常驻),这也是 4K 官方宣传片
+    /// 让进程多占四五百 MB 的根因。降档后改为解码帧复制回内存再缩放,内存按显示尺寸走。
+    /// </summary>
+    internal static bool AllowsZeroCopyHwdec(VideoRenderQuality quality)
+        => quality == VideoRenderQuality.Native;
 
     /// <summary>
     /// 是否正在播放(供 UI 绑定播放/暂停按钮图标)。
@@ -343,6 +445,93 @@ public sealed class VideoBackgroundControl : Grid
         set => SetValue(IsMutedProperty, value);
     }
 
+    /// <summary>
+    /// 档位对应的 mpv 缩放滤镜串(<c>vf</c>);<paramref name="widthCap"/> ≤ 0(Native 档)返回 null = 不设滤镜。
+    /// <para>
+    /// ① 只缩小不放大:宽取 <c>min(iw,cap)</c>。固定写 <c>scale=w=1920</c> 会把 480p 源放大到 1080p
+    /// (实测 854x480 → 1920x1080),解码后的每一帧都变大,白多十几 MB 内存、几十 MB 显存。
+    /// ② 用 <c>lavfi=[...]</c> 方括号整段引用滤镜图:<c>min(iw,cap)</c> 里的逗号若裸写,
+    /// 会被 mpv 当成滤镜分隔符拆开,整个滤镜被静默丢弃;方括号内原样交给 libavfilter,不用转义。
+    /// ③ <c>o=[threads=4]</c> 限制滤镜图线程数:默认按 CPU 核数开 swscale 切片线程
+    /// (16 核机器实测多 30 个线程、约 17 MB),与解码线程同为 4 足够 4K→1080p 每帧缩放。
+    /// </para>
+    /// </summary>
+    internal static string? ScaleFilterFor(int widthCap)
+        => widthCap > 0 ? $"lavfi=[scale=w='min(iw,{widthCap})':h=-2]:o=[threads=4]" : null;
+
+    /// <summary>
+    /// 档位是否用 mpv 的 <c>profile=fast</c>(双线性缩放、关抖动等)。
+    /// 1080p 及以下档背景封面看不出画质差别,实测省约 85 MB 显存(4K 源;核显机器上显存即内存);
+    /// 4K/原生档是用户主动要画质,保持 mpv 默认渲染。
+    /// </summary>
+    internal static bool UsesFastRenderProfile(VideoRenderQuality quality)
+        => quality is VideoRenderQuality.Hd720 or VideoRenderQuality.Hd1080;
+
+    /// <summary>按 <see cref="_renderWidthCap"/> 给 mpv 设置缩放滤镜(见 <see cref="ScaleFilterFor"/>)。</summary>
+    private void ApplyScaleFilter(BackgroundMpvContext ctx)
+    {
+        if (ScaleFilterFor(_renderWidthCap) is not { } vf)
+        {
+            return;
+        }
+        try
+        {
+            ctx.SetOptionString("vf", vf);
+        }
+        catch (Exception ex)
+        {
+            System.Console.Error.WriteLine($"MCKURO-VIDEO vf 设置失败(仅影响内存,不影响播放): {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 构造期向 <see cref="BackgroundMpvContext.OnPreInitialize"/> 传递本次会话的档位。
+    /// <para>
+    /// 为什么用 ThreadStatic 而不是实例字段:基类构造器会在派生类字段赋值<b>之前</b>回调
+    /// OnPreInitialize(与 LoopFileOption 必须用字面常量同一约束),那时读实例字段只能拿到默认值。
+    /// 而 hwdec 又必须在 mpv_initialize 之前设置、运行期改不了,只能走这条「创建前写线程槽」的路。
+    /// 同一线程上 mpv 上下文是串行创建的(TryStartVideo 在 UI 线程),不会串台。
+    /// </para>
+    /// </summary>
+    [ThreadStatic]
+    private static VideoRenderQuality t_pendingQuality;
+
+    /// <summary>档位 → 构造期 hwdec 值。降档走 copy 模式,帧池不再按源分辨率向 GPU 申请。</summary>
+    private static string HwdecForPendingQuality()
+        => AllowsZeroCopyHwdec(t_pendingQuality) ? "auto-safe" : "d3d11va-copy";
+
+    /// <summary>
+    /// 仅网络源才启用大缓冲与 CDN 请求头:播放源一律先经 <see cref="EnsureVideoCachedAsync"/>
+    /// 落盘为本地文件后再 LoadFile,真正交给 mpv 的总是本地路径 —— 此时 demuxer 缓冲
+    /// (50 MB)/缓存秒数纯属常驻内存浪费;本地文件无缓冲耗尽问题,用 mpv 默认小缓冲即可。
+    /// 必须在创建播放器后调用(OnPreInitialize 拿不到运行期 VideoUrl,见 LoopFileOption 约定)。
+    /// </summary>
+    private void ApplyNetworkBufferingOptions(BackgroundMpvContext ctx, string url)
+    {
+        if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        try
+        {
+            // 网络源需要打开 demuxer 缓存(OnPreInitialize 里为省内存设成了 cache=no)。
+            ctx.SetOptionString("cache", "yes");
+            ctx.SetOptionString("demuxer-max-bytes", "50M");
+            ctx.SetOptionString("demuxer-max-back-bytes", "16M");
+            ctx.SetOptionString("cache-secs", "30");
+            ctx.SetOptionString("demuxer-readahead-secs", "30");
+            ctx.SetOptionString("network-timeout", "30");
+            // CDN 可能校验请求头(库洛游戏静态资源 CDN)
+            ctx.SetOptionString("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            ctx.SetOptionString("referrer", "https://kurogame.com");
+        }
+        catch (Exception)
+        {
+            // 缓冲设置失败不影响播放(默认值兜底)
+        }
+    }
+
     /// <summary>按 IsMuted 配置设置 mpv 静音(创建播放器后调用;失败不影响播放)。</summary>
     private void ApplyMuteIfConfigured(BackgroundMpvContext ctx)
     {
@@ -385,6 +574,8 @@ public sealed class VideoBackgroundControl : Grid
         VideoUrlProperty.Changed.AddClassHandler<VideoBackgroundControl>((o, e) => o.OnUrlChanged());
         FallbackImageUrlProperty.Changed.AddClassHandler<VideoBackgroundControl>((o, e) => o.OnUrlChanged());
         IsVideoEnabledProperty.Changed.AddClassHandler<VideoBackgroundControl>((o, e) => o.OnUrlChanged());
+        // 清晰度档位变化 = 重建播放会话(vf/缓冲尺寸都要重来),与换 URL 同一条路径。
+        QualityProperty.Changed.AddClassHandler<VideoBackgroundControl>((o, e) => o.OnUrlChanged());
     }
 
     /// <summary>背景覆盖诊断:视频位图的实际 Bounds 是否与父控件一致(不一致=裁剪错误)。
@@ -467,6 +658,8 @@ public sealed class VideoBackgroundControl : Grid
     {
         AttachedToVisualTree -= OnAttached;
         _attached = true;
+        // 先定封面解码尺寸再给 URL:反过来会先按原尺寸解一次 4K 封面并留在 LRU 里
+        RefreshRenderWidthCap();
         _fallback!.ImageUrl = FallbackImageUrl;
 
         // 挂起源①:宿主窗口最小化/隐藏(覆盖「启动游戏后最小化到任务栏/托盘」场景)
@@ -491,6 +684,8 @@ public sealed class VideoBackgroundControl : Grid
             _watchedWindow = null;
         }
         AppServices.GameMonitor.StateChanged -= OnGameStateChanged;
+        CancelSuspendRelease();
+        _releasedForSuspend = false;
         DisposePlayer();
         AttachedToVisualTree -= OnAttached;
         AttachedToVisualTree += OnAttached;
@@ -525,10 +720,64 @@ public sealed class VideoBackgroundControl : Grid
         {
             _frameSignal.Set(); // 唤醒渲染线程立即应用(否则最多延迟一个 33ms 节拍)
         }
+
+        if (_suspended)
+        {
+            ScheduleSuspendRelease();
+            return;
+        }
+        CancelSuspendRelease();
+        if (_releasedForSuspend && _attached)
+        {
+            // 挂起期间会话已被释放:重建(TryStartVideo 会清掉 _releasedForSuspend)
+            TryStartVideo();
+            ScheduleStartRetry();
+        }
+    }
+
+    /// <summary>
+    /// 挂起持续 <see cref="SuspendReleaseDelay"/> 后释放当前播放会话(见字段区说明)。
+    /// 已有计时器 / 已释放 / 无会话时为空操作。
+    /// </summary>
+    private void ScheduleSuspendRelease()
+    {
+        if (_suspendReleaseTimer is not null || _releasedForSuspend || _mpv is null)
+        {
+            return;
+        }
+        var gen = Generation;
+        _suspendReleaseTimer = DispatcherTimer.RunOnce(() =>
+        {
+            _suspendReleaseTimer = null;
+            if (Stale(gen) || !_suspended || !_attached || _mpv is null)
+            {
+                return;
+            }
+            // 用户手动暂停 / 已播完(技能演示停在末帧)的会话不释放:重建会从头自动播放,
+            // 违背用户意图;这两种状态下 mpv 本就处于暂停,只是少省一份内存。
+            if (_userPaused || _reachedEnd)
+            {
+                return;
+            }
+            System.Console.Error.WriteLine("MCKURO-VIDEO 挂起超时,释放播放会话");
+            DisposePlayer();
+            IsPlaying = false;
+            _releasedForSuspend = true;
+        }, SuspendReleaseDelay);
+    }
+
+    private void CancelSuspendRelease()
+    {
+        _suspendReleaseTimer?.Dispose();
+        _suspendReleaseTimer = null;
     }
 
     private void TryStartVideo()
     {
+        // 新会话接管:旧会话的挂起释放计时/标记作废(末尾按当前挂起状态重新计时)
+        CancelSuspendRelease();
+        _releasedForSuspend = false;
+
         // 先自增 generation 再销毁旧会话:旧 mpv 在 Dispose 中(同步或异步)触发的
         // EndFile/Stop 回调进来时 Stale(旧 gen) 必然成立,不会污染新会话状态。
         // (此前顺序相反:DisposePlayer 与自增之间回调可穿过 _disposed=false + 旧 gen 的窗口)
@@ -541,6 +790,10 @@ public sealed class VideoBackgroundControl : Grid
         // 控件层常驻(用户反馈"播放中控件仍显示"的另一入口)。
         _userPaused = false;
         _reachedEnd = false;
+
+        // 本会话的解码尺寸档位:在 UI 线程快照一次(vf 与软件缓冲都用它),
+        // 避免逐帧/跨线程读 StyledProperty(见 AsyncImage 的同类教训)。
+        RefreshRenderWidthCap();
 
         if (!IsVideoEnabled || string.IsNullOrWhiteSpace(VideoUrl))
         {
@@ -567,16 +820,28 @@ public sealed class VideoBackgroundControl : Grid
         if (!IsLibMpvAvailable())
         {
             Debug.WriteLine("[libmpv] native 库不可用,回退静态图");
+            RefreshRenderWidthCap(fullSizeCover: true); // 封面即最终画面,不降档
             ShowFallback(gen);
             return;
         }
 
         try
         {
-            // 循环与否由**类型**决定,不能传进构造器存字段:基类构造器会在派生字段赋值前
-            // 调用 OnPreInitialize,读字段必然拿到默认值 false(详见 BackgroundMpvContext 注释)。
-            _mpv = ShouldLoop ? new LoopingMpvContext() : new OneShotMpvContext();
+            // hwdec 必须在 mpv_initialize 之前设、运行期改不了,而基类构造器又早于实例字段赋值
+            // 回调 OnPreInitialize —— 只能先把本次档位写进线程槽,让 OnPreInitialize 读到。
+            t_pendingQuality = Quality;
+            try
+            {
+                // 循环与否由**类型**决定,不能传进构造器存字段:基类构造器会在派生字段赋值前
+                // 调用 OnPreInitialize,读字段必然拿到默认值 false(详见 BackgroundMpvContext 注释)。
+                _mpv = ShouldLoop ? new LoopingMpvContext() : new OneShotMpvContext();
+            }
+            finally
+            {
+                t_pendingQuality = VideoRenderQuality.Native; // 复位:避免下次别的会话误读
+            }
             ApplyMuteIfConfigured(_mpv);
+            ApplyNetworkBufferingOptions(_mpv, VideoUrl);
 
             // 播放结束 / 错误 → 回退静态图或标记结束态
             _mpv.EndFile += (_, e) =>
@@ -624,6 +889,12 @@ public sealed class VideoBackgroundControl : Grid
             // v4:优先 OpenGL GPU 渲染(GPU 解码 + GPU 呈现,见 VideoGlRenderer);
             // 平台无 GL 后端/初始化失败时自动回退 v3 软件渲染路径。
             _ = TryGlOrFallbackAsync(gen, token);
+
+            // 在挂起状态下开播(如游戏运行中打开启动页):同样计时释放
+            if (_suspended)
+            {
+                ScheduleSuspendRelease();
+            }
         }
         catch (Exception ex)
         {
@@ -702,6 +973,10 @@ public sealed class VideoBackgroundControl : Grid
             {
                 // 铺满渲染目标(=UniformToFill 的裁切行为;仅 GL 路径生效)
                 _mpv.SetOptionString("panscan", "1.0");
+                // 按 Quality 档位钳制解码/渲染尺寸:官方宣传片源是 2280p,原分辨率解码时
+                // d3d11va 帧池 + ANGLE FBO + 驱动映射会常驻 400~500 MB;背景在窗口里只显示到
+                // ~1100 DIP 宽,1080p 完全够用。Native 档不设置 vf(保留原分辨率)。
+                ApplyScaleFilter(_mpv);
             }
             catch (Exception)
             {
@@ -761,6 +1036,7 @@ public sealed class VideoBackgroundControl : Grid
             if (_mpv is not null)
             {
                 _ = PollVideoAspectAndPropagateAsync(gen);
+                MaybeScheduleTranscode(gen);
             }
         });
     }
@@ -844,6 +1120,10 @@ public sealed class VideoBackgroundControl : Grid
                 };
                 Children.Add(_videoImage);
             }
+
+            // 软件渲染同样按档位缩放解码输出:pinned 缓冲与 WriteableBitmap
+            // 都按 TryResolveVideoSize 钳制后的尺寸分配(双缓冲),与 GL 路径同一上限。
+            ApplyScaleFilter(_mpv);
 
             // mpv 更新回调来自 native 线程，只唤醒专用视频线程；不在回调里做 UI 或渲染。
             _mpv.StartSoftwareRendering(() =>
@@ -929,7 +1209,23 @@ public sealed class VideoBackgroundControl : Grid
         var cacheDir = VideoCache.DefaultDirectory;
         Directory.CreateDirectory(cacheDir);
         var localPath = VideoCache.PathFor(cacheDir, url);
+
+        // 已有本档位的降分辨率副本(见 VideoTranscoder):直接播副本。原片不再刷新使用时间,
+        // 按 LRU 自然过期;切到更高档位时若原片已被清理,重新下载一次即可。
+        var cap = _renderWidthCap;
+        var transcoded = cap > 0 ? VideoCache.TranscodedPathFor(localPath, cap) : null;
+        if (transcoded is not null && VideoTranscoder.IsUsable(transcoded))
+        {
+            SchedulePruneOnce(cacheDir, transcoded);
+            VideoCache.Touch(transcoded);
+            Volatile.Write(ref _cacheState, new CacheState(gen, localPath, transcoded, cap, IsTranscoded: true));
+            System.Console.Error.WriteLine($"MCKURO-VIDEO 使用转码副本 {Path.GetFileName(transcoded)}");
+            return transcoded;
+        }
         SchedulePruneOnce(cacheDir, localPath);
+        // 播原片:首帧后若源宽超过档位上限,后台转一份副本(MaybeScheduleTranscode)
+        Volatile.Write(ref _cacheState,
+            transcoded is null ? null : new CacheState(gen, localPath, transcoded, cap, IsTranscoded: false));
 
         // 只有完整下载的文件才会出现在最终文件名下(临时文件 + 原子替换),非空即可信
         if (VideoCache.IsUsable(localPath))
@@ -951,6 +1247,61 @@ public sealed class VideoBackgroundControl : Grid
             return null;
         }
         return localPath;
+    }
+
+    /// <summary>
+    /// 本会话播放的缓存文件与对应的转码副本(<see cref="EnsureVideoCachedAsync"/> 在后台线程写入,
+    /// 首帧后 <see cref="MaybeScheduleTranscode"/> 与失败回退 <see cref="ShowFallback"/> 读取;按会话代号作废)。
+    /// </summary>
+    private sealed record CacheState(long Gen, string Source, string Target, int Cap, bool IsTranscoded);
+
+    private CacheState? _cacheState; // 跨线程:一律经 Volatile/Interlocked 读写
+
+    /// <summary>
+    /// 首帧后:本会话播的是原片且源宽超过档位上限 → 后台转一份降分辨率副本,下次会话直接用。
+    /// 每个会话只生效一次(循环播放会再次触发 FileLoaded;CompareExchange 取走候选)。
+    /// </summary>
+    private void MaybeScheduleTranscode(long gen)
+    {
+        if (Volatile.Read(ref _cacheState) is not { IsTranscoded: false } state || state.Gen != gen
+            || Interlocked.CompareExchange(ref _cacheState, null, state) != state)
+        {
+            return;
+        }
+        _ = Task.Run(async () =>
+        {
+            // video-params 在首帧解码后才可用(与 PollVideoAspectAndPropagateAsync 同样重试)
+            for (var attempt = 0; attempt < 8 && !Stale(gen); attempt++)
+            {
+                int width;
+                try
+                {
+                    width = _mpv?.GetProperty<int>("video-params/w") ?? 0;
+                }
+                catch (Exception)
+                {
+                    width = 0;
+                }
+                if (width > 0)
+                {
+                    long bytes;
+                    try
+                    {
+                        bytes = new FileInfo(state.Source).Length;
+                    }
+                    catch (Exception)
+                    {
+                        return;
+                    }
+                    if (VideoCache.ShouldTranscode(width, state.Cap, bytes))
+                    {
+                        VideoTranscoder.Enqueue(state.Source, state.Target, state.Cap);
+                    }
+                    return;
+                }
+                await Task.Delay(500).ConfigureAwait(false);
+            }
+        });
     }
 
     /// <summary>每个进程只清理一次视频缓存(后台执行,不阻塞播放)。</summary>
@@ -1116,6 +1467,13 @@ public sealed class VideoBackgroundControl : Grid
             if (Stale(gen))
             {
                 return;
+            }
+
+            // 本会话播的是转码副本却失败了:停用这份副本(下次回到原片并重转),
+            // 不能让一份坏副本把视频永久变成静态图
+            if (Volatile.Read(ref _cacheState) is { IsTranscoded: true } state && state.Gen == gen)
+            {
+                VideoTranscoder.MarkBad(state.Target);
             }
 
             if (_videoImage is not null)
@@ -1418,6 +1776,7 @@ public sealed class VideoBackgroundControl : Grid
                 {
                     IsPlaying = true;
                 }
+                MaybeScheduleTranscode(gen);
             }
 
             // 位图在渲染线程重建,Source 绑定只能在 UI 线程更新
@@ -1447,13 +1806,13 @@ public sealed class VideoBackgroundControl : Grid
                 return false;
             }
 
-            // 使用视频原始分辨率(软件渲染缓冲按源分辨率分配,背景画质最佳)。
-            // 仅在极端尺寸(>4K 宽)时按比例限制,防止异常源撑爆内存。
-            const int maxWidth = 4096;
-            if (w > maxWidth)
+            // 软件渲染的 pinned 缓冲 + WriteableBitmap 都按此尺寸分配(每帧两份,双缓冲)。
+            // 按 Quality 档位钳制:4K 源单帧 33 MB,两份缓冲加解码侧缩放帧即 ~100 MB;
+            // 显示上限只有主窗口 ~1100 DIP,1080p 档完全够用、肉眼无差。
+            if (_renderWidthCap > 0 && w > _renderWidthCap)
             {
-                h = (int)((long)h * maxWidth / w);
-                w = maxWidth;
+                h = (int)((long)h * _renderWidthCap / w);
+                w = _renderWidthCap;
             }
 
             _videoWidth = w;
@@ -1655,22 +2014,46 @@ public sealed class VideoBackgroundControl : Grid
         {
             // 渲染 API 要求 vo=libmpv 在 initialize 前设置
             SetOptionString("vo", "libmpv");
+            // 低档位用 mpv 内置 fast 预设(见 UsesFastRenderProfile)。必须先于下面的显式选项:
+            // 预设只是一组默认值,后设的 hwdec 等仍以本方法为准。旧版 mpv 无此预设时忽略即可。
+            if (UsesFastRenderProfile(t_pendingQuality))
+            {
+                try
+                {
+                    SetOptionString("profile", "fast");
+                }
+                catch (Exception)
+                {
+                    // 预设不存在:保持 mpv 默认渲染,不影响播放
+                }
+            }
             SetOptionString("audio", "no");
             // v4:硬件解码(GPU 解码)。auto-safe = 白名单 hwdec:macOS videotoolbox /
             // Windows d3d11va / Linux vaapi-nvdec;失败自动回退软件解码。
             // GL 渲染路径下解码帧留在 GPU 侧直接互操作;软件渲染路径下 mpv 自动降级软解。
-            SetOptionString("hwdec", "auto-safe");
+            // 注意:降档(默认 1080p)时改走 copy 模式,避免零拷贝帧池按 4K 源分辨率撑爆内存,
+            // 档位由 TryStartVideo 在创建上下文前写入线程槽(见 HwdecForPendingQuality)。
+            SetOptionString("hwdec", HwdecForPendingQuality());
             // 循环:背景封面视频需要 inf;技能演示设 no —— 播完停在末帧等用户重播
             SetOptionString("loop-file", LoopFileOption);
             SetOptionString("volume", "0");
-            // 网络缓冲:CDN 视频首次缓冲耗尽后卡住"只动了一下",增大 demuxer 缓冲
-            SetOptionString("demuxer-max-bytes", "50M");
-            SetOptionString("cache-secs", "30");
-            SetOptionString("demuxer-readahead-secs", "30");
-            SetOptionString("network-timeout", "30");
-            // CDN 可能校验请求头(库洛游戏静态资源 CDN)
-            SetOptionString("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-            SetOptionString("referrer", "https://kurogame.com");
+            // 解码侧限制:背景封面不需要「最高画质 + 大量预解码帧」。
+            // vd-lavc-threads 控制解码线程数,线程越多每线程各自的帧缓冲/上下文越多;
+            // 对背景封面这种低帧率静态感画面,4 线程足够,能显著压低解码器常驻内存。
+            SetOptionString("vd-lavc-threads", "4");
+            // 硬件解码的帧池按【源分辨率】向 GPU 申请,是 4K 源常驻数百 MB 的根因。
+            // 关掉 hwdec 的直接输出(d3d11va 的零拷贝路径必须按源尺寸建纹理池),
+            // 改为 GPU 解码后拉回系统内存再按 vf 缩放 —— 内存换 CPU,但背景封面
+            // 帧率/画质无感,而内存从"按源分辨率"降到"按显示分辨率"。
+            SetOptionString("hwdec-extra-frames", "2");
+            // 只保留最小前向缓存:官方宣传片是本地文件,不需要预读大缓冲。
+            // (网络源的大缓冲另由 ApplyNetworkBufferingOptions 按需打开。)
+            SetOptionString("cache", "no");
+            SetOptionString("demuxer-max-bytes", "16M");
+            SetOptionString("demuxer-max-back-bytes", "4M");
+            // 网络缓冲/请求头不在这里设置:OnPreInitialize 在基类构造器里回调,
+            // 此刻拿不到运行期的 VideoUrl(与 LoopFileOption 必须用字面常量同一原因,
+            // 见类注释)。网络源才需要的大缓冲挪到 TryStartVideo 创建上下文后按需设置。
         }
     }
 

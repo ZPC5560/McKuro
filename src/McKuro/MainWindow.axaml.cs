@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -1607,6 +1608,22 @@ public partial class MainWindow : Window
     private double _pillTargetY;
     private double _pillStretch;
 
+    // 拖拽只在选中胶囊对应的导航项按下时启动；普通项仍由 ListBox 原样处理点击。
+    // 按下与抬起之间用轻微阻尼追踪指针，直到松手才提交导航，避免加载页面打断手势。
+    private IPointer? _navPointer;
+    /// <summary>当前接管的指针 Id(0 = 无)。仅用于断言/诊断,手势归属以 <see cref="_navPointer"/> 引用比较为准。</summary>
+    private int _navPointerId;
+    private int _navPressIndex = -1;
+    private Point _navPressPoint;
+    private double _navGrabOffsetY;
+    private double _navDragY;
+    private double _navDragVelocity;
+    private long _navDragSampleTick;
+    private bool _navDragging;
+    private double _pillDragStretch;
+
+    private const double NavDragThreshold = 5;
+
     /// <summary>目标已定但容器未就绪:挂起,LayoutUpdated 补滑(绝不直接跳位)。</summary>
     private bool _pillTargetPending;
 
@@ -1616,10 +1633,19 @@ public partial class MainWindow : Window
         NavList.SelectionChanged += (_, _) => OnNavSelected();
         NavList.SizeChanged += (_, _) => SnapNavPill();
         NavList.Loaded += (_, _) => SnapNavPill();
+        // handledEventsToo: ListBox 可能先处理选择事件，拖拽仍须在它之前接管同一指针。
+        // 按下必须挂在【窗口】上:挂在 NavList 上时,点击落在 ListBoxItem 内部更深层的
+        // 视觉(图标/文字)时隧道阶段已被更里层元素处理,处理器收不到(实测:事件完全不触发)。
+        // 窗口是隧道起点必经节点,配合 handledEventsToo 能稳定拿到每一次按下。
+        AddHandler(PointerPressedEvent, OnNavPointerPressed, RoutingStrategies.Tunnel, true);
+        NavList.AddHandler(PointerMovedEvent, OnNavPointerMoved, RoutingStrategies.Bubble, true);
+        NavList.AddHandler(PointerReleasedEvent, OnNavPointerReleased, RoutingStrategies.Bubble, true);
+        NavList.AddHandler(PointerCaptureLostEvent, OnNavPointerCaptureLost, RoutingStrategies.Bubble, true);
+        Closed += (_, _) => CancelNavPillDrag(snap: false);
         NavList.LayoutUpdated += (_, _) =>
         {
-            // 滑动中:逐帧实时追踪选中项,绝不干预动画,避免互相争抢
-            if (_pillTimer is not null)
+            // 滑动/拖拽中：分别由动画或指针独占位置，不让布局回归争抢胶囊。
+            if (_pillTimer is not null || _navPointer is not null)
             {
                 return;
             }
@@ -1647,12 +1673,16 @@ public partial class MainWindow : Window
 
     /// <summary>读取当前选中项容器及其目标(相对 NavGlassPanel);容器未就绪返回 null。</summary>
     private (ListBoxItem container, Point raw)? ReadNavTarget()
+        => ReadNavTarget(NavList.SelectedIndex);
+
+    /// <summary>读取指定项；拖拽途中不能改读已选中项，否则胶囊会被吸附逻辑拉走。</summary>
+    private (ListBoxItem container, Point raw)? ReadNavTarget(int index)
     {
-        if (NavList.SelectedIndex < 0 || NavList.ItemCount == 0)
+        if (index < 0 || index >= NavList.ItemCount)
         {
             return null;
         }
-        if (NavList.ContainerFromIndex(NavList.SelectedIndex) is not ListBoxItem container
+        if (NavList.ContainerFromIndex(index) is not ListBoxItem container
             || !container.IsLoaded)
         {
             return null;
@@ -1663,6 +1693,206 @@ public partial class MainWindow : Window
             return null;
         }
         return (container, pt.Value);
+    }
+
+    private void OnNavPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        var properties = e.GetCurrentPoint(NavList).Properties;
+        // 触摸/笔的 contact 也允许拖拽;右键只保留菜单,不进入导航手势。
+        // Avalonia 12 的 PointerType 没有 IsContact() 扩展方法,直接按枚举判断
+        // (鼠标/触摸/笔三态),触摸与笔即使 IsLeftButtonPressed 为假也算有效按下。
+        var isContact = e.Pointer.Type is PointerType.Touch or PointerType.Pen;
+        if (_navPointer is not null || (!properties.IsLeftButtonPressed && !isContact))
+        {
+            return;
+        }
+
+        // 本处理器挂在【窗口】上(隧道路由起点),因此要先排除导航栏之外的所有点击:
+        // 命中测试交给 NavList 自身,不在其可视范围内就直接放行给原来的逻辑。
+        var inNav = e.GetPosition(NavList);
+        if (inNav.X < 0 || inNav.Y < 0 || inNav.X > NavList.Bounds.Width || inNav.Y > NavList.Bounds.Height)
+        {
+            return;
+        }
+
+        var point = e.GetPosition(NavGlassPanel);
+        var selected = ReadNavTarget();
+        if (selected is null || !NavPill.IsVisible)
+        {
+            return;
+        }
+
+        // 只认真正按在选中胶囊的范围内。按在其它项上立即交给 ListBox，
+        // 不会先抢走点击，也不会要求用户先选中再拖拽另一个页面。
+        if (point.X < PillTranslate.X || point.X > PillTranslate.X + NavPill.Width
+            || point.Y < PillTranslate.Y || point.Y > PillTranslate.Y + NavPill.Height)
+        {
+            return;
+        }
+
+        _navPointer = e.Pointer;
+        // Id 只作诊断/断言用:手势归属用引用比较(_navPointer != e.Pointer),
+        // 因为同一指针对象在各事件里是同一个实例,而 Id 在多指针场景下更易读日志。
+        _navPointerId = e.Pointer.Id;
+        _navPressIndex = NavList.SelectedIndex;
+        _navPressPoint = point;
+        _navLastPointerY = point.Y;
+        _navGrabOffsetY = point.Y - PillTranslate.Y;
+        _navDragY = PillTranslate.Y;
+        _navDragVelocity = 0;
+        _navDragSampleTick = Stopwatch.GetTimestamp();
+        _navDragging = false;
+        _pillDragStretch = 0;
+        StopNavGlide();
+        NavList.Cursor = new Cursor(StandardCursorType.SizeNorthSouth);
+        e.Pointer.Capture(NavList);
+        e.Handled = true;
+    }
+
+    private void OnNavPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_navPointer != e.Pointer || _navPressIndex < 0)
+        {
+            return;
+        }
+
+        var point = e.GetPosition(NavGlassPanel);
+        if (!_navDragging)
+        {
+            var delta = point - _navPressPoint;
+            if (Math.Abs(delta.Y) < NavDragThreshold && Math.Abs(delta.X) < NavDragThreshold)
+            {
+                return;
+            }
+            if (Math.Abs(delta.X) > Math.Abs(delta.Y))
+            {
+                // 横向离开不启动纵向拖拽，但保持捕获，松开时仍恢复普通点击。
+                return;
+            }
+            _navDragging = true;
+            e.PreventGestureRecognition();
+        }
+
+        var (minimum, maximum) = ReadNavDragBounds();
+        _navDragY = NavPillGesture.RubberBand(point.Y - _navGrabOffsetY, minimum, maximum);
+        var now = Stopwatch.GetTimestamp();
+        var seconds = (now - _navDragSampleTick) / (double)Stopwatch.Frequency;
+        if (seconds > 0.001)
+        {
+            // 用本次原始 Y 与上次采样值计算速度；越界时的回弹速度不直接传给吸附。
+            var velocity = (point.Y - _navLastPointerY) / seconds;
+            _navDragVelocity = Math.Clamp(velocity, -1200, 1200);
+        }
+        _navLastPointerY = point.Y;
+        _navDragSampleTick = now;
+        PillTranslate.Y = _navDragY;
+        _pillDragStretch += (0.055 - _pillDragStretch) * 0.35;
+        ApplyNavPillStretch(_pillDragStretch, vertical: true);
+        e.Handled = true;
+    }
+
+    private double _navLastPointerY;
+
+    private (double minimum, double maximum) ReadNavDragBounds()
+    {
+        var first = ReadNavTarget(0);
+        var last = ReadNavTarget(NavList.ItemCount - 1);
+        if (first is null || last is null)
+        {
+            return (PillTranslate.Y, PillTranslate.Y);
+        }
+        return (first.Value.raw.Y + 3, last.Value.raw.Y + 3);
+    }
+
+    private void OnNavPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_navPointer != e.Pointer)
+        {
+            return;
+        }
+        FinishNavPillDrag();
+        e.Handled = true;
+    }
+
+    private void OnNavPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        if (_navPointer == e.Pointer)
+        {
+            // 外部控件抢捕获/窗口失焦：回到已选中项，绝不把悬在半空的胶囊当导航提交。
+            CancelNavPillDrag(snap: true);
+        }
+    }
+
+    private void FinishNavPillDrag()
+    {
+        var wasDragging = _navDragging;
+        var velocity = _navDragVelocity;
+        // 必须先把按下时的项索引取出来:ClearNavPointer 会把 _navPressIndex 复位成 -1,
+        // 之后再读就拿不到容器,点击会静默失效(实测陷阱)。
+        var pressIndex = _navPressIndex;
+        ClearNavPointer();
+        if (!wasDragging)
+        {
+            // 还原 ListBox 的默认点击:按下事件在 Tunnel 被我们拦下,但指针捕获仍在列表上,
+            // 这里手动补上"聚焦 + 选中",原有选中绑定与导航命令据此正常工作。
+            if (pressIndex >= 0 && NavList.ContainerFromIndex(pressIndex) is ListBoxItem container)
+            {
+                container.Focus();
+                container.IsSelected = true;
+            }
+            return;
+        }
+
+        var targets = new List<double>(NavList.ItemCount);
+        for (var i = 0; i < NavList.ItemCount; i++)
+        {
+            if (ReadNavTarget(i) is { } info)
+            {
+                targets.Add(info.raw.Y + 3);
+            }
+        }
+        var index = NavPillGesture.FindSnapIndex(PillTranslate.Y, targets, velocity);
+        if (index < 0)
+        {
+            SnapNavPill();
+            return;
+        }
+        if (NavList.ContainerFromIndex(index) is ListBoxItem target)
+        {
+            target.Focus();
+            target.IsSelected = true;
+        }
+        else if (NavList.Items[index] is ViewModels.NavigationItem item && DataContext is ViewModels.MainWindowViewModel vm)
+        {
+            vm.NavigateTo(item);
+        }
+        _pillTargetY = targets[index];
+        StartNavGlide();
+    }
+
+    private void CancelNavPillDrag(bool snap)
+    {
+        ClearNavPointer();
+        if (snap)
+        {
+            SnapNavPill();
+        }
+    }
+
+    private void ClearNavPointer()
+    {
+        var pointer = _navPointer;
+        _navPointer = null;
+        _navPointerId = 0;
+        _navPressIndex = -1;
+        _navDragging = false;
+        _navDragVelocity = 0;
+        _pillDragStretch = 0;
+        NavList.Cursor = null;
+        if (pointer is not null && ReferenceEquals(pointer.Captured, NavList))
+        {
+            pointer.Capture(null);
+        }
     }
 
     private void ApplyNavPillSize(ListBoxItem container)
@@ -1784,6 +2014,45 @@ public partial class MainWindow : Window
             }
         };
         timer.Start();
+    }
+
+    /// <summary>
+    /// 停止滑动动画,但<b>保持</b>胶囊当前位置不动。
+    /// <para>
+    /// 拖拽按下时要立刻掐掉动画,否则动画每帧还在写 PillTranslate,会和指针位置打架
+    /// (表现为胶囊在手指与旧目标之间来回抖)。这里只停表、不清位 —— 后续由指针接管位置。
+    /// </para>
+    /// </summary>
+    private void StopNavGlide()
+    {
+        _pillTimer?.Stop();
+        _pillTimer = null;
+        // 动画的形变属于"滑动中"的视觉效果,接管后交给拖拽自己的拉伸值;
+        // 这里归零,避免按下瞬间留着上一次的挤压感。
+        _pillStretch = 0;
+    }
+
+    /// <summary>
+    /// 按给定拉伸量设置胶囊形变(Apple Liquid Glass 的 squash &amp; stretch)。
+    /// 缩放以中心为轴对称(RenderTransformOrigin=50%,50%):
+    /// 纵向拖拽时沿 Y 拉伸、X 等比收窄,静止拉伸量为 0 时恢复 1:1。
+    /// </summary>
+    /// <param name="stretch">拉伸量(0 = 无形变,越大越"被拉长")。</param>
+    /// <param name="vertical">true = 沿纵向拉伸(拖拽导航栏);false = 沿横向拉伸。</param>
+    private void ApplyNavPillStretch(double stretch, bool vertical)
+    {
+        // 夹到与动画一致的量级,避免拖拽加速度异常时形变过大
+        stretch = Math.Clamp(stretch, 0, 0.28);
+        if (vertical)
+        {
+            PillScale.ScaleY = 1 + stretch;
+            PillScale.ScaleX = Math.Max(0.75, 1 - stretch * 0.55);
+        }
+        else
+        {
+            PillScale.ScaleX = 1 + stretch;
+            PillScale.ScaleY = Math.Max(0.75, 1 - stretch * 0.55);
+        }
     }
 
     private TranslateTransform PillTranslate => ((TransformGroup)NavPill.RenderTransform!).Children[0] as TranslateTransform ?? throw new InvalidOperationException();

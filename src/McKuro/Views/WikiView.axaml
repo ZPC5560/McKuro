@@ -216,7 +216,8 @@
                                             </Style>
                                         </Button.Styles>
                                         <Grid>
-                                            <controls:AsyncImage x:Name="img" ImageUrl="{Binding Url}" Stretch="UniformToFill" />
+                                            <!-- 封面主图显示区 160~640 高,按 2x 上限解码,避免 4K 封面原尺寸常驻缓存 -->
+                                            <controls:AsyncImage x:Name="img" ImageUrl="{Binding Url}" DecodeHeight="1280" Stretch="UniformToFill" />
                                             <ContentControl Content="{Binding #img}" ContentTemplate="{StaticResource ImagePlaceholder}" />
                                         </Grid>
                                     </Button>

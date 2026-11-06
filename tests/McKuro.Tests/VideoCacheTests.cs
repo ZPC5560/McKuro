@@ -92,6 +92,49 @@ public sealed class VideoCacheTests : IDisposable
         Assert.True(File.Exists(oldest));   // 当前要播放的文件永不删除
     }
 
+    [Fact]
+    public void TranscodedPath_Is_Per_Cap_And_Still_A_Cache_File()
+    {
+        var original = VideoCache.PathFor(_dir, "https://cdn.example/pv.mp4");
+        var w1920 = VideoCache.TranscodedPathFor(original, 1920);
+        var w1280 = VideoCache.TranscodedPathFor(original, 1280);
+
+        Assert.Equal(Path.GetDirectoryName(original), Path.GetDirectoryName(w1920));
+        Assert.NotEqual(original, w1920);
+        Assert.NotEqual(w1920, w1280);                       // 不同档位互不覆盖
+        Assert.EndsWith(".w1920" + VideoCache.FileSuffix, w1920);
+        Assert.StartsWith(Path.GetFileName(original)[..^VideoCache.FileSuffix.Length], Path.GetFileName(w1920));
+    }
+
+    [Fact]
+    public void Prune_Keeps_Transcoded_Copies_And_Their_InProgress_Output()
+    {
+        var now = DateTime.UtcNow;
+        var original = Write("H" + VideoCache.FileSuffix, 10, now.AddDays(-40)); // 只播副本后原片不再续期
+        var copy = VideoCache.TranscodedPathFor(original, 1920);
+        File.WriteAllBytes(copy, new byte[10]);
+        var writing = VideoCache.TempPathFor(VideoCache.TranscodedPathFor(original, 1280));
+        File.WriteAllBytes(writing, new byte[10]);
+
+        VideoCache.Prune(_dir, now);
+
+        Assert.False(File.Exists(original));  // 过期原片照常淘汰
+        Assert.True(File.Exists(copy));        // 副本是正常缓存文件,不会被当成旧格式删掉
+        Assert.True(File.Exists(writing));     // 正在写的转码输出不删
+    }
+
+    [Theory]
+    [InlineData(3840, 1920, 12_000_000L, true)]
+    [InlineData(1920, 1920, 12_000_000L, false)]   // 源不超过上限:重新编码只掉画质
+    [InlineData(854, 1920, 6_000_000L, false)]
+    [InlineData(3840, 0, 12_000_000L, false)]      // 原生档:不限制
+    [InlineData(0, 1920, 12_000_000L, false)]      // 源宽未知
+    [InlineData(3840, 1920, 0L, false)]
+    [InlineData(3840, 1920, VideoCache.MaxTranscodeSourceBytes + 1, false)]
+    public void ShouldTranscode_Only_When_Source_Exceeds_Cap_And_Size_Is_Reasonable(
+        int sourceWidth, int cap, long bytes, bool expected)
+        => Assert.Equal(expected, VideoCache.ShouldTranscode(sourceWidth, cap, bytes));
+
     private string Write(string name, int size, DateTime lastWriteUtc)
     {
         var path = Path.Combine(_dir, name);

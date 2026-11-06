@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Net;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Core.Models.Game;
 using McKuro.Core.Models.Wiki;
 using McKuro.Core.Services.Game;
@@ -126,13 +127,31 @@ public sealed partial class WikiViewModel : ViewModelBase
         SelectedBannerIndex >= 0 && SelectedBannerIndex < Banners.Count ? Banners[SelectedBannerIndex] : null;
 
     /// <summary>当前项是直接视频文件(mp4 等)→ mpv 原地自动播放。</summary>
-    public bool CurrentBannerIsDirectVideo => CurrentBanner?.IsVideo == true;
+    public bool CurrentBannerIsDirectVideo => BannerVideoEnabled && CurrentBanner?.IsVideo == true;
 
     /// <summary>当前项是B站视频 → 原控件内嵌B站播放器自动播放。</summary>
-    public bool CurrentBannerIsBili => CurrentBanner?.IsBiliVideo == true;
+    public bool CurrentBannerIsBili => BannerVideoEnabled && CurrentBanner?.IsBiliVideo == true;
 
-    /// <summary>当前项是网页内嵌视频(B站或 YouTube)→ WebView 播放器层显示。</summary>
-    public bool CurrentBannerIsWebVideo => CurrentBanner is { IsBiliVideo: true } or { IsYoutubeVideo: true };
+    /// <summary>
+    /// 当前项是网页内嵌视频(B站或 YouTube)→ WebView 播放器层显示。
+    /// <para>
+    /// 受 <see cref="BannerVideoEnabled"/> 控制:关闭后返回 false,轮播区只显示静态封面图,
+    /// 既不创建 mpv 解码会话,也不创建 B站/YouTube 内嵌 WebView(那是一个独立的浏览器子进程,
+    /// 单个播放器就常驻 150~400 MB)。
+    /// </para>
+    /// </summary>
+    public bool CurrentBannerIsWebVideo =>
+        BannerVideoEnabled && CurrentBanner is { IsBiliVideo: true } or { IsYoutubeVideo: true };
+
+    /// <summary>
+    /// 资讯页轮播视频总开关(设置项)。关闭后 <see cref="CurrentBannerIsDirectVideo"/> /
+    /// <see cref="CurrentBannerIsBili"/> / <see cref="CurrentBannerIsWebVideo"/> 一律为 false,
+    /// 两个播放器都不会被创建。
+    /// </summary>
+    [ObservableProperty]
+    private bool _bannerVideoEnabled = true;
+
+    partial void OnBannerVideoEnabledChanged(bool value) => RaiseCurrentBannerChanged();
 
     public string CurrentBannerTitle => CurrentBanner?.Title ?? "";
     public bool CurrentBannerHasTitle => CurrentBannerTitle.Length > 0;
@@ -197,6 +216,10 @@ public sealed partial class WikiViewModel : ViewModelBase
 
     public WikiViewModel()
     {
+        BannerVideoEnabled = AppServices.Settings.Current.WikiBannerVideoEnabled;
+        // 设置页改开关后即时生效:关闭时两个播放器层立即隐藏,WebView 由视图随后回收
+        WeakReferenceMessenger.Default.Register<WikiViewModel, WikiBannerVideoSettingsChangedMessage>(this,
+            static (recipient, message) => recipient.BannerVideoEnabled = message.Value);
         // 进入页面自动加载(对齐其他页面的自动刷新)
         _ = LoadAsync();
     }

@@ -45,6 +45,41 @@ public static class VideoCache
         return Path.Combine(cacheDir, hash + FileSuffix);
     }
 
+    /// <summary>
+    /// 降分辨率转码副本的路径:<c>{hash}.w{cap}.v2.mp4</c>。仍以 <see cref="FileSuffix"/> 结尾,
+    /// 所以和原片一样参与 <see cref="Prune"/> 的过期与总量淘汰;不同档位上限各存一份,互不覆盖。
+    /// </summary>
+    public static string TranscodedPathFor(string originalPath, int widthCap)
+    {
+        var name = Path.GetFileName(originalPath);
+        var stem = name.EndsWith(FileSuffix, StringComparison.OrdinalIgnoreCase)
+            ? name[..^FileSuffix.Length]
+            : Path.GetFileNameWithoutExtension(name);
+        return Path.Combine(Path.GetDirectoryName(originalPath) ?? "", $"{stem}.w{widthCap}{FileSuffix}");
+    }
+
+    /// <summary>
+    /// 转码源文件大小上限。官方宣传片是十几 MB;超过这个量级(按 4K 码率是好几分钟的片子)
+    /// 后台转码要吃几十秒 CPU,不值得,直接播原片。
+    /// </summary>
+    public const long MaxTranscodeSourceBytes = 200L * 1024 * 1024;
+
+    /// <summary>
+    /// 是否值得转一份降分辨率副本:有档位上限、源宽确实超过上限、源文件大小已知且不过大。
+    /// 源宽不超过上限时不转 —— 重新编码只会掉画质,省不了内存。
+    /// </summary>
+    public static bool ShouldTranscode(int sourceWidth, int widthCap, long sourceBytes)
+        => widthCap > 0 && sourceWidth > widthCap && sourceBytes is > 0 and <= MaxTranscodeSourceBytes;
+
+    /// <summary>
+    /// 一次性临时文件路径。带 <c>.tmp-</c> 标记:<see cref="Prune"/> 只清理超过一天的残留,
+    /// 不会误删正在写入的下载/转码输出。
+    /// </summary>
+    public static string TempPathFor(string destPath) => destPath + TempMarker + Guid.NewGuid().ToString("N");
+
+    /// <summary>尽力删除(被占用/无权限时静默跳过,下次清理再删)。</summary>
+    public static void TryDeleteFile(string path) => TryDelete(path);
+
     /// <summary>缓存命中时刷新最近使用时间(清理按它淘汰;NTFS 默认不维护 LastAccessTime)。失败忽略。</summary>
     public static void Touch(string path)
     {
@@ -73,7 +108,7 @@ public static class VideoCache
         TimeSpan? idleTimeout = null)
     {
         var idleSpan = idleTimeout ?? IdleReadTimeout;
-        var tmp = destPath + TempMarker + Guid.NewGuid().ToString("N");
+        var tmp = TempPathFor(destPath);
         try
         {
             using var idle = CancellationTokenSource.CreateLinkedTokenSource(ct);

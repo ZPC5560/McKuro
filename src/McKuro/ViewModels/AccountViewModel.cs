@@ -1223,6 +1223,18 @@ public sealed partial class AccountViewModel : ViewModelBase
             await SyncFirstRoleAsync(account);
 
             IsKuroLoginOpen = false;
+            // 库街区登录完成 = 本次运行不再需要极验验证码:拆掉进程级常驻的 WebView2
+            // (锚点 Controller + 隐藏窗口 + 环境缓存),让 5~6 个 msedgewebview2 子进程退出
+            // (合计约 300+ MB 工作集)。之后若用户退出登录/换号,首次 Controller 创建会重新冷启动。
+            // 必须走 UI 线程:锚点 Controller 绑定创建它的线程套间。
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                Controls.WebView2Control.ReleasePrewarmResources();
+            }
+            else
+            {
+                Dispatcher.UIThread.Post(Controls.WebView2Control.ReleasePrewarmResources);
+            }
             // 堆叠卡片:库街区登录完成 → 自动切到下一个未登录的卡片
             AdvanceToNextLoginCard(0);
         }

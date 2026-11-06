@@ -76,6 +76,30 @@ public sealed class Live2DSettingsChangedMessage : ValueChangedMessage<bool>
     }
 }
 
+/// <summary>背景视频清晰度变更(设置页改档后发送,启动页据此重建播放会话)。</summary>
+public sealed class BackgroundVideoQualityChangedMessage : ValueChangedMessage<int>
+{
+    public BackgroundVideoQualityChangedMessage(int quality) : base(quality)
+    {
+    }
+}
+
+/// <summary>角色页技能演示视频开关变更(关闭后不创建 mpv 解码会话)。</summary>
+public sealed class RoleSkillDemoSettingsChangedMessage : ValueChangedMessage<bool>
+{
+    public RoleSkillDemoSettingsChangedMessage(bool enabled) : base(enabled)
+    {
+    }
+}
+
+/// <summary>资讯页轮播视频开关变更(关闭后不创建 mpv 解码器/内嵌 WebView)。</summary>
+public sealed class WikiBannerVideoSettingsChangedMessage : ValueChangedMessage<bool>
+{
+    public WikiBannerVideoSettingsChangedMessage(bool enabled) : base(enabled)
+    {
+    }
+}
+
 /// <summary>
 /// 账号头像已解析(本地磁盘缓存路径)。
 /// 主页拉取每日数据后把头像落盘缓存(icon_cache/avatar,按 userId),

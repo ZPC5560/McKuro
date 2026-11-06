@@ -214,9 +214,68 @@ public sealed class WebView2Control : NativeControlHost
     /// <summary>
     /// 进程级缓存的官方环境:创建一次常驻复用(浏览器进程与磁盘缓存的极验 JS 均保持热态,
     /// 后续验证窗口秒开,对齐 Haiyu 的常驻模式)。环境绑定创建线程套间,所有使用须在平台线程。
+    /// <para>
+    /// 登录成功后由 <see cref="ReleasePrewarmResources"/> 清空,让不再需要的浏览器进程退出。
+    /// </para>
     /// </summary>
     private static object? s_sharedEnv;
     private static TaskCompletionSource<object?>? s_envTcs;
+
+    /// <summary>
+    /// 释放「进程级常驻」的 WebView2 资源(锚点 Controller + 隐藏锚点窗口 + 共享环境缓存)。
+    /// <para>
+    /// 锚点机制的目的是让浏览器进程常驻、下次验证窗口秒开 —— 代价是 5~6 个
+    /// msedgewebview2 子进程(合计约 300+ MB 工作集)在应用整个生命周期都不退出。
+    /// 登录成功之后本次运行不再需要极验,这份常驻开销就没有意义了,调用本方法把它们全部拆掉:
+    /// 浏览器进程会因为没有存活 Controller 而自行退出。
+    /// </para>
+    /// <para>
+    /// 必须在 UI(平台)线程调用(Avalonia 的 Dispatcher 线程):锚点 Controller 绑定创建线程套间。
+    /// 之后若再次需要验证(例如用户退出登录),<see cref="PrewarmEnvironment"/> / 首次
+    /// Controller 创建会重新走一遍冷启动路径 —— 状态已清空,不会误判为"已就绪"。
+    /// </para>
+    /// <para>
+    /// 与 <c>Teardown</c> 一样,<b>不</b>直接对原生 COM 对象调 Release:浏览器进程结束时会自行销毁这些对象,
+    /// 对悬空指针调 Release 是 AccessViolation 且不可捕获。这里只清托管引用、销毁宿主 HWND。
+    /// </para>
+    /// </summary>
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = ReflJustification)]
+    public static void ReleasePrewarmResources()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+        Log?.LogInformation("释放 WebView2 常驻资源(锚点 Controller/隐藏窗口/环境缓存)");
+
+        var ctrl = s_anchorCtrl;
+        s_anchorCtrl = null;
+        // Controller 必须先"放手"再销毁宿 HWND:留着引用会让浏览器进程继续存活
+        if (ctrl is not null)
+        {
+            try
+            {
+                // 反射调 Close():不 Join 其内部异步(与实例 Teardown 同一理由,避免等自身消息循环)
+                ctrl.GetType().GetMethod("Close", Type.EmptyTypes)?.Invoke(ctrl, null);
+            }
+            catch (Exception ex)
+            {
+                Log?.LogInformation("锚点 Controller Close 失败(忽略): {Message}", ex.Message);
+            }
+        }
+
+        var anchor = s_anchorHwnd;
+        s_anchorHwnd = nint.Zero;
+        if (anchor != nint.Zero)
+        {
+            Win32.DestroyWindow(anchor);
+        }
+
+        // 环境缓存一并清空:否则下次 PrewarmEnvironment 会因为 s_sharedEnv 非空而直接复用
+        // 已随浏览器进程一起失效的旧环境(StartEnvironmentCreation 的快路径),导致新建 Controller 失败。
+        s_sharedEnv = null;
+        s_envTcs = null;
+    }
 
     // —— 浏览器进程锚点:隐藏窗口 + 常驻 Controller ——
     // 没有任何存活的 Controller 时 WebView2 浏览器进程会自行退出,下次创建 Controller 就是冷启动(数秒)。

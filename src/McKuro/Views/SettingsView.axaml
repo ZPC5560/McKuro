@@ -328,6 +328,23 @@
                                   IsChecked="{Binding BackgroundVideoEnabled, Mode=TwoWay}" />
                 </Grid>
             </Border>
+            <!-- 清晰度:1080p / 4K 可选。官方宣传片源是 2280p,原生解码的零拷贝帧池会多占 400~500 MB,
+                 背景封面在窗口里只显示到约 1100 DIP 宽,1080p 肉眼无差。启用视频后展开。 -->
+            <Border Classes="row" IsVisible="{Binding BackgroundVideoEnabled}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Options" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.VideoQuality}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.VideoQuality.Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Width="280" VerticalAlignment="Center"
+                              ItemsSource="{Binding VideoQualities}"
+                              SelectedIndex="{Binding BackgroundVideoQuality, Mode=TwoWay}" />
+                </Grid>
+            </Border>
             <!-- 视频来源:二级设置,启用后展开 -->
             <Border Classes="row" IsVisible="{Binding BackgroundVideoEnabled}">
                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
@@ -362,9 +379,13 @@
                     <Border Width="336" Height="189" CornerRadius="8" ClipToBounds="True"
                             HorizontalAlignment="Left" Background="Black"
                             IsVisible="{Binding HasCustomVideoPath}">
+                        <!-- IsVideoEnabled 不能写死 True:外层 IsVisible 只隐藏不卸载,
+                             控件仍会在设置的其它分类/官方模式下后台解码。
+                             336x189 的预览用 720p 档即可(WE 壁纸源常为 4K)。 -->
                         <controls:VideoBackgroundControl VideoUrl="{Binding CustomBackgroundVideoPath}"
                                                          FallbackImageUrl="{Binding CustomVideoCoverPath}"
-                                                         IsVideoEnabled="True"
+                                                         IsVideoEnabled="{Binding IsCustomVideoPreviewActive}"
+                                                         Quality="Hd720"
                                                          SyncWindowAspect="False" />
                     </Border>
                     <!-- WE 扫描结果:封面网格,点击选用 -->
@@ -386,7 +407,9 @@
                                         <StackPanel Width="172">
                                             <Border Height="97" CornerRadius="6" ClipToBounds="True"
                                                     Background="{DynamicResource SemiColorBg3}">
+                                                <!-- WE 封面缩略图:显示 97 高,按 2x 解码,扫描大量壁纸时缓存占用可控 -->
                                                 <controls:AsyncImage ImageUrl="{Binding CoverPath}"
+                                                                     DecodeHeight="194"
                                                                      Stretch="UniformToFill" />
                                             </Border>
                                             <TextBlock Text="{Binding Title}" FontSize="12" Margin="2,5,2,0"
@@ -398,6 +421,36 @@
                         </ItemsControl>
                     </ScrollViewer>
                 </StackPanel>
+            </Border>
+            <!-- 角色页技能演示视频:关闭后不创建 mpv 解码会话 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="Video" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.RoleSkillDemo}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.RoleSkillDemo.Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{Binding RoleSkillDemoEnabled, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+            <!-- 资讯页轮播视频(含 B站/YouTube 内嵌播放器):关闭后不创建解码器与浏览器子进程 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile">
+                        <ic:FluentIcon Icon="VideoChat" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Settings.WikiBannerVideo}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Settings.WikiBannerVideo.Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{Binding WikiBannerVideoEnabled, Mode=TwoWay}" />
+                </Grid>
             </Border>
         </StackPanel>
     </Border>
