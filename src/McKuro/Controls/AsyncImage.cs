@@ -194,15 +194,23 @@ public sealed class AsyncImage : Avalonia.Controls.Image
         using var ms = new MemoryStream(bytes, writable: false);
         if (maxWidth > 0 && maxHeight > 0)
         {
-            // 按更严格的维度缩放:保证解码结果两个方向都不超上限。
-            // 先整解一次拿源尺寸 —— 只能如此:DecodeToWidth/Height 无法从流里直接得知
-            // 另一维,而读已解位图的 PixelSize 是唯一可靠来源。
+            if (maxWidth == maxHeight)
+            {
+                // 正方形上限:宽高相同时直接按宽降档(横版图宽是约束方向;纵版图不会被放大,
+                // DecodeToWidth 保证缩放后宽不超 maxWidth,高按比例,两者都满足正方形上限)。
+                // 省去全量 probe 解码 + 立即丢弃的额外内存峰值。
+                return Bitmap.DecodeToWidth(ms, maxWidth);
+            }
+
+            // 两个维度不同:需先读原始尺寸再决定按哪个方向缩放。
+            // probe 在 using 块内,DecodeToWidth 返回前即 Dispose(两者不在同一堆上同时常驻)。
             using (var probe = new Bitmap(ms))
             {
                 var srcW = probe.PixelSize.Width;
                 var srcH = probe.PixelSize.Height;
                 if (srcW <= 0 || srcH <= 0)
                 {
+                    ms.Position = 0;
                     return new Bitmap(ms);
                 }
                 var scale = Math.Min((double)maxWidth / srcW, (double)maxHeight / srcH);

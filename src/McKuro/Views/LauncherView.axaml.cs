@@ -11,6 +11,19 @@ public partial class LauncherView : UserControl
 {
     private readonly DispatcherTimer _slideTimer;
 
+    /// <summary>
+    /// 本 View 注入到 <see cref="LauncherViewModel"/> 的确认委托(用于精确解绑)。
+    /// <para>
+    /// <b>为什么必须解绑</b>:<see cref="LauncherViewModel"/> 是主窗口构造时创建的单例,
+    /// 而本 View 随每次导航重建。委托体捕获了 <c>this</c>(要拿 TopLevel 当弹窗 owner),
+    /// 单例 VM 一旦持有它,本 View 及其整棵视觉树就被钉住,永远等不到 GC ——
+    /// 表现为「切页内存不断累加」(每进一次启动页泄漏一个 View)。
+    /// </para>
+    /// </summary>
+    private Func<ResourceLevelItem, Task<bool>>? _injectedLevelSwitch;
+
+    private Func<ResourcePackItem, Task<bool>>? _injectedPackDelete;
+
     public LauncherView()
     {
         InitializeComponent();
@@ -24,11 +37,32 @@ public partial class LauncherView : UserControl
                 SlideCarousel.SelectedIndex = (SlideCarousel.SelectedIndex + 1) % vm.Slideshows.Count;
             }
         };
-        _slideTimer.Start();
+        // 不在这里 Start():计时器的启停跟着「进入/离开视觉树」走(见下方 AttachedToVisualTree),
+        // 否则 View 被复用时(切走→切回同一实例)计时器会永远停着。
 
         DataContextChanged += (_, _) => AttachConfirmation();
 
-        Unloaded += (_, _) => _slideTimer.Stop();
+        // 生命周期严格对称:进入视觉树 → 启动计时器 + 注入委托;离开 → 停表 + 解绑。
+        // <para/>
+        // <b>为什么启停要跟视觉树走</b>:切页时 ContentPresenter 会新建一个 View 实例替换旧的
+        // (Avalonia 的 DataTemplate 不参与回收复用),旧实例 detach 时停表。计时器的启停
+        // 因此必须挂在 attach/detach 上成对出现 —— 只在构造函数 Start 的话,
+        // 实例从构造到挂载之间的空档里表是停的,而 detach 后再无人在这个实例上 Start。
+        // </para>
+        AttachedToVisualTree += (_, _) =>
+        {
+            _slideTimer.Start();
+            AttachConfirmation();
+        };
+
+        // 离开视觉树(切走页面)时:停计时器 + 解绑注入到单例 VM 的委托。
+        // Unloaded 在控件从视觉树移除时触发;DetachedFromVisualTree 更早且覆盖得更全
+        // (ContentControl 换 Content 时旧 View 先 detach)。
+        DetachedFromVisualTree += (_, _) =>
+        {
+            _slideTimer.Stop();
+            DetachConfirmation();
+        };
     }
 
     /// <summary>
@@ -59,9 +93,12 @@ public partial class LauncherView : UserControl
     /// </summary>
     private void AttachConfirmation()
     {
+        // 重挂前先解旧的:DataContext 可能换 VM(理论上不会,VM 是单例),避免旧委托残留
+        DetachConfirmation();
+
         if (DataContext is LauncherViewModel vm)
         {
-            vm.ConfirmLevelSwitchAsync = item =>
+            _injectedLevelSwitch = item =>
             {
                 var owner = TopLevel.GetTopLevel(this) as Window;
                 // 弹窗里说「需要下载 X」,必须用**实际还需下载**的量。
@@ -72,10 +109,11 @@ public partial class LauncherView : UserControl
                     : string.IsNullOrWhiteSpace(item.SizeOnlyText) ? item.SizeText : item.SizeOnlyText;
                 return ResourceLevelConfirmWindow.ShowAsync(owner, item.DisplayName, size);
             };
+            vm.ConfirmLevelSwitchAsync = _injectedLevelSwitch;
 
             // 删除画质包复用同一个确认窗口,但标题/正文/确认键都换成"删除"措辞
             // (否则用户会误以为是在切换画质)。
-            vm.ConfirmPackDeleteAsync = item =>
+            _injectedPackDelete = item =>
             {
                 var owner = TopLevel.GetTopLevel(this) as Window;
                 return ResourceLevelConfirmWindow.ShowAsync(
@@ -85,6 +123,31 @@ public partial class LauncherView : UserControl
                     LanguageService.Format("Launcher.PackDeleteConfirmOk"),
                     LanguageService.Format("Launcher.LevelCancel"));
             };
+            vm.ConfirmPackDeleteAsync = _injectedPackDelete;
         }
+    }
+
+    /// <summary>
+    /// 解绑本 View 注入到单例 VM 的确认委托。
+    /// <para>
+    /// 只在 <c>vm.ConfirmXxxAsync</c> <b>仍指向本 View 注入的那个委托实例</b> 时才置空 ——
+    /// 若已被别的来源(理论上不会)覆盖,贸然置空会破坏别人的注入。
+    /// </para>
+    /// </summary>
+    private void DetachConfirmation()
+    {
+        if (DataContext is LauncherViewModel vm)
+        {
+            if (_injectedLevelSwitch is not null && ReferenceEquals(vm.ConfirmLevelSwitchAsync, _injectedLevelSwitch))
+            {
+                vm.ConfirmLevelSwitchAsync = null;
+            }
+            if (_injectedPackDelete is not null && ReferenceEquals(vm.ConfirmPackDeleteAsync, _injectedPackDelete))
+            {
+                vm.ConfirmPackDeleteAsync = null;
+            }
+        }
+        _injectedLevelSwitch = null;
+        _injectedPackDelete = null;
     }
 }

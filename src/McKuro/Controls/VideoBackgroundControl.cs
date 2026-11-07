@@ -167,9 +167,15 @@ public sealed class VideoBackgroundControl : Grid
     // 250 MB 专用内存)。而「挂起」的典型场景恰恰是开着启动器玩几个小时游戏、或最小化到托盘。
     // 挂起超过 SuspendReleaseDelay 就整个销毁会话(露出底下的静态封面),恢复时重建;
     // 短暂最小化再还原不受影响(仍是原位续播)。代价:恢复后视频冷启动约 1 秒、从头播放。
+    //
+    // 游戏运行中(gameActive)立即释放:用户不可能边玩游戏边看启动器视频,
+    // 10 秒宽限毫无意义,反而让视频会话的 ~250 MB 和游戏本体的内存同时常驻。
 
-    /// <summary>挂起多久后释放播放会话。</summary>
+    /// <summary>最小化/隐藏挂起多久后释放播放会话(短暂最小化再还原不受影响)。</summary>
     internal static readonly TimeSpan SuspendReleaseDelay = TimeSpan.FromSeconds(10);
+
+    /// <summary>游戏运行中立即释放:几乎为零的延迟,让下一个 Dispatcher 节拍立即销毁会话。</summary>
+    internal static readonly TimeSpan SuspendReleaseDelayGame = TimeSpan.FromMilliseconds(100);
 
     /// <summary>挂起释放计时器(仅 UI 线程读写)。</summary>
     private IDisposable? _suspendReleaseTimer;
@@ -723,7 +729,8 @@ public sealed class VideoBackgroundControl : Grid
 
         if (_suspended)
         {
-            ScheduleSuspendRelease();
+            // 游戏运行中立即释放(100ms);窗口最小化/隐藏保留 10s 宽限供快速还原
+            ScheduleSuspendRelease(gameActive ? SuspendReleaseDelayGame : SuspendReleaseDelay);
             return;
         }
         CancelSuspendRelease();
@@ -736,10 +743,10 @@ public sealed class VideoBackgroundControl : Grid
     }
 
     /// <summary>
-    /// 挂起持续 <see cref="SuspendReleaseDelay"/> 后释放当前播放会话(见字段区说明)。
+    /// 挂起持续 <paramref name="delay"/> 后释放当前播放会话(见字段区说明)。
     /// 已有计时器 / 已释放 / 无会话时为空操作。
     /// </summary>
-    private void ScheduleSuspendRelease()
+    private void ScheduleSuspendRelease(TimeSpan delay)
     {
         if (_suspendReleaseTimer is not null || _releasedForSuspend || _mpv is null)
         {
@@ -763,7 +770,7 @@ public sealed class VideoBackgroundControl : Grid
             DisposePlayer();
             IsPlaying = false;
             _releasedForSuspend = true;
-        }, SuspendReleaseDelay);
+        }, delay);
     }
 
     private void CancelSuspendRelease()
@@ -893,7 +900,8 @@ public sealed class VideoBackgroundControl : Grid
             // 在挂起状态下开播(如游戏运行中打开启动页):同样计时释放
             if (_suspended)
             {
-                ScheduleSuspendRelease();
+                var gameNow = AppServices.GameMonitor.State != GameSessionState.Idle;
+                ScheduleSuspendRelease(gameNow ? SuspendReleaseDelayGame : SuspendReleaseDelay);
             }
         }
         catch (Exception ex)

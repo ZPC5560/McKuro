@@ -31,6 +31,16 @@ public partial class WikiView : UserControl
     private Window? _watchedWindow;
 
     /// <summary>
+    /// 本 View 当前是否挂在视觉树上。
+    /// <para>
+    /// 用于阻止「未挂载时注入内嵌播放器」:ViewModel 是单例,切走页面后它仍会抛
+    /// <c>PropertyChanged</c>,若不加这道闸,会在一个已离开视觉树的 View 里新建
+    /// WebView2 —— 那次的 <c>CloseWebView</c> 已经错过,等于又漏一个被 GCHandle 钉住的实例。
+    /// </para>
+    /// </summary>
+    private bool _isAttachedToVisualTree;
+
+    /// <summary>
     /// 内嵌播放器是否处于挂起:窗口最小化/隐藏或游戏会话进行中(与 VideoBackgroundControl 同一挂起规则)。
     /// 挂起时直接回收 WebView(B站/YouTube 页面在 iframe 里,无法可靠地从外部暂停),恢复时重建。
     /// </summary>
@@ -55,13 +65,20 @@ public partial class WikiView : UserControl
         AttachedToVisualTree += OnAttachedToVisualTree;
         DetachedFromVisualTree += (_, _) =>
         {
+            _isAttachedToVisualTree = false;
             UnhookViewModel();
             UnhookSuspendSources();
+            // 必须回收内嵌播放器:WebView2Control 用 GCHandle.Alloc(this) 强引用保活自身
+            // (原生 WndProc/回调链路要引用控件),只有 CloseWebView→Teardown 才释放那个句柄。
+            // 不关的话,每次进资讯页新建的 WebView2 都被 GCHandle 钉住,原生窗口与浏览器
+            // 进程资源一起泄漏(切页内存持续涨的第二个来源)。
+            ReleaseEmbedPlayer(resetSession: true);
         };
     }
 
     private void OnAttachedToVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {
+        _isAttachedToVisualTree = true;
         UnhookSuspendSources();
         // 挂起源①:宿主窗口最小化/隐藏(托盘);挂起源②:游戏会话进行中
         _watchedWindow = TopLevel.GetTopLevel(this) as Window;
@@ -71,6 +88,10 @@ public partial class WikiView : UserControl
         }
         AppServices.GameMonitor.StateChanged += OnGameStateChanged;
         UpdateEmbedSuspendState();
+        // 挂载后补一次覆盖层维护:DataContext 通常在 attach 之前就已设置,而那时
+        // UpdateVideoOverlay 因「未挂载不注入」的闸门直接返回了 —— 不补这一句,
+        // 首次进入资讯页就不会有内嵌播放器。
+        UpdateVideoOverlay();
     }
 
     private void UnhookSuspendSources()
@@ -172,10 +193,59 @@ public partial class WikiView : UserControl
         BannerHost.Height = Math.Clamp(BannerHost.Bounds.Width / aspect.Value, 160, 640);
     }
 
+    /// <summary>
+    /// 回收当前内嵌播放器:停静音注入、关掉 WebView2、清空宿主内容。
+    /// <para>
+    /// <b>为什么必须显式关 WebView2</b>:<see cref="WebView2Control"/> 用
+    /// <c>GCHandle.Alloc(this)</c> 强引用保活自身(原生 WndProc 与回调链路要引用控件),
+    /// 那个句柄只在 <c>Teardown()</c> 里释放。若不在离开页面时 <c>CloseWebView()</c>,
+    /// 每进一次资讯页新建的 WebView2 都被 GCHandle 钉住 —— 原生子窗口与浏览器进程资源
+    /// 一起泄漏(切页内存持续上涨的第二个来源)。
+    /// <para/>
+    /// <c>WkWebViewControl</c>(macOS)不需要显式处理:Avalonia 会在控件离开视觉树时
+    /// 自动调用 <c>DestroyNativeControlCore</c> 释放原生对象。
+    /// </para>
+    /// </summary>
+    /// <param name="resetSession">
+    /// 是否同时清掉会话键。
+    /// <para>
+    /// <c>true</c>(离开页面):要清 —— 否则重新挂载时「会话键没变」会跳过重建,
+    /// 而播放器已被回收,页面就没有内嵌播放器了。
+    /// <para/>
+    /// <c>false</c>(切换轮播项):不清 —— 会话键变化本身就会触发重建;
+    /// 这里若置空,「会话键变化才重建」的判断会恒成立,导致每次刷新都拆了重建
+    /// (反复创建原生窗口,反而更耗资源)。
+    /// </para>
+    /// </param>
+    private void ReleaseEmbedPlayer(bool resetSession = false)
+    {
+        _biliMuteTimer?.Stop();
+        _biliMuteTimer = null;
+
+        var webView = BiliEmbedHost.Content as WebView2Control ?? _biliWebView2;
+        webView?.CloseWebView();
+
+        BiliEmbedHost.Content = null;
+        _biliWebView2 = null;
+
+        if (resetSession)
+        {
+            _embedSessionKey = null;
+        }
+    }
+
     /// <summary>按当前轮播项维护视频覆盖层:直接视频交给 XAML 控件;B站/YouTube 视频注入平台 WebView。
     /// B站为中文轮播预告;YouTube 为国际服英文轮播预告(界面语言 en-US 的数据源)。</summary>
     private void UpdateVideoOverlay()
     {
+        // 未挂载时不得注入播放器:WikiViewModel 是单例,用户切走后它仍会抛 PropertyChanged
+        // → 这里会在一个已经离开视觉树的 View 里新建 WebView2,而那次的 CloseWebView
+        // 已经错过(detach 时已回收过一次)→ 又是一个没人关的 WebView2,被 GCHandle 钉住。
+        if (!_isAttachedToVisualTree)
+        {
+            return;
+        }
+
         var vm = DataContext as WikiViewModel;
         // 挂起期间(最小化/托盘/游戏中)不保留内嵌播放器,避免后台继续解码
         var banner = !_embedSuspended && vm?.CurrentBannerIsWebVideo == true ? vm.CurrentBanner : null;
@@ -190,11 +260,10 @@ public partial class WikiView : UserControl
         // 离开网页视频项(或会话键变化):回收旧 WebView,停止静音注入
         if (sessionKey is null || sessionKey != _embedSessionKey)
         {
-            _biliMuteTimer?.Stop();
-            _biliMuteTimer = null;
-            (_embedSessionKey is null ? null : BiliEmbedHost.Content as WebView2Control)?.CloseWebView();
-            BiliEmbedHost.Content = null;
-            _biliWebView2 = null;
+            // 会话键为 null(当前不是网页视频)时一并清掉会话键:否则 _embedSessionKey 仍留着
+            // 旧视频的键,下次切回该视频时会因「键没变」跳过重建,播放器却是空的。
+            // 会话键非 null 的变化则不用清 —— 紧接着下面的分支就会按新键重建。
+            ReleaseEmbedPlayer(resetSession: sessionKey is null);
         }
         if (sessionKey is not null && sessionKey != _embedSessionKey)
         {
