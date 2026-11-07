@@ -183,6 +183,9 @@ public sealed class VideoBackgroundControl : Grid
     /// <summary>当前会话是否因长时间挂起被释放(恢复时据此重建;仅 UI 线程读写)。</summary>
     private bool _releasedForSuspend;
 
+    /// <summary>当前计时器是否已经是游戏会话的立即释放档。最小化的 10 秒档须能被游戏启动缩短。</summary>
+    private bool _suspendReleaseForGame;
+
     /// <summary>播放会话代号:每次 TryStartVideo 自增,异步回调只对当前会话生效(防旧会话串台)。</summary>
     private long _imageGeneration;
 
@@ -716,6 +719,14 @@ public sealed class VideoBackgroundControl : Grid
         var hidden = _watchedWindow is { IsVisible: false };
         var gameActive = AppServices.GameMonitor.State != GameSessionState.Idle;
         _suspended = minimized || hidden || gameActive;
+        // 诊断:释放不生效时必须能一眼看出是哪一路判据没成立(Release 下 Debug.WriteLine 被编译掉)。
+        // 默认静默,避免每次最小化/游戏启动都往日志里刷一行;排查时设环境变量开启。
+        if (Environment.GetEnvironmentVariable("McKuro_VIDEO_SUSPEND_DIAG") == "1")
+        {
+            System.Console.Error.WriteLine(
+                $"MCKURO-VIDEO 挂起判定 minimized={minimized} hidden={hidden} game={gameActive} " +
+                $"state={AppServices.GameMonitor.State} suspended={_suspended} mpv={_mpv is not null} attached={_attached}");
+        }
 
         if (_glRenderer is not null)
         {
@@ -730,12 +741,20 @@ public sealed class VideoBackgroundControl : Grid
         if (_suspended)
         {
             // 游戏运行中立即释放(100ms);窗口最小化/隐藏保留 10s 宽限供快速还原
-            ScheduleSuspendRelease(gameActive ? SuspendReleaseDelayGame : SuspendReleaseDelay);
+            ScheduleSuspendRelease(gameActive ? SuspendReleaseDelayGame : SuspendReleaseDelay, gameActive);
             return;
         }
         CancelSuspendRelease();
         if (_releasedForSuspend && _attached)
         {
+            // 游戏会话期间不恢复:即使用户把窗口还原到前台,也只显示静态封面。
+            // 16 GB 机器上「游戏本体 + 启动器视频会话」同时常驻会撞内存上限,
+            // 而玩游戏时不会有人盯着启动器背景看。游戏结束后由 OnGameStateChanged
+            // 再走一次本方法(此时 gameActive=false)正常重建。
+            if (gameActive)
+            {
+                return;
+            }
             // 挂起期间会话已被释放:重建(TryStartVideo 会清掉 _releasedForSuspend)
             TryStartVideo();
             ScheduleStartRetry();
@@ -744,32 +763,47 @@ public sealed class VideoBackgroundControl : Grid
 
     /// <summary>
     /// 挂起持续 <paramref name="delay"/> 后释放当前播放会话(见字段区说明)。
-    /// 已有计时器 / 已释放 / 无会话时为空操作。
+    /// 游戏启动可把普通挂起计时器缩短；普通挂起的重复通知不会重置计时。
     /// </summary>
-    private void ScheduleSuspendRelease(TimeSpan delay)
+    private void ScheduleSuspendRelease(TimeSpan delay, bool forGame = false)
     {
+        // 先最小化(10 秒计时)再启动游戏时，必须缩短既有计时器；否则所谓「立即释放」
+        // 实际仍会等满 10 秒。普通的最小化重复事件则保留原计时，不无限延期。
+        if (_suspendReleaseTimer is not null && forGame && !_suspendReleaseForGame)
+        {
+            CancelSuspendRelease();
+        }
         if (_suspendReleaseTimer is not null || _releasedForSuspend || _mpv is null)
         {
             return;
         }
         var gen = Generation;
+        _suspendReleaseForGame = forGame;
         _suspendReleaseTimer = DispatcherTimer.RunOnce(() =>
         {
             _suspendReleaseTimer = null;
+            _suspendReleaseForGame = false;
             if (Stale(gen) || !_suspended || !_attached || _mpv is null)
             {
                 return;
             }
-            // 用户手动暂停 / 已播完(技能演示停在末帧)的会话不释放:重建会从头自动播放,
-            // 违背用户意图;这两种状态下 mpv 本就处于暂停,只是少省一份内存。
-            if (_userPaused || _reachedEnd)
+            // 普通最小化且用户手动暂停/播完时保留最后一帧与恢复语义。
+            // 游戏会话必须无条件释放：暂停并不会释放解码器、帧池和 GL 资源；
+            // 游戏结束后的恢复以静态封面为起点，不再偷偷自动播放用户已暂停的视频。
+            if (!forGame && (_userPaused || _reachedEnd))
             {
                 return;
             }
-            System.Console.Error.WriteLine("MCKURO-VIDEO 挂起超时,释放播放会话");
+            System.Console.Error.WriteLine(forGame
+                ? "MCKURO-VIDEO 游戏会话开始,释放播放会话"
+                : "MCKURO-VIDEO 挂起超时,释放播放会话");
             DisposePlayer();
             IsPlaying = false;
             _releasedForSuspend = true;
+            // 让位给游戏本体:解码器已拆,再把已空闲的原生页交还系统。
+            // 不调这一下,mpv/ANGLE 释放掉的页仍以「工作集」形式占着 —— 实测最小化后
+            // 视频配置比无视频配置仍多约 170 MB,正是这部分。
+            WorkingSetTrimmer.Trim();
         }, delay);
     }
 
@@ -777,6 +811,7 @@ public sealed class VideoBackgroundControl : Grid
     {
         _suspendReleaseTimer?.Dispose();
         _suspendReleaseTimer = null;
+        _suspendReleaseForGame = false;
     }
 
     private void TryStartVideo()
@@ -784,6 +819,22 @@ public sealed class VideoBackgroundControl : Grid
         // 新会话接管:旧会话的挂起释放计时/标记作废(末尾按当前挂起状态重新计时)
         CancelSuspendRelease();
         _releasedForSuspend = false;
+
+        // 游戏会话进行中绝不新建解码会话。
+        // 释放之后仍有多条路径会回到这里(首帧兜底重试、URL/档位属性变化、页面重新挂载),
+        // 旧实现在这些路径上会重新建起 mpv+GL,表现为「释放过一次、过一会儿内存又涨回原样」
+        // —— 用户报的「启动游戏后没有释放内存」。这里直接露出静态封面,
+        // 等游戏结束(状态回 Idle → UpdateSuspendState)再按视频开关正常重建。
+        if (AppServices.GameMonitor.State != GameSessionState.Idle)
+        {
+            _imageGeneration = Interlocked.Increment(ref _imageGeneration);
+            DisposePlayer();
+            _disposed = false;
+            RefreshRenderWidthCap();
+            System.Console.Error.WriteLine("MCKURO-VIDEO 游戏会话进行中,跳过新建播放会话");
+            _fallback!.ImageUrl = FallbackImageUrl;
+            return;
+        }
 
         // 先自增 generation 再销毁旧会话:旧 mpv 在 Dispose 中(同步或异步)触发的
         // EndFile/Stop 回调进来时 Stale(旧 gen) 必然成立,不会污染新会话状态。
@@ -901,7 +952,7 @@ public sealed class VideoBackgroundControl : Grid
             if (_suspended)
             {
                 var gameNow = AppServices.GameMonitor.State != GameSessionState.Idle;
-                ScheduleSuspendRelease(gameNow ? SuspendReleaseDelayGame : SuspendReleaseDelay);
+                ScheduleSuspendRelease(gameNow ? SuspendReleaseDelayGame : SuspendReleaseDelay, gameNow);
             }
         }
         catch (Exception ex)
@@ -929,13 +980,17 @@ public sealed class VideoBackgroundControl : Grid
             // 利用 TaskCompletionSource 在 OnOpenGlInit 完成时通知 —— Avalonia 12 的
             // OpenGlControlBase 无外部可调用的公开 InitializeAsync,只能通过视觉树自动初始化。
             var glReadyTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            gl = new VideoGlRenderer(this, glReadyTcs)
+            gl = new VideoGlRenderer(this, glReadyTcs, gen)
             {
                 Opacity = 0,
                 IsHitTestVisible = false,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Stretch,
             };
+            // 入树前就登记所有权：初始化等待期间启动游戏，DisposePlayer 也必须找得到
+            // 这个渲染器。旧实现直到 await 成功后才登记，100ms 清理会漏拆它，随后迟到的
+            // GL 初始化又拿新会话重建解码资源，表现为「日志已释放但内存重新涨回去」。
+            _glRenderer = gl;
             Children.Add(gl);
 
             // 等 GL 初始化完成(自动初始化,OnOpenGlInit 设 tcs)或超时
@@ -954,17 +1009,20 @@ public sealed class VideoBackgroundControl : Grid
                 ok = false;
             }
 
-            // 过期或失败都要先拆除未接管的渲染器:DisposePlayer 只拆 _glRenderer 字段指向的实例,
-            // 若本渲染器已完成 GL 初始化但续体尚未运行(字段还没指向它),它会残留视觉树,
-            // 每帧继续用已 Dispose 的 mpv 句柄调用 OpenGlRender(use-after-free)。
+            // 过期或失败都要显式拆除渲染器；初始化期间它已登记在 _glRenderer，
+            // DisposePlayer 也可能先行拆除，因此 Children.Remove 按集合语义幂等处理。
             // 会话过期则到此为止(绝不能落到 StartSoftwareRenderingPath —— 那会拿当前会话的
             // _mpv 建第二个渲染上下文,mpv 只允许一个,第二个失败 → GL 层垃圾帧/会话被杀)。
             if (!ok || Stale(gen))
             {
-                if (gl is not null && !ReferenceEquals(_glRenderer, gl) && Children.Contains(gl))
+                if (gl is not null)
                 {
                     gl.BeginShutdown();
                     Children.Remove(gl);
+                    if (ReferenceEquals(_glRenderer, gl))
+                    {
+                        _glRenderer = null;
+                    }
                 }
                 if (Stale(gen))
                 {
@@ -975,7 +1033,6 @@ public sealed class VideoBackgroundControl : Grid
             }
 
             // GL 路径成功:渲染器接管显示;首个文件加载完成后取消看门狗并显示视频
-            _glRenderer = gl;
             _mpv.FileLoaded += (_, _) => OnGlFileLoaded(gen);
             try
             {
@@ -995,20 +1052,19 @@ public sealed class VideoBackgroundControl : Grid
         catch (Exception ex)
         {
             Debug.WriteLine($"[libmpv] GL 渲染路径失败,回退软件渲染: {ex.Message}");
-            if (!Stale(gen))
+            if (gl is not null)
             {
-                if (gl is not null && !ReferenceEquals(_glRenderer, gl) && Children.Contains(gl))
-                {
-                    gl.BeginShutdown();
-                    Children.Remove(gl);
-                }
-                StartSoftwareRenderingPath(gen);
-            }
-            else if (gl is not null && !ReferenceEquals(_glRenderer, gl) && Children.Contains(gl))
-            {
-                // 过期会话的渲染器同样不能残留(见上方注释)
+                // 失败与过期都经同一所有权入口拆除，不能让「字段已指向它」反而成为跳过条件。
                 gl.BeginShutdown();
                 Children.Remove(gl);
+                if (ReferenceEquals(_glRenderer, gl))
+                {
+                    _glRenderer = null;
+                }
+            }
+            if (!Stale(gen))
+            {
+                StartSoftwareRenderingPath(gen);
             }
         }
     }
@@ -2100,6 +2156,7 @@ public sealed class VideoBackgroundControl : Grid
     {
         private readonly VideoBackgroundControl _owner;
         private readonly TaskCompletionSource<bool> _glReadyTcs;
+        private readonly long _generation;
         private readonly object _sync = new();
         private bool _glReady;
         private BackgroundMpvContext? _mpv;
@@ -2110,24 +2167,22 @@ public sealed class VideoBackgroundControl : Grid
         /// <summary>GL 上下文已丢失:此时不能再调用 GL 相关释放,交给 mpv Dispose 兜底。</summary>
         private bool _contextLost;
 
-        public VideoGlRenderer(VideoBackgroundControl owner, TaskCompletionSource<bool> glReadyTcs)
+        public VideoGlRenderer(VideoBackgroundControl owner, TaskCompletionSource<bool> glReadyTcs, long generation)
         {
             _owner = owner;
             _glReadyTcs = glReadyTcs;
+            _generation = generation;
         }
 
         protected override void OnOpenGlInit(GlInterface gl)
         {
-            var ctx = _owner.GetMpvForGl();
-            if (ctx is null)
-            {
-                _glReadyTcs.TrySetResult(false);
-                return; // 已释放/未就绪:保持不可渲染
-            }
-
             lock (_sync)
             {
-                if (_owner._disposed)
+                // 必须在取 mpv 之前校验本渲染器所属会话：旧实现先取宿主「当前」mpv，
+                // 迟到的旧 GL 初始化可能因此拿到下一次会话并重建已被游戏启动释放的资源。
+                if (_shuttingDown || _owner.Stale(_generation)
+                    || !ReferenceEquals(_owner._glRenderer, this)
+                    || _owner.GetMpvForGl() is not { } ctx)
                 {
                     _glReadyTcs.TrySetResult(false);
                     return;

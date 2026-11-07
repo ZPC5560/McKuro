@@ -76,6 +76,36 @@ public partial class MainWindow : Window
         HookNavPill();
         ShellGrid.LayoutUpdated += OnShellLayoutProbe;
         InitImmersiveUi();
+        HookGameSessionMemoryRelease();
+    }
+
+    /// <summary>
+    /// 游戏会话期间让位内存:游戏本体在 16 GB 机器上通常要吃掉 8~12 GB,
+    /// 启动器若仍常驻完整界面(GPU 纹理、页面视觉树、Skia 图层)就容易撞到内存上限。
+    /// <para>
+    /// 做法是「不重建页面,只停渲染 + 交还工作集」:
+    /// <see cref="Control.IsVisible"/> 置 false 会让 Avalonia 跳过本窗口的合成与绘制,
+    /// 页面对象与 ViewModel 全部保留(切回来不需要重新拉数据,也不触发 OnNavigatedTo);
+    /// 真正的解码器/模型/视频已在各自控件里释放。
+    /// </para>
+    /// <para>游戏结束回 Idle 时恢复可见,并再交还一次(此时页面刚重建过纹理)。</para>
+    /// </summary>
+    private void HookGameSessionMemoryRelease()
+    {
+        AppServices.GameMonitor.StateChanged += OnGameSessionStateChangedForMemory;
+        Closed += (_, _) => AppServices.GameMonitor.StateChanged -= OnGameSessionStateChangedForMemory;
+    }
+
+    private void OnGameSessionStateChangedForMemory(GameSessionState state)
+    {
+        var active = state != GameSessionState.Idle;
+        // 不碰 WindowState:用户可能正在看启动器;这里只停内容区渲染。
+        ContentHost.IsVisible = !active;
+        if (active)
+        {
+            // 停渲染后把已空闲的原生页还给系统(纹理/图层/字体缓存的驻留部分)
+            Dispatcher.UIThread.Post(() => WorkingSetTrimmer.Trim(), DispatcherPriority.Background);
+        }
     }
 
     /// <summary>

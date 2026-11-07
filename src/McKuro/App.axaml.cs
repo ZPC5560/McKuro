@@ -241,6 +241,70 @@ public partial class App : Application
                         }
                     }
 
+                    // 游戏会话资源释放自检(McKuro_SMOKE_GAME_SESSION=1):走与 Launch()
+                    // 相同的 BeginLaunch/StateChanged 出口，不需要真实游戏与版本服务端。
+                    // McKuro_SMOKE_GAME_EXE 指向一个真实可执行的替身程序(测试用 calc 副本)：
+                    // 必须让进程真的活着，否则 20 秒稳定窗口到点会被判「启动失败」回到空闲，
+                    // 资源随之恢复 —— 那测的是失败路径，不是「游戏运行中」。
+                    // McKuro_SMOKE_GAME_SECONDS 为会话时长(默认 10 秒;<=0 表示 kill 后不自动结束)。
+                    if (Environment.GetEnvironmentVariable("McKuro_SMOKE_GAME_SESSION") == "1")
+                    {
+                        System.Console.Error.WriteLine("MCKURO-SMOKE 游戏会话钩子已装载");
+                        var gameSeconds = double.TryParse(
+                            Environment.GetEnvironmentVariable("McKuro_SMOKE_GAME_SECONDS"), out var gs)
+                            ? Math.Max(0, gs)   // 显式给 0 = 一直保持在游戏中
+                            : 10;
+                        var gameStart = double.TryParse(
+                            Environment.GetEnvironmentVariable("McKuro_SMOKE_GAME_START"), out var gst) && gst > 0
+                            ? gst
+                            : 10;
+                        DispatcherTimer.RunOnce(() =>
+                        {
+                            System.Console.Error.WriteLine($"MCKURO-SMOKE 到达游戏会话起点 t={gameStart}s");
+                            System.Diagnostics.Process? fake = null;
+                            var fakeExe = Environment.GetEnvironmentVariable("McKuro_SMOKE_GAME_EXE");
+                            var names = new[] { "McKuroFakeGame" };
+                            if (!string.IsNullOrWhiteSpace(fakeExe) && File.Exists(fakeExe))
+                            {
+                                try
+                                {
+                                    var psi = new System.Diagnostics.ProcessStartInfo(fakeExe)
+                                    {
+                                        UseShellExecute = true,
+                                        // timeout.exe 需要一个时长参数才会驻留;其它替身程序忽略多余参数。
+                                        Arguments = "/t 600 /nobreak",
+                                    };
+                                    fake = System.Diagnostics.Process.Start(psi);
+                                }
+                                catch (Exception ex)
+                                {
+                                    System.Console.Error.WriteLine($"MCKURO-SMOKE 启动替身进程失败: {ex.Message}");
+                                }
+                                names = [Path.GetFileNameWithoutExtension(fakeExe)];
+                            }
+                            AppServices.GameMonitor.BeginLaunch(names);
+                            if (gameSeconds > 0)
+                            {
+                                DispatcherTimer.RunOnce(() =>
+                                {
+                                    // 结束进程让监控按「正常退出」走，而不是伪造 Reset：
+                                    // 这样状态切换与真实退出完全同路。
+                                    try
+                                    {
+                                        if (fake is { HasExited: false })
+                                        {
+                                            fake.Kill(entireProcessTree: true);
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        System.Console.Error.WriteLine($"MCKURO-SMOKE 结束替身进程失败: {ex.Message}");
+                                    }
+                                }, TimeSpan.FromSeconds(gameSeconds));
+                            }
+                        }, TimeSpan.FromSeconds(gameStart));
+                    }
+
                     // WebView2 常驻资源释放自检(McKuro_SMOKE_WV2_RELEASE=<秒>):到点调用
                     // ReleasePrewarmResources,验证锚点 Controller/隐藏窗口/环境缓存被拆掉、
                     // msedgewebview2 子进程随后退出。仅开发诊断用,不触碰任何登录接口。

@@ -19,6 +19,9 @@ public sealed class Live2DModelHost : Panel
     private string _loadedName = "";
     private TopLevel? _hookedTopLevel;
 
+    /// <summary>游戏会话进行中强制卸载模型；游戏结束后按原 Show 绑定恢复。</summary>
+    private bool _gameActive;
+
     public static readonly StyledProperty<bool> ShowProperty =
         AvaloniaProperty.Register<Live2DModelHost, bool>(nameof(Show));
 
@@ -119,6 +122,8 @@ public sealed class Live2DModelHost : Panel
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+        AppServices.GameMonitor.StateChanged += OnGameStateChanged;
+        OnGameStateChanged(AppServices.GameMonitor.State);
         // 纯展示模式(首页)不参与命中测试,指针事件到不了模型;改为挂窗口级
         // PointerMoved,按位置转发视线目标,让"跟随鼠标"不需要抢占下方点击。
         if (!AllowInteraction)
@@ -139,7 +144,23 @@ public sealed class Live2DModelHost : Panel
             _hookedTopLevel.RemoveHandler(InputElement.PointerMovedEvent, OnTopLevelPointerMoved);
             _hookedTopLevel = null;
         }
+        AppServices.GameMonitor.StateChanged -= OnGameStateChanged;
+        Teardown();
         base.OnDetachedFromVisualTree(e);
+    }
+
+    private void OnGameStateChanged(GameSessionState state)
+    {
+        var active = state != GameSessionState.Idle;
+        if (_gameActive == active)
+        {
+            return;
+        }
+        _gameActive = active;
+        // 保留用户设置与 ViewModel 的 Show 状态，只拆原生模型和 GL 控件。
+        // 游戏结束回 Idle 时 Update 会按同一份模型配置重新创建。
+        Update();
+        System.Console.Error.WriteLine($"[L2D-DBG] 游戏会话 active={active}, 模型已{(active ? "卸载" : "请求恢复")}");
     }
 
     private void OnTopLevelPointerMoved(object? sender, PointerEventArgs e)
@@ -197,6 +218,7 @@ public sealed class Live2DModelHost : Panel
     private void Update()
     {
         var shouldShow = Show
+                         && !_gameActive
                          && Live2DLocator.IsSupported
                          && !string.IsNullOrWhiteSpace(ModelDirectory)
                          && !string.IsNullOrWhiteSpace(ModelName);
