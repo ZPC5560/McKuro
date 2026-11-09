@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using McKuro.Core.Models.Wiki;
+using McKuro.Core.Services.Notification;
 using McKuro.Services;
 
 namespace McKuro.ViewModels;
@@ -74,13 +75,17 @@ public sealed class GanttTick
 }
 
 /// <summary>换取活动(卡池)条目,带倒计时。</summary>
-public sealed class ActivityPoolItem
+public sealed partial class ActivityPoolItem : ObservableObject
 {
     public required string Name { get; init; }
     public required string Category { get; init; }     // 角色 / 武器
     public required string CountdownText { get; init; } // 剩余时间
     public required string TimeRangeText { get; init; }
     public required DateTime End { get; init; }
+    /// <summary>临期提醒的稳定 Key(与提醒调度器共用 <see cref="ActivityReminderPolicy"/>)。</summary>
+    public required string Key { get; init; }
+    /// <summary>是否临期(距结束 ≤3 天且未结束);只有临期卡池才显示忽略按钮。</summary>
+    public required bool IsExpiringSoon { get; init; }
     public string? ImageUrl { get; init; }
     /// <summary>卡池全部内容图(5★/4★ 角色武器,对齐 Haiyu 显示 4 张)。</summary>
     public List<string> Images { get; init; } = [];
@@ -88,6 +93,15 @@ public sealed class ActivityPoolItem
     public List<string> FourStarImages => Images.Skip(1).ToList();
     /// <summary>是否有 4★ 内容(首图之后还有图)。</summary>
     public bool HasFourStar => Images.Count > 1;
+
+    /// <summary>用户是否已忽略该卡池的临期提醒(与版本活动共用同一份忽略名单)。</summary>
+    [ObservableProperty]
+    private bool _isIgnored;
+
+    /// <summary>忽略按钮文本(忽略 ↔ 取消忽略)。</summary>
+    public string IgnoreButtonText => LanguageService.Format(IsIgnored ? "Activity.Unignore" : "Activity.Ignore");
+
+    partial void OnIsIgnoredChanged(bool value) => OnPropertyChanged(nameof(IgnoreButtonText));
 }
 
 /// <summary>
@@ -323,14 +337,14 @@ public sealed partial class ActivityViewModel : ViewModelBase
                 // 甘特条像素定位:全部按 pxPerDay 折算(pxPerDay 已含最低宽度补偿)
                 var (barLeft, doneW, remainLeft, remainW, todayX) = ComputeBarPixels(
                     item.Start, item.End, now, GanttStart, pxPerDay);
-                var expiringSoon = item.IsOngoing && (item.End - now).TotalDays <= ExpiringSoonDays;
+                var expiringSoon = item.IsOngoing && ActivityReminderPolicy.IsExpiring(item.End, now, ActivityReminderPolicy.ExpiringWindow);
                 System.Console.Error.WriteLine(
                     $"MCKURO-GANTT item {item.Title}: barLeft={barLeft:F0} barW={remainLeft + remainW - barLeft:F0} " +
                     $"doneW={doneW:F0} todayX={todayX:F0}");
                 VersionActivities.Add(new ActivityGanttItem
                 {
                     Title = item.Title,
-                    Key = $"{item.Title}|{item.Start:yyyyMMddHHmm}|{item.End:yyyyMMddHHmm}",
+                    Key = ActivityReminderPolicy.VersionKey(item.Title, item.Start, item.End),
                     TimeRangeText = $"{item.Start:MM-dd} ~ {item.End:MM-dd}",
                     Start = item.Start,
                     End = item.End,
@@ -372,18 +386,13 @@ public sealed partial class ActivityViewModel : ViewModelBase
                 $"ticks={string.Join(' ', GanttTicks.Select(t => $"{t.Text}@{t.LeftPx:F0}"))}");
             GanttLoaded?.Invoke();
 
-            // 恢复已忽略的临期提醒(仅保留当前仍展示的活动 Key:新活动刷新后旧忽略项自动失效)
+            // 恢复已忽略的临期提醒。只读不写:此前这里会把名单里"当前页没看见"的 Key 直接剪掉,
+            // 而接口偶发少返回一条、或某次只加载了版本活动没加载到卡池,就会永久丢掉用户的忽略记录 ——
+            // 表现正是"忽略了,重开软件又弹"。过期记录改由 PruneExpiredIgnoreList 按 Key 自带的结束时刻清理。
             var ignoredIds = AppServices.Settings.Current.IgnoredEndingActivityIds ?? [];
-            var currentKeys = VersionActivities.Select(a => a.Key).ToHashSet();
             foreach (var gantt in VersionActivities)
             {
-                gantt.IsIgnored = ignoredIds.Contains(gantt.Key);
-            }
-            var prunedIds = ignoredIds.Where(currentKeys.Contains).ToList();
-            if (prunedIds.Count != ignoredIds.Count)
-            {
-                AppServices.Settings.Current.IgnoredEndingActivityIds = prunedIds;
-                AppServices.Settings.Save();
+                gantt.IsIgnored = ActivityReminderPolicy.IsIgnored(ignoredIds, gantt.Key);
             }
 
             // 2. 换取活动(events-side:角色池 / 武器池,每个 events-side 一个池)
@@ -413,9 +422,16 @@ public sealed partial class ActivityViewModel : ViewModelBase
                         {
                             continue;
                         }
+                        // 名称与 Key 只算一次:空名回退文案必须与调度器一致,否则忽略名单对不上
+                        var poolName = tab.Name ?? LanguageService.Format("Activity.PoolFallback");
+                        var poolKey = ActivityReminderPolicy.PoolKey(poolName, start, end);
                         PoolActivities.Add(new ActivityPoolItem
                         {
-                            Name = tab.Name ?? LanguageService.Format("Activity.PoolFallback"),
+                            Name = poolName,
+                            Key = poolKey,
+                            IsIgnored = ActivityReminderPolicy.IsIgnored(ignoredIds, poolKey),
+                            IsExpiringSoon = ActivityReminderPolicy.IsExpiring(
+                                end, now, ActivityReminderPolicy.ExpiringWindow),
                             Category = category,
                             CountdownText = FormatCountdown(end - now),
                             TimeRangeText = $"{start:MM-dd} {start:HH:mm} ~ {end:MM-dd} {end:HH:mm}",
@@ -429,6 +445,7 @@ public sealed partial class ActivityViewModel : ViewModelBase
 
             HasData = VersionActivities.Count > 0 || PoolActivities.Count > 0;
             StatusText = LanguageService.Format("Activity.StatusLoaded", VersionActivities.Count, PoolActivities.Count);
+            PruneExpiredIgnoreList(now);
         }
         catch (Exception ex)
         {
@@ -504,9 +521,6 @@ public sealed partial class ActivityViewModel : ViewModelBase
         return false;
     }
 
-    /// <summary>临期提醒阈值:距结束 ≤3 天的进行中活动标题标红。</summary>
-    private const double ExpiringSoonDays = 3;
-
     /// <summary>临期剩余时间短文本(如 "3天" / "14小时");通知调度器复用同一文案。</summary>
     internal static string FormatRemaining(TimeSpan remaining)
     {
@@ -522,8 +536,7 @@ public sealed partial class ActivityViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 切换活动临期提醒的忽略状态(忽略 ↔ 取消忽略,持久化到设置)。
-    /// 仅保留当前展示活动的 Key:新版本活动刷新后旧忽略项自动失效。
+    /// 切换版本活动的临期提醒忽略状态(忽略 ↔ 取消忽略,持久化到设置)。
     /// </summary>
     [RelayCommand]
     private void ToggleActivityIgnore(ActivityGanttItem? item)
@@ -533,11 +546,74 @@ public sealed partial class ActivityViewModel : ViewModelBase
             return;
         }
         item.IsIgnored = !item.IsIgnored;
-        AppServices.Settings.Current.IgnoredEndingActivityIds = VersionActivities
-            .Where(static a => a.IsIgnored)
-            .Select(static a => a.Key)
-            .ToList();
+        PersistIgnoredKeys(includeVersion: true, includePools: false);
+    }
+
+    /// <summary>切换换取活动(卡池)的临期提醒忽略状态(与版本活动共用同一份忽略名单)。</summary>
+    [RelayCommand]
+    private void TogglePoolIgnore(ActivityPoolItem? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+        item.IsIgnored = !item.IsIgnored;
+        PersistIgnoredKeys(includeVersion: false, includePools: true);
+    }
+
+    /// <summary>
+    /// 把当前页活动的忽略状态写回设置。<b>只覆盖本次涉及的那一类</b>:
+    /// 版本活动与卡池共用一份名单,若切换时整体重写,一旦另一类的数据这次没拉到
+    /// (接口失败/该版本没有卡池),它已有的忽略记录会被整段抹掉 —— 用户明明点过忽略,下次却又被弹。
+    /// </summary>
+    private void PersistIgnoredKeys(bool includeVersion, bool includePools)
+    {
+        var settings = AppServices.Settings.Current;
+        var existing = settings.IgnoredEndingActivityIds ?? [];
+        var kept = new List<string>(existing.Count + 8);
+        foreach (var key in existing)
+        {
+            // 保留不属于本次写入类别的记录
+            if (includePools && IsPoolKey(key))
+            {
+                continue;
+            }
+            if (includeVersion && !IsPoolKey(key))
+            {
+                continue;
+            }
+            kept.Add(key);
+        }
+        if (includeVersion)
+        {
+            kept.AddRange(VersionActivities.Where(static a => a.IsIgnored).Select(static a => a.Key));
+        }
+        if (includePools)
+        {
+            kept.AddRange(PoolActivities.Where(static p => p.IsIgnored).Select(static p => p.Key));
+        }
+        settings.IgnoredEndingActivityIds = kept.Distinct(StringComparer.Ordinal).ToList();
         AppServices.Settings.Save();
+    }
+
+    /// <summary>卡池 Key(带 <c>pool:</c> 前缀,与版本活动区分)。</summary>
+    private static bool IsPoolKey(string key)
+        => key.StartsWith(ActivityReminderPolicy.PoolKeyPrefix, StringComparison.Ordinal);
+
+    /// <summary>
+    /// 顺手清掉早已结束的活动留下的忽略记录(判据是 Key 里自带的结束时刻,与当前页看到什么无关)。
+    /// 只在内容真的变化时才落盘(去重也算变化)。
+    /// </summary>
+    private static void PruneExpiredIgnoreList(DateTime now)
+    {
+        var settings = AppServices.Settings.Current;
+        var existing = settings.IgnoredEndingActivityIds ?? [];
+        var pruned = ActivityReminderPolicy.PruneExpired(existing, now);
+        if (!pruned.SequenceEqual(existing, StringComparer.Ordinal))
+        {
+            settings.IgnoredEndingActivityIds = pruned;
+            AppServices.Settings.Save();
+        }
     }
 
     private static string FormatCountdown(TimeSpan remaining)

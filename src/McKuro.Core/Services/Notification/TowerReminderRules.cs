@@ -132,8 +132,20 @@ public static class TowerReminderPolicy
     }
 
     /// <summary>
-    /// 终焉矩阵完成度:已有战绩(<c>hasRecord</c> 且得分 &gt; 0)的模式数 / 模式总数。
+    /// 终焉矩阵完成度:已打完(该模式 boss 全部通关)的模式数 / 模式总数。
     /// 模式列表为空时返回 null。
+    /// <para>
+    /// <b>完成判据是 <c>passBoss &gt;= bossCount</c>,不是 <c>hasRecord &amp;&amp; score &gt; 0</c></b>:
+    /// 后者只说明"这一期打过、有分",不代表打满。实测报文里出现过
+    /// <c>[id=1 hasRecord=true score=58454 passBoss=4 bossCount=5 rank=7]</c> ——
+    /// 奇点扩张 5 个 boss 只打了 4 个,却因为"有记录有分"被当成已完成,
+    /// 于是赛季剩 2 天时整个类别一条提醒都不弹(用户反馈的正是这个)。
+    /// </para>
+    /// <para>
+    /// <c>bossCount</c> 为 0 表示接口没给总量,该模式按<b>未完成</b>计入 —— 与
+    /// <see cref="TowerProgress.IsComplete"/>「总量未知一律按未完成」的口径一致:
+    /// 宁可多提醒一次,也不要漏掉。
+    /// </para>
     /// </summary>
     public static TowerProgress? MatrixModes(NewTowerData? data)
     {
@@ -142,8 +154,39 @@ public static class TowerReminderPolicy
         {
             return null;
         }
-        return new TowerProgress(modes.Count(m => m.HasRecord && m.Score > 0), modes.Count, TowerProgressUnit.Modes);
+        var done = modes.Count(m => m.BossCount > 0 && m.PassBoss >= m.BossCount);
+        return new TowerProgress(done, modes.Count, TowerProgressUnit.Modes);
     }
+
+    /// <summary>
+    /// 玩法 → 塔页页签序号(0=逆境深塔,1=终焉矩阵,2=海墟)。
+    /// <para>
+    /// 提醒卡片的「前往」只带一个页面 key(<c>Tower</c>),不带页签信息,于是点开永远停在
+    /// 默认的「逆境深塔」页签 —— 用户收到「终焉矩阵即将刷新」,点过去看到的却是深塔。
+    /// 把页签序号拼进导航 key(<c>Tower#1</c>)即可直达;页签顺序由
+    /// <c>TowerView.axaml</c> 的 TabItem 顺序决定,改动那里必须同步这里。
+    /// </para>
+    /// </summary>
+    public static int TabIndexOf(TowerKind kind) => kind switch
+    {
+        TowerKind.DeepTower => 0,
+        TowerKind.Matrix => 1,
+        TowerKind.Slash => 2,
+        _ => 0,
+    };
+
+    /// <summary>塔页的页面导航 key(与 <c>NavigationKeys.Tower</c> 同值;Core 层不引用 UI 命名空间)。</summary>
+    public const string TowerPageKey = "Tower";
+
+    /// <summary>页面 key 与页内定位的分隔符(与 <c>NavigationKeys.TabSeparator</c> 同值)。</summary>
+    public const char TabSeparator = '#';
+
+    /// <summary>
+    /// 组装「塔页 + 指定玩法页签」的导航 key,如 <c>Tower#1</c>(终焉矩阵)。
+    /// 放在 Core 层是为了让测试直接覆盖(UI 层没有 InternalsVisibleTo)。
+    /// </summary>
+    public static string TowerNavKey(TowerKind kind)
+        => $"{TowerPageKey}{TabSeparator}{TabIndexOf(kind)}";
 
     /// <summary>
     /// 赛季临期提醒的去重 Key:只到「天」。

@@ -976,6 +976,33 @@ public sealed partial class TowerViewModel : ViewModelBase
     private const int ReloadMinIntervalSeconds = 60;
 
     /// <summary>
+    /// 应用「页内定位」:把页签切到指定玩法(提醒卡片「前往」用)。
+    /// <para>
+    /// 页签序号超出范围时忽略(不抛、也不回落到 0):序号来源是
+    /// <see cref="McKuro.Core.Services.Notification.TowerReminderPolicy.TabIndexOf"/>,
+    /// 与 <c>TowerView.axaml</c> 的 TabItem 顺序一一对应;万一将来页签顺序调整而映射没同步,
+    /// 停在当前页签比跳到错误的页签更不容易误导用户。
+    /// </para>
+    /// </summary>
+    public void ApplyTabIndex(int tabIndex)
+    {
+        // 页签数量随数据变化(全息/探索无数据时整页 TabControl 会隐藏),故按已定义的页签总数校验
+        if (tabIndex < 0 || tabIndex >= TowerTabCount)
+        {
+            return;
+        }
+        SelectedTabIndex = tabIndex;
+    }
+
+    /// <summary>塔页页签总数(深塔/矩阵/海墟/全息/探索,见 TowerView.axaml 的 TabItem 顺序)。</summary>
+    public const int TowerTabCount = 5;
+
+    /// <summary>页签序号 → 玩法(供测试与提醒映射核对)。0=深塔,1=矩阵,2=海墟,3=全息,4=探索。</summary>
+    public const int TabDeepTower = 0;
+    public const int TabMatrix = 1;
+    public const int TabSlash = 2;
+
+    /// <summary>
     /// 导航到深塔/海墟页时调用:重新拉取数据。
     /// 页面 VM 在 App 启动时就全部建好并只构造一次(见 MainWindowViewModel),构造函数里的
     /// 那次加载发生在启动瞬间;没有这个入口,页面上永远是启动那一刻的战绩快照

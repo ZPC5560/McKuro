@@ -386,6 +386,16 @@ public sealed class TowerService
         _logger.LogInformation(
             "提醒: 赛季剩余 | 深塔{TSE} | 矩阵{NTE} | 海墟{SSE}",
             Remain(tower?.SeasonEndTime), Remain(matrix?.EndTime), Remain(slash?.SeasonEndTime));
+        // 完成度明细:提醒是否被"已满额完成"抑制。三者的完成度口径各不相同,一旦口径错
+        // 就会变成"赛季快结束了却一条提醒都没有"(矩阵曾把"参与过"当成"打满")。
+        _logger.LogInformation(
+            "提醒: 完成度明细 | 深塔星{TS}/{TSMax} | 海墟难度1 {SS}/{SSMax} | 矩阵逐模式[{NT}]",
+            tower?.DifficultyList?.Sum(d => d.TowerAreaList?.Sum(a => a.Star) ?? 0) ?? -1,
+            tower?.DifficultyList?.Sum(d => d.TowerAreaList?.Sum(a => a.MaxStar) ?? 0) ?? -1,
+            slash?.DifficultyList?.FirstOrDefault(d => d.Difficulty == 1)?.AllScore ?? -1,
+            slash?.DifficultyList?.FirstOrDefault(d => d.Difficulty == 1)?.MaxScore ?? -1,
+            string.Join(" ", matrix?.ModeDetails?.Select(m =>
+                $"[id={m.ModeId} rec={m.HasRecord} score={m.Score} boss={m.PassBoss}/{m.BossCount} rank={m.Rank}]") ?? []));
         return new TowerSeasonSnapshot(tower, slash, matrix, "", roleId);
     }
 

@@ -350,11 +350,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         r.Raise("smoke:liveness", NotificationKind.DailyLiveness,
             LanguageService.Format("Notif.LivenessTitle"),
             LanguageService.Format("Notif.LivenessMessage", 100), NavigationKeys.Home);
-        // 深塔赛季临期(新增类别:图标/配色/进度文案一起看)
+        // 深塔赛季临期(新增类别:图标/配色/进度文案一起看;页签定位也用冒烟一起验)
         r.Raise("smoke:tower", NotificationKind.TowerEnding,
             LanguageService.Format("Notif.TowerSlashTitle"),
             LanguageService.Format("Notif.TowerMessageWithProgress", "2 天 2 小时", 9000, 12000,
-                LanguageService.Format("Notif.TowerUnitScore")), NavigationKeys.Tower);
+                LanguageService.Format("Notif.TowerUnitScore")),
+            McKuro.Core.Services.Notification.TowerReminderPolicy.TowerNavKey(
+                McKuro.Core.Services.Notification.TowerKind.Slash));
     }
 
     partial void OnSelectedNavigationItemChanged(NavigationItem? value)
@@ -425,12 +427,26 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>通过字符串 key 导航(供消息接收)。</summary>
+    /// <summary>
+    /// 通过字符串 key 导航(供提醒卡片「前往」等消息接收)。
+    /// <para>
+    /// key 可带页内定位后缀(<c>Tower#1</c> = 塔页的终焉矩阵页签),后缀解析见
+    /// <see cref="NavigationKeys.ParseTowerTab"/>:先按页面 key 切页,再让目标页定位到指定页签。
+    /// </para>
+    /// </summary>
     public void NavigateToKey(string key)
     {
-        if (_navByKey.TryGetValue(key, out var nav))
+        var (pageKey, tabIndex) = NavigationKeys.ParseTowerTab(key);
+        if (!_navByKey.TryGetValue(pageKey, out var nav))
         {
-            NavigateTo(nav);
+            return;
+        }
+        NavigateTo(nav);
+        // 切页后由页面自身应用页内定位(塔页:选中对应玩法页签)。
+        // 必须放在 NavigateTo 之后:切页会触发 OnNavigatedTo 重载数据,先设页签会被随后的状态重置覆盖。
+        if (tabIndex is { } tab && nav.ViewModel is TowerViewModel tower)
+        {
+            tower.ApplyTabIndex(tab);
         }
     }
 }

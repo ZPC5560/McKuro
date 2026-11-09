@@ -199,7 +199,7 @@ public class TowerReminderPolicyTests
         {
             ModeDetails =
             [
-                new NewTowerModeDetail { ModeId = 0, HasRecord = true, Score = 44065 },
+                new NewTowerModeDetail { ModeId = 0, HasRecord = true, Score = 44065, PassBoss = 4, BossCount = 4 },
                 new NewTowerModeDetail { ModeId = 1, HasRecord = false, Score = 0 },
                 // hasRecord 但 0 分:没打完,不算完成
                 new NewTowerModeDetail { ModeId = 2, HasRecord = true, Score = 0 },
@@ -210,6 +210,73 @@ public class TowerReminderPolicyTests
         Assert.Equal(1, progress!.Done);
         Assert.Equal(3, progress.Total);
         Assert.Equal(TowerProgressUnit.Modes, progress.Unit);
+    }
+
+    /// <summary>
+    /// 回归:矩阵"完成"必须看 <c>passBoss &gt;= bossCount</c>,不能看"有记录且有分"。
+    /// 实测报文里奇点扩张为 <c>score=58454 passBoss=4 bossCount=5</c> ——
+    /// 5 个 boss 只打了 4 个,却被算成完成,导致赛季剩 2 天时该玩法一条提醒都不弹。
+    /// </summary>
+    [Fact]
+    public void MatrixModes_Partial_Boss_Clear_Is_Not_Complete()
+    {
+        var data = new NewTowerData
+        {
+            ModeDetails =
+            [
+                // 稳态协议:4/4 打完 → 完成
+                new NewTowerModeDetail { ModeId = 0, HasRecord = true, Score = 10823, PassBoss = 4, BossCount = 4 },
+                // 奇点扩张:4/5 → 未完成(旧判据把它当成完成)
+                new NewTowerModeDetail { ModeId = 1, HasRecord = true, Score = 58454, PassBoss = 4, BossCount = 5 },
+            ],
+        };
+
+        var progress = TowerReminderPolicy.MatrixModes(data)!;
+        Assert.Equal(1, progress.Done);
+        Assert.Equal(2, progress.Total);
+        Assert.False(progress.IsComplete);
+
+        // 因此"剩 2 天且未打满"必须产出提醒(这正是用户反馈缺失的那条)
+        var expiry = TowerReminderPolicy.Evaluate(TowerKind.Matrix, Now, Millis(TimeSpan.FromDays(2)), progress);
+        Assert.NotNull(expiry);
+        Assert.Equal(TowerKind.Matrix, expiry!.Kind);
+        Assert.Equal(1, expiry.Progress!.Done);
+        Assert.Equal(2, expiry.Progress.Total);
+    }
+
+    /// <summary>全部 boss 打完才算满额;此时不再打扰。</summary>
+    [Fact]
+    public void MatrixModes_All_Bosses_Cleared_Suppresses_Reminder()
+    {
+        var data = new NewTowerData
+        {
+            ModeDetails =
+            [
+                new NewTowerModeDetail { ModeId = 0, HasRecord = true, Score = 10823, PassBoss = 4, BossCount = 4 },
+                new NewTowerModeDetail { ModeId = 1, HasRecord = true, Score = 58454, PassBoss = 5, BossCount = 5 },
+            ],
+        };
+
+        var progress = TowerReminderPolicy.MatrixModes(data)!;
+        Assert.True(progress.IsComplete);
+        Assert.Null(TowerReminderPolicy.Evaluate(TowerKind.Matrix, Now, Millis(TimeSpan.FromDays(2)), progress));
+    }
+
+    /// <summary>bossCount 缺失(0)时无法证明打满 → 按未完成计入,宁可多提醒。</summary>
+    [Fact]
+    public void MatrixModes_Unknown_BossCount_Counts_As_Not_Done()
+    {
+        var data = new NewTowerData
+        {
+            ModeDetails =
+            [
+                new NewTowerModeDetail { ModeId = 0, HasRecord = true, Score = 44065, PassBoss = 0, BossCount = 0 },
+            ],
+        };
+
+        var progress = TowerReminderPolicy.MatrixModes(data)!;
+        Assert.Equal(0, progress.Done);
+        Assert.False(progress.IsComplete);
     }
 
     [Fact]

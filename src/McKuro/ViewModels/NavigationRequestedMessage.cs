@@ -31,6 +31,37 @@ public static class NavigationKeys
     public const string RedeemCodes = "RedeemCodes";
     public const string Account = "Account";
     public const string Settings = "Settings";
+
+    /// <summary>
+    /// 页面 key 与「页内定位」的分隔符。塔页有三个玩法共用一个页面
+    /// (深塔/矩阵/海墟各是页签),提醒卡片的「前往」必须能指定落到哪个页签,
+    /// 故 key 可写成 <c>Tower#1</c>(= 终焉矩阵)。见 <see cref="ParseTowerTab"/>。
+    /// </summary>
+    public const char TabSeparator = '#';
+
+    /// <summary>
+    /// 拆出「页面 key」与「页内页签序号」:输入 <c>Tower#1</c> 返回 <c>("Tower", 1)</c>;
+    /// 无后缀时页签为 <c>null</c>(表示保持页面当前页签不变)。
+    /// <para>后缀不是非负整数时按"不带定位"处理,并把整串当页面 key 原样返回 —— 宁可跳到页面,
+    /// 也不要因为一个畸形 key 变成毫无反应。</para>
+    /// </summary>
+    public static (string PageKey, int? TabIndex) ParseTowerTab(string? key)
+    {
+        if (string.IsNullOrEmpty(key))
+        {
+            return ("", null);
+        }
+        var sep = key.LastIndexOf(TabSeparator);
+        if (sep <= 0 || sep == key.Length - 1)
+        {
+            return (key, null);
+        }
+        var suffix = key[(sep + 1)..];
+        return int.TryParse(suffix, System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var tab)
+            ? (key[..sep], tab)
+            : (key, null);
+    }
 }
 
 /// <summary>

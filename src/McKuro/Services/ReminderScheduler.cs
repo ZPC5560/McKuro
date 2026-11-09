@@ -35,8 +35,8 @@ public sealed class ReminderScheduler : IDisposable
     /// </summary>
     private static readonly TimeSpan TowerInterval = TimeSpan.FromHours(6);
 
-    /// <summary>活动临期阈值(与活动页 <c>ExpiringSoonDays</c> 一致:距结束 ≤3 天)。</summary>
-    private static readonly TimeSpan ExpiringWindow = TimeSpan.FromDays(3);
+    /// <summary>活动临期阈值(与活动页共用 <see cref="ActivityReminderPolicy.ExpiringWindow"/>:距结束 ≤3 天)。</summary>
+    private static TimeSpan ExpiringWindow => ActivityReminderPolicy.ExpiringWindow;
 
     /// <summary>等出口 IP 探测完成的上限:超时照常检查(单次失败静默,下一轮再试)。</summary>
     private static readonly TimeSpan NetworkInitTimeout = TimeSpan.FromSeconds(5);
@@ -225,10 +225,18 @@ public sealed class ReminderScheduler : IDisposable
         }
     }
 
-    /// <summary>活动临期:版本活动(与活动页忽略名单互通)+ 换取活动(卡池),距结束 ≤3 天提醒(按天去重)。</summary>
+    /// <summary>
+    /// 活动临期:版本活动 + 换取活动(卡池)距结束 ≤3 天提醒(按天去重)。
+    /// <para>
+    /// 两类<b>共用一份忽略名单</b>(活动页「忽略」按钮写入的 <c>IgnoredEndingActivityIds</c>),
+    /// Key 统一由 <see cref="ActivityReminderPolicy"/> 生成。此前卡池那条分支既没查忽略名单、
+    /// 活动页卡池卡片上也没有忽略按钮,于是"忽略了活动、重开软件照样弹《活动即将结束》"。
+    /// </para>
+    /// </summary>
     private static async Task CheckActivityAsync(CancellationToken ct)
     {
         var now = DateTime.Now;
+        // 忽略名单每次检查都重新读:用户可能在本次运行期间刚点过「忽略」,读启动时的快照会晚 6 小时才生效
         var ignored = AppServices.Settings.Current.IgnoredEndingActivityIds ?? [];
 
         // 1. 版本活动(hot-content-side;Key 与活动页甘特条一致:标题|开始|结束)
@@ -238,14 +246,14 @@ public sealed class ReminderScheduler : IDisposable
             foreach (var hot in hots.Where(h => h.CountDown?.DateRange is { Count: 2 }))
             {
                 if (!TryParseRange(hot.CountDown!.DateRange!, out var start, out var end)
-                    || end < now
-                    || end - now > ExpiringWindow)
+                    || !ActivityReminderPolicy.IsExpiring(end, now, ExpiringWindow))
                 {
                     continue;
                 }
-                // Key 与活动页甘特条完全一致(含空标题回退),保证忽略名单互通
-                var key = $"{hot.Title ?? LanguageService.Format("Activity.FallbackTitle")}|{start:yyyyMMddHHmm}|{end:yyyyMMddHHmm}";
-                if (ignored.Contains(key))
+                // 空标题的回退文案必须与活动页一致,否则按标题拼出来的 Key 对不上、忽略名单失效
+                var displayTitle = hot.Title ?? LanguageService.Format("Activity.FallbackTitle");
+                var key = ActivityReminderPolicy.VersionKey(displayTitle, start, end);
+                if (ActivityReminderPolicy.IsIgnored(ignored, key))
                 {
                     continue;
                 }
@@ -254,12 +262,12 @@ public sealed class ReminderScheduler : IDisposable
                     NotificationKind.ActivityEnding,
                     LanguageService.Format("Notif.ActivityTitle"),
                     LanguageService.Format("Notif.ActivityMessage",
-                        hot.Title ?? "", ActivityViewModel.FormatRemaining(end - now), end.ToString("MM-dd")),
+                        displayTitle, ActivityViewModel.FormatRemaining(end - now), end.ToString("MM-dd")),
                     NavigationKeys.Activity);
             }
         }
 
-        // 2. 换取活动(events-side:角色池/武器池)
+        // 2. 换取活动(events-side:角色池/武器池)—— 与版本活动同口径判定、同一份忽略名单
         var pools = await AppServices.Wiki.GetEventTabDataListAsync(WikiType.Waves, ct).ConfigureAwait(false);
         if (pools is not null)
         {
@@ -276,17 +284,23 @@ public sealed class ReminderScheduler : IDisposable
                         continue;
                     }
                     if (!TryParseRange(tab.CountDown.DateRange, out var start, out var end)
-                        || end < now
-                        || end - now > ExpiringWindow)
+                        || !ActivityReminderPolicy.IsExpiring(end, now, ExpiringWindow))
+                    {
+                        continue;
+                    }
+                    // 空名回退文案必须与活动页一致,否则 Key 对不上、忽略名单失效
+                    var poolName = tab.Name ?? LanguageService.Format("Activity.PoolFallback");
+                    var poolKey = ActivityReminderPolicy.PoolKey(poolName, start, end);
+                    if (ActivityReminderPolicy.IsIgnored(ignored, poolKey))
                     {
                         continue;
                     }
                     AppServices.Reminders.Raise(
-                        $"act:pool:{tab.Name}|{start:yyyyMMddHHmm}|{end:yyyyMMddHHmm}",
+                        $"act:{poolKey}",
                         NotificationKind.ActivityEnding,
                         LanguageService.Format("Notif.ActivityTitle"),
                         LanguageService.Format("Notif.ActivityMessage",
-                            tab.Name ?? "", ActivityViewModel.FormatRemaining(end - now), end.ToString("MM-dd")),
+                            poolName, ActivityViewModel.FormatRemaining(end - now), end.ToString("MM-dd")),
                         NavigationKeys.Activity);
                 }
             }
@@ -411,7 +425,8 @@ public sealed class ReminderScheduler : IDisposable
             NotificationKind.TowerEnding,
             title,
             message,
-            NavigationKeys.Tower);
+            // 带上页签序号:三类玩法共用「塔」页,只给 Tower 会一律停在深塔页签
+            TowerReminderPolicy.TowerNavKey(expiry.Kind));
     }
 
     /// <summary>
