@@ -227,6 +227,33 @@ public partial class App : Application
                         }
                     }
 
+                    // 「游戏资源」弹窗目视验证(McKuro_SMOKE_RESOURCE=1):
+                    // 直接打开同心圆资源面板;=device 时额外切到设备信息页,
+                    // 用于一次跑完两页的排版核对(不然得手动点两次页签再截图)。
+                    if (Environment.GetEnvironmentVariable("McKuro_SMOKE_RESOURCE") is { Length: > 0 } resourceMode)
+                    {
+                        DispatcherTimer.RunOnce(() =>
+                        {
+                            var owner = (Application.Current?.ApplicationLifetime
+                                as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+
+                            // ShowAsync 是模态的:它会一直挂起到用户关窗,所以"切页签"不能写在它后面。
+                            // 这里不 await,另起一个一次性定时器在弹窗出现后再切。
+                            _ = Views.GameResourceWindow.ShowAsync(owner, AppServices.Paths.GameRootDir);
+
+                            if (resourceMode == "device")
+                            {
+                                DispatcherTimer.RunOnce(() =>
+                                {
+                                    if (owner?.OwnedWindows.OfType<Views.GameResourceWindow>().FirstOrDefault() is { } dlg)
+                                    {
+                                        dlg.SelectDeviceTabForSmoke();
+                                    }
+                                }, TimeSpan.FromSeconds(2));
+                            }
+                        }, TimeSpan.FromSeconds(3));
+                    }
+
                     // 「游戏已退出」状态文案自动消失的目视验证(McKuro_SMOKE_SESSION_END=1):
                     // 伪造一次正常结束(不是 Failed,失败文案要常驻),用于确认 8 秒后状态栏清空。
                     if (Environment.GetEnvironmentVariable("McKuro_SMOKE_SESSION_END") == "1")

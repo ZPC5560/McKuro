@@ -57,6 +57,32 @@ public sealed partial class LauncherViewModel
         await task;
     }
 
+    /// <summary>
+    /// 打开「游戏资源」弹窗:分类体积(同心圆)+ 设备信息。
+    /// <para>
+    /// 与「检查重复文件」同一类"看一眼就走"的诊断面板,所以放在功能菜单里而不是设置页 ——
+    /// 用户是从启动页发现"体积不对劲"才点进来的,让他再走「设置 → 游戏 → ⋯」会绕远。
+    /// </para>
+    /// <para>
+    /// <b>不设 IsBusy</b>:弹窗自己承担扫描的进度反馈,占住启动页的忙碌位会让整页按钮变灰,
+    /// 而弹窗是模态的、用户本来也点不到启动页 —— 那只是白白把状态栏拖成"正在做事"。
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenGameResourceAsync()
+    {
+        CloseGameMenu();
+        if (!NativeGameManagementSupported)
+        {
+            StatusText = PlatformGameNotice;
+            return;
+        }
+
+        var owner = (Avalonia.Application.Current?.ApplicationLifetime
+            as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        await McKuro.Views.GameResourceWindow.ShowAsync(owner, AppServices.Paths.GameRootDir);
+    }
+
     /// <summary>创建桌面快捷方式(指向启动器自身)。</summary>
     [RelayCommand]
     private void CreateDesktopShortcut()

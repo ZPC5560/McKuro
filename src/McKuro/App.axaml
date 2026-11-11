@@ -152,6 +152,15 @@
                         <GradientStop Color="#004FD0FF" Offset="1" />
                     </LinearGradientBrush>
                     <SolidColorBrush x:Key="McKuroChartBaseline" Color="#33FFFFFF" />
+                    <!-- 「游戏资源」同心圆的五个环色(外→内:正式资源/预下载/日志/截图/启动器临时文件)。
+                         取色原则对齐 Apple 运动健康:五个都高饱和、彼此色相拉开(蓝/青/琥珀/紫/灰),
+                         压在同色低透明度轨道上仍然一眼分得清;最后一个刻意用中性灰 ——
+                         "启动器临时文件"是唯一一个建议清理的,不该和游戏本体抢眼。 -->
+                    <SolidColorBrush x:Key="McKuroRingOfficial" Color="#5A9CFF" />
+                    <SolidColorBrush x:Key="McKuroRingPredownload" Color="#4FE3D0" />
+                    <SolidColorBrush x:Key="McKuroRingLogs" Color="#FFC65A" />
+                    <SolidColorBrush x:Key="McKuroRingShots" Color="#B98CFF" />
+                    <SolidColorBrush x:Key="McKuroRingTemp" Color="#93A1B5" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="McKuroAccent" Color="#5A8DEE" />
@@ -235,6 +244,13 @@
                         <GradientStop Color="#001E8FC7" Offset="1" />
                     </LinearGradientBrush>
                     <SolidColorBrush x:Key="McKuroChartBaseline" Color="#330F2B5B" />
+                    <!-- 「游戏资源」同心圆的五个环色(亮色主题):同一组色相压暗一档,
+                         否则浅色卡片上 #4FE3D0 这种亮青几乎看不见。 -->
+                    <SolidColorBrush x:Key="McKuroRingOfficial" Color="#3D6FD8" />
+                    <SolidColorBrush x:Key="McKuroRingPredownload" Color="#12A7A0" />
+                    <SolidColorBrush x:Key="McKuroRingLogs" Color="#C98A16" />
+                    <SolidColorBrush x:Key="McKuroRingShots" Color="#8455D6" />
+                    <SolidColorBrush x:Key="McKuroRingTemp" Color="#6B7889" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 

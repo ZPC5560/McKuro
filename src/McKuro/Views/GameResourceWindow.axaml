@@ -1,0 +1,366 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ic="using:FluentIcons.Avalonia"
+        xmlns:controls="clr-namespace:McKuro.Controls"
+        xmlns:vm="using:McKuro.ViewModels"
+        xmlns:loc="clr-namespace:McKuro.Services"
+        mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="620"
+        x:Class="McKuro.Views.GameResourceWindow"
+        x:DataType="vm:GameResourceViewModel"
+        Title="{loc:Localize Key=Launcher.Resource.Title}"
+        Width="760" Height="600"
+        MinWidth="700" MinHeight="520"
+        CanResize="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+  <!--
+    游戏资源(用户需求 2026-11):启动页功能菜单新增入口,展示
+    ① 当前游戏总大小 / 正式资源 / 预下载 / 日志 / 截图 / 启动器临时文件,以及占整块硬盘的比例
+       —— 用多级同心圆(参考 Apple 运动健康的三环)表达,每环独立按 360° 读比例;
+    ② 设备信息 —— 对齐官方启动器新版「游戏设置 → 设备信息」页(CPU/内存/显卡/显存/驱动/磁盘类型/系统)。
+
+    为什么是弹窗而不是设置页的一个子标签:
+    这里是"看一眼就走"的诊断面板,和「检查重复文件」同一个使用场景;
+    放进设置页会迫使路径「设置 → 游戏 → 资源」,而用户是从启动页看到体积不对劲才点进来的。
+
+    设计取向:同心圆是主角,图例是配角。图例不做进度条也不做迷你环 ——
+    数字和百分比已经够读,再画一遍条形只会和主视觉打架。
+  -->
+  <Window.Styles>
+    <!-- 页签:与设置页顶部分类同一套胶囊语义(未选中弱化、选中强调色) -->
+    <Style Selector="Button.rsTab">
+      <Setter Property="Padding" Value="13,7" />
+      <Setter Property="CornerRadius" Value="9" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.rsTab:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SemiColorBg3}" />
+    </Style>
+    <Style Selector="Button.rsTab.selected">
+      <Setter Property="Background" Value="{DynamicResource McKuroAccent}" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <!-- 图例行:整行可悬停(有目录时才能点开),悬停给一点面色反馈 -->
+    <Style Selector="Border.legendRow">
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="8,7" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.legendRow:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SemiColorBg2}" />
+    </Style>
+    <!-- 有目录可开的行才给手型光标:光标是最省事的"这里能点"提示 -->
+    <Style Selector="Border.legendRow.openable">
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <!-- 设备信息行 -->
+    <Style Selector="Border.deviceRow">
+      <Setter Property="Padding" Value="14,9" />
+    </Style>
+    <Style Selector="TextBlock.deviceLabel">
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.deviceValue">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorText0}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="TextAlignment" Value="Right" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+  </Window.Styles>
+
+  <Border Padding="20" Background="{DynamicResource SemiColorBg1}">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="14">
+
+      <!-- ============ 标题栏 ============ -->
+      <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+        <Border Width="38" Height="38" CornerRadius="10"
+                Background="{DynamicResource SemiColorBg3}">
+          <ic:FluentIcon Icon="DataPie" IconVariant="Regular" IconSize="Size20"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Foreground="{DynamicResource SemiColorPrimary}" />
+        </Border>
+        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+          <TextBlock Text="{loc:Localize Key=Launcher.Resource.Title}"
+                     FontSize="16" FontWeight="Bold"
+                     Foreground="{DynamicResource SemiColorText0}" />
+          <!-- 第二行是游戏目录本身:用户最常问的"你看的是哪个目录"在这里一次答清 -->
+          <TextBlock Text="{Binding GameRootDisplay}" FontSize="11.5"
+                     Foreground="{DynamicResource SemiColorText3}"
+                     TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+        </StackPanel>
+        <Button Grid.Column="2" Padding="7" CornerRadius="8"
+                Background="Transparent" BorderThickness="0"
+                VerticalAlignment="Top"
+                AutomationProperties.Name="{loc:Localize Key=Win.Close}"
+                Click="OnCloseClick">
+          <ic:FluentIcon Icon="Dismiss" IconVariant="Regular" IconSize="Size16"
+                         Foreground="{DynamicResource SemiColorText2}" />
+        </Button>
+      </Grid>
+
+      <!-- ============ 页签 + 重新扫描 ============ -->
+      <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+          <Button Classes="rsTab" Classes.selected="{Binding IsStorageTabActive}"
+                  Content="{loc:Localize Key=Launcher.Resource.TabStorage}"
+                  Click="OnSelectStorageTab" />
+          <Button Classes="rsTab" Classes.selected="{Binding IsDeviceTabActive}"
+                  Content="{loc:Localize Key=Launcher.Resource.TabDevice}"
+                  Click="OnSelectDeviceTab" />
+        </StackPanel>
+
+        <!-- 扫描中的不确定态细环 + 文案:几十万文件要几秒,不给反馈就像卡死 -->
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                    IsVisible="{Binding IsScanning}">
+          <controls:RingProgress Width="13" Height="13" Thickness="2"
+                                 ShowText="False" IsIndeterminate="True"
+                                 VerticalAlignment="Center"
+                                 ForegroundBrush="{DynamicResource SemiColorPrimary}"
+                                 TrackBrush="{DynamicResource McKuroChartBaseline}" />
+          <TextBlock Text="{Binding ScanStatusText}" FontSize="11.5"
+                     VerticalAlignment="Center"
+                     Foreground="{DynamicResource SemiColorText2}" />
+        </StackPanel>
+
+        <Button Grid.Column="2" Padding="12,6" CornerRadius="8"
+                Click="OnRescanClick"
+                IsEnabled="{Binding !IsScanning}"
+                Content="{loc:Localize Key=Launcher.Resource.Rescan}" />
+      </Grid>
+
+      <!-- ============ 资源占用页 ============ -->
+      <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="22"
+            IsVisible="{Binding IsStorageTabActive}">
+
+        <!-- 左:同心圆 + 总量 + 磁盘占用 -->
+        <StackPanel Grid.Column="0" Spacing="10" Width="286" VerticalAlignment="Top">
+          <Border CornerRadius="14" Padding="14,16"
+                  Background="{DynamicResource SemiColorBg2}">
+            <StackPanel Spacing="10">
+              <!-- 同心圆:必须 Stretch 填满这 250×250 的格子。
+                   自绘 Control 没有隐式的期望尺寸,给 Center 会量出 0×0 ——
+                   那时 Bounds 为 0,Render 里 outerRadius ≤ 0 直接返回,画面上什么都不出现
+                   (只有中心的文字还在,看起来像"环丢了")。 -->
+              <Grid Width="250" Height="250" HorizontalAlignment="Center">
+                <!-- 五环同心圆。环色由 App.axaml 的五个主题令牌给(暗/亮各一套) -->
+                <controls:StorageRings x:Name="Rings"
+                                       Ratios="{Binding RingRatios}"
+                                       RingThickness="12"
+                                       RingGap="4"
+                                       TrackOpacity="0.34"
+                                       HorizontalAlignment="Stretch"
+                                       VerticalAlignment="Stretch"
+                                       Ring1Brush="{DynamicResource McKuroRingOfficial}"
+                                       Ring2Brush="{DynamicResource McKuroRingPredownload}"
+                                       Ring3Brush="{DynamicResource McKuroRingLogs}"
+                                       Ring4Brush="{DynamicResource McKuroRingShots}"
+                                       Ring5Brush="{DynamicResource McKuroRingTemp}"
+                                       TrackFallbackBrush="{DynamicResource McKuroChartBaseline}" />
+                <!-- 中心读数。宽度按"最内圈留下的孔"标定:250 直径、5 环(12 宽 + 4 隙)之后
+                     中心孔直径约 102,所以文字块封顶 104 —— 再宽就会压到最内那一环上。 -->
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Spacing="1" Width="96">
+                  <TextBlock Text="{Binding RingCenterValue}"
+                             FontSize="17" FontWeight="Bold"
+                             HorizontalAlignment="Center"
+                             TextAlignment="Center"
+                             FontFeatures="tnum"
+                             Foreground="{DynamicResource SemiColorText0}" />
+                  <TextBlock Text="{Binding RingCenterLabel}" FontSize="10"
+                             HorizontalAlignment="Center"
+                             Foreground="{DynamicResource SemiColorText3}" />
+                </StackPanel>
+              </Grid>
+
+              <!-- 文件数副文案 -->
+              <TextBlock Text="{Binding TotalSizeSubText}" FontSize="11"
+                         HorizontalAlignment="Center"
+                         Foreground="{DynamicResource SemiColorText3}"
+                         IsVisible="{Binding TotalSizeSubText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+          </Border>
+
+          <!-- 占整块硬盘:一条细进度 + 一行读数。读不到磁盘容量时整块隐藏 -->
+          <Border CornerRadius="12" Padding="14,11"
+                  Background="{DynamicResource SemiColorBg2}"
+                  IsVisible="{Binding HasDiskInfo}">
+            <StackPanel Spacing="7">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="{loc:Localize Key=Launcher.Resource.DiskTitle}" FontSize="12"
+                           Foreground="{DynamicResource SemiColorText2}" />
+                <TextBlock Grid.Column="1" Text="{Binding DiskUsageText}" FontSize="11"
+                           Foreground="{DynamicResource SemiColorText3}"
+                           FontFeatures="tnum" />
+              </Grid>
+              <ProgressBar Height="5" CornerRadius="3"
+                           Minimum="0" Maximum="100"
+                           Value="{Binding DiskUsagePercent}"
+                           Foreground="{DynamicResource McKuroRingOfficial}"
+                           Background="{DynamicResource McKuroChartBaseline}" />
+            </StackPanel>
+          </Border>
+
+          <!-- 预下载明细(多个版本暂存时逐条列出) -->
+          <Border CornerRadius="12" Padding="14,11"
+                  Background="{DynamicResource SemiColorBg2}"
+                  IsVisible="{Binding HasPredownloadDetail}">
+            <StackPanel Spacing="4">
+              <TextBlock Text="{loc:Localize Key=Launcher.Resource.PredownloadDetailTitle}"
+                         FontSize="12" FontWeight="SemiBold"
+                         Foreground="{DynamicResource SemiColorText2}" />
+              <TextBlock Text="{Binding PredownloadDetailText}" FontSize="11.5"
+                         TextWrapping="Wrap" LineHeight="17"
+                         Foreground="{DynamicResource SemiColorText3}" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- 右:图例(五类恒定五行,颜色对环;可点开对应目录) -->
+        <Border Grid.Column="1" CornerRadius="14" Padding="6,4"
+                Background="{DynamicResource SemiColorBg2}"
+                VerticalAlignment="Top">
+          <ItemsControl ItemsSource="{Binding Legend}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="1" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:GameResourceLegendItem">
+                <Border Classes="legendRow"
+                        Classes.openable="{Binding CanOpen}"
+                        DoubleTapped="OnLegendRowDoubleTapped"
+                        ToolTip.Tip="{Binding Path}">
+                  <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="11">
+                    <!-- 环色圆点:与同心圆第 N 环同色。用转换器把资源 key 解析成当次主题的画刷,
+                         与 StorageRings 的 RingNBrush 读的是同一份 App.axaml 令牌。 -->
+                    <Ellipse Grid.Column="0" Width="10" Height="10"
+                             VerticalAlignment="Center"
+                             Fill="{Binding BrushKey, Converter={x:Static vm:ThemeBrushConverter.Instance}}" />
+                    <StackPanel Grid.Column="1" Spacing="1">
+                      <StackPanel Orientation="Horizontal" Spacing="7">
+                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource SemiColorText0}" />
+                        <!-- 体积 0 的那类不给"0 B"这种噪声,改成一句弱提示 -->
+                        <TextBlock Text="{loc:Localize Key=Launcher.Resource.EmptyTag}"
+                                   FontSize="10.5" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SemiColorText3}"
+                                   IsVisible="{Binding IsEmpty}" />
+                      </StackPanel>
+                      <TextBlock Text="{Binding Description}" FontSize="11"
+                                 TextWrapping="Wrap" LineHeight="15.5"
+                                 Foreground="{DynamicResource SemiColorText3}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="1" VerticalAlignment="Center"
+                                HorizontalAlignment="Right">
+                      <TextBlock Text="{Binding SizeText}" FontSize="13.5" FontWeight="Bold"
+                                 HorizontalAlignment="Right" FontFeatures="tnum"
+                                 Foreground="{DynamicResource SemiColorText1}" />
+                      <TextBlock Text="{Binding ShareText}" FontSize="11"
+                                 HorizontalAlignment="Right" FontFeatures="tnum"
+                                 Foreground="{DynamicResource SemiColorText3}" />
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Border>
+      </Grid>
+
+      <!-- ============ 设备信息页 ============ -->
+      <Grid Grid.Row="2" RowDefinitions="*,Auto" RowSpacing="10"
+            IsVisible="{Binding IsDeviceTabActive}">
+        <Border Grid.Row="0" CornerRadius="14"
+                Background="{DynamicResource SemiColorBg2}"
+                ClipToBounds="True">
+          <Grid RowDefinitions="Auto,*">
+            <!-- 顶部操作行:一键复制(对齐官方启动器的「一键复制设备信息」) -->
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="14,11,14,9">
+              <StackPanel Spacing="1" VerticalAlignment="Center">
+                <TextBlock Text="{loc:Localize Key=Launcher.Resource.DeviceTitle}"
+                           FontSize="13" FontWeight="SemiBold"
+                           Foreground="{DynamicResource SemiColorText0}" />
+                <TextBlock Text="{loc:Localize Key=Launcher.Resource.DeviceHint}" FontSize="11"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SemiColorText3}" />
+              </StackPanel>
+              <Button Grid.Column="1" Padding="12,6" CornerRadius="8" VerticalAlignment="Center"
+                      Click="OnCopyDeviceInfoClick"
+                      IsEnabled="{Binding DeviceRows.Count}"
+                      Foreground="{DynamicResource SemiColorPrimary}">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <ic:FluentIcon Icon="Copy" IconVariant="Regular" IconSize="Size16"
+                                 VerticalAlignment="Center"
+                                 Foreground="{DynamicResource SemiColorPrimary}" />
+                  <TextBlock x:Name="CopyDeviceText" Text="{Binding CopyDeviceInfoText}"
+                             FontSize="12" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+            </Grid>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+              <StackPanel>
+                <!-- 加载中:只放一条不确定态提示,不预先摆空行(空行会跳一下) -->
+                <TextBlock Text="{loc:Localize Key=Launcher.Resource.DeviceLoading}"
+                           FontSize="12" Margin="14,6,14,14"
+                           Foreground="{DynamicResource SemiColorText3}"
+                           IsVisible="{Binding IsDeviceLoading}" />
+                <TextBlock Text="{Binding DeviceUnsupportedText}" FontSize="12"
+                           Margin="14,6,14,14" TextWrapping="Wrap"
+                           Foreground="{DynamicResource SemiColorText3}"
+                           IsVisible="{Binding DeviceUnsupportedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                <ItemsControl ItemsSource="{Binding DeviceRows}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DeviceInfoRow">
+                      <Border Classes="deviceRow"
+                              BorderThickness="0,0,0,1"
+                              BorderBrush="{DynamicResource SemiColorBg3}">
+                        <Grid ColumnDefinitions="150,*" ColumnSpacing="14">
+                          <TextBlock Classes="deviceLabel" Text="{Binding Label}" />
+                          <TextBlock Grid.Column="1" Classes="deviceValue" Text="{Binding Value}" />
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </ScrollViewer>
+          </Grid>
+        </Border>
+
+        <!-- 隐私说明:设备信息只在本机展示/复制,不上报 -->
+        <TextBlock Grid.Row="1" Text="{loc:Localize Key=Launcher.Resource.DevicePrivacy}"
+                   FontSize="11" TextWrapping="Wrap" LineHeight="16"
+                   Foreground="{DynamicResource SemiColorText3}" />
+      </Grid>
+
+      <!-- ============ 底部操作 ============ -->
+      <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+        <Button MinWidth="96" Padding="16,8" CornerRadius="8"
+                Click="OnOpenFolderClick"
+                IsEnabled="{Binding HasGameDir}"
+                Content="{loc:Localize Key=Launcher.Resource.OpenFolder}" />
+        <Button MinWidth="96" Padding="16,8" CornerRadius="8"
+                Classes="primary"
+                Click="OnCloseClick"
+                Content="{loc:Localize Key=Win.Close}" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>

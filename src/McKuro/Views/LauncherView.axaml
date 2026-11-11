@@ -227,6 +227,13 @@
                                         IsEnabled="{Binding CanStartInstalledOperation}">
                                     <TextBlock Text="{loc:Localize Key=Launcher.Menu.CheckResidue}" FontSize="12" />
                                 </Button>
+                                <!-- 游戏资源:分类体积(同心圆)+ 设备信息。
+                                     与上面的"检查重复文件"是一对——那个负责清理,这个负责看清"到底占在哪"。
+                                     不绑 CanStartInstalledOperation:没装游戏时也要能点开,
+                                     弹窗自己会提示"尚未设置游戏目录"。 -->
+                                <Button Classes="menuItem" Command="{Binding OpenGameResourceCommand}">
+                                    <TextBlock Text="{loc:Localize Key=Launcher.Menu.Resource}" FontSize="12" />
+                                </Button>
                                 <Button Classes="menuItem" Command="{Binding CreateDesktopShortcutCommand}">
                                     <TextBlock Text="{loc:Localize Key=Launcher.Menu.CreateShortcut}" FontSize="12" />
                                 </Button>
