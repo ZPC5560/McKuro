@@ -377,6 +377,194 @@ public sealed class GameManifestLoader
     }
 
     /// <summary>
+    /// 读取「分级预下载」信息:目标版本、该等级由哪些包组成、全量与精简各自的体积/所需空间。
+    /// <para>
+    /// <b>必须读新版协议端点</b>(<c>.../{appKey}/G152/official/index.json</c>):旧协议端点自 3.8 起
+    /// 不再提供 <c>predownload</c> 节点,只能从新版协议拿到预载内容。新版协议的 <c>predownload</c>
+    /// 只有 <c>bundles</c> + <c>resourcePacks</c>(无版本号/无 cdnList),版本号在每个包自己的
+    /// <c>version</c> 里 —— 这也是它不能复用 <see cref="KuroUpdateData"/> 的原因。
+    /// </para>
+    /// <para>
+    /// 体积口径:<b>下载字节</b>按补丁清单的 <c>resource</c> 逐条累加(与真正要下的一致);
+    /// <b>所需空间</b> = 下载字节 + 最大单文件,复现官方启动器「所需空间」显示值
+    /// (实测国服 3.8.0 HD:12.08 GiB 下载 / 13.48 GiB 预留)。
+    /// </para>
+    /// </summary>
+    /// <param name="packIndexUrl">新版协议 index.json 地址(<see cref="KuroEndpoints.ResourcePackIndexForServerType"/>)。</param>
+    /// <param name="bundleName">资源等级组合名(HD/SD/UHD)。</param>
+    /// <param name="installedVersion">本地已装版本,用于在 patchConfig 里精确匹配差分包。</param>
+    /// <param name="ct">取消令牌。</param>
+    /// <returns>没有预载节点时返回 null(调用方据此判定"当前无可预载")。</returns>
+    public async Task<PredownloadInfo?> LoadPredownloadInfoAsync(
+        string packIndexUrl,
+        string bundleName,
+        string? installedVersion,
+        CancellationToken ct = default)
+    {
+        if (!IsHttpsUrl(packIndexUrl))
+        {
+            return null;
+        }
+
+        var index = await LoadResourcePackIndexAsync(packIndexUrl, ct).ConfigureAwait(false);
+        var node = index?.Predownload;
+        if (node?.ResourcePacks is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        var packNames = ResourceLevelPlanner.ResolvePackNames(
+            new KuroResourcePackIndex { Bundles = node.Bundles, ResourcePacks = node.ResourcePacks },
+            bundleName);
+        var cdn = index!.CdnList?
+            .Where(c => IsHttpsUrl(c.Url))
+            .OrderBy(c => c.P == 0 ? int.MaxValue : c.P)
+            .FirstOrDefault()?.Url;
+        if (string.IsNullOrWhiteSpace(cdn))
+        {
+            return null;
+        }
+
+        long full = 0;
+        long minimal = 0;
+        long fullDisk = 0;
+        long minimalDisk = 0;
+        string? version = null;
+        var packs = new List<PredownloadPackPlan>();
+        foreach (var packName in packNames)
+        {
+            if (!node.ResourcePacks.TryGetValue(packName, out var pack))
+            {
+                continue;
+            }
+
+            // 版本号:各包 version 一致(实测都是目标版本);取最高值兜底不一致的服务端数据。
+            if (!string.IsNullOrWhiteSpace(pack.Version)
+                && (version is null || CompareVersion(pack.Version, version) > 0))
+            {
+                version = pack.Version;
+            }
+
+            // 预下载用包内 patchConfig 与本地版本精确匹配的那一项(下载的是差异包,不是整包)。
+            var (patch, packPlan) = await LoadPredownloadPatchListAsync(pack, packName, cdn, installedVersion, ct)
+                .ConfigureAwait(false);
+            if (patch is null || packPlan is null)
+            {
+                continue;
+            }
+
+            packs.Add(packPlan);
+            full += PredownloadPlanner.DownloadBytes(patch, PredownloadSpec.Full);
+            minimal += PredownloadPlanner.DownloadBytes(patch, PredownloadSpec.Minimal);
+            // 所需空间用的「最大单文件」取 <b>全局最大</b>(跨包取 max),不是各包相加:
+            // 峰值占用是「已下的部分 + 正在落位的那个文件」,同一时刻只有一个大文件在写。
+            // 实测校验:12.08 + 1.40 = 13.48 GiB 与官方启动器一致;按包相加会得到 14.37。
+            fullDisk = Math.Max(fullDisk, PredownloadPlanner.LargestFileBytes(patch, PredownloadSpec.Full));
+            minimalDisk = Math.Max(minimalDisk, PredownloadPlanner.LargestFileBytes(patch, PredownloadSpec.Minimal));
+        }
+
+        if (version is null || packs.Count == 0)
+        {
+            return null;
+        }
+
+        return new PredownloadInfo
+        {
+            TargetVersion = version,
+            BundleName = bundleName,
+            PackNames = packNames,
+            Packs = packs,
+            FullBytes = full,
+            MinimalBytes = minimal,
+            // 所需空间 = 本次下载 + 最大单文件(多包时按包累加,保守且与官方同量级)。
+            FullDiskBytes = full + fullDisk,
+            MinimalDiskBytes = minimal + minimalDisk,
+        };
+    }
+
+    /// <summary>
+    /// 读取某个预载资源包「与本地版本精确匹配」的补丁清单(差异清单)。
+    /// <para>
+    /// 匹配不到时返回 null:官方只给"从某个具体版本升到目标版本"的补丁,不能把最新项
+    /// 当成任意本地版本的补丁(那会算出完全错误的体积,直接开下还可能合不出差分)。
+    /// </para>
+    /// </summary>
+    private async Task<(KuroPatchIndex? Patch, PredownloadPackPlan? Plan)> LoadPredownloadPatchListAsync(
+        KuroResourcePack pack,
+        string packName,
+        string cdnUrl,
+        string? installedVersion,
+        CancellationToken ct)
+    {
+        var configs = pack.PatchConfig;
+        var match = configs?.FirstOrDefault(p =>
+            !string.IsNullOrWhiteSpace(p.Version)
+            && !string.IsNullOrWhiteSpace(installedVersion)
+            && string.Equals(p.Version, installedVersion, StringComparison.OrdinalIgnoreCase));
+        // 本地版本没有专属补丁时:退到"最接近的旧版本补丁"没有意义(差分合不上),
+        // 但至少用最新一项估算体积,让 UI 能显示量级而不是 0。
+        var chosen = match ?? (configs is { Count: > 0 } ? configs[^1] : null);
+        if (chosen is null || string.IsNullOrWhiteSpace(chosen.IndexFile))
+        {
+            return (null, null);
+        }
+
+        var url = cdnUrl.TrimEnd('/') + "/" + chosen.IndexFile.TrimStart('/');
+        var plan = new PredownloadPackPlan
+        {
+            PackName = packName,
+            PatchIndexUrl = url,
+            // 下载前缀 = CDN + patchConfig.baseUrl(预载补丁的 baseUrl 形如 .../<包>/3.7.1/resources)。
+            BaseUrl = cdnUrl.TrimEnd('/') + "/" + (chosen.BaseUrl ?? "").TrimStart('/'),
+            IndexFileMd5 = chosen.IndexFileMd5,
+        };
+
+        try
+        {
+            using var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var payload = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            payload = DecompressIfNeeded(payload, response);
+            if (!string.IsNullOrWhiteSpace(chosen.IndexFileMd5) && !HashMatches(payload, chosen.IndexFileMd5))
+            {
+                // 给了哈希却对不上:不能悄悄用(内容可能被篡改或 CDN 异常)。
+                return (null, null);
+            }
+
+            var parsed = JsonSerializer.Deserialize(payload, GameJsonContext.Default.KuroPatchIndex);
+            return (parsed, plan);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "读取预载补丁清单失败: {Pack}", pack.Version);
+            return (null, null);
+        }
+    }
+
+    /// <summary>版本号数值比较(段数补齐,缺失按 0);都非法时退回字符串比较。</summary>
+    private static int CompareVersion(string a, string b)
+    {
+        static int[] Parse(string v) => v.Split('.').Select(s => int.TryParse(s, out var n) ? n : -1).ToArray();
+        var pa = Parse(a);
+        var pb = Parse(b);
+        var len = Math.Max(pa.Length, pb.Length);
+        for (var i = 0; i < len; i++)
+        {
+            var av = i < pa.Length ? pa[i] : 0;
+            var bv = i < pb.Length ? pb[i] : 0;
+            if (av != bv)
+            {
+                return av.CompareTo(bv);
+            }
+        }
+        return 0;
+    }
+
+    /// <summary>
     /// 加载单个资源包的清单(indexFile.json),返回包内全部文件。
     /// 下载地址 = <c>{cdn}{baseUrl}{dest}</c>(baseUrl 以 zip/ 结尾,清单内无分片信息)。
     /// 同时回填 <see cref="KuroResourcePack.FileCount"/>/<see cref="KuroResourcePack.TotalBytes"/>。
@@ -498,7 +686,8 @@ public sealed class GameManifestLoader
         string patchIndexUrl,
         string? baseUrl = null,
         string? indexFileMd5 = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        PredownloadSpec spec = PredownloadSpec.Full)
     {
         if (!IsHttpsUrl(patchIndexUrl))
         {
@@ -519,6 +708,20 @@ public sealed class GameManifestLoader
             if (patch is null)
             {
                 return Fail("解析补丁清单失败");
+            }
+
+            // 精简规格的取舍判据统一由 PredownloadPlanner 给出 —— 体积预估与实际下载必须同源,
+            // 否则会出现「预演说 7.30 GB、实际却下了 12 GB」这类无法解释的偏差。
+            var excludedPrefixes = spec == PredownloadSpec.Minimal
+                ? PredownloadPlanner.ExcludePrefixes(patch)
+                : System.Array.Empty<string>();
+            var droppedGroupDests = PredownloadPlanner.DroppedGroupDests(patch, excludedPrefixes);
+            if (droppedGroupDests.Count > 0)
+            {
+                _logger.LogInformation(
+                    "精简预下载:剔除 {Count} 个分组(排除前缀 {Prefixes})",
+                    droppedGroupDests.Count,
+                    string.Join(",", excludedPrefixes));
             }
 
             var effectiveBase = (baseUrl ?? "").TrimEnd('/') + "/";
@@ -555,6 +758,11 @@ public sealed class GameManifestLoader
             foreach (var e in patch.Resource ?? [])
             {
                 if (e?.Dest is null)
+                {
+                    continue;
+                }
+                // 精简规格下被整组剔除的差分/资源包:连下载都不发起。
+                if (droppedGroupDests.Contains(NormalizePath(e.Dest)))
                 {
                     continue;
                 }
@@ -607,6 +815,10 @@ public sealed class GameManifestLoader
                 {
                     continue;
                 }
+                if (droppedGroupDests.Contains(NormalizePath(group.Dest)))
+                {
+                    continue;
+                }
                 var packageEntry = packageCache.TryGetValue(NormalizePath(group.Dest), out var package)
                     ? package
                     : PackageEntry(new KuroPatchEntry { Dest = group.Dest }, null);
@@ -625,6 +837,14 @@ public sealed class GameManifestLoader
             foreach (var zip in patch.ZipInfos ?? [])
             {
                 if (zip?.Dest is null)
+                {
+                    continue;
+                }
+                // zip 包自身没有 dstFiles,改按包内条目判:整包都落在排除前缀下才剔除。
+                var zipDests = (zip.Entries ?? [])
+                    .Where(x => !string.IsNullOrWhiteSpace(x.Dest))
+                    .ToArray();
+                if (zipDests.Length > 0 && zipDests.All(x => PredownloadPlanner.IsExcluded(x.Dest, excludedPrefixes)))
                 {
                     continue;
                 }
@@ -830,6 +1050,10 @@ public sealed class GameManifestLoader
 [JsonSerializable(typeof(KuroResourcePack))]
 [JsonSerializable(typeof(KuroResourceBundle))]
 [JsonSerializable(typeof(KuroResourcePackRootConfig))]
+[JsonSerializable(typeof(KuroPredownloadNode))]
+[JsonSerializable(typeof(KuroPatchTagGroups))]
+[JsonSerializable(typeof(KuroPatchTagGroup))]
+[JsonSerializable(typeof(PredownloadInfo))]
 [JsonSerializable(typeof(Dictionary<string, KuroResourcePack>))]
 [JsonSerializable(typeof(Dictionary<string, KuroResourceBundle>))]
 [JsonSerializable(typeof(Dictionary<string, string>))]

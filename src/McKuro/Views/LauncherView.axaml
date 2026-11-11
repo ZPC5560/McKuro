@@ -371,22 +371,20 @@
                                                            TrackBrush="{DynamicResource McKuroProgressTrack}"
                                                            ForegroundBrush="{DynamicResource McKuroProgressFill}"
                                                            TextBrush="{DynamicResource McKuroSpeedValue}" />
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                        <TextBlock Text="{Binding ProgressText}" FontSize="11"
+                                    <!-- 中间列<必须>吃满剩余宽度并裁剪:横向 StackPanel 不约束子元素宽度,
+                                         超长文案会直接画到右侧「暂停下载」按钮上(用户反馈的重叠)。 -->
+                                    <Grid Grid.Column="1" VerticalAlignment="Center" RowDefinitions="Auto,Auto"
+                                          RowSpacing="2" ClipToBounds="True">
+                                        <TextBlock Grid.Row="0" Text="{Binding ProgressText}" FontSize="11"
                                                    Foreground="{DynamicResource SemiColorText2}"
-                                                   TextTrimming="CharacterEllipsis" />
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Text="{Binding RemainingTimeText}" FontSize="10.5"
-                                                       Foreground="{DynamicResource SemiColorText2}"
-                                                       IsVisible="{Binding RemainingTimeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                                            <TextBlock Text="{Binding DownloadSizeText}" FontSize="10.5"
-                                                       Foreground="{DynamicResource SemiColorText2}"
-                                                       IsVisible="{Binding DownloadSizeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                                            <TextBlock Text="{Binding DiskSpaceText}" FontSize="10.5"
-                                                       Foreground="{DynamicResource SemiColorText3}"
-                                                       IsVisible="{Binding DiskSpaceText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                                        </StackPanel>
-                                    </StackPanel>
+                                                   TextTrimming="CharacterEllipsis"
+                                                   TextWrapping="NoWrap" />
+                                        <TextBlock Grid.Row="1" Text="{Binding ProgressSubText}" FontSize="10.5"
+                                                   Foreground="{DynamicResource SemiColorText3}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   TextWrapping="NoWrap"
+                                                   IsVisible="{Binding ProgressSubText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                    </Grid>
                                     <!-- 仅在真正可暂停的下载阶段显示暂停/继续;
                                          校验/差分合成/解压/资源安装阶段暂停是空操作,整体隐藏。 -->
                                     <Button Grid.Column="2"
@@ -694,7 +692,7 @@
                  忙碌时在文案左侧转一个不确定态细环,让"正在做事"与"什么都没发生"可区分。 -->
             <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="8"
                   Margin="2,8,2,10" VerticalAlignment="Center"
-                  IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                  IsVisible="{Binding ShowStatusBar}">
                 <controls:RingProgress Grid.Column="0"
                                        Width="14" Height="14"
                                        VerticalAlignment="Center"

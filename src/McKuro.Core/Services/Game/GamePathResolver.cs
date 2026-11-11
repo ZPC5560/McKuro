@@ -1,3 +1,4 @@
+using McKuro.Core.Models.Game;
 using McKuro.Core.Infrastructure;
 
 namespace McKuro.Core.Services.Game;
@@ -105,6 +106,28 @@ public sealed class GamePathResolver
         DiffDataDir is null || !IsSafeVersionSegment(version)
             ? null
             : Path.Combine(DiffDataDir, version);
+
+    /// <summary>
+    /// 指定规格的预下载暂存目录(游戏目录下 <c>DiffData/&lt;版本&gt;</c>,精简规格加 <c>_min</c> 后缀)。
+    /// <para>
+    /// <b>为什么必须按规格隔离:</b>同一目标版本下,全量与精简要下的是不同集合(精简少了
+    /// 可后补的分组)。共用目录会让先下全量、再选精简的用户"复用"到那份更全的目录
+    /// (体积对不上、状态显示也不对),反之会让选了全量的用户拿到缺料的预载包。
+    /// </para>
+    /// <para>
+    /// 后缀用固定词而不是 Enumerable 名,保持目录名可读;仍然只占 DiffData 下<b>一级</b>,
+    /// 于是既有的「必须是 DiffData 直接子目录」删除断言仍然成立。
+    /// </para>
+    /// </summary>
+    public string? PredownloadStagingDir(string version, PredownloadSpec spec) =>
+        PredownloadStagingDir(version) is not { } baseDir
+            ? null
+            : spec == PredownloadSpec.Minimal
+                ? baseDir + MinimalStagingSuffix
+                : baseDir;
+
+    /// <summary>精简规格暂存目录的后缀(全量不加后缀,保证与历史目录兼容)。</summary>
+    public const string MinimalStagingSuffix = "_min";
 
     /// <summary>
     /// 版本号能否安全地用作 DiffData 下的单级目录名:1~4 段、每段 1~9 位 ASCII 数字、以 '.' 分隔

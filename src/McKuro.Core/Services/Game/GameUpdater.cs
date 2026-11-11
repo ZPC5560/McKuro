@@ -35,6 +35,11 @@ public sealed class UpdateCheckResult
 
     public string? PredownloadVersion { get; init; }
 
+    /// <summary>
+    /// 分级预载信息(目标版本、全量/精简各自的体积与所需空间);无预载或该渠道无该协议时为 null。
+    /// </summary>
+    public PredownloadInfo? PredownloadInfo { get; init; }
+
     /// <summary>需要下载的文件。</summary>
     public IReadOnlyList<GameFileEntry> FilesToDownload { get; init; } = [];
 
@@ -69,6 +74,20 @@ public sealed class GameUpdater : IGameUpdater
     private readonly ILogger<GameUpdater> _logger;
 
     /// <summary>
+    /// 新版协议 index.json 地址(含 <c>resourcePacks</c>/<c>bundles</c>/<c>predownload</c>)。
+    /// <para>
+    /// <b>为什么预下载必须走这条通道:</b>旧协议端点(<c>.../10003_Y8xXrXk.../index.json</c>)自 3.8 起
+    /// 实测 <c>predownloadSwitch=1</c> 却<b>不再提供</b> <c>predownload</c> 节点 —— 官方把分级预下载
+    /// 搬到了新版协议端点。继续读旧端点会永远得到"当前无预载",也就是用户看到的
+    /// 「检测不到预载下载」。
+    /// </para>
+    /// <para>
+    /// 返回 null 表示该渠道没有新版协议(WeGame):预下载退回旧协议逻辑(拿不到就如实报无预载)。
+    /// </para>
+    /// </summary>
+    private readonly Func<GameServerType, string?> _packIndexUrlProvider;
+
+    /// <summary>
     /// 是否启用快速校验(对齐 Haiyu 1.4.3 FastVerify)。设置服务缺失(测试/工具场景)时保持关闭,
     /// 即回退全文件 MD5 校验。
     /// </summary>
@@ -83,7 +102,8 @@ public sealed class GameUpdater : IGameUpdater
         AppDatabase? database = null,
         ISettingsService? settings = null,
         Func<GameServerType, string>? indexUrlProvider = null,
-        ILogger<GameUpdater>? logger = null)
+        ILogger<GameUpdater>? logger = null,
+        Func<GameServerType, string?>? packIndexUrlProvider = null)
         : this(
             loader,
             downloader,
@@ -94,7 +114,8 @@ public sealed class GameUpdater : IGameUpdater
             database,
             settings,
             indexUrlProvider,
-            logger)
+            logger,
+            packIndexUrlProvider)
     {
     }
 
@@ -108,7 +129,8 @@ public sealed class GameUpdater : IGameUpdater
         AppDatabase? database = null,
         ISettingsService? settings = null,
         Func<GameServerType, string>? indexUrlProvider = null,
-        ILogger<GameUpdater>? logger = null)
+        ILogger<GameUpdater>? logger = null,
+        Func<GameServerType, string?>? packIndexUrlProvider = null)
     {
         _loader = loader;
         _downloader = downloader;
@@ -119,6 +141,7 @@ public sealed class GameUpdater : IGameUpdater
         _database = database;
         _settings = settings;
         _indexUrlProvider = indexUrlProvider ?? KuroEndpoints.ForServerType;
+        _packIndexUrlProvider = packIndexUrlProvider ?? KuroEndpoints.ResourcePackIndexForServerType;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<GameUpdater>.Instance;
     }
 
@@ -198,25 +221,88 @@ public sealed class GameUpdater : IGameUpdater
         }
     }
 
-    /// <summary>获取预下载清单的下载体积与所需磁盘空间(供 UI 显示下载/磁盘预估,参考 Haiyu Config.Size/UnCompressSize)。</summary>
-    public async Task<(long DownloadBytes, long DiskBytes)> GetPredownloadEstimateAsync(
+    /// <summary>
+    /// 获取预下载的体积预估(下载字节 / 所需磁盘空间)。
+    /// <para>
+    /// <b>改走新版协议</b>:旧协议端点自 3.8 起不再提供 <c>predownload</c> 节点,
+    /// 从它算出来的体积恒为 0(等于「没有预下载」)。新版协议要按资源等级包逐个读补丁清单,
+    /// 全量与精简的体积也不同,所以这里按规格分别给出。
+    /// </para>
+    /// </summary>
+    public async Task<PredownloadInfo?> GetPredownloadInfoAsync(
         GameServerType serverType,
         CancellationToken ct = default)
+    {
+        var packIndexUrl = _packIndexUrlProvider(serverType);
+        if (string.IsNullOrWhiteSpace(packIndexUrl))
+        {
+            // 该渠道没有新版协议(WeGame):预下载退回旧端点(通常报"无预载")。
+            return await GetLegacyPredownloadInfoAsync(serverType, ct).ConfigureAwait(false);
+        }
+
+        try
+        {
+            var root = _paths.GameRootDir;
+            var installedVersion = string.IsNullOrEmpty(root) ? null : ReadInstalledVersion(root);
+            var bundle = ResourceLevelPlanner.LevelToBundleName(_settings?.Current.ResourceLevel);
+            return await _loader.LoadPredownloadInfoAsync(packIndexUrl, bundle, installedVersion, ct)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "读取分级预下载信息失败");
+            return null;
+        }
+    }
+
+    /// <summary>旧协议(WeGame 等无新版协议的渠道)的预载信息解析。</summary>
+    private async Task<PredownloadInfo?> GetLegacyPredownloadInfoAsync(GameServerType serverType, CancellationToken ct)
     {
         try
         {
             var indexUrl = _indexUrlProvider(serverType);
             var load = await _loader.LoadKuroAsync(indexUrl, preDownload: true, ct).ConfigureAwait(false);
-            if (!load.Success)
+            if (!load.Success || !load.HasPredownload)
             {
-                return (0, 0);
+                return null;
             }
-            return (load.PredownloadDownloadBytes, load.PredownloadDiskBytes);
+            var version = load.PredownloadVersion;
+            if (string.IsNullOrWhiteSpace(version))
+            {
+                return null;
+            }
+            // 旧协议没有「全量/精简」之分,两档同值。
+            return new PredownloadInfo
+            {
+                TargetVersion = version,
+                BundleName = "",
+                FullBytes = load.PredownloadDownloadBytes,
+                MinimalBytes = load.PredownloadDownloadBytes,
+                FullDiskBytes = load.PredownloadDiskBytes,
+                MinimalDiskBytes = load.PredownloadDiskBytes,
+            };
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
-            return (0, 0);
+            return null;
         }
+    }
+
+    /// <summary>获取预下载体积(默认全量规格);无预载或读取失败时为 (0,0)。</summary>
+    public async Task<(long DownloadBytes, long DiskBytes)> GetPredownloadEstimateAsync(
+        GameServerType serverType,
+        CancellationToken ct = default)
+    {
+        var info = await GetPredownloadInfoAsync(serverType, ct).ConfigureAwait(false);
+        return info is null ? (0, 0) : (info.FullBytes, info.FullDiskBytes);
     }
 
     /// <summary>检查更新(依据当前渠道的 index.json)。</summary>
@@ -288,12 +374,18 @@ public sealed class GameUpdater : IGameUpdater
             hasUpdate = IsVersionOlder(installedVersion, manifest.Version);
         }
 
+        // 预载版本的判定改走新版协议(旧端点自 3.8 起不再给 predownload 节点)。
+        // 额外读一次分级预载信息:既要拿目标版本号(新版协议的 predownload 节点里没有),
+        // 也要把「全量/精简」的体积透给 UI。读不到就如实当作"当前无预载"。
+        var predownloadInfo = await GetPredownloadInfoAsync(serverType, ct).ConfigureAwait(false);
+        var predownloadVersion = predownloadInfo?.TargetVersion ?? load.PredownloadVersion;
+        var hasPredownload = predownloadInfo is not null || load.HasPredownload;
         // 预载版本已完整下载到本地时,不再把 HasPredownload 置真(按钮显示「预下载完成」并禁用)。
         // 服务器存在 predownload 节点本身不代表还需要下载。
         var predownloadCompleted = false;
-        if (load.HasPredownload && !string.IsNullOrWhiteSpace(load.Predownload?.Version))
+        if (hasPredownload && !string.IsNullOrWhiteSpace(predownloadVersion))
         {
-            predownloadCompleted = FindStaging(load.Predownload.Version, serverType, installedVersion) is not null;
+            predownloadCompleted = FindStaging(predownloadVersion, serverType, installedVersion) is not null;
         }
 
         return new UpdateCheckResult
@@ -302,9 +394,10 @@ public sealed class GameUpdater : IGameUpdater
             ServerVersion = manifest.Version,
             InstalledVersion = installedVersion,
             HasUpdate = hasUpdate,
-            HasPredownload = load.HasPredownload && !predownloadCompleted,
+            HasPredownload = hasPredownload && !predownloadCompleted,
             PredownloadCompleted = predownloadCompleted,
-            PredownloadVersion = load.PredownloadVersion,
+            PredownloadVersion = predownloadVersion,
+            PredownloadInfo = predownloadInfo,
             FilesToDownload = [],
             NotInstalled = notInstalled,
         };
@@ -488,7 +581,8 @@ public sealed class GameUpdater : IGameUpdater
     public async Task<(bool Success, string? StagingDir, string? Message)> PreDownloadAsync(
         GameServerType serverType,
         IProgress<DownloadProgress>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        PredownloadSpec spec = PredownloadSpec.Full)
     {
         var root = _paths.GameRootDir;
         if (string.IsNullOrEmpty(root))
@@ -496,6 +590,15 @@ public sealed class GameUpdater : IGameUpdater
             return (false, null, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
         }
 
+        // 新版协议(3.8 起的「资源分类下载」)优先:旧端点已不再提供 predownload 节点。
+        var packIndexUrl = _packIndexUrlProvider(serverType);
+        if (!string.IsNullOrWhiteSpace(packIndexUrl))
+        {
+            return await PreDownloadResourcePacksAsync(packIndexUrl, serverType, spec, progress, ct)
+                .ConfigureAwait(false);
+        }
+
+        // ---- 以下为旧协议路径(仅剩 WeGame 等无新版协议的渠道) ----
         var indexUrl = _indexUrlProvider(serverType);
         var load = await _loader.LoadKuroAsync(indexUrl, preDownload: false, ct).ConfigureAwait(false);
         if (!load.Success || load.Manifest is null)
@@ -630,6 +733,171 @@ public sealed class GameUpdater : IGameUpdater
     }
 
     /// <summary>
+    /// 3.8 起的分级预下载:按资源等级包(common + 等级包)下载各自的差异包到暂存目录。
+    /// <para>
+    /// <b>为什么按包递归而不是一次拉一份清单</b>:新版协议的 <c>predownload</c> 节点把内容拆成
+    /// <c>common</c>/<c>hd</c>/<c>sd</c>/<c>uhd</c> 多个包,每个包有<b>自己的</b> indexFile 与 baseUrl;
+    /// 少下一个包,装完就会缺文件。
+    /// </para>
+    /// <para>
+    /// <b>全量/精简</b>由补丁清单顶层的 <c>tagGroups.min.exclude_prefixes</c> 决定(见
+    /// <see cref="PredownloadPlanner"/>):精简规格整组剔除可后补的内容,与官方启动器口径一致。
+    /// </para>
+    /// </summary>
+    private async Task<(bool Success, string? StagingDir, string? Message)> PreDownloadResourcePacksAsync(
+        string packIndexUrl,
+        GameServerType serverType,
+        PredownloadSpec spec,
+        IProgress<DownloadProgress>? progress,
+        CancellationToken ct)
+    {
+        var root = _paths.GameRootDir;
+        if (string.IsNullOrEmpty(root))
+        {
+            return (false, null, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
+        }
+
+        var installedVersion = ReadInstalledVersion(root);
+        var bundle = ResourceLevelPlanner.LevelToBundleName(_settings?.Current.ResourceLevel);
+        var info = await _loader.LoadPredownloadInfoAsync(packIndexUrl, bundle, installedVersion, ct)
+            .ConfigureAwait(false);
+        if (info is null)
+        {
+            return (false, null, CoreStrings.T("Core.Updater.NoPredownload", "当前没有可用的预载版本"));
+        }
+
+        var targetVersion = info.TargetVersion;
+        // 版本号来自服务端,PredownloadStagingDir 只接受纯数字版本号(拒绝 ".."/绝对路径等)。
+        if (!GamePathResolver.IsSafeVersionSegment(targetVersion))
+        {
+            _logger.LogWarning("服务端预载版本号不合法,拒绝使用: {Version}", targetVersion);
+            return (false, null, CoreStrings.T("Core.Updater.InvalidServerVersion", "服务端返回的版本号无效"));
+        }
+
+        // 逐个包取补丁清单并按规格过滤 —— 下载集合必须与体积预估同源(同一份 PredownloadPlanner 判据),
+        // 否则会出现「预演说 7.30 GB、实际下了 12 GB」。
+        var patchPlans = new List<(PredownloadPackPlan Plan, ManifestLoadResult Load)>();
+        foreach (var packPlan in info.Packs)
+        {
+            var patchLoad = await _loader.LoadPatchAsync(
+                packPlan.PatchIndexUrl,
+                packPlan.BaseUrl,
+                packPlan.IndexFileMd5,
+                ct,
+                spec).ConfigureAwait(false);
+            if (!patchLoad.Success || patchLoad.Manifest is null || patchLoad.Manifest.PatchPlan is null)
+            {
+                return (false, null, patchLoad.Message
+                    ?? CoreStrings.T("Core.Updater.PredownloadManifestUnavailable", "预载补丁清单不可用"));
+            }
+            patchPlans.Add((packPlan, patchLoad));
+        }
+
+        // 各包的补丁文件合并成一次下载:共用并发/限速/进度/续传,避免串行等待。
+        var allFiles = new List<GameFileEntry>();
+        foreach (var (_, load) in patchPlans)
+        {
+            allFiles.AddRange(load.Manifest!.Files);
+        }
+        if (allFiles.Count == 0)
+        {
+            return (false, null, CoreStrings.T("Core.Updater.PredownloadManifestUnavailable", "预载补丁清单不可用"));
+        }
+
+        var downloadBytes = allFiles.Sum(f => f.Size);
+        var staging = _paths.PredownloadStagingDir(targetVersion, spec);
+        if (string.IsNullOrEmpty(staging))
+        {
+            return (false, null, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
+        }
+        // [过渡代码 · 下个版本移除] 先把旧版数据目录里的预载包搬到游戏目录,再继续(可断点续传)。
+        await MigrateLegacyPredownloadAsync(root, progress).WaitAsync(ct).ConfigureAwait(false);
+        if (!HasFreeSpace(staging, downloadBytes))
+        {
+            return (false, null, CoreStrings.F("Core.Updater.DownloadDiskFull", $"预载下载盘空间不足: {FormatBytes(downloadBytes)}", FormatBytes(downloadBytes)));
+        }
+        // 所需空间用「本次下载 + 最大单文件」,复现官方口径(实测国服 3.8.0 HD:12.08 GiB 下载 / 13.48 GiB 预留)。
+        // 旧实现取 patchConfig.ext.requiredDiskSpace,新协议该值是游戏盘上差分合成的峰值占用,对预下载明显偏大。
+        var requiredBytes = info.DiskBytesFor(spec);
+        if (!HasFreeSpace(root, requiredBytes))
+        {
+            return (false, null, CoreStrings.F("Core.Updater.GameDiskFull", $"游戏盘空间不足: {FormatBytes(requiredBytes)}", FormatBytes(requiredBytes)));
+        }
+
+        Directory.CreateDirectory(staging);
+        var existingMeta = await ReadPreDownloadMetaAsync(staging, ct).ConfigureAwait(false);
+        if (existingMeta is null
+            ? Directory.EnumerateFileSystemEntries(staging).Any()
+            : !string.Equals(existingMeta.Version, targetVersion, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(existingMeta.SourceVersion, installedVersion, StringComparison.OrdinalIgnoreCase)
+                || existingMeta.ServerType != serverType
+                // 同一版本换规格(全量↔精简)必须重下:两份目录虽然分开,但若老记录没有 spec 字段
+                // (反序列化成 Full)而本次选精简,直接复用会得到一份规格不符的预载包。
+                || existingMeta.Spec != spec)
+        {
+            // 递归删除前最后一道断言:目标必须是 DiffData 的直接子目录(防御版本号校验之外的任何漏洞)。
+            if (!GamePathResolver.IsDirectChildOf(_paths.DiffDataDir, staging))
+            {
+                _logger.LogError("拒绝删除非 DiffData 直接子目录的暂存目录: {Path}", staging);
+                return (false, null, CoreStrings.T("Core.Updater.InvalidServerVersion", "服务端返回的版本号无效"));
+            }
+            Directory.Delete(staging, recursive: true);
+            Directory.CreateDirectory(staging);
+        }
+
+        var meta = new PreDownloadMeta
+        {
+            Version = targetVersion,
+            SourceVersion = installedVersion,
+            ServerType = serverType,
+            Completed = false,
+            Spec = spec,
+            Packs = patchPlans.Select(p => new PreDownloadPackMeta
+            {
+                PackName = p.Plan.PackName,
+                PatchIndexUrl = p.Plan.PatchIndexUrl,
+                BaseUrl = p.Plan.BaseUrl ?? "",
+                IndexFileMd5 = p.Plan.IndexFileMd5,
+            }).ToList(),
+        };
+        var metaPath = Path.Combine(staging, MarkerFileName);
+        await File.WriteAllTextAsync(
+            metaPath,
+            JsonSerializer.Serialize(meta, GameMetaJsonContext.Default.PreDownloadMeta),
+            ct).ConfigureAwait(false);
+
+        progress?.Report(new DownloadProgress
+        {
+            FileIndex = 0,
+            FileTotal = allFiles.Count,
+            BytesDownloaded = 0,
+            BytesTotal = downloadBytes,
+            SpeedBps = 0,
+            CurrentFile = CoreStrings.F("Core.Updater.FilesFound", $"发现 {allFiles.Count} 个待下载文件,开始下载…", allFiles.Count),
+        });
+
+        var (_, failures) = await _downloader.DownloadManyAsync(
+            allFiles,
+            baseUrl: "",
+            staging,
+            progress,
+            ct).ConfigureAwait(false);
+        if (failures.Count > 0)
+        {
+            return (false, staging, CoreStrings.F("Core.Updater.DownloadFailures", $"有 {failures.Count} 个文件下载失败: {failures[0]}", failures.Count, failures[0]));
+        }
+
+        // 仅在全部包完成 MD5 校验后将预载标记切换为可安装。
+        meta.Completed = true;
+        await File.WriteAllTextAsync(
+            metaPath,
+            JsonSerializer.Serialize(meta, GameMetaJsonContext.Default.PreDownloadMeta),
+            ct).ConfigureAwait(false);
+
+        return (true, staging, null);
+    }
+
+    /// <summary>
     /// 在补丁清单里找与本地版本<b>精确匹配</b>的那一项(纯内存,不触网);没有或缺 indexFile 时返回 null。
     /// Haiyu 不会把最新项误当成任意本地版本的补丁。
     /// </summary>
@@ -719,16 +987,16 @@ public sealed class GameUpdater : IGameUpdater
         if (stagingDir is not null)
         {
             var meta = await ReadPreDownloadMetaAsync(stagingDir, ct).ConfigureAwait(false);
-            if (meta?.PatchIndexUrl is not null && meta.DownloadBaseUrl is not null)
+            if (meta is not null)
             {
-                patchLoad = await _loader.LoadPatchAsync(
-                    meta.PatchIndexUrl,
-                    meta.DownloadBaseUrl,
-                    meta.IndexFileMd5,
-                    ct).ConfigureAwait(false);
-                if (!patchLoad.Success || patchLoad.Manifest?.PatchPlan is null)
+                // 3.8 起的分级预载:多个包各有补丁清单,合并成一份安装计划(下载早已完成,这里只是重建清单)。
+                // 老格式(单补丁)走原有分支,已下好的预载包不会因升级而作废。
+                patchLoad = meta.Packs is { Count: > 0 }
+                    ? await LoadMergedPreDownloadPatchAsync(meta, ct).ConfigureAwait(false)
+                    : await LoadLegacyPreDownloadPatchAsync(meta, ct).ConfigureAwait(false);
+                if (patchLoad is null || !patchLoad.Success || patchLoad.Manifest?.PatchPlan is null)
                 {
-                    _logger.LogWarning("预载补丁清单重新加载失败,回退当前版本更新: {Message}", patchLoad.Message);
+                    _logger.LogWarning("预载补丁清单重新加载失败,回退当前版本更新: {Message}", patchLoad?.Message);
                     patchLoad = null;
                     stagingDir = null;
                 }
@@ -1338,6 +1606,12 @@ public sealed class GameUpdater : IGameUpdater
 
     /// <summary>[过渡代码] 旧位置中指定版本的暂存目录。</summary>
     private string LegacyStagingDir(string version) => Path.Combine(LegacyPredownloadRoot, version);
+
+    /// <summary>[过渡代码] 旧版预下载根目录下按规格区分的暂存目录(精简带 _min 后缀)。</summary>
+    private string LegacyStagingDir(string version, PredownloadSpec spec) =>
+        spec == PredownloadSpec.Minimal
+            ? Path.Combine(LegacyPredownloadRoot, version + GamePathResolver.MinimalStagingSuffix)
+            : Path.Combine(LegacyPredownloadRoot, version);
 
     /// <summary>
     /// [过渡代码] 把旧版数据目录里的预载包搬到游戏目录 DiffData 下;并发调用共享同一次执行。
@@ -2108,6 +2382,74 @@ public sealed class GameUpdater : IGameUpdater
         return $"{value:0.##} {units[index]}";
     }
 
+    /// <summary>
+    /// 重建分级预载(多包)的安装计划:各包补丁清单合并成一份 <see cref="GamePatchPlan"/>。
+    /// <para>
+    /// 必须按 <c>predownload.json</c> 里记录的<b>同一规格</b>重新加载清单:精简预载只有精简清单里的
+    /// 差异包,按全量清单去装会去找根本不存在的文件而失败。
+    /// </para>
+    /// </summary>
+    private async Task<ManifestLoadResult?> LoadMergedPreDownloadPatchAsync(PreDownloadMeta meta, CancellationToken ct)
+    {
+        var mergedFiles = new List<GameFileEntry>();
+        var mergedPlan = new GamePatchPlan();
+        foreach (var pack in meta.Packs!)
+        {
+            if (string.IsNullOrWhiteSpace(pack.PatchIndexUrl))
+            {
+                return null;
+            }
+            var load = await _loader.LoadPatchAsync(
+                pack.PatchIndexUrl,
+                pack.BaseUrl,
+                pack.IndexFileMd5,
+                ct,
+                meta.Spec).ConfigureAwait(false);
+            if (!load.Success || load.Manifest?.PatchPlan is null)
+            {
+                return load;
+            }
+
+            mergedFiles.AddRange(load.Manifest.Files);
+            var plan = load.Manifest.PatchPlan;
+            mergedPlan.DiffPackages.AddRange(plan.DiffPackages);
+            mergedPlan.DiffGroups.AddRange(plan.DiffGroups);
+            mergedPlan.ZipPackages.AddRange(plan.ZipPackages);
+            mergedPlan.DeleteFiles.AddRange(plan.DeleteFiles);
+        }
+
+        if (mergedFiles.Count == 0)
+        {
+            return null;
+        }
+        return new ManifestLoadResult
+        {
+            Success = true,
+            Manifest = new GameManifest { PatchPlan = mergedPlan, Files = mergedFiles },
+        };
+    }
+
+    /// <summary>重建老格式(单补丁)预载的安装计划。</summary>
+    private async Task<ManifestLoadResult?> LoadLegacyPreDownloadPatchAsync(PreDownloadMeta meta, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(meta.PatchIndexUrl) || string.IsNullOrWhiteSpace(meta.DownloadBaseUrl))
+        {
+            return null;
+        }
+        return await _loader.LoadPatchAsync(
+            meta.PatchIndexUrl,
+            meta.DownloadBaseUrl,
+            meta.IndexFileMd5,
+            ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 查找可安装的预载暂存目录。
+    /// <para>
+    /// <b>先全量后精简</b>:全量包是精简的超集,两份都下好时优先用全量(装完内容更完整);
+    /// 只有精简时用精简 —— 缺少的可后补内容在首次进游戏时由客户端自己补,不会卡住更新。
+    /// </para>
+    /// </summary>
     private string? FindStaging(string version, GameServerType? serverType = null, string? sourceVersion = null)
     {
         // 版本号来自服务端清单:不是纯数字版本号就不拼路径(命中的目录之后会被递归删除,见 H3)。
@@ -2115,20 +2457,35 @@ public sealed class GameUpdater : IGameUpdater
         {
             return null;
         }
-        // 现行位置:游戏目录下 DiffData/<版本>。
-        var staging = _paths.PredownloadStagingDir(version);
-        var hit = InspectStaging(staging, version, serverType, sourceVersion);
-        if (hit is not null)
+        // 现行位置:游戏目录下 DiffData/<版本>(全量)与 DiffData/<版本>_min(精简)。
+        foreach (var spec in new[] { PredownloadSpec.Full, PredownloadSpec.Minimal })
         {
-            return hit;
+            var hit = InspectStaging(_paths.PredownloadStagingDir(version, spec), version, serverType, sourceVersion, spec);
+            if (hit is not null)
+            {
+                return hit;
+            }
         }
         // [过渡代码 · 下个版本删除] 回退到旧位置(数据目录 predownload/<版本>):
         // 迁移尚未跑过(如用户升级后直接点「安装更新」)时,旧位置的完整预载包仍应被消费。
-        return InspectStaging(LegacyStagingDir(version), version, serverType, sourceVersion);
+        foreach (var spec in new[] { PredownloadSpec.Full, PredownloadSpec.Minimal })
+        {
+            var hit = InspectStaging(LegacyStagingDir(version, spec), version, serverType, sourceVersion, spec);
+            if (hit is not null)
+            {
+                return hit;
+            }
+        }
+        return null;
     }
 
-    /// <summary>校验暂存目录:目录与标记存在、标记完整且版本/来源版本/渠道匹配时返回该目录,否则 null。</summary>
-    private string? InspectStaging(string? staging, string version, GameServerType? serverType, string? sourceVersion)
+    /// <summary>校验暂存目录:目录与标记存在、标记完整且版本/来源版本/渠道/规格匹配时返回该目录,否则 null。</summary>
+    private string? InspectStaging(
+        string? staging,
+        string version,
+        GameServerType? serverType,
+        string? sourceVersion,
+        PredownloadSpec spec = PredownloadSpec.Full)
     {
         if (string.IsNullOrEmpty(staging))
         {
@@ -2142,10 +2499,19 @@ public sealed class GameUpdater : IGameUpdater
         try
         {
             var meta = JsonSerializer.Deserialize(File.ReadAllText(marker), GameMetaJsonContext.Default.PreDownloadMeta);
+            // 「这份预载包怎么装」的两条合法形态:
+            //   ① 3.8 起的分级预载 —— 有 Packs(每包一份补丁清单);
+            //   ② 更早的单补丁预载 —— 有 PatchIndexUrl + DownloadBaseUrl。
+            // 两者都不满足的标记视为损坏:它连"要下什么"都描述不了,不能拿去安装。
+            var hasPackList = meta?.Packs is { Count: > 0 };
+            var hasLegacyPatch = meta is not null
+                && !string.IsNullOrWhiteSpace(meta.PatchIndexUrl)
+                && !string.IsNullOrWhiteSpace(meta.DownloadBaseUrl);
             if (meta is null
                 || !meta.Completed
-                || string.IsNullOrWhiteSpace(meta.PatchIndexUrl)
-                || string.IsNullOrWhiteSpace(meta.DownloadBaseUrl)
+                || (!hasPackList && !hasLegacyPatch)
+                // 规格必须与目录一致:全量目录里放着精简标记(或反之)说明手工作业过,不能盲信。
+                || meta.Spec != spec
                 || !string.Equals(meta.Version, version, StringComparison.OrdinalIgnoreCase)
                 || (serverType is not null && meta.ServerType != serverType.Value)
                 || (sourceVersion is not null
@@ -2532,6 +2898,41 @@ public sealed class PreDownloadMeta
     [JsonPropertyName("indexFileMd5")] public string? IndexFileMd5 { get; set; }
     [JsonPropertyName("baseUrl")] public string? BaseUrl { get; set; }
     [JsonPropertyName("downloadBaseUrl")] public string? DownloadBaseUrl { get; set; }
+
+    /// <summary>
+    /// 预下载规格(全量/精简)。3.8 起官方才有该区分;老记录反序列化为默认值 <see cref="PredownloadSpec.Full"/>。
+    /// <para>
+    /// <b>必须随暂存目录一起记录</b>:同一目标版本、同一来源版本下,全量与精简的暂存内容不同
+    /// (精简少了可后补的分组)。不区分就会出现"选了精简却复用上次全量的目录"或反之,
+    /// 两条路径都会得到一份与规格不符的预载包。
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("spec")] public PredownloadSpec Spec { get; set; } = PredownloadSpec.Full;
+
+    /// <summary>
+    /// 3.8 起的分级预下载:一次预载由多个资源包组成(common + 等级包),各包有各自的补丁清单。
+    /// <para>
+    /// 为空表示老格式(单补丁),此时仍按 <see cref="PatchIndexUrl"/>/<see cref="DownloadBaseUrl"/> 消费 ——
+    /// 老版本下载的预载包不能被新代码判成"无效",否则用户已经下好的几十 GB 会白费。
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("packs")] public List<PreDownloadPackMeta>? Packs { get; set; }
+}
+
+/// <summary>分级预载中单个资源包的补丁清单定位(写进 predownload.json)。</summary>
+public sealed class PreDownloadPackMeta
+{
+    /// <summary>包名(common/hd/sd/uhd)。</summary>
+    [JsonPropertyName("packName")] public string PackName { get; set; } = "";
+
+    /// <summary>该包补丁清单的完整地址。</summary>
+    [JsonPropertyName("patchIndexUrl")] public string PatchIndexUrl { get; set; } = "";
+
+    /// <summary>该包补丁资源的下载前缀。</summary>
+    [JsonPropertyName("baseUrl")] public string BaseUrl { get; set; } = "";
+
+    /// <summary>补丁清单 MD5。</summary>
+    [JsonPropertyName("indexFileMd5")] public string? IndexFileMd5 { get; set; }
 }
 
 [JsonSerializable(typeof(PreDownloadMeta))]

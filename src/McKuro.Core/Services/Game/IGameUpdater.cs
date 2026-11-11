@@ -1,3 +1,5 @@
+using McKuro.Core.Models.Game;
+
 namespace McKuro.Core.Services.Game;
 
 /// <summary>游戏更新器接口。</summary>
@@ -5,10 +7,18 @@ public interface IGameUpdater
 {
     Task<UpdateCheckResult> CheckUpdateAsync(GameServerType serverType, CancellationToken ct = default);
 
+    /// <summary>
+    /// 预下载新版本到暂存目录(不触碰游戏文件,可暂停/续传)。
+    /// </summary>
+    /// <param name="spec">
+    /// 预下载规格:全量 / 精简(3.8 起官方才有该区分,精简只下启动所需的、其余进游戏后补)。
+    /// 老渠道没有该区分时两档等价。
+    /// </param>
     Task<(bool Success, string? StagingDir, string? Message)> PreDownloadAsync(
         GameServerType serverType,
         IProgress<DownloadProgress>? progress = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        PredownloadSpec spec = PredownloadSpec.Full);
 
     Task<(bool Success, string? Message)> InstallAsync(
         GameServerType serverType,
@@ -26,8 +36,14 @@ public interface IGameUpdater
         IProgress<DownloadProgress>? progress = null,
         CancellationToken ct = default);
 
-    /// <summary>获取预下载清单的下载体积与所需磁盘空间(供 UI 显示下载/磁盘预估,参考 Haiyu Config.Size/UnCompressSize)。</summary>
+    /// <summary>获取预下载清单的下载体积与所需磁盘空间(默认按全量规格)。</summary>
     Task<(long DownloadBytes, long DiskBytes)> GetPredownloadEstimateAsync(GameServerType serverType, CancellationToken ct = default);
+
+    /// <summary>
+    /// 读取分级预下载信息:目标版本 + 全量/精简各自的体积与所需空间。
+    /// <para>无预载、渠道不支持或读取失败时返回 null(UI 据此隐藏预下载入口)。</para>
+    /// </summary>
+    Task<PredownloadInfo?> GetPredownloadInfoAsync(GameServerType serverType, CancellationToken ct = default);
 
     bool LaunchGame(out string? error);
 

@@ -1,0 +1,116 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:loc="clr-namespace:McKuro.Services"
+        mc:Ignorable="d" d:DesignWidth="520"
+        x:Class="McKuro.Views.PredownloadSpecWindow"
+        Title="{loc:Localize Key=Launcher.PredownloadSpecTitle}"
+        Width="540" SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+  <!-- 分级预下载的选择窗,对齐官方启动器 3.8 的「预下载新版本」弹窗:
+       两张并排卡片(全量 / 精简),右侧给各自体积,下方一句说明;
+       底部固定显示「下载大小 / 所需空间 / 可用空间」与「确定下载」。
+       卡片刻意做成固定两张而不是列表:官方最多只有两档,列表会引入多余的模板与选中态同步。 -->
+  <Window.Styles>
+    <Style Selector="Border.specCard">
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="14,12" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Background" Value="{DynamicResource SemiColorBg2}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource McKuroSwitchChipStroke}" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <Style Selector="Border.specCard.selected">
+      <Setter Property="BorderBrush" Value="{DynamicResource SemiColorPrimary}" />
+      <Setter Property="Background" Value="{DynamicResource SemiColorBg3}" />
+    </Style>
+
+    <Style Selector="Button.specAction">
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="18,8" />
+    </Style>
+  </Window.Styles>
+
+  <Border Padding="22" Background="{DynamicResource SemiColorBg1}">
+    <StackPanel Spacing="14">
+      <TextBlock FontSize="17" FontWeight="Bold"
+                 Foreground="{DynamicResource SemiColorText0}"
+                 Text="{loc:Localize Key=Launcher.PredownloadSpecTitle}" />
+
+      <TextBlock TextWrapping="Wrap" LineHeight="19" FontSize="12.5"
+                 Foreground="{DynamicResource SemiColorText1}"
+                 Text="{loc:Localize Key=Launcher.PredownloadSpecNotice}" />
+
+      <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+        <Border x:Name="FullCard" Grid.Column="0" Classes="specCard">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0" FontSize="15" FontWeight="Bold"
+                         Foreground="{DynamicResource SemiColorText0}"
+                         Text="{loc:Localize Key=Launcher.PredownloadFull}" />
+              <TextBlock Grid.Column="1" x:Name="FullSizeText" FontSize="15" FontWeight="Bold"
+                         Foreground="{DynamicResource SemiColorPrimary}" />
+            </Grid>
+            <TextBlock x:Name="FullHintText" TextWrapping="Wrap" LineHeight="18" FontSize="12"
+                       Foreground="{DynamicResource SemiColorText2}"
+                       Text="{loc:Localize Key=Launcher.PredownloadFullHint}" />
+          </StackPanel>
+        </Border>
+
+        <Border x:Name="MinimalCard" Grid.Column="1" Classes="specCard">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0" FontSize="15" FontWeight="Bold"
+                         Foreground="{DynamicResource SemiColorText0}"
+                         Text="{loc:Localize Key=Launcher.PredownloadMinimal}" />
+              <TextBlock Grid.Column="1" x:Name="MinimalSizeText" FontSize="15" FontWeight="Bold"
+                         Foreground="{DynamicResource SemiColorPrimary}" />
+            </Grid>
+            <TextBlock x:Name="MinimalHintText" TextWrapping="Wrap" LineHeight="18" FontSize="12"
+                       Foreground="{DynamicResource SemiColorText2}"
+                       Text="{loc:Localize Key=Launcher.PredownloadMinimalHint}" />
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <!-- 底部信息区:三行数字全部来自同一份 PredownloadInfo,选中哪档就显示哪档。 -->
+      <Border CornerRadius="8" Padding="14,10" Background="{DynamicResource SemiColorBg2}">
+        <StackPanel Spacing="6">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}"
+                       Text="{loc:Localize Key=Launcher.PredownloadDownloadSize}" />
+            <TextBlock x:Name="DownloadSizeText" FontSize="12" FontWeight="Bold"
+                       Foreground="{DynamicResource SemiColorPrimary}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}"
+                       Text="{loc:Localize Key=Launcher.PredownloadRequiredSpace}" />
+            <TextBlock x:Name="RequiredSpaceText" FontSize="12"
+                       Foreground="{DynamicResource SemiColorText0}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock FontSize="12" Foreground="{DynamicResource SemiColorText2}"
+                       Text="{loc:Localize Key=Launcher.PredownloadAvailableSpace}" />
+            <TextBlock x:Name="AvailableSpaceText" FontSize="12"
+                       Foreground="{DynamicResource SemiColorText0}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <TextBlock TextWrapping="Wrap" LineHeight="17" FontSize="11.5"
+                 Foreground="{DynamicResource SemiColorText3}"
+                 Text="{loc:Localize Key=Launcher.PredownloadSpecMemoryHint}" />
+
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+        <Button x:Name="CancelButton" MinWidth="88" Classes="specAction"
+                Content="{loc:Localize Key=Launcher.LevelCancel}" />
+        <Button x:Name="ConfirmButton" MinWidth="120" Classes="specAction"
+                Content="{loc:Localize Key=Launcher.PredownloadSpecConfirm}" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>

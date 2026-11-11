@@ -21,6 +21,16 @@ public sealed class KuroResourcePackIndex
     /// <summary>资源等级组合(键为组合名:HD/SD/UHD)。</summary>
     [JsonPropertyName("bundles")] public Dictionary<string, KuroResourceBundle>? Bundles { get; set; }
 
+    /// <summary>
+    /// 预下载节点(3.8 起才有):只含 <c>bundles</c> + <c>resourcePacks</c>,
+    /// <b>没有</b> <c>version</c>/<c>config</c>/<c>cdnList</c> —— 版本号在每个包各自身上。
+    /// <para>
+    /// 这是「分级预下载」的唯一数据源:旧协议端点(<c>.../10003_Y8xXrXk.../index.json</c>)的
+    /// <c>predownload</c> 自 3.8 起恒为 null,只有新版协议端点会给。
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("predownload")] public KuroPredownloadNode? Predownload { get; set; }
+
     /// <summary>根节点配置(含画质说明页链接等)。</summary>
     [JsonPropertyName("config")] public KuroResourcePackRootConfig? Config { get; set; }
 }
@@ -57,6 +67,14 @@ public sealed class KuroResourcePack
     [JsonPropertyName("unCompressSize")] public long? UnCompressSize { get; set; }
 
     [JsonPropertyName("patchType")] public string? PatchType { get; set; }
+
+    /// <summary>
+    /// 历史补丁项(预下载包才有,3.8 起):每项是「从 <c>version</c> 升到本包版本」的差异清单。
+    /// <para>
+    /// 预下载要下的正是其中与本地版本精确匹配的那一项,不是整包。
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("patchConfig")] public List<KuroPatchConfig>? PatchConfig { get; set; }
 
     /// <summary>包内文件数(来自 indexFile,由加载器填充)。</summary>
     [JsonIgnore]

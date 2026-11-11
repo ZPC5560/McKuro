@@ -165,6 +165,9 @@ public sealed class KuroPatchIndex
     [JsonPropertyName("applyTypes")] public List<string>? ApplyTypes { get; set; }
 
     [JsonPropertyName("resource")] public List<KuroPatchEntry>? Resource { get; set; }
+
+    /// <summary>标签组规则(3.8 起才有):{"min":{"exclude_prefixes":[...]}};缺失表示全部都要。</summary>
+    [JsonPropertyName("tagGroups")] public KuroPatchTagGroups? TagGroups { get; set; }
 }
 
 /// <summary>补丁差异文件(下载 krdiff 差分文件应用到游戏目录)。</summary>

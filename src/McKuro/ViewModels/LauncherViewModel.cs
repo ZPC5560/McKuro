@@ -120,6 +120,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
         {
             CancelTransientStatusTimer();
         }
+        // 状态栏的可见性同时取决于「有文案」和「不在下载中」,文案一变就要重算。
+        OnPropertyChanged(nameof(ShowStatusBar));
     }
 
     [ObservableProperty]
@@ -214,6 +216,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
         OnPropertyChanged(nameof(PreDownloadButtonVisible));
         OnPropertyChanged(nameof(IsPreDownloadActive));
         OnPropertyChanged(nameof(ShowDownloadCard));
+        // 下载中隐藏左下状态栏(进度卡已表达同样的信息)。
+        OnPropertyChanged(nameof(ShowStatusBar));
         // 下载/安装期间隐藏资源等级小按钮/面板/画质包面板(与进度卡同列,避免重叠)
         OnPropertyChanged(nameof(ShowResourceLevelPill));
         OnPropertyChanged(nameof(ShowResourceLevelPanel));
@@ -264,6 +268,16 @@ public sealed partial class LauncherViewModel : ViewModelBase
         OnPropertyChanged(nameof(PreDownloadButtonEnabled));
     }
 
+    /// <summary>
+    /// 是否显示底部状态栏。
+    /// <para>
+    /// 下载/安装进行中<b>不显示</b>:此时进度卡已经完整表达了"在做什么、下了多少、还要多久",
+    /// 左下角再挂一条「预下载中(不影响当前游戏文件)」纯属重复,而且在全屏视频上多一行小字很扎眼
+    /// (用户明确要求去掉)。状态栏仍然保留 —— 它是操作**结果**的出口(失败原因、完成提示)。
+    /// </para>
+    /// </summary>
+    public bool ShowStatusBar => !string.IsNullOrEmpty(StatusText) && !IsDownloading;
+
     /// <summary>是否显示下载/安装进度卡片:有下载/安装活动或有预下载可领取时才显示。</summary>
     public bool ShowDownloadCard => IsDownloading || HasPredownload;
 
@@ -272,6 +286,19 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
     /// <summary>是否显示预下载进度环(有预下载或正在下载)。</summary>
     public bool ShowPreDownloadRing => IsDownloading || HasPredownload;
+
+    /// <summary>最近一次检查更新拿到的分级预载信息(供预下载弹窗使用);无预载时为 null。</summary>
+    private PredownloadInfo? _predownloadInfo;
+
+    /// <summary>
+    /// 用户最近一次选择的预下载规格(默认全量,与官方"未获测试资格默认全量"一致)。
+    /// <para>
+    /// 只作为下次弹窗的默认选中项 —— 具体的规格选择发生在下载前的弹窗里
+    /// (<see cref="ConfirmPredownloadSpecAsync"/>),而不是启动页上的常驻控件:
+    /// 官方也是这么做的,避免用户在不看体积的情况下误选十几 GB 的档位。
+    /// </para>
+    /// </summary>
+    public PredownloadSpec SelectedPredownloadSpec { get; private set; } = PredownloadSpec.Full;
 
     /// <summary>合并下载按钮命令:未下载时触发预下载,下载中切换暂停/继续(已完成预下载时不响应)。</summary>
     [RelayCommand]
@@ -396,6 +423,13 @@ public sealed partial class LauncherViewModel : ViewModelBase
     [ObservableProperty]
     private string _downloadSizeText = "";
 
+    // ProgressSubText 由三个源字段拼成:任一变化都要通知(否则界面会停在旧的一行)。
+    partial void OnBytesTextChanged(string value) => OnPropertyChanged(nameof(ProgressSubText));
+
+    partial void OnRemainingTimeTextChanged(string value) => OnPropertyChanged(nameof(ProgressSubText));
+
+    partial void OnDiskSpaceTextChanged(string value) => OnPropertyChanged(nameof(ProgressSubText));
+
     /// <summary>磁盘空间预估(如 "需要 15 GB,可用 80 GB",参考 Haiyu UnCompressSize + DriveInfo)。</summary>
     [ObservableProperty]
     private string _diskSpaceText = "";
@@ -407,6 +441,20 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// <summary>预估剩余时间(如 "剩余约 15 分钟",按当前速度估算)。</summary>
     [ObservableProperty]
     private string _remainingTimeText = "";
+
+    /// <summary>
+    /// 进度卡的第二行(剩余时间 · 已下载/总量 · 磁盘)。
+    /// <para>
+    /// <b>为什么合成一个字符串而不是三个 TextBlock</b>:原先三个横向 TextBlock 在窄卡片里
+    /// 没有宽度约束、也不会裁剪,长文案(如"需 13.48 GB 磁盘空间,可用 123.22 GB")会直接
+    /// 画到右侧「暂停下载」按钮上 —— 用户反馈的"文字和按键重叠"。合成一行 + TextTrimming
+    /// 后无论多长都只会在中间列内省略,永远不会压到按钮。
+    /// </para>
+    /// </summary>
+    public string ProgressSubText => string.Join(
+        " · ",
+        new[] { RemainingTimeText, BytesText, DiskSpaceText }
+            .Where(s => !string.IsNullOrWhiteSpace(s)));
 
     /// <summary>实时下载速度历史(每秒一点,单位 MB/s;供 SpeedTrendChart 画波动曲线,参考 Haiyu DownloadSpeedPoints)。</summary>
     public ObservableCollection<double> DownloadSpeedHistory { get; } = [];
@@ -1079,15 +1127,18 @@ public sealed partial class LauncherViewModel : ViewModelBase
             // 下载/磁盘预估(参考 Haiyu Config.Size + UnCompressSize;空间不足时置警告)
             UpdateDownloadEstimate(result.TotalBytes);
 
-            // 预下载场景:FilesToDownload 为空(CheckUpdate 不计算文件差异),
-            // 额外加载预下载清单获取下载体积与磁盘需求,用于预下载环的下载/磁盘预估
-            if (result.HasPredownload)
+            // 分级预载(3.8 起):整理出「全量 / 精简」两档的体积,供预下载按钮旁的卡片使用。
+            // 体积预估与实际下载共用同一份补丁清单判据,不会出现"说好 7.30 GB 却下了 12 GB"。
+            // 分级预载:把规格信息留到「点预下载」时弹窗用;这里先把进度卡的体积口径对齐到默认规格。
+            _predownloadInfo = result.PredownloadInfo;
+            if (result.PredownloadInfo is { } pdInfo && result.HasPredownload)
             {
-                var (pdDownload, pdDisk) = await AppServices.GameUpdater.GetPredownloadEstimateAsync(ServerType);
-                if (pdDownload > 0 || pdDisk > 0)
+                // 服务端不再提供精简档时把记住的选择回退全量,避免下次弹窗默认到一个不存在的档位。
+                if (!pdInfo.SupportsMinimal)
                 {
-                    UpdateDownloadEstimate(pdDownload, pdDisk);
+                    SelectedPredownloadSpec = PredownloadSpec.Full;
                 }
+                UpdateDownloadEstimate(pdInfo.BytesFor(SelectedPredownloadSpec), pdInfo.DiskBytesFor(SelectedPredownloadSpec));
             }
 
             if (result.NotInstalled)
@@ -1139,6 +1190,15 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// 预下载前的规格选择钩子:由 View(LauncherView)注入实际弹窗,返回用户选择的规格。
+    /// <para>
+    /// <b>未注入时按当前已选规格直接开始</b>(测试/无界面场景),但正常情况下必须先弹窗 ——
+    /// 全量 12.08 GB 与精简 7.30 GB 差着 4.78 GB 流量,不能让用户在没有选择机会的情况下默认用一个。
+    /// </para>
+    /// </summary>
+    public Func<PredownloadInfo, Task<PredownloadSpec?>>? ConfirmPredownloadSpecAsync { get; set; }
+
     [RelayCommand]
     private async Task PreDownloadAsync()
     {
@@ -1150,6 +1210,19 @@ public sealed partial class LauncherViewModel : ViewModelBase
         if (IsOperationRunning)
         {
             return;
+        }
+
+        // 分级预载:开始下载前先让用户选全量还是精简(对齐官方「确定下载」弹窗)。
+        // 拿不到规格信息(老渠道/无预载)时跳过弹窗,按默认规格走原逻辑。
+        if (ConfirmPredownloadSpecAsync is not null && _predownloadInfo is { } specInfo && specInfo.SupportsMinimal)
+        {
+            var chosen = await ConfirmPredownloadSpecAsync(specInfo);
+            if (chosen is null)
+            {
+                // 用户取消:什么都不做(连状态栏都不打扰)。
+                return;
+            }
+            SelectedPredownloadSpec = chosen.Value;
         }
 
         IsDownloading = true;
@@ -1168,7 +1241,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
         try
         {
-            var (success, _, message) = await AppServices.GameUpdater.PreDownloadAsync(ServerType, progress);
+            var (success, _, message) = await AppServices.GameUpdater.PreDownloadAsync(
+                ServerType, progress, ct: default, spec: SelectedPredownloadSpec);
             if (success)
             {
                 // 下载完整落盘即置完成态:按钮禁用并显示「预下载完成」(对齐上游 1.6)
@@ -1321,7 +1395,7 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
         _lastInstallUiUpdate = now;
         ProgressPercent = p.Percent * 100;
-        ProgressText = LanguageService.Format("Launcher.FileProgress", p.FileIndex, p.FileTotal, FormatSize(p.BytesDownloaded), FormatSize(p.BytesTotal));
+        ProgressText = LanguageService.Format("Launcher.FileProgress", p.FileIndex, p.FileTotal);
         CurrentFileText = p.CurrentFile;
         ApplySpeedDisplay(p.SpeedBps);
         BytesText = $"{FormatSize(p.BytesDownloaded)} / {FormatSize(p.BytesTotal)}";

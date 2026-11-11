@@ -24,6 +24,9 @@ public partial class LauncherView : UserControl
 
     private Func<ResourcePackItem, Task<bool>>? _injectedPackDelete;
 
+    /// <summary>本 View 注入的「分级预下载规格选择」委托(同样需要精确解绑,理由同上)。</summary>
+    private Func<PredownloadInfo, Task<PredownloadSpec?>>? _injectedPredownloadSpec;
+
     public LauncherView()
     {
         InitializeComponent();
@@ -63,6 +66,37 @@ public partial class LauncherView : UserControl
             _slideTimer.Stop();
             DetachConfirmation();
         };
+    }
+
+    /// <summary>
+    /// 取游戏所在盘的可用空间(字节);游戏目录未设置或读不到时返回 null。
+    /// <para>
+    /// 预下载会落在游戏目录的 <c>DiffData</c> 下,所以口径必须是<b>游戏盘</b>而不是系统盘 ——
+    /// 这正是「可用空间」那一行要回答的问题。
+    /// </para>
+    /// </summary>
+    private static long? ResolveGameDriveFreeBytes()
+    {
+        try
+        {
+            var root = AppServices.Settings.Current.GameRootDir;
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                return null;
+            }
+            var full = System.IO.Path.GetFullPath(root);
+            var driveRoot = System.IO.Path.GetPathRoot(full);
+            if (string.IsNullOrEmpty(driveRoot))
+            {
+                return null;
+            }
+            return new System.IO.DriveInfo(driveRoot).AvailableFreeSpace;
+        }
+        catch (Exception)
+        {
+            // 读不到可用空间不影响选择(该行显示 "-"),绝不能因此挡住预下载。
+            return null;
+        }
     }
 
     /// <summary>
@@ -124,6 +158,16 @@ public partial class LauncherView : UserControl
                     LanguageService.Format("Launcher.LevelCancel"));
             };
             vm.ConfirmPackDeleteAsync = _injectedPackDelete;
+
+            // 分级预下载:开始下载前弹「全量 / 精简」选择窗(对齐官方 3.8 的「预下载新版本」)。
+            // 硬盘可用空间在这里现取(游戏盘口径),让用户点之前就能看到够不够。
+            _injectedPredownloadSpec = info =>
+            {
+                var owner = TopLevel.GetTopLevel(this) as Window;
+                var available = ResolveGameDriveFreeBytes();
+                return PredownloadSpecWindow.ShowAsync(owner, info, available, vm.SelectedPredownloadSpec);
+            };
+            vm.ConfirmPredownloadSpecAsync = _injectedPredownloadSpec;
         }
     }
 
@@ -138,6 +182,11 @@ public partial class LauncherView : UserControl
     {
         if (DataContext is LauncherViewModel vm)
         {
+            if (_injectedPredownloadSpec is not null && ReferenceEquals(vm.ConfirmPredownloadSpecAsync, _injectedPredownloadSpec))
+            {
+                vm.ConfirmPredownloadSpecAsync = null;
+            }
+
             if (_injectedLevelSwitch is not null && ReferenceEquals(vm.ConfirmLevelSwitchAsync, _injectedLevelSwitch))
             {
                 vm.ConfirmLevelSwitchAsync = null;
