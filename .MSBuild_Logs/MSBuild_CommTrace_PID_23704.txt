@@ -1,0 +1,25 @@
+.NET TP Worker (TID 11) 639299976608120934 +  319.5454ms: Building handshake for node type X64, NodeReuse, (version 1): options 16777228.
+.NET TP Worker (TID 11) 639299976608127702 +    0.6768ms: Handshake salt is 
+.NET TP Worker (TID 11) 639299976608131230 +    0.3528ms: Tools directory root is C:\Program Files\dotnet\sdk\10.0.403
+.NET TP Worker (TID 11) 639299976608638813 +   50.7583ms: Starting to acquire 1 new or existing node(s) to establish nodes from ID 2 to 2...
+.NET TP Worker (TID 11) 639299976608696870 +    5.8057ms: Filtering 4 candidate processes by NodeMode OutOfProcNode for process name 'dotnet'
+.NET TP Worker (TID 11) 639299976608705630 +     0.876ms: Including process 3304 - command line retrieval not supported on this platform
+.NET TP Worker (TID 11) 639299976608709718 +    0.4088ms: Including process 13336 - command line retrieval not supported on this platform
+.NET TP Worker (TID 11) 639299976608713614 +    0.3896ms: Including process 13868 - command line retrieval not supported on this platform
+.NET TP Worker (TID 11) 639299976608717884 +     0.427ms: Including process 23704 - command line retrieval not supported on this platform
+.NET TP Worker (TID 11) 639299976608721893 +    0.4009ms: Filtered to 4 processes matching NodeMode OutOfProcNode
+.NET TP Worker (TID 11) 639299976608725956 +    0.4063ms: Attempting to connect to 4 existing processes 'dotnet'...
+.NET TP Worker (TID 11) 639299976608730253 +    0.4297ms: Trying to connect to existing process dotnet with id 3304 to establish node 2...
+.NET TP Worker (TID 11) 639299976608744590 +    1.4337ms: Attempting connect to PID 3304 with pipe MSBuild3304 with timeout 0 ms
+.NET TP Worker (TID 11) 639299976608764851 +    2.0261ms: Writing handshake part Options (16777228) to pipe MSBuild3304
+.NET TP Worker (TID 11) 639299976608773922 +    0.9071ms: Writing handshake part Salt (-81088152) to pipe MSBuild3304
+.NET TP Worker (TID 11) 639299976608778232 +     0.431ms: Writing handshake part FileVersionMajor (18) to pipe MSBuild3304
+.NET TP Worker (TID 11) 639299976608781971 +    0.3739ms: Writing handshake part FileVersionMinor (9) to pipe MSBuild3304
+.NET TP Worker (TID 11) 639299976608785038 +    0.3067ms: Writing handshake part FileVersionBuild (15) to pipe MSBuild3304
+.NET TP Worker (TID 11) 639299976608788191 +    0.3153ms: Writing handshake part FileVersionPrivate (52412) to pipe MSBuild3304
+.NET TP Worker (TID 11) 639299976608791363 +    0.3172ms: Writing handshake part SessionId (1) to pipe MSBuild3304
+.NET TP Worker (TID 11) 639299976608795987 +    0.4624ms: Reading handshake from pipe MSBuild3304
+.NET TP Worker (TID 11) 639299976608801579 +    0.5592ms: Successfully connected to pipe MSBuild3304...!
+.NET TP Worker (TID 11) 639299976608805062 +    0.3483ms: Successfully connected to existing node 2 which is PID 3304
+ (TID 2) 639299976640225411 +  3142.035ms: System-wide node count: 0, threshold: 24, this instance has: 1 nodes
+ (TID 2) 639299976640275842 +    5.0431ms: System-wide node count: 0, threshold: 24, this instance has: 0 nodes

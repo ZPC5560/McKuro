@@ -36,7 +36,7 @@ App icon: official Shorekeeper icon (shared under CC BY-NC-SA), multi-size ICO e
 ### Game Launch & Updates
 
 - **Streaming install**: full updates and repairs run "download while applying", with parallel file-level verification, automatic backup before replacement, and no extra staging-disk copy; **repair** can skip file verification.
-- **Pre-download** does not touch installed files (pause/resume supported); **download speed limit** (MB/s) and concurrency are adjustable.
+- **Pre-download** does not touch installed files (pause/resume supported) and offers **Full / Minimal** modes (matching the official 3.8 "resource-classified download"); **download speed limit** (MB/s) and concurrency are adjustable.
 - **Resource levels**: HD/SD/UHD switching computes a diff pack against what's already installed and downloads only the missing parts.
 - **Launch options**: DX11/DLSS toggles, custom arguments, optional launch file; **DLSS/XeSS version detection**; one-click open game folder; directory auto-detect after selection.
 - **Process monitor**: tri-state start button (Start / Starting / In-game); minimize to taskbar or system tray after launch; post-game window behavior configurable.
@@ -121,7 +121,7 @@ McKuro/
 │   ├── Services/                   # Update (self-update) / Launcher / Notification / Redeem / Settings and the rest
 │   └── Infrastructure/             # SQLite (Microsoft.Data.Sqlite)
 ├── src/ThirdParty/Sparkle.Live2DView/  # vendored Live2D rendering control (MIT)
-└── tests/McKuro.Tests/             # xUnit unit tests (1311 cases)
+└── tests/McKuro.Tests/             # xUnit unit tests (1834 cases)
 ```
 
 ## Usage Guide
@@ -193,7 +193,7 @@ Settings checks GitHub Releases (default repository `ZPC5560/McKuro`); the updat
 
 ## Testing & CI
 
-- `tests/McKuro.Tests`: **1311 xUnit unit tests** (log decryption, gacha analysis, banner statistics, update pipeline, notifications, i18n, and more).
+- `tests/McKuro.Tests`: **1834 xUnit unit tests** (log decryption, gacha analysis, banner statistics, update pipeline, notifications, i18n, and more).
 - `build-and-test.yml`: build + test on Linux for every push/PR; release tags or manual dispatch run the full-platform AOT publishes and attach Release assets.
 - `website.yml`: rebuilds and deploys the website whenever `website/` or `website-src/` changes, failing on any drift between built output and committed artifacts.
 

@@ -36,7 +36,7 @@
 ### 启动与游戏进程
 
 - **流式安装**:安装更新(全量/修复)采用「边下载边更新」,文件级校验并行化,替换前自动备份,省一份暂存盘占用;**修复游戏**可跳过校验文件。
-- **预下载**不影响已安装文件(支持暂停/继续),**下载速度限制**(MB/s)与并发可调。
+- **预下载**不影响已安装文件(支持暂停/继续),可选**全量 / 精简**两档(对齐官方 3.8 的「资源分类下载」),**下载速度限制**(MB/s)与并发可调。
 - **资源等级分级下载**:HD/SD/UHD 切换只按已安装资源计算差异包、仅下载缺失部分。
 - **启动参数**:DX11/DLSS 开关、自定义参数、可选启动文件;**DLSS/XeSS 版本检测**;一键打开游戏目录;选目录后自动识别加载。
 - **进程监控**:启动按钮三态(启动游戏/启动中/游戏中);启动后最小化位置可选任务栏/系统托盘;游戏结束后窗口状态可配。
@@ -121,7 +121,7 @@ McKuro/
 │   ├── Services/                   # Update(自更新) / Launcher / Notification / Redeem / Settings 等其余服务
 │   └── Infrastructure/             # SQLite (Microsoft.Data.Sqlite)
 ├── src/ThirdParty/Sparkle.Live2DView/  # vendored Live2D 渲染控件 (MIT)
-└── tests/McKuro.Tests/             # xUnit 单元测试 (1311 个用例)
+└── tests/McKuro.Tests/             # xUnit 单元测试 (1834 个用例)
 ```
 
 ## 使用说明
@@ -193,7 +193,7 @@ ISCC.exe installer\setup.iss /DMyAppVersion=1.3.5
 
 ## 测试与 CI
 
-- `tests/McKuro.Tests`:xUnit 单元测试 **1311 个用例**(覆盖日志解密、抽卡分析、卡池统计、更新链路、通知、多语言等)。
+- `tests/McKuro.Tests`:xUnit 单元测试 **1834 个用例**(覆盖日志解密、抽卡分析、卡池统计、更新链路、通知、多语言等)。
 - `build-and-test.yml`:push/PR 在 Linux 构建 + 测试;发布 tag 或手动触发时进行全平台 AOT 构建并附加 Release 资产。
 - `website.yml`:`website/` 或 `website-src/` 变更时重新构建并部署官网。
 
