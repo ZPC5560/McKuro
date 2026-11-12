@@ -473,11 +473,25 @@ public class UpdateCacheMaintenanceTests
             {
                 var result = UpdateCacheMaintenance.Clean(root, now);
 
-                Assert.True(File.Exists(locked));
+                // 未占用的那个在两种平台上都一定被删掉
                 Assert.False(File.Exists(Path.Combine(root, "free.zip")));
-                // 只统计真正删掉的那一个
-                Assert.Equal(1, result.FilesRemoved);
-                Assert.Equal(500, result.BytesFreed);
+
+                if (OperatingSystem.IsWindows())
+                {
+                    // Windows:独占句柄让 File.Delete 抛 IOException —— 跳过该文件、继续处理其余,
+                    // 且只统计真正删掉的那一个(界面不能承诺没兑现的字节)
+                    Assert.True(File.Exists(locked));
+                    Assert.Equal(1, result.FilesRemoved);
+                    Assert.Equal(500, result.BytesFreed);
+                }
+                else
+                {
+                    // Unix:FileShare 是协作式的,不阻止 unlink —— 两个都能删掉。
+                    // (这条断言曾漏了平台分支,Windows 绿、Linux CI 红。)
+                    Assert.False(File.Exists(locked));
+                    Assert.Equal(2, result.FilesRemoved);
+                    Assert.Equal(1500, result.BytesFreed);
+                }
             }
         }
         finally

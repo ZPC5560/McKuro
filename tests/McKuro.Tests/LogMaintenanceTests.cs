@@ -401,14 +401,26 @@ public class LogMaintenanceTests
             var openable = WriteLog(dir, "SmsLogin", Yesterday, 200);
 
             // FileShare.None：模拟"被常驻写句柄占用"。Windows 上此时 File.Delete 抛 IOException；
-            // Unix 上 unlink 仍能成功（.NET 的文件共享在 Unix 上是协作式的），所以断言分平台。
+            // Unix 上 unlink 仍能成功（.NET 的文件共享在 Unix 上是协作式的，不是强制锁），
+            // 所以这里**连计数断言都必须分平台** —— 曾把 Assert.Equal(1, ...) 写在分支外，
+            // 在 Windows 上绿、在 Linux CI 上红（实际删掉 2 个）。
             using (new FileStream(lockedToday, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
             {
                 // 不包 try/catch —— 这里抛异常就是用例失败
                 var result = LogMaintenance.Clean(dir, Now, LogCleanScope.All);
 
-                Assert.Equal(1, result.FilesRemoved);
-                Assert.Equal(200, result.BytesFreed);
+                if (OperatingSystem.IsWindows())
+                {
+                    // 占用文件删不掉 → 只删掉历史那个，释放量也只算 200
+                    Assert.Equal(1, result.FilesRemoved);
+                    Assert.Equal(200, result.BytesFreed);
+                }
+                else
+                {
+                    // Unix 协作式共享：占用的文件同样被 unlink 掉 → 两个都删、字节都算
+                    Assert.Equal(2, result.FilesRemoved);
+                    Assert.Equal(300, result.BytesFreed);
+                }
             }
 
             // 未占用的那个一定被删掉
