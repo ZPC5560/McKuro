@@ -65,6 +65,88 @@
 .cl__foot { margin-top: 28px; text-align: center; color: var(--ink-2); font-size: 14.5px; }
 .cl__link { color: var(--accent-ink); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
 
+/* ---------- bilingual release notes ----------
+   The build emits both languages into the same markup (tools/changelog.py
+   to_html(with_en=True)): every release carries its Chinese body in .cl__zh and, when
+   one was written, its English body in .cl__en.
+
+   No JS: nothing is hidden by the switch, and .cl__en is itself a <details> whose
+   "English" summary opens that release's translation. Chinese stays the default, and
+   the switch bar stays hidden (it is rendered [hidden]; .js is what reveals it).
+
+   With JS: the container's data-cl-lang decides which body is visible. In English mode
+   site.js opens the per-release .cl__en, so the translation reads as the entry's body
+   rather than as a nested disclosure; releases that predate the bilingual policy have
+   no .cl__en at all and keep showing their Chinese rather than going blank. */
+.cl__bar {
+  display: none; justify-content: flex-end; gap: 2px;
+  /* sits in the gap between the section heading and the first entry */
+  margin: -34px 0 16px; padding: 3px;
+  border-radius: 999px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--line);
+  width: fit-content; margin-left: auto;
+}
+/* Only exists when JS can act on it (build ships it [hidden]); a no-JS visitor must not
+   get an empty strip where a control would be. */
+.js .cl__bar { display: flex; }
+.cl__bar[hidden] { display: none; }
+.lang__btn {
+  appearance: none; border: 0; background: none; cursor: pointer;
+  padding: 6px 14px; border-radius: 999px;
+  font: 500 13px/1 var(--sans); color: var(--ink-2);
+  transition: background var(--t-hover) var(--ease), color var(--t-hover) var(--ease);
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.lang__btn[aria-pressed="true"] { background: var(--surface); color: var(--accent-ink); box-shadow: var(--shadow); }
+@media (hover: hover) and (pointer: fine) {
+  .lang__btn[aria-pressed="false"]:hover { color: var(--ink); }
+}
+.lang__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* the per-release English block, as rendered for the no-JS / per-entry path */
+.cl__en { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.cl__en__sum {
+  cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 0; color: var(--ink-2); font: 500 12.5px/1 var(--mono); letter-spacing: .04em;
+  text-transform: uppercase;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.cl__en__sum::-webkit-details-marker { display: none; }
+.cl__en__sum::after {
+  content: ""; width: 6px; height: 6px; margin-top: -3px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg); transition: transform var(--t-ui) var(--ease-enter);
+}
+.cl__en[open] > .cl__en__sum::after { transform: rotate(225deg); margin-top: 1px; }
+.cl__en__body { padding-top: 4px; }
+/* English body: the mono/serif display faces are CJK-first here, so the Latin copy gets
+   the sans face and a touch more leading to stay readable at the same size. */
+.cl__en__body .cl__list li { font-family: var(--sans); line-height: 1.68; text-wrap: pretty; }
+
+/* JS on: one language at a time, driven by data-cl-lang on the list container.
+   site.js opens the per-release .cl__en <details> in English mode (a closed <details>
+   hides its body no matter what `display` says), so here it only needs to stop looking
+   like a nested disclosure: no rule above the text, and its summary — now redundant,
+   since the page-level switch already chose English — is hidden. */
+.js .changelog[data-cl-lang="zh"] .cl__en { display: none; }
+.js .changelog[data-cl-lang="en"] .cl[data-has-en] > .cl__body > .cl__zh { display: none; }
+.js .changelog[data-cl-lang="en"] .cl[data-has-en] > .cl__body > .cl__en {
+  margin-top: 0; border-top: 0; padding-top: 0;
+}
+.js .changelog[data-cl-lang="en"] .cl[data-has-en] > .cl__body > .cl__en > .cl__en__sum {
+  display: none;
+}
+/* The disclosure motion in 46-disclosure.css animates `block-size` from 0; that would
+   make the English body arrive with a slide every time the page is shown in English. */
+.js .changelog[data-cl-lang="en"] .cl__en::details-content { block-size: auto; opacity: 1; }
+
+/* The switch itself only makes sense once JS can act on it (build ships it [hidden]). */
+
+@media (max-width: 520px) {
+  .cl__bar { margin-bottom: 10px; }
+  .lang__btn { padding: 6px 12px; font-size: 12.5px; }
+}
+
+
 /* The list itself is long (every release), so the first screen of each entry gets a
    slightly tighter leading than body copy would. */
 @media (max-width: 720px) {

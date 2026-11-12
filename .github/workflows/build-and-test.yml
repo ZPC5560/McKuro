@@ -28,6 +28,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # CHANGELOG.md 是发布说明的唯一数据源(Release 正文 + 官网更新日志都从它渲染)。
+      # 它此前**没有任何 CI 把关**:`check` 只在 website.yml 里通过 build.py 的 SystemExit 间接生效,
+      # 而本工作流不构建站点 —— 于是双语规则(自 <!--bilingual-from:--> 指定的版本起必须带英文块)
+      # 在主 CI 上完全不设防,缺英文只在真正打 tag 发布时才炸。
+      # 放在 Checkout 之后、任何构建之前:文档不合规就没必要再跑几分钟的 restore/build/test。
+      - name: Validate CHANGELOG structure & bilingual rules
+        run: python3 tools/changelog.py check
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:

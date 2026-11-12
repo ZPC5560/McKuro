@@ -46,3 +46,7 @@ scripts/
 website-src/source-model/
 # 转换过程的中间产物
 website-src/font-src/*.tmp
+
+# Python 字节码缓存(构建/运行副产物,不入库)
+__pycache__/
+*.pyc

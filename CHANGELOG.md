@@ -1,12 +1,87 @@
 # Changelog
 
+<!--bilingual-from: 1.3.8.1-->
+
 本文件是 McKuro 发布说明的**唯一数据源**，三个消费端由它保持同步：
 
-- **GitHub Release 正文** — tag 发布时 CI 自动提取对应小节写入（`python tools/changelog.py extract <版本>`）
-- **官网「更新日志」区块** — `website-src/build.py` 构建时从本文件渲染注入
+- **GitHub Release 正文** — tag 发布时 CI 自动提取对应小节写入（`python tools/changelog.py extract <版本>`；若该版有英文正文，Release 里中文在前、`## English` 在后）
+- **官网「更新日志」区块** — `website-src/build.py` 构建时从本文件渲染注入，右上角可切换中文 / English
 - **仓库直接阅读** — 就是本文件
 
 发新版本时**只改本文件**：在顶部插入 `## [X.Y.Z] - YYYY-MM-DD` 小节（组标题 `### Added / Changed / Removed / Fixed`，也可用中文组名），打 tag 后 Release 与官网自动跟随。结构自检：`python tools/changelog.py check`。
+
+## 双语写法
+
+自 1.3.8.1 起每个版本都要带中英文两段正文。写法固定为：中文正文照旧写在前面，英文正文整块放进 `<!--en-->` 与 `<!--/en-->` 之间，并自带一套英文分组标题（`### Added` / `### Changed` / `### Fixed`，不要写中文组名、也不要用 `en:` 前缀）。
+
+英文块示例（占位符用尖括号写法，避免被当成真实版本小节）：
+
+```
+<!--en-->
+
+### Added
+
+- **<English item>**: <English description>
+
+### Fixed
+
+- **<English fix>**: <English description>
+
+<!--/en-->
+```
+
+要点：
+
+- 两个标记各自独占一行，每节**只能有一个**英文块，且必须放在该节末尾；标记本身不会渲染到官网或 Release 里。
+- 英文块必须有分组标题和条目，不能是空块（`check` 会报错）。
+- 中文段落与英文段落**同源同序**，条目不必逐句对译，但覆盖面要一致。
+- 语言标记只放正文末尾；文件顶部只放 `<!--bilingual-from: <版本>-->` 这一行声明。
+
+那行声明表示「从哪一版开始必须双语」：`check` 对所有 **≥ 该版本**的版本强制要求非空英文块，更旧的版本允许只有中文（历史记录不回填）；但任何人给旧版本补了英文块，它的完整性一样受校验。声明缺省时按「最新版本必须双语」处理。
+
+单语命令仍可单独取：`extract <版本>` 出中文（历史行为不变），`extract <版本> --lang en` 出英文（缺失时回退中文并向 stderr 告警），`has-lang <版本> en` 用退出码回答该版有没有英文（CI 用它决定是否拼双语）。
+
+## [1.3.8.1] - 2026-11-12
+
+### Added
+
+- **补全可选资源**：当初选的是精简版（省下十几 GB），之后想把资源一次性备齐？启动页现在会出现「补全资源」入口（按钮上直接标注体积），点一下就只下载被精简丢掉的那部分可选资源（官方命名的 `Option_Pack_*` 分组），不动已装好的常规文件、也不改变已装的版本号。实测国服 3.8.0 HD：26 个可选包，common 2.91 GiB + hd 1.88 GiB。是否显示这个入口**不看你当初选了哪个规格，而是看服务端差分清单里那些可选分组的目标文件在不在盘上** —— 规格记录会因换目录/重装/旧版本覆盖而失真，文件在不在才是真的。补全过程中会明确标注「不影响当前游戏文件」
+- **正式更新也能选「全量 / 精简」**：上一版只给「预下载」加了两档选择；这次正式更新同样支持。没有可复用预载包、需要现下内容时，会先让你选档 —— 两档差十几 GB，默认替你选一个并不合适
+- **关于页新增「清理软件日志」**：日志按类型分目录、按天分文件，只增不减，跑几个月就是几百 MB。现在设置 → 关于 → 版本与平台里有占用统计，点「清理日志」会弹窗让你选范围，默认只清历史日期 —— 今天的日志是排查现场，清完再要反馈就没料可查了。清理后为空的历史目录会一并回收
+
+### Fixed
+
+- **每次升级都在 C 盘堆更新包**：自更新把下载的 zip（约 130 MB）和解压目录（约 500 MB）都留在 `%AppData%\McKuro\updates\`，装完从不删除，每升级一次累加一份 —— 实测累计已到 2.6 GB。现在替换成功后脚本会就地删掉解压目录与安装包；替换失败则原样保留，方便重试。另外启动时还会按龄兜底清理（整包 3 天、`.part` 半成品 1 天），覆盖「脚本没删掉」和「下完没装就关了」两种情况
+- **官方提示有新版，McKuro 却说「已是最新」**：官方自 3.8 起把正式版本发布到新版协议端点的 `resourcePacks` 上，而旧协议端点的版本号仍停在 3.7.1。McKuro 一直只读旧端点，于是版本比较永远是「已是最新」，3.8.0 正式发布当天也检测不到更新。现在优先读新版协议（四个资源包都是 3.8.0），只有新端点缺 `resourcePacks`、网络失败或清单为空时才回退旧协议，避免「新端点偶发失败就静默退回旧端点、又报已是最新」这类更难排查的表现
+- **解压结果为空时仍然执行替换**：`xcopy` 的源目录「存在但为空」时退出码是 0 而不是错误码，导致失败保护判断不到 —— 于是脚本照常删掉解压目录和安装包，用户既没升级成功、也没了重试原料。现在替换前先确认解压结果至少有一个文件，不满足就直接停下并保留全部文件
+- **正式更新只能按完整清单重下**：新版协议没有旧协议那种顶层 `patchConfig`，差分配置挪进了每个资源包自己身上。McKuro 之前没接这条，正式更新只能逐文件对齐完整清单 —— 实测 3.7.1→3.8.0 差分包只有 12.08 GiB，按完整清单补齐却要重下几十 GB。现在读各包的差分项；任一包匹配不到本地版本时整体回退完整清单（不做部分差分，避免装完缺文件再白下一遍）
+
+### Changed
+
+- **关于页按钮精简为三个**：原先「打开日志目录 / 清理历史日志 / 清空全部日志」三个按钮把这一页挤满了。现在只留「软件目录 / 打开目录 / 清理日志」，清历史还是全清收进点击后的弹窗 —— 那是一次性决策，不需要常驻两个按钮。弹窗里会列出「当前占用 / 可清理的历史日志 / 今天的日志（保留）」三个具体数字
+- 更新包缓存与日志占用都在进入设置页时重新统计，枚举放在后台线程，不会卡住页面
+
+<!--en-->
+
+### Added
+
+- **Top up optional resources**: Chose the minimal build earlier (saving a dozen-odd GB) and now want everything in one go? The launcher page now offers a **Top up resources** entry (volume shown on the button) that downloads only the optional resource groups dropped by the minimal build (the official `Option_Pack_*` groups). Regular installed files are left alone and the installed version does not change. Measured on CN 3.8.0 HD: 26 optional packs, 2.91 GiB common + 1.88 GiB hd. Whether the entry appears is decided by **whether the target files of those optional groups in the server's diff manifest exist on disk**, not by which tier was chosen back then — a recorded tier goes stale after moving the folder, reinstalling, or being overwritten by an older build, whereas presence of the files is the truth. The UI states explicitly that it does not affect current game files while it runs
+- **Full / minimal choice for regular updates too**: The previous release only added the two-tier choice to **pre-download**; regular updates now support it as well. When there is no reusable pre-download package and content must be fetched on the spot, you are asked to pick a tier first — the two differ by more than ten GB, so silently defaulting to one would be wrong
+- **Clean up app logs**: Logs are split per category and per day, and only ever grow — a few hundred MB after a few months. Settings → About → Version & platform now shows current usage, and **Clean logs** opens a dialog to choose the scope. By default only past dates are removed, because today's logs are the evidence for troubleshooting; once cleared there is nothing left to investigate. Empty historical category folders are removed along with the files
+
+### Fixed
+
+- **Every update piled more installers onto the system drive**: Self-update kept both the downloaded zip (~130 MB) and the extracted folder (~500 MB) in `%AppData%\McKuro\updates\` and never deleted them, adding another copy with every upgrade — 2.6 GB had accumulated in practice. After a successful replacement the script now removes the extracted folder and the package in place; if the replacement fails they are kept as-is so it can be retried. A stale-by-age sweep at startup (whole packages after 3 days, `.part` fragments after 1 day) also covers the cases where the script could not delete them, or the download finished but the user never installed
+- **Official launcher shows an update, McKuro says "up to date"**: Since 3.8 the vendor publishes the release version on the new protocol endpoint's `resourcePacks`, while the version string on the old endpoint is still 3.7.1. McKuro only read the old endpoint, so the comparison always concluded "already up to date" — it could not detect 3.8.0 on release day. The new protocol is now read first (all four resource packs report 3.8.0), falling back to the old one only when the new endpoint lacks `resourcePacks`, fails to respond, or returns an empty manifest, so that a transient failure cannot silently downgrade to the stale endpoint and report "up to date" again
+- **Replacement ran even when extraction produced nothing**: When `xcopy`'s source directory exists but is empty, it exits with code 0 rather than an error, so the failure guard never fired — the script went on to delete the extracted folder and the package, leaving the user neither upgraded nor able to retry. Replacement now requires at least one extracted file; otherwise it stops and keeps everything
+- **Regular updates could only re-download the full manifest**: The new protocol has no top-level `patchConfig` the way the old one did; diff config moved onto each resource pack. McKuro did not read it, so regular updates aligned against the complete manifest file by file — the 3.7.1→3.8.0 diff package is only 12.08 GiB, while the complete manifest would re-download dozens of GB. Each pack's diff entries are now read; if any pack has no entry for the local version, the whole update falls back to the complete manifest instead of performing a partial diff and failing validation afterwards
+
+### Changed
+
+- **About page trimmed to three buttons**: The old "Open log folder / Remove old logs / Clear all logs" trio crowded the page. It is now "App folder / Open folder / Clean logs", with the old-versus-all decision moved into a dialog shown after clicking — a one-off decision that does not deserve two permanent buttons. The dialog spells out three concrete numbers: current usage, removable old logs, and today's logs (kept)
+- Update-cache and log usage are re-measured when the settings page opens; enumeration runs on a background thread so the page never stalls
+
+<!--/en-->
 
 ## [1.3.8.0] - 2026-11-11
 

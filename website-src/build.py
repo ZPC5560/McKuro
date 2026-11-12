@@ -85,7 +85,10 @@ def changelog_section():
     errs = cl.check(text)
     if errs:
         raise SystemExit("CHANGELOG.md failed validation:\n  " + "\n  ".join(errs))
-    return cl.to_html(text, open_recent=2)
+    # with_en=True: every release ships both languages in the same markup, so site.js
+    # only switches which one is visible (no extra request, and a visitor with JS off
+    # can still expand the English block of any single release).
+    return cl.to_html(text, open_recent=2, with_en=True)
 
 
 def latest_release():

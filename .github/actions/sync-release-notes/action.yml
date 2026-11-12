@@ -2,7 +2,9 @@ name: Sync release notes from CHANGELOG.md
 description: >
   Creates the GitHub Release for the current tag with this version's section of
   CHANGELOG.md as the body — the repo changelog, the website changelog section
-  and the Release notes stay one single source.
+  and the Release notes stay one single source. Since v1.3.8.1 a section may carry
+  an English body as well; when it does, the Release body ships both (Chinese
+  first, then `## English` below a rule) so one Release serves both languages.
   Idempotent: the note body is compared first and skipped when already equal;
   a stale/mismatched release is deleted and recreated (the REST update API
   returns HTTP 422 when the release's tag binding no longer matches the tag).
@@ -22,10 +24,28 @@ runs:
         set -euo pipefail
         ver="${TAG#v}"
         notes="$(mktemp)"
-        trap 'rm -f "$notes"' EXIT
-        if ! python3 tools/changelog.py extract "$ver" -o "$notes"; then
+        # 中英文各自先落到独立文件,再拼成最终正文:
+        # 中文正文与旧版逐字节一致(extract 默认行为不变),英文只在存在时追加,
+        # 因此「没有英文块的历史版本」产生的正文与改造前完全相同。
+        zh="$(mktemp)"
+        en="$(mktemp)"
+        trap 'rm -f "$notes" "$zh" "$en"' EXIT
+        if ! python3 tools/changelog.py extract "$ver" -o "$zh"; then
           echo "::error::CHANGELOG.md has no section for ${ver} — write the changelog entry before pushing the tag."
           exit 1
+        fi
+        cp "$zh" "$notes"
+        # has-lang: 0=有英文正文, 1=没有(历史版本), 2=版本不存在(上面已挡住)
+        if python3 tools/changelog.py has-lang "$ver" en; then
+          python3 tools/changelog.py extract "$ver" --lang en -o "$en"
+          # 分隔线 + `## English`:GitHub 会把 `---` 渲染成一条水平线,两种语言分得清
+          {
+            printf '\n---\n\n## English\n\n'
+            cat "$en"
+          } >> "$notes"
+          echo "release body is bilingual (zh + en)"
+        else
+          echo "no English body for ${ver} — releasing Chinese only"
         fi
         # 幂等:先看 Release 是否已存在且正文一致,一致就跳过;否则确保它存在。
         #

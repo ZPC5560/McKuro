@@ -6,7 +6,17 @@
         <h2 class="sec__h2">更新日志</h2>
         <p class="sec__sub">这里与每个版本的 GitHub Release 说明同源：改仓库里的一份 CHANGELOG.md，两边一起更新。</p>
       </header>
-      <div class="changelog">
+      <!-- Language switch, release notes only.
+           The build ships both languages in the same markup (build.py -> to_html(with_en=True)),
+           so switching is a class toggle: no request, no flicker. The whole bar stays
+           `hidden` until site.js has (a) found at least one translated release and (b)
+           wired the buttons, so a visitor with JS off — or a page whose releases all
+           predate the bilingual policy — never sees a switch that does nothing. -->
+      <div class="cl__bar" id="cl-lang" role="group" aria-label="更新日志语言" hidden>
+        <button class="lang__btn is-on" type="button" data-lang="zh" aria-pressed="true" lang="zh-Hans">中文</button>
+        <button class="lang__btn" type="button" data-lang="en" aria-pressed="false" lang="en">English</button>
+      </div>
+      <div class="changelog" id="changelog-list" data-cl-lang="zh">
 <!--CHANGELOG-->
       </div>
       <p class="cl__foot">更早的记录与全部下载资产见 <a class="cl__link" href="https://github.com/ZPC5560/McKuro/releases" target="_blank" rel="noopener">GitHub&nbsp;Releases</a>。</p>

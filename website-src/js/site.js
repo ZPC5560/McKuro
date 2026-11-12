@@ -386,4 +386,55 @@
     }, { threshold: 0.5 });
     counters.forEach(function (el) { cio.observe(el); });
   }
+  /* ---------- 8. CHANGELOG language switch (中文 / English) ----------
+     Only the release notes are bilingual: CHANGELOG.md carries a Chinese body and an
+     English body per release, and build.py renders both into the same markup
+     (tools/changelog.py to_html(with_en=True)). Unreleased history has Chinese only,
+     so a release without a translation keeps its Chinese body even in English mode —
+     the alternative (blank entries) would look like a rendering bug.
+
+     The choice is remembered, because someone who reads the log in English will come
+     back to it. A stored value is the only way the page starts in English; without one
+     we never override the browser, since the page itself is written in Chinese. */
+  var clList = $("#changelog-list");
+  var langBox = $("#cl-lang");
+  /* No translation anywhere yet (every release predates the bilingual policy) means the
+     switch would flip between two identical renderings — leave it out entirely. */
+  if (clList && langBox && $(".cl[data-has-en]", clList)) {
+    var LANG_KEY = "mckuro.clang";
+
+    var applyLang = function (lang) {
+      var en = lang === "en";
+      clList.setAttribute("data-cl-lang", en ? "en" : "zh");
+      $$(".lang__btn", langBox).forEach(function (b) {
+        var on = b.getAttribute("data-lang") === (en ? "en" : "zh");
+        b.classList.toggle("is-on", on);
+        b.setAttribute("aria-pressed", String(on));
+      });
+      /* In English mode a translated release shows its English body directly, so the
+         per-entry <details> must be OPEN — a <details> that is closed keeps its body
+         hidden whatever `display` it is given, and this is the one place that would
+         otherwise render an empty card. It is closed again in Chinese mode so the
+         "one toggle at a time" rule holds and the entries stay compact. */
+      $$(".cl__en", clList).forEach(function (d) { d.open = en; });
+    };
+
+    var stored = null;
+    try { stored = window.localStorage.getItem(LANG_KEY); } catch (e) { /* private mode */ }
+    if (stored !== "en" && stored !== "zh") { stored = "zh"; }
+    /* Coming back to the page in English is only worth honouring if the newest release
+       actually has English; a stale "en" from an older visit should not open the log on
+       a language that no longer has anything to show. */
+    if (stored === "en" && !$(".cl[data-has-en]", clList)) { stored = "zh"; }
+    applyLang(stored);
+    langBox.removeAttribute("hidden");
+
+    $$(".lang__btn", langBox).forEach(function (b) {
+      b.addEventListener("click", function () {
+        var lang = b.getAttribute("data-lang") === "en" ? "en" : "zh";
+        applyLang(lang);
+        try { window.localStorage.setItem(LANG_KEY, lang); } catch (e) { /* quota / private */ }
+      });
+    });
+  }
 })();
