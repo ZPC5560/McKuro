@@ -154,6 +154,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// </summary>
     public void OnNavigatedTo()
     {
+        // 更新包占用按需重算:目录内容只在下载/安装/清理时变化,进页刷新一次即可,
+        // 不必常驻轮询(单次枚举最多几百个文件 + 几次 syscall)。
+        RefreshUpdateCacheInfo();
+        RefreshLogInfo();
+
         var index = ResourceLevelIndexFromSettings(AppServices.Settings.Current);
         if (index == ResourceLevelIndex)
         {
@@ -1024,6 +1029,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>日志目录(为空表示文件日志不可用)。</summary>
     public string LogDirText => AppServices.LogDir;
 
+    /// <summary>软件安装目录(exe 所在目录;供「软件目录」按钮的悬停提示)。</summary>
+    public string AppDirText => Path.GetDirectoryName(Environment.ProcessPath) ?? "";
+
     public string PlatformNameText => AppServices.Capabilities.PlatformName;
 
     /// <summary>平台徽标:是否为 Windows(四格窗格 Logo)。</summary>
@@ -1828,17 +1836,15 @@ public sealed partial class SettingsViewModel : ViewModelBase
             // 重启兜底:Inno 的 RestartApplications 只重启"优雅退出"的应用,被 Restart Manager
             // 强杀的(本应用有关闭隐藏到托盘逻辑)不会拉起。用监视脚本等安装器进程退出后启动新版,
             // 本进程随即主动退出(安装器无文件锁,替换干净)。
+            // 脚本同时负责删掉下载的 setup.exe —— 它同样是每升级一次就在 updates\ 里加 130 MB 的源头。
             if (!string.IsNullOrEmpty(appDir))
             {
                 var watcher = Path.Combine(destDir, "relaunch.cmd");
-                File.WriteAllText(watcher, $$"""
-                    @echo off
-                    :wait
-                    timeout /t 1 /nobreak >nul
-                    tasklist /nh /fi "PID eq {{installer.Id}}" | find "{{installer.Id}}" >nul && goto wait
-                    start "" "{{Path.Combine(appDir, "McKuro.exe")}}"
-                    del "%~f0"
-                    """, System.Text.Encoding.UTF8);
+                File.WriteAllText(
+                    watcher,
+                    McKuro.Core.Services.Update.UpdateLaunchScripts.BuildWindowsRelaunchScript(
+                        installer.Id, appDir, localPath),
+                    System.Text.Encoding.UTF8);
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = "cmd.exe",
@@ -1878,20 +1884,30 @@ public sealed partial class SettingsViewModel : ViewModelBase
             Directory.CreateDirectory(extractDir);
             await ExtractZipWithProgressAsync(zipPath, extractDir, progress);
 
+            // 解压结果必须至少有一个文件才允许替换 —— 这是 xcopy 守卫漏洞的前置补丁:
+            // xcopy 源目录「不存在」时返回 4,脚本的 `if errorlevel 1 goto keepall` 能保住包;
+            // 但源目录「存在且为空」时它只打印 "0 File(s) copied" 却返回 0,守卫不会触发,
+            // 脚本会照常 rd 掉解压目录、del 掉安装包 —— 用户既没升级成功、也没了重试原料。
+            // 在 cmd 里靠解析 xcopy 输出文本判定太脆(受代码页与本地化影响),所以在调用方拦截。
+            if (!Directory.EnumerateFiles(extractDir, "*", SearchOption.AllDirectories).Any())
+            {
+                AppUpdateStatusText = LanguageService.Format("Update.ReplaceFailed");
+                // 空包同样没用,别留下占位置
+                TryDeleteUpdateArtifacts(extractDir, zipPath);
+                return false;
+            }
+
             var appDir = Path.GetDirectoryName(Environment.ProcessPath) ?? ".";
             if (OperatingSystem.IsWindows())
             {
                 var script = Path.Combine(destDir, "update.cmd");
-                // 注意:必须用单 $ 原始字符串 —— $$ 会让 {extractDir}/{appDir} 变成字面量(xcopy 永远失败)
-                File.WriteAllText(script, $"""
-                    @echo off
-                    chcp 65001 >nul
-                    timeout /t 2 /nobreak >nul
-                    taskkill /im McKuro.exe /f >nul 2>&1
-                    timeout /t 1 /nobreak >nul
-                    xcopy /e /y /q "{extractDir}\*" "{appDir}\"
-                    start "" "{Path.Combine(appDir, "McKuro.exe")}"
-                    """, System.Text.Encoding.UTF8);
+                // 脚本正文统一由 UpdateLaunchScripts 生成:替换成功后删除解压目录与安装包、
+                // 失败时走 keepall 分支保留重试原料、最后自删。原先内联在这里的版本没有任何
+                // 清理动作,于是每升级一次就在 updates\ 里多留一份解压目录 + zip(用户 C 盘一直累加)。
+                File.WriteAllText(
+                    script,
+                    McKuro.Core.Services.Update.UpdateLaunchScripts.BuildWindowsReplaceScript(extractDir, appDir, zipPath),
+                    System.Text.Encoding.UTF8);
 
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
@@ -1913,29 +1929,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 var exeName = Path.GetFileName(processPath);
                 var script = Path.Combine(destDir, "update.sh");
                 var log = Path.Combine(destDir, "update.log");
-                // 注意:单 $ 原始字符串(单花括号即插值;$$ 会把 {xxx} 变成字面量,脚本全废)。
-                // macOS 自带 bash 3.2:不能用 &>> / 等 bash4 语法,统一 POSIX 写法
-                File.WriteAllText(script, $"""
-                    #!/bin/bash
-                    exec >>"{log}" 2>&1
-                    echo "$(date '+%F %T') update.sh 启动:目标进程 {Environment.ProcessId} → {appDir}"
-                    sleep 2
-                    kill {Environment.ProcessId} 2>/dev/null
-                    for i in 1 2 3 4 5; do
-                        kill -0 {Environment.ProcessId} 2>/dev/null || break
-                        sleep 1
-                    done
-                    kill -9 {Environment.ProcessId} 2>/dev/null
-                    sleep 1
-                    echo "$(date '+%F %T') 旧进程已退出,开始替换"
-                    cp -R "{extractDir}/." "{appDir}/" || echo "cp 失败"
-                    chmod +x "{Path.Combine(appDir, exeName)}"
-                    echo "$(date '+%F %T') 替换完成,拉起新版本"
-                    nohup "{Path.Combine(appDir, exeName)}" >>"{log}" 2>&1 &
-                    sleep 1
-                    echo "$(date '+%F %T') 已拉起新版本"
-                    rm -f -- "$0"
-                    """);
+                // 脚本里的 bash 语法约束(必须是 bash 3.2 可解析的 POSIX 写法)由 Core 侧的
+                // UpdateLaunchScripts 统一守住,并有单测钉住,这里不再重复内联。
+                File.WriteAllText(script, McKuro.Core.Services.Update.UpdateLaunchScripts.BuildPosixReplaceScript(
+                    extractDir, appDir, exeName, zipPath, log, Environment.ProcessId));
 
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
@@ -1956,6 +1953,33 @@ public sealed partial class SettingsViewModel : ViewModelBase
         {
             AppUpdateStatusText = LanguageService.Format("Update.ReplaceFailedWith", ex.Message);
             return false;
+        }
+    }
+
+    /// <summary>尽力删除本次升级用掉的解压目录与安装包(失败静默:下次启动的按龄清理会兜底)。</summary>
+    private static void TryDeleteUpdateArtifacts(string extractDir, string? packagePath)
+    {
+        try
+        {
+            if (Directory.Exists(extractDir))
+            {
+                Directory.Delete(extractDir, true);
+            }
+        }
+        catch (Exception)
+        {
+            // 被占用/无权限:留给启动时的按龄清理
+        }
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(packagePath) && File.Exists(packagePath))
+            {
+                File.Delete(packagePath);
+            }
+        }
+        catch (Exception)
+        {
+            // 同上
         }
     }
 
@@ -2009,6 +2033,259 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AppUpdateAvailable = false;
         AppUpdateVersionText = "";
         AppUpdateStatusText = LanguageService.Format("Update.SkippedNow", _pendingUpdate.Version);
+    }
+
+    // ---------- 更新包缓存(用户反馈 2026-11:每升级一次,update 目录累加约 600 MB) ----------
+
+    /// <summary>
+    /// 更新包缓存目录(<c>%AppData%\McKuro\updates</c>):下载的 zip 与解压出的整份新版都落在这里。
+    /// </summary>
+    public static string UpdateCacheDir => UpdateCacheMaintenance.DefaultDirectory(AppServices.AppDataDir);
+
+    private string _updateCacheUsageText = "";
+
+    /// <summary>「当前占用 2.6 GB(37 个文件)」这类占用说明。</summary>
+    public string UpdateCacheUsageText
+    {
+        get => _updateCacheUsageText;
+        private set => SetProperty(ref _updateCacheUsageText, value);
+    }
+
+    [ObservableProperty]
+    private string _updateCacheStatusText = "";
+
+    [ObservableProperty]
+    private bool _updateCacheStatusVisible;
+
+    /// <summary>缓存是否非空(为空时「打开目录」无意义,连目录都不存在)。</summary>
+    [ObservableProperty]
+    private bool _updateCacheHasContent;
+
+    /// <summary>
+    /// 重新统计缓存占用。目录枚举在后台线程做:可能含上万个文件(解压出的整份新版),
+    /// 同步跑会把进设置页卡住一拍。
+    /// </summary>
+    public void RefreshUpdateCacheInfo()
+    {
+        var dir = UpdateCacheDir;
+        _ = Task.Run(() =>
+        {
+            var usage = UpdateCacheMaintenance.Measure(dir);
+            var text = usage.IsEmpty
+                ? LanguageService.Format("Update.Cache.Empty")
+                : LanguageService.Format(
+                    "Update.Cache.Usage",
+                    UpdateCacheMaintenance.FormatSize(usage.TotalBytes),
+                    usage.FileCount);
+            // 结果回 UI 线程:属性变更通知必须发生在绑定线程
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                UpdateCacheUsageText = text;
+                UpdateCacheHasContent = !usage.IsEmpty;
+            });
+        });
+    }
+
+    /// <summary>
+    /// 手动清理更新包缓存:删掉所有<b>已完成</b>的更新包与解压目录,以及超过 1 天的 <c>.part</c>。
+    /// <para>
+    /// 进行中的下载/安装一律不动(那时按钮也已被 <see cref="AppUpdateBusy"/> 禁用),
+    /// 因为删掉正在写的文件会让当前这次升级失败。
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private async Task CleanUpdateCacheAsync()
+    {
+        if (AppUpdateDownloading || AppUpdateInstalling)
+        {
+            return;
+        }
+        try
+        {
+            var dir = UpdateCacheDir;
+            // 手动清理用「现在就过期」的口径:用户点了清理,就是要把手上这些残留全清掉
+            var result = await Task.Run(() =>
+                UpdateCacheMaintenance.Clean(dir, DateTime.UtcNow, maxAge: TimeSpan.Zero)).ConfigureAwait(true);
+            UpdateCacheStatusVisible = true;
+            UpdateCacheStatusText = result.RemovedAnything
+                ? LanguageService.Format("Update.Cache.Cleaned", UpdateCacheMaintenance.FormatSize(result.BytesFreed))
+                : LanguageService.Format("Update.Cache.CleanNothing");
+            RefreshUpdateCacheInfo();
+        }
+        catch (Exception ex)
+        {
+            UpdateCacheStatusVisible = true;
+            UpdateCacheStatusText = LanguageService.Format("Update.Cache.CleanFailed", ex.Message);
+        }
+    }
+
+    /// <summary>在文件管理器里打开更新包缓存目录(不存在时先建,避免按钮点了没反应)。</summary>
+    [RelayCommand]
+    private void OpenUpdateCacheDir()
+    {
+        try
+        {
+            var dir = UpdateCacheDir;
+            Directory.CreateDirectory(dir);
+            if (!AppServices.OpenInFileManager(dir))
+            {
+                UpdateCacheStatusVisible = true;
+                UpdateCacheStatusText = LanguageService.Format("Update.Cache.OpenFailed");
+            }
+        }
+        catch (Exception ex)
+        {
+            UpdateCacheStatusVisible = true;
+            UpdateCacheStatusText = LanguageService.Format("Update.Cache.CleanFailed", ex.Message);
+        }
+    }
+
+    // ---------- 软件日志清理(用户需求 2026-11) ----------
+
+    private string _logUsageText = "";
+
+    /// <summary>「当前占用 12.4 MB(38 个文件,其中历史 31 个)」这类占用说明。</summary>
+    public string LogUsageText
+    {
+        get => _logUsageText;
+        private set => SetProperty(ref _logUsageText, value);
+    }
+
+    [ObservableProperty]
+    private string _logCleanStatusText = "";
+
+    [ObservableProperty]
+    private bool _logCleanStatusVisible;
+
+    /// <summary>最近一次统计结果。清理弹窗要用它显示"能清多少、保留多少"。</summary>
+    private McKuro.Core.Services.LogFootprint _logFootprint;
+
+    /// <summary>
+    /// 重新统计日志占用。日志目录可能含上百个按天文件,枚举放后台线程,结果回 UI 线程。
+    /// </summary>
+    public void RefreshLogInfo()
+    {
+        var dir = AppServices.LogDir;
+        _ = Task.Run(() =>
+        {
+            var footprint = string.IsNullOrEmpty(dir)
+                ? default
+                : McKuro.Core.Services.LogMaintenance.Measure(dir, DateTime.Now);
+            var text = footprint.IsEmpty
+                ? LanguageService.Format("Log.Clean.Empty")
+                : LanguageService.Format(
+                    "Log.Clean.Usage",
+                    McKuro.Core.Infrastructure.StorageFootprint.FormatSize(footprint.TotalBytes),
+                    footprint.FileCount,
+                    footprint.OldFileCount);
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                _logFootprint = footprint;
+                LogUsageText = text;
+            });
+        });
+    }
+
+    /// <summary>
+    /// 「清理日志」:先弹窗让用户选范围(只清历史 / 清空全部),再执行。
+    /// <para>
+    /// 原先页面上直接摆「清理历史日志」「清空全部日志」两个按钮,连目录按钮一共四个,
+    /// 把关于页挤满了。范围选择不是常驻信息,而是点下去之后才要做的决策 —— 收进弹窗后
+    /// 页面上只剩「打开软件目录 / 打开日志目录 / 清理日志」三个按钮。
+    /// </para>
+    /// <para>
+    /// 弹窗里的默认按钮是「只清历史」:今天的日志正被常驻句柄追加,是用户排查现场,
+    /// 不该被一次随手点击带走。
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private async Task CleanLogsAsync()
+    {
+        var dir = AppServices.LogDir;
+        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+        {
+            LogCleanStatusVisible = true;
+            LogCleanStatusText = LanguageService.Format("Log.Clean.Empty");
+            return;
+        }
+
+        // 弹窗前刷新一次:用户可能刚在别处删过文件,过期的统计会让弹窗报错数字
+        var footprint = await Task.Run(() =>
+            McKuro.Core.Services.LogMaintenance.Measure(dir, DateTime.Now)).ConfigureAwait(true);
+        _logFootprint = footprint;
+
+        var owner = (Avalonia.Application.Current?.ApplicationLifetime
+            as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+
+        // ShowDialog 必须留在 UI 线程(ConfigureAwait(true) 已回到 UI 上下文)
+        var scope = await McKuro.Views.LogCleanupWindow.ShowAsync(owner, footprint).ConfigureAwait(true);
+        if (scope is null)
+        {
+            return; // 用户取消
+        }
+        await CleanLogsCoreAsync(scope.Value);
+    }
+
+    private async Task CleanLogsCoreAsync(McKuro.Core.Services.LogCleanScope scope)
+    {
+        var dir = AppServices.LogDir;
+        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+        {
+            LogCleanStatusVisible = true;
+            LogCleanStatusText = LanguageService.Format("Log.Clean.Empty");
+            return;
+        }
+        try
+        {
+            var result = await Task.Run(() =>
+                McKuro.Core.Services.LogMaintenance.Clean(dir, DateTime.Now, scope)).ConfigureAwait(true);
+            LogCleanStatusVisible = true;
+            if (!result.RemovedAnything)
+            {
+                LogCleanStatusText = scope == McKuro.Core.Services.LogCleanScope.OldOnly
+                    ? LanguageService.Format("Log.Clean.NothingToDo")
+                    : LanguageService.Format("Log.Clean.Empty");
+            }
+            else
+            {
+                var size = McKuro.Core.Infrastructure.StorageFootprint.FormatSize(result.BytesFreed);
+                LogCleanStatusText = scope == McKuro.Core.Services.LogCleanScope.OldOnly
+                    ? LanguageService.Format("Log.Clean.OldDone", size, result.FilesRemoved)
+                    : LanguageService.Format("Log.Clean.AllDone", size, result.FilesRemoved);
+            }
+            RefreshLogInfo();
+        }
+        catch (Exception ex)
+        {
+            LogCleanStatusVisible = true;
+            LogCleanStatusText = LanguageService.Format("Log.Clean.Failed", ex.Message);
+        }
+    }
+
+    /// <summary>在文件管理器里打开软件所在的安装目录(关于页「打开软件目录」)。</summary>
+    [RelayCommand]
+    private void OpenAppDir()
+    {
+        var dir = Path.GetDirectoryName(Environment.ProcessPath);
+        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+        {
+            LogCleanStatusVisible = true;
+            LogCleanStatusText = LanguageService.Format("Log.Clean.OpenAppDirFailed");
+            return;
+        }
+        try
+        {
+            if (!AppServices.OpenInFileManager(dir))
+            {
+                LogCleanStatusVisible = true;
+                LogCleanStatusText = LanguageService.Format("Log.Clean.OpenAppDirFailed");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogCleanStatusVisible = true;
+            LogCleanStatusText = LanguageService.Format("Log.Clean.Failed", ex.Message);
+        }
     }
 
     private static string FormatAppUpdateSize(long bytes) =>

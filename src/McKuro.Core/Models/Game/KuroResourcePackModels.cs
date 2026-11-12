@@ -46,6 +46,12 @@ public sealed class KuroResourcePackRootConfig
 {
     /// <summary>语言代码 → 画质说明页 URL(键如 zh-Hans / en / ja)。</summary>
     [JsonPropertyName("resourceLevelHint")] public Dictionary<string, string>? ResourceLevelHint { get; set; }
+
+    /// <summary>
+    /// 关键文件清单(缺失即视为未安装/未装完)。新版协议把它放在根节点 <c>config</c> 里,
+    /// 而旧协议放在顶层 <c>keyFileCheckList</c>。
+    /// </summary>
+    [JsonPropertyName("keyFileCheckList")] public List<string>? KeyFileCheckList { get; set; }
 }
 
 /// <summary>单个资源包(下载其 indexFile 可得到包内文件清单)。</summary>

@@ -1179,7 +1179,9 @@
                 </Grid>
             </Border>
 
-            <!-- 应用版本 + 日志 -->
+            <!-- 应用版本 + 软件目录(用户需求 2026-11:关于页按钮精简为三个)
+                 版本号必须留在自己的行里 —— 早先把它并到下面「清理软件日志」行后,
+                 「清理软件日志」标题正下方直接跟着「版本 v1.3.8」,读起来像日志组件的版本。 -->
             <Border Classes="row">
                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
                     <Border Classes="tile">
@@ -1193,9 +1195,38 @@
                             <Run Text="{Binding CurrentAppVersionText}" FontWeight="Bold" />
                         </TextBlock>
                     </StackPanel>
-                    <Button Grid.Column="2" VerticalAlignment="Center" Content="{loc:Localize Key=Common.OpenLogDir}"
-                            Command="{Binding OpenLogDirCommand}"
-                            ToolTip.Tip="{Binding LogDirText}" />
+                    <Button Grid.Column="2" VerticalAlignment="Center"
+                            Content="{loc:Localize Key=Log.Clean.OpenAppDir}"
+                            Command="{Binding OpenAppDirCommand}"
+                            ToolTip.Tip="{Binding AppDirText}" />
+                </Grid>
+            </Border>
+
+            <!-- 日志清理(用户需求 2026-11):日志按 category 分目录、按天分文件,只增不减。
+                 目录口径与 GlobalExceptionLogger / FileLoggerProvider 完全一致(AppServices.LogDir)。
+                 按钮只有「日志目录」与「清理日志」两个;"清历史还是全清"收进点击后的弹窗
+                 (见 Views/LogCleanupWindow)—— 那是一次性决策,不需要在页面上常驻两个按钮。 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile" VerticalAlignment="Top">
+                        <ic:FluentIcon Icon="Broom" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="6">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Log.Clean.Title}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Log.Clean.Desc}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding LogUsageText}" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding LogCleanStatusText}" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap"
+                                   IsVisible="{Binding LogCleanStatusVisible}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="8">
+                        <Button Content="{loc:Localize Key=Log.Clean.OpenDir}" Command="{Binding OpenLogDirCommand}"
+                                ToolTip.Tip="{Binding LogDirText}" />
+                        <Button Content="{loc:Localize Key=Log.Clean.Clean}" Command="{Binding CleanLogsCommand}"
+                                Classes="primary" />
+                    </StackPanel>
                 </Grid>
             </Border>
         </StackPanel>
@@ -1260,6 +1291,33 @@
                         <TextBlock Text="{Binding AppUpdateIntegrityText}" FontSize="12"
                                    Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap"
                                    IsVisible="{Binding AppUpdateIntegrityVisible}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 更新包缓存(用户反馈 2026-11):自更新把 zip 与解压目录都留在 %AppData%\McKuro\updates\,
+                 每升级一次累加约 600 MB 却没有任何入口能看见/清掉。这里给出占用与手动清理;
+                 自动清理在替换脚本里(装完即删)和启动扫描里(按龄淘汰)各做一次。 -->
+            <Border Classes="row">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <Border Classes="tile" VerticalAlignment="Top">
+                        <ic:FluentIcon Icon="Delete" IconVariant="Regular" IconSize="Size20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="6">
+                        <TextBlock Classes="rowTitle" Text="{loc:Localize Key=Update.Cache.Title}" />
+                        <TextBlock Classes="rowDesc" Text="{loc:Localize Key=Update.Cache.Desc}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding UpdateCacheUsageText}" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding UpdateCacheStatusText}" FontSize="12"
+                                   Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap"
+                                   IsVisible="{Binding UpdateCacheStatusVisible}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="8">
+                        <Button Content="{loc:Localize Key=Update.Cache.OpenDir}" Command="{Binding OpenUpdateCacheDirCommand}"
+                                IsEnabled="{Binding UpdateCacheHasContent}" />
+                        <Button Content="{loc:Localize Key=Common.CleanNow}" Command="{Binding CleanUpdateCacheCommand}"
+                                IsEnabled="{Binding !AppUpdateBusy}" />
                     </StackPanel>
                 </Grid>
             </Border>

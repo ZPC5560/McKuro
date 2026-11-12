@@ -1,0 +1,91 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ic="using:FluentIcons.Avalonia"
+        xmlns:loc="clr-namespace:McKuro.Services"
+        mc:Ignorable="d" d:DesignWidth="460" d:DesignHeight="330"
+        x:Class="McKuro.Views.LogCleanupWindow"
+        Title="{loc:Localize Key=Log.Clean.Title}"
+        Width="460" MaxHeight="560" SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+  <!-- 清理日志的范围选择(用户需求 2026-11):
+       关于页原来摆了「清理历史日志」「清空全部日志」两个按钮,加上目录按钮一共四个,把这一页挤满了。
+       改成只有「清理日志」一个按钮,点开这里再选范围 —— 范围本来就不是需要常驻可见的信息,
+       而是"点下去之后才要想"的一次性决策。 -->
+  <Window.Styles>
+    <Style Selector="Button.dlgCancel">
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="18,8" />
+    </Style>
+    <Style Selector="Button.dlgDanger">
+      <Setter Property="Foreground" Value="{DynamicResource McKuroWarning}" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="18,8" />
+    </Style>
+  </Window.Styles>
+  <Border Padding="22" Background="{DynamicResource SemiColorBg1}">
+    <StackPanel Spacing="14">
+      <!-- 标题 -->
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <Border Width="36" Height="36" CornerRadius="8" Background="{DynamicResource SemiColorBg3}">
+          <ic:FluentIcon Icon="Broom" IconVariant="Regular" IconSize="Size20"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Foreground="{DynamicResource McKuroWarning}" />
+        </Border>
+        <TextBlock x:Name="TitleText" FontSize="16" FontWeight="Bold"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource SemiColorText0}" />
+      </StackPanel>
+
+      <!-- 说明正文 -->
+      <TextBlock x:Name="BodyText" FontSize="13" TextWrapping="Wrap" LineHeight="20"
+                 Foreground="{DynamicResource SemiColorText1}" />
+
+      <!-- 体积明细:总计 / 历史可清 / 今天保留 -->
+      <Border CornerRadius="10" Padding="14,10"
+              Background="{DynamicResource SemiColorBg2}"
+              BorderBrush="{DynamicResource McKuroSwitchChipStroke}"
+              BorderThickness="1">
+        <StackPanel Spacing="6">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{loc:Localize Key=Log.Clean.Dialog.TotalLabel}" FontSize="12"
+                       Foreground="{DynamicResource SemiColorText2}" />
+            <TextBlock x:Name="TotalText" Grid.Column="1" FontSize="12" FontWeight="Bold"
+                       Foreground="{DynamicResource SemiColorText1}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{loc:Localize Key=Log.Clean.Dialog.OldLabel}" FontSize="12"
+                       Foreground="{DynamicResource SemiColorText2}" />
+            <TextBlock x:Name="OldText" Grid.Column="1" FontSize="12"
+                       Foreground="{DynamicResource SemiColorText1}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{loc:Localize Key=Log.Clean.Dialog.TodayLabel}" FontSize="12"
+                       Foreground="{DynamicResource SemiColorText2}" />
+            <TextBlock x:Name="TodayText" Grid.Column="1" FontSize="12"
+                       Foreground="{DynamicResource SemiColorText1}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <!-- 安全说明:说清两个选项分别会删什么、为什么不建议全清 -->
+      <TextBlock Text="{loc:Localize Key=Log.Clean.Dialog.SafeHint}" FontSize="11"
+                 TextWrapping="Wrap" LineHeight="17"
+                 Foreground="{DynamicResource SemiColorText3}" />
+
+      <!-- 操作:取消 / 只清历史(默认) / 清空全部 -->
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+        <Button x:Name="CancelButton" MinWidth="88" Classes="dlgCancel"
+                Content="{loc:Localize Key=Log.Clean.Dialog.Cancel}" />
+        <Button x:Name="OldOnlyButton" MinWidth="112" Classes="dlgCancel"
+                Content="{loc:Localize Key=Log.Clean.Dialog.OldOnly}" />
+        <Button x:Name="AllButton" MinWidth="112" Classes="dlgDanger"
+                Content="{loc:Localize Key=Log.Clean.Dialog.All}" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>

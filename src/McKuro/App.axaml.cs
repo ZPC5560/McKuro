@@ -88,6 +88,16 @@ public partial class App : Application
         // 再由抽卡分析页按需触发网络刷新。失败静默,不影响启动。
         AppServices.GachaIcons.ApplyCachedCatalog();
 
+        // 更新包缓存兜底清理(用户反馈 2026-11):自更新把 zip 与解压目录都留在
+        // %AppData%\McKuro\updates\,每次升级累加约 600 MB。首选清理点是替换脚本自己
+        // (装完即删,见 UpdateLaunchScripts);这里再按龄淘汰 —— 覆盖两种情况:
+        //   ① 脚本那一步因为文件被占用/杀软锁而没删掉(rd/del 失败静默);
+        //   ② 下载完但用户没装就关掉了(留着一个 130 MB 的 zip)。
+        // 后台线程、失败静默:宁可晚点清,也不能拖慢或打断启动。
+        _ = Task.Run(() => McKuro.Core.Services.Update.UpdateCacheMaintenance.Clean(
+            McKuro.Core.Services.Update.UpdateCacheMaintenance.DefaultDirectory(AppServices.AppDataDir),
+            DateTime.UtcNow));
+
         // WebView2 环境预热:只在「确实需要重新登录」时才做。
         //
         // 旧实现只判断「是否存过账号」,而账号存在 ≠ 登录仍然有效:token 可能已在别处失效、
@@ -225,6 +235,27 @@ public partial class App : Application
                                 () => launcherVm.CheckResidueCommand.Execute(null),
                                 TimeSpan.FromSeconds(2));
                         }
+                    }
+
+                    // 设置页「关于」分类目视验证(McKuro_SMOKE_ABOUT=1):
+                    // 直接切到「关于」分类,用于核对版本/目录/日志清理那一组的排版与按钮数量。
+                    if (Environment.GetEnvironmentVariable("McKuro_SMOKE_ABOUT") == "1")
+                    {
+                        DispatcherTimer.RunOnce(() =>
+                        {
+                            var about = vm.SettingsPage.Categories
+                                .FirstOrDefault(c => c.Key == SettingsCategoryKeys.About);
+                            vm.SettingsPage.SelectCategoryCommand.Execute(about);
+                        }, TimeSpan.FromSeconds(1));
+                    }
+
+                    // 「清理日志」弹窗目视验证(McKuro_SMOKE_LOGCLEAN=1):
+                    // 切到设置页后直接触发清理命令,验证范围选择弹窗的排版与文案。
+                    if (Environment.GetEnvironmentVariable("McKuro_SMOKE_LOGCLEAN") == "1")
+                    {
+                        DispatcherTimer.RunOnce(
+                            () => _ = vm.SettingsPage.CleanLogsCommand.ExecuteAsync(null),
+                            TimeSpan.FromSeconds(2));
                     }
 
                     // 「游戏资源」弹窗目视验证(McKuro_SMOKE_RESOURCE=1):

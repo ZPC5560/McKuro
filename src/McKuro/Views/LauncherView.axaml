@@ -644,6 +644,41 @@
                                        VerticalAlignment="Center" Margin="0,2,0,0" />
                         </StackPanel>
                     </Button>
+                    <!-- 补全可选资源(仅精简安装时出现):启动按钮左侧的次级入口。
+                         不放主按钮位 —— 它是一次性增强操作,不该和「启动游戏」抢视线。
+                         精简版进游戏后客户端会按进度自动补,这个按钮只是让想一次备齐的人省事。 -->
+                    <Button Height="56"
+                            Padding="0"
+                            FontSize="14"
+                            Background="#2A2F3A"
+                            Foreground="#D8DBE2"
+                            BorderThickness="1"
+                            BorderBrush="#3A4150"
+                            CornerRadius="18"
+                            Command="{Binding TopUpResourcesCommand}"
+                            IsEnabled="{Binding CanStartOperation}"
+                            IsVisible="{Binding ShowTopUpButton}"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,8,0">
+                        <Button.Styles>
+                            <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                                <Setter Property="Background" Value="#353B48" />
+                                <Setter Property="Opacity" Value="1" />
+                            </Style>
+                            <Style Selector="Button:pointerover">
+                                <Setter Property="Background" Value="#353B48" />
+                                <Setter Property="Opacity" Value="1" />
+                            </Style>
+                        </Button.Styles>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6" VerticalAlignment="Center">
+                            <ic:FluentIcon Icon="ArrowDownload" IconVariant="Regular" IconSize="Size16"
+                                           VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:Localize Key=Launcher.TopUpButton}" FontSize="14" FontWeight="Bold"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding TopUpSizeText}" FontSize="11"
+                                       VerticalAlignment="Center" Margin="0,2,0,0" Opacity="0.8" />
+                        </StackPanel>
+                    </Button>
                     <Button Height="56"
                             Padding="0"
                             FontSize="15"

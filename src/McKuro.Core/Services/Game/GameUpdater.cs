@@ -85,7 +85,8 @@ public sealed class GameUpdater : IGameUpdater
     /// 返回 null 表示该渠道没有新版协议(WeGame):预下载退回旧协议逻辑(拿不到就如实报无预载)。
     /// </para>
     /// </summary>
-    private readonly Func<GameServerType, string?> _packIndexUrlProvider;
+    // 可空:调用方指定了自己的清单地址(测试/私有部署)时该通道为 null,见构造器注释。
+    private readonly Func<GameServerType, string?>? _packIndexUrlProvider;
 
     /// <summary>
     /// 是否启用快速校验(对齐 Haiyu 1.4.3 FastVerify)。设置服务缺失(测试/工具场景)时保持关闭,
@@ -141,7 +142,11 @@ public sealed class GameUpdater : IGameUpdater
         _database = database;
         _settings = settings;
         _indexUrlProvider = indexUrlProvider ?? KuroEndpoints.ForServerType;
-        _packIndexUrlProvider = packIndexUrlProvider ?? KuroEndpoints.ResourcePackIndexForServerType;
+        // 端点提供者的默认值必须与 indexUrlProvider 保持同一语义:
+        // 调用方显式指定了自己的清单地址(测试、私有部署)时,不能偷偷连官方新版端点 ——
+        // 否则单测会依赖外网,离线环境直接超时(实测 StreamingInstallTests 因此挂起)。
+        _packIndexUrlProvider = packIndexUrlProvider
+            ?? (indexUrlProvider is null ? KuroEndpoints.ResourcePackIndexForServerType : null);
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<GameUpdater>.Instance;
     }
 
@@ -233,7 +238,7 @@ public sealed class GameUpdater : IGameUpdater
         GameServerType serverType,
         CancellationToken ct = default)
     {
-        var packIndexUrl = _packIndexUrlProvider(serverType);
+        var packIndexUrl = _packIndexUrlProvider?.Invoke(serverType);
         if (string.IsNullOrWhiteSpace(packIndexUrl))
         {
             // 该渠道没有新版协议(WeGame):预下载退回旧端点(通常报"无预载")。
@@ -305,6 +310,41 @@ public sealed class GameUpdater : IGameUpdater
         return info is null ? (0, 0) : (info.FullBytes, info.FullDiskBytes);
     }
 
+    /// <summary>
+    /// 加载「当前正式版本」的完整清单:<b>优先新版协议端点</b>,取不到才回退旧协议。
+    /// <para>
+    /// <b>这是「官方提示更新、我们没提示」的根因修复。</b>实测 2026-11-12(3.8.0 正式发布当天):
+    /// 旧协议端点 <c>default.config.version</c> 仍是 3.7.1,而新版协议端点四个资源包都是 3.8.0 ——
+    /// 官方把正式版本发布到了新版协议的 <c>resourcePacks</c> 上,旧端点只是没跟上。
+    /// 只读旧端点,版本比较永远是「已是最新」。
+    /// </para>
+    /// <para>
+    /// 回退条件很严格:新版端点缺 resourcePacks / 网络失败 / 清单为空 才回退,避免
+    /// "新端点偶发失败就静默退到旧端点、又报已是最新"这类更难排查的表现。WeGame 等
+    /// 没有新端点的渠道直接走旧协议。
+    /// </para>
+    /// </summary>
+    private async Task<ManifestLoadResult> LoadCurrentManifestAsync(
+        GameServerType serverType,
+        CancellationToken ct)
+    {
+        var packIndexUrl = _packIndexUrlProvider?.Invoke(serverType);
+        if (!string.IsNullOrWhiteSpace(packIndexUrl))
+        {
+            var bundle = ResourceLevelPlanner.LevelToBundleName(_settings?.Current.ResourceLevel);
+            var packed = await _loader.LoadResourcePackManifestAsync(packIndexUrl, bundle, ct)
+                .ConfigureAwait(false);
+            if (packed is { Success: true, Manifest: not null })
+            {
+                return packed;
+            }
+            _logger.LogWarning("新版协议清单不可用,回退旧协议端点(可能是发布过渡期)");
+        }
+
+        var indexUrl = _indexUrlProvider(serverType);
+        return await _loader.LoadKuroAsync(indexUrl, preDownload: false, ct).ConfigureAwait(false);
+    }
+
     /// <summary>检查更新(依据当前渠道的 index.json)。</summary>
     /// <remarks>
     /// 只比较版本号判断是否有更新,不做全量文件 MD5 校验(数万文件会耗时数分钟,
@@ -327,12 +367,12 @@ public sealed class GameUpdater : IGameUpdater
         // 照常去拉清单,让界面能算出需要下载多少、并允许直接点「下载安装」。
         // 安装流程自己会 Directory.CreateDirectory,不需要在这里建目录。
 
-        var indexUrl = _indexUrlProvider(serverType);
-        var load = await _loader.LoadKuroAsync(indexUrl, preDownload: false, ct).ConfigureAwait(false);
+        var load = await LoadCurrentManifestAsync(serverType, ct).ConfigureAwait(false);
         if (!load.Success || load.Manifest is null)
         {
             return new UpdateCheckResult { Success = false, Message = load.Message ?? CoreStrings.T("Core.Updater.ManifestFailed", "获取更新清单失败") };
         }
+        // 新版协议没有 default 节点:差分会走分级预载通道(见 InstallAsync),这里不依赖 DefaultData。
 
         var manifest = load.Manifest;
         // 防御:服务端版本缺失视为拉取失败(避免空版本强制"有更新")
@@ -591,7 +631,7 @@ public sealed class GameUpdater : IGameUpdater
         }
 
         // 新版协议(3.8 起的「资源分类下载」)优先:旧端点已不再提供 predownload 节点。
-        var packIndexUrl = _packIndexUrlProvider(serverType);
+        var packIndexUrl = _packIndexUrlProvider?.Invoke(serverType);
         if (!string.IsNullOrWhiteSpace(packIndexUrl))
         {
             return await PreDownloadResourcePacksAsync(packIndexUrl, serverType, spec, progress, ct)
@@ -942,7 +982,8 @@ public sealed class GameUpdater : IGameUpdater
     public async Task<(bool Success, string? Message)> InstallAsync(
         GameServerType serverType,
         IProgress<DownloadProgress>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        PredownloadSpec spec = PredownloadSpec.Full)
     {
         var root = _paths.GameRootDir;
         if (string.IsNullOrEmpty(root))
@@ -962,8 +1003,8 @@ public sealed class GameUpdater : IGameUpdater
                 $"无法创建游戏目录: {root}", root));
         }
 
-        var indexUrl = _indexUrlProvider(serverType);
-        var load = await _loader.LoadKuroAsync(indexUrl, preDownload: false, ct).ConfigureAwait(false);
+        // 优先新版协议端点:正式版本发布在那里,旧端点会滞后(见 LoadCurrentManifestAsync)。
+        var load = await LoadCurrentManifestAsync(serverType, ct).ConfigureAwait(false);
         if (!load.Success || load.Manifest is null)
         {
             return (false, load.Message ?? CoreStrings.T("Core.Updater.ManifestFailed", "获取更新清单失败"));
@@ -1007,9 +1048,62 @@ public sealed class GameUpdater : IGameUpdater
             }
         }
 
+        // 新版协议的差分更新:各包 patchConfig 里「从本地版本升到目标版本」的补丁清单。
+        // 先于旧协议分支尝试 —— 新版协议的 DefaultData 为 null,旧分支根本进不去,
+        // 不接这条就只能逐文件对齐完整清单(实测 3.7.1→3.8.0 差分 12.08 GiB vs 全量几十 GB)。
+        if (stagingDir is null)
+        {
+            var packIndexUrl = _packIndexUrlProvider?.Invoke(serverType);
+            if (!string.IsNullOrWhiteSpace(packIndexUrl))
+            {
+                var bundle = ResourceLevelPlanner.LevelToBundleName(_settings?.Current.ResourceLevel);
+                var plan = await _loader.LoadUpdatePatchPlanAsync(packIndexUrl, bundle, installedVersion, ct, spec)
+                    .ConfigureAwait(false);
+                if (plan is not null)
+                {
+                    var (downloaded, tempDir, message) = await DownloadUpdatePatchAsync(
+                        plan, installedVersion, progress, ct).ConfigureAwait(false);
+                    if (downloaded && tempDir is not null)
+                    {
+                        stagingDir = tempDir;
+                        patchTempDir = tempDir;
+                        patchLoad = await LoadMergedPreDownloadPatchAsync(
+                            new PreDownloadMeta
+                            {
+                                Version = plan.TargetVersion,
+                                SourceVersion = installedVersion,
+                                ServerType = serverType,
+                                // 与下载时同一规格:精简预载只有精简清单里的差分包,
+                                // 按全量清单去装会去找根本不存在的文件而失败。
+                                Spec = plan.Spec,
+                                Packs = plan.Packs.Select(p => new PreDownloadPackMeta
+                                {
+                                    PackName = p.PackName,
+                                    PatchIndexUrl = p.PatchIndexUrl,
+                                    BaseUrl = p.BaseUrl ?? "",
+                                    IndexFileMd5 = p.IndexFileMd5,
+                                }).ToList(),
+                            },
+                            ct).ConfigureAwait(false);
+                        if (patchLoad is null || !patchLoad.Success || patchLoad.Manifest?.PatchPlan is null)
+                        {
+                            _logger.LogWarning("差分清单重建失败,回退完整清单: {Message}", patchLoad?.Message);
+                            patchLoad = null;
+                            stagingDir = null;
+                            patchTempDir = null;
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("差分更新包下载失败,回退完整清单: {Message}", message);
+                    }
+                }
+            }
+        }
+
         // 只有默认节点已经切换到预载目标版本时,才消费预载目录。
         // 服务器存在 predownload 节点本身不会触发未来版本下载。
-        if (stagingDir is null)
+        if (stagingDir is null && load.DefaultData is not null)
         {
             var (patchUrl, cdnPrefix, patchConfig) = await ResolvePatchFromIndexAsync(
                 load.DefaultData,
@@ -1894,8 +1988,8 @@ public sealed class GameUpdater : IGameUpdater
             return (false, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
         }
 
-        var indexUrl = _indexUrlProvider(serverType);
-        var load = await _loader.LoadKuroAsync(indexUrl, preDownload: false, ct).ConfigureAwait(false);
+        // 优先新版协议端点:正式版本发布在那里,旧端点会滞后(见 LoadCurrentManifestAsync)。
+        var load = await LoadCurrentManifestAsync(serverType, ct).ConfigureAwait(false);
         if (!load.Success || load.Manifest is null)
         {
             return (false, load.Message ?? CoreStrings.T("Core.Updater.ManifestFailed", "获取更新清单失败"));
@@ -2380,6 +2474,285 @@ public sealed class GameUpdater : IGameUpdater
             index++;
         } while (value >= 1024 && index < units.Length - 1);
         return $"{value:0.##} {units[index]}";
+    }
+
+    /// <summary>
+    /// 取「正式更新」的两档体积(供界面在下载前让用户选全量/精简)。
+    /// <para>
+    /// 与预下载的区别:预下载读 <c>predownload</c> 节点(预载窗口才有),这里读
+    /// <c>resourcePacks[].patchConfig</c>(正式版始终有)。所以预载窗口关闭后,
+    /// 正式更新仍能给出两档对比。
+    /// </para>
+    /// </summary>
+    /// <returns>差分计划(含 FullBytes/MinimalBytes);无法差分为 null。</returns>
+    public async Task<UpdatePatchPlan?> GetUpdateSpecOptionsAsync(
+        GameServerType serverType,
+        CancellationToken ct = default)
+    {
+        var root = _paths.GameRootDir;
+        var packIndexUrl = _packIndexUrlProvider?.Invoke(serverType);
+        if (string.IsNullOrEmpty(root) || string.IsNullOrWhiteSpace(packIndexUrl))
+        {
+            return null;
+        }
+
+        try
+        {
+            var installedVersion = ReadInstalledVersion(root);
+            var bundle = ResourceLevelPlanner.LevelToBundleName(_settings?.Current.ResourceLevel);
+            return await _loader.LoadUpdatePatchPlanAsync(packIndexUrl, bundle, installedVersion, ct)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "读取更新规格选项失败");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 检测当前安装是否为「精简」状态:是否存在被跳过的可选资源分组。
+    /// <para>
+    /// 判断依据不是"当初选了什么规格"(那个记录会丢、也会被旧版本覆盖),而是
+    /// <b>当前服务端差分清单里那些可选分组的目标文件在磁盘上是否存在</b>:
+    /// 缺 → 就是精简状态,能补;都在 → 已经是完整状态,不该再显示「补全」入口。
+    /// </para>
+    /// </summary>
+    /// <returns>补全计划(含体积);已是完整状态 / 无法判断时为 null。</returns>
+    public async Task<ResourceTopUpPlan?> DetectOptionalResourcesMissingAsync(
+        GameServerType serverType,
+        CancellationToken ct = default)
+    {
+        var root = _paths.GameRootDir;
+        if (string.IsNullOrEmpty(root))
+        {
+            return null;
+        }
+
+        var packIndexUrl = _packIndexUrlProvider?.Invoke(serverType);
+        if (string.IsNullOrWhiteSpace(packIndexUrl))
+        {
+            return null;
+        }
+
+        var installedVersion = ReadInstalledVersion(root);
+        if (string.IsNullOrWhiteSpace(installedVersion))
+        {
+            return null;
+        }
+
+        var bundle = ResourceLevelPlanner.LevelToBundleName(_settings?.Current.ResourceLevel);
+
+        // 判据一:<b>当前正式版完整清单里的可选资源(Option_Pack_*)在磁盘上缺不缺</b>。
+        // 用完整清单而不是差分清单,因为:
+        //   ① 完整清单给的是"应存在的目标路径",差分清单给的是"要下载的 .krpdiff 包"
+        //      (后者本来就不在游戏目录里,拿它判断永远得出"缺失"——这是初版的 bug);
+        //   ② 完整清单不依赖"从哪个版本升上来",装好当前版本后依然可判。
+        var manifest = await _loader.LoadResourcePackManifestAsync(packIndexUrl, bundle, ct)
+            .ConfigureAwait(false);
+        if (manifest is not { Success: true, Manifest: not null })
+        {
+            return null;
+        }
+
+        var optionalFiles = manifest.Manifest.Files
+            .Where(f => f.Path.Contains("Option_Pack", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (optionalFiles.Count == 0)
+        {
+            // 服务端这一版本没有可选资源包(或不是分级版本):不该有补全入口。
+            return null;
+        }
+
+        var missingFiles = optionalFiles.Count(f =>
+            !File.Exists(GameFilePath.CombineUnderRoot(root, f.Path)));
+        _logger.LogInformation("可选资源检测:{Total} 个可选文件,缺失 {Missing} 个", optionalFiles.Count, missingFiles);
+        if (missingFiles == 0)
+        {
+            return null;   // 已完整
+        }
+
+        // 判据二:怎么补。走差分清单(按本地版本匹配),只挑被精简丢弃的分组。
+        var plan = await _loader.LoadResourceTopUpPlanAsync(packIndexUrl, bundle, installedVersion, ct)
+            .ConfigureAwait(false);
+        return plan;
+    }
+
+    /// <summary>
+    /// 补齐精简版缺失的可选资源(下载被跳过分组的差分包并应用)。
+    /// <para>
+    /// <b>只用于「已经装好了当前版本、但当初选了精简」的情形</b>:它不改变已装版本号,
+    /// 也不影响主清单 —— 补的是 <c>Option_Pack_*</c> 这类进游戏后才会按进度下载的内容。
+    /// </para>
+    /// </summary>
+    public async Task<(bool Success, string? Message)> TopUpOptionalResourcesAsync(
+        GameServerType serverType,
+        IProgress<DownloadProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        var root = _paths.GameRootDir;
+        if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+        {
+            return (false, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
+        }
+
+        var plan = await DetectOptionalResourcesMissingAsync(serverType, ct).ConfigureAwait(false);
+        if (plan is null)
+        {
+            return (true, CoreStrings.T("Launcher.TopUpNothing", "可选资源已齐全"));
+        }
+
+        // 下载到固定临时目录(可续传),再按补丁计划应用。
+        var topUpKey = string.Join(",", plan.Packs.Select(p => p.PackName)) + "|topup";
+        var tempDir = _paths.PatchInstallTempDir(GamePathResolver.ComputePatchKey(
+            topUpKey,
+            string.Join(",", plan.Packs.Select(p => p.IndexFileMd5)),
+            ReadInstalledVersion(root)));
+        if (string.IsNullOrEmpty(tempDir))
+        {
+            return (false, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
+        }
+
+        var merged = new List<GameFileEntry>();
+        var mergedPlan = new GamePatchPlan();
+        foreach (var pack in plan.Packs)
+        {
+            var load = await _loader.LoadPatchAsync(
+                pack.PatchIndexUrl, pack.BaseUrl, pack.IndexFileMd5, ct, PredownloadSpec.Minimal)
+                .ConfigureAwait(false);
+            if (!load.Success || load.Manifest?.PatchPlan is null)
+            {
+                return (false, load.Message);
+            }
+            merged.AddRange(load.Manifest.Files);
+            mergedPlan.DiffPackages.AddRange(load.Manifest.PatchPlan.DiffPackages);
+            mergedPlan.DiffGroups.AddRange(load.Manifest.PatchPlan.DiffGroups);
+            mergedPlan.DeleteFiles.AddRange(load.Manifest.PatchPlan.DeleteFiles);
+        }
+
+        if (merged.Count == 0)
+        {
+            return (true, CoreStrings.T("Launcher.TopUpNothing", "可选资源已齐全"));
+        }
+
+        var downloadBytes = merged.Sum(f => f.Size);
+        if (!HasFreeSpace(tempDir, downloadBytes) || !HasFreeSpace(root, plan.DownloadBytes))
+        {
+            return (false, CoreStrings.F("Core.Updater.DownloadDiskFull",
+                $"空间不足: {FormatBytes(downloadBytes)}", FormatBytes(downloadBytes)));
+        }
+
+        CleanStaleInstallTemp(tempDir);
+        Directory.CreateDirectory(tempDir);
+        var (_, failures) = await _downloader.DownloadManyAsync(merged, "", tempDir, progress, ct)
+            .ConfigureAwait(false);
+        if (failures.Count > 0)
+        {
+            return (false, CoreStrings.F("Core.Updater.DownloadFailedFirst",
+                $"下载失败: {failures[0]}", failures[0]));
+        }
+
+        // 注意:补全只应用差分包,不动已装版本号与主清单。
+        var result = await _patchInstaller.InstallAsync(
+            mergedPlan, tempDir, root, merged, progress, ct).ConfigureAwait(false);
+        TryDeleteDirectory(tempDir);
+        return result.Success
+            ? (true, CoreStrings.F("Launcher.TopUpDone",
+                $"已补齐可选资源({FormatBytes(plan.DownloadBytes)})", FormatBytes(plan.DownloadBytes)))
+            : (false, result.Message);
+    }
+
+    /// <summary>
+    /// 下载新协议差分更新的各包补丁文件到一个固定临时目录(支持断点续传)。
+    /// <para>
+    /// 目录按「来源版本 + 目标版本 + 包集合」固定命名:中断后再次点安装能复用已下文件与 .part,
+    /// 而不是从头重下十几个 GB(与旧协议补丁临时目录同一策略)。
+    /// </para>
+    /// </summary>
+    /// <returns>成功标志、暂存目录、失败原因。</returns>
+    private async Task<(bool Success, string? TempDir, string? Message)> DownloadUpdatePatchAsync(
+        UpdatePatchPlan plan,
+        string? installedVersion,
+        IProgress<DownloadProgress>? progress,
+        CancellationToken ct)
+    {
+        var root = _paths.GameRootDir;
+        if (string.IsNullOrEmpty(root))
+        {
+            return (false, null, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
+        }
+
+        // 合并各包的补丁清单,得到要下载的差分包列表。
+        var merged = new List<GameFileEntry>();
+        var mergedPlan = new GamePatchPlan();
+        foreach (var pack in plan.Packs)
+        {
+            var load = await _loader.LoadPatchAsync(
+                pack.PatchIndexUrl,
+                pack.BaseUrl,
+                pack.IndexFileMd5,
+                ct,
+                plan.Spec).ConfigureAwait(false);
+            if (!load.Success || load.Manifest?.PatchPlan is null)
+            {
+                return (false, null, load.Message);
+            }
+            merged.AddRange(load.Manifest.Files);
+            mergedPlan.DiffPackages.AddRange(load.Manifest.PatchPlan.DiffPackages);
+            mergedPlan.DiffGroups.AddRange(load.Manifest.PatchPlan.DiffGroups);
+            mergedPlan.ZipPackages.AddRange(load.Manifest.PatchPlan.ZipPackages);
+            mergedPlan.DeleteFiles.AddRange(load.Manifest.PatchPlan.DeleteFiles);
+        }
+
+        if (merged.Count == 0)
+        {
+            return (false, null, CoreStrings.T("Core.Updater.PredownloadManifestUnavailable", "预载补丁清单不可用"));
+        }
+
+        var downloadBytes = merged.Sum(f => f.Size);
+        // 所需空间:下载 + 最大单文件(差分合成时新旧文件同时在场),与预下载同一口径。
+        var requiredBytes = downloadBytes + merged.Max(f => f.Size);
+        var key = GamePathResolver.ComputePatchKey(
+            string.Join(",", plan.Packs.Select(p => p.PackName)) + "|" + plan.TargetVersion + "|" + installedVersion,
+            string.Join(",", plan.Packs.Select(p => p.IndexFileMd5)),
+            installedVersion);
+        var tempDir = _paths.PatchInstallTempDir(key);
+        if (string.IsNullOrEmpty(tempDir))
+        {
+            return (false, null, CoreStrings.T("Launcher.NoGameDir", "未设置游戏目录"));
+        }
+
+        CleanStaleInstallTemp(tempDir);
+        if (!HasFreeSpace(tempDir, downloadBytes))
+        {
+            return (false, null, CoreStrings.F("Core.Updater.DownloadDiskFull",
+                $"更新下载盘空间不足: {FormatBytes(downloadBytes)}", FormatBytes(downloadBytes)));
+        }
+        if (!HasFreeSpace(root, requiredBytes))
+        {
+            return (false, null, CoreStrings.F("Core.Updater.GameDiskFull",
+                $"游戏盘空间不足: {FormatBytes(requiredBytes)}", FormatBytes(requiredBytes)));
+        }
+
+        Directory.CreateDirectory(tempDir);
+        var (_, failures) = await _downloader.DownloadManyAsync(
+            merged,
+            "",
+            tempDir,
+            progress,
+            ct).ConfigureAwait(false);
+        if (failures.Count > 0)
+        {
+            // 不删临时目录:已下完的部分与 .part 由哈希保护,下次续传。
+            return (false, tempDir, CoreStrings.F("Core.Updater.DownloadFailedFirst",
+                $"下载失败: {failures[0]}", failures[0]));
+        }
+
+        return (true, tempDir, null);
     }
 
     /// <summary>

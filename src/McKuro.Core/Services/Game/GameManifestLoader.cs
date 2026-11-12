@@ -377,6 +377,403 @@ public sealed class GameManifestLoader
     }
 
     /// <summary>
+    /// 读取「正式版本更新」的差分计划:各资源包从 <paramref name="installedVersion"/> 升到当前版本的补丁清单。
+    /// <para>
+    /// <b>为什么要单独解析:</b>新版协议没有旧协议那种 <c>default.config.patchConfig</c> 顶层补丁表,
+    /// 差分配置挪到了每个资源包自己的 <c>patchConfig[]</c> 里。不接这条,正式更新就只能逐文件对齐完整清单
+    /// —— 实测 3.7.1→3.8.0 差分包只有 12.08 GiB,而按完整清单补齐要重下几十 GB。
+    /// </para>
+    /// <para>
+    /// 任一包匹配不到本地版本的差分项时返回 null(<b>不做部分差分</b>):少打一个包的差分,
+    /// 装完就会缺文件,后续校验必然失败并回退——白下一遍。
+    /// </para>
+    /// </summary>
+    /// <returns>可用差分计划;本地版本没有对应差分项时为 null(调用方回退完整清单)。</returns>
+    /// <param name="spec">下载规格:精简时后续 <see cref="LoadPatchAsync"/> 要带同一个规格做分组过滤。</param>
+    public async Task<UpdatePatchPlan?> LoadUpdatePatchPlanAsync(
+        string packIndexUrl,
+        string bundleName,
+        string? installedVersion,
+        CancellationToken ct = default,
+        PredownloadSpec spec = PredownloadSpec.Full)
+    {
+        if (!IsHttpsUrl(packIndexUrl) || string.IsNullOrWhiteSpace(installedVersion))
+        {
+            return null;
+        }
+
+        var index = await LoadResourcePackIndexAsync(packIndexUrl, ct).ConfigureAwait(false);
+        if (index?.ResourcePacks is not { Count: > 0 } || index.Bundles is null)
+        {
+            return null;
+        }
+
+        var cdn = index.CdnList?
+            .Where(c => IsHttpsUrl(c.Url))
+            .OrderBy(c => c.P == 0 ? int.MaxValue : c.P)
+            .FirstOrDefault()?.Url;
+        if (string.IsNullOrWhiteSpace(cdn))
+        {
+            return null;
+        }
+
+        var packs = new List<PredownloadPackPlan>();
+        var loadedPatches = new List<KuroPatchIndex>();
+        long bytes = 0;
+        string? target = null;
+        foreach (var packName in ResourceLevelPlanner.ResolvePackNames(index, bundleName))
+        {
+            if (!index.ResourcePacks.TryGetValue(packName, out var pack))
+            {
+                return null;
+            }
+
+            // 精确匹配本地版本:官方只给「从某个具体版本升到本包版本」的差分清单,
+            // 拿别的版本硬套会合不出正确的文件。
+            var match = (pack.PatchConfig ?? []).FirstOrDefault(p =>
+                !string.IsNullOrWhiteSpace(p.Version)
+                && string.Equals(p.Version, installedVersion, StringComparison.OrdinalIgnoreCase));
+            if (match is null || string.IsNullOrWhiteSpace(match.IndexFile))
+            {
+                _logger.LogInformation(
+                    "包 {Pack} 没有从 {From} 升到 {To} 的差分项,回退完整清单",
+                    packName, installedVersion, pack.Version);
+                return null;
+            }
+
+            var patchUrl = cdn.TrimEnd('/') + "/" + match.IndexFile.TrimStart('/');
+            packs.Add(new PredownloadPackPlan
+            {
+                PackName = packName,
+                PatchIndexUrl = patchUrl,
+                BaseUrl = cdn.TrimEnd('/') + "/" + (match.BaseUrl ?? "").TrimStart('/'),
+                IndexFileMd5 = match.IndexFileMd5,
+            });
+            bytes += match.Size ?? 0;
+
+            // 顺带取一次补丁清单,算两档体积:界面要在下载前给出「全量 X GB / 精简 Y GB」的对比。
+            // 清单早已在内存里(下载阶段还要再解析一次),这里多读一次换来的是用户能看到真实差别。
+            var patchList = await LoadPatchIndexOnlyAsync(patchUrl, match.IndexFileMd5, ct).ConfigureAwait(false);
+            if (patchList is not null)
+            {
+                loadedPatches.Add(patchList);
+            }
+
+            if (!string.IsNullOrWhiteSpace(pack.Version)
+                && (target is null || CompareVersion(pack.Version, target) > 0))
+            {
+                target = pack.Version;
+            }
+        }
+
+        if (packs.Count == 0 || target is null)
+        {
+            return null;
+        }
+
+        var full = loadedPatches.Sum(p => PredownloadPlanner.DownloadBytes(p, PredownloadSpec.Full));
+        var minimal = loadedPatches.Sum(p => PredownloadPlanner.DownloadBytes(p, PredownloadSpec.Minimal));
+        _logger.LogInformation(
+            "差分更新计划:v{From} → v{To} 包={Packs} 全量≈{Full} 精简≈{Minimal}",
+            installedVersion, target, string.Join("+", packs.Select(p => p.PackName)), full, minimal);
+        return new UpdatePatchPlan
+        {
+            TargetVersion = target,
+            SourceVersion = installedVersion,
+            Packs = packs,
+            // 下载字节按所选规格;拿不到清单时退回 patchConfig 声明的 size(量级够 UI 用)。
+            DownloadBytes = loadedPatches.Count > 0 ? (spec == PredownloadSpec.Minimal ? minimal : full) : bytes,
+            FullBytes = loadedPatches.Count > 0 ? full : bytes,
+            MinimalBytes = loadedPatches.Count > 0 ? minimal : bytes,
+            // 规格随计划一起带下去:下载与安装两处都要按同一判据过滤,
+            // 否则会出现"按精简算的体积、却按全量下载"的错配。
+            Spec = spec,
+        };
+    }
+
+    /// <summary>
+    /// 生成「补齐精简版缺失的可选资源」的下载计划。
+    /// <para>
+    /// <b>用途:</b>用户当初选了精简预下载(或精简更新),之后想把一次性备齐 ——
+    /// 那些被 <c>tagGroups.min.exclude_prefixes</c> 排除掉的分组(官方命名为
+    /// <c>Client/Saved/Resources/Option_Pack_*</c>)可以单独检出并下载。
+    /// 实测 3.8.0 国服 HD:26 个可选包,common 2.91 GiB + hd 1.88 GiB。
+    /// </para>
+    /// <para>
+    /// <b>为什么走差分清单而不是完整清单</b>:这些包在完整清单里也存在,但按完整清单比对
+    /// 会把「本来就该在的常规文件」一起算进来。差分清单的分组结构天然把它们分开了:
+    /// 被精简丢弃的分组,其 dstFiles 就是进游戏后要补的那些文件。
+    /// </para>
+    /// <para>
+    /// <b>本地版本无差分项时返回 null</b>:此时无法定向补;调用方应提示用户
+    /// 「进游戏后由客户端按进度自动补充」而不是盲目下几十 GB。
+    /// </para>
+    /// </summary>
+    /// <returns>补全计划(含要下载的分组与字节数);无法定向补时为 null。</returns>
+    public async Task<ResourceTopUpPlan?> LoadResourceTopUpPlanAsync(
+        string packIndexUrl,
+        string bundleName,
+        string? installedVersion,
+        CancellationToken ct = default)
+    {
+        if (!IsHttpsUrl(packIndexUrl) || string.IsNullOrWhiteSpace(installedVersion))
+        {
+            return null;
+        }
+
+        var index = await LoadResourcePackIndexAsync(packIndexUrl, ct).ConfigureAwait(false);
+        if (index?.ResourcePacks is not { Count: > 0 } || index.Bundles is null)
+        {
+            return null;
+        }
+
+        var cdn = index.CdnList?
+            .Where(c => IsHttpsUrl(c.Url))
+            .OrderBy(c => c.P == 0 ? int.MaxValue : c.P)
+            .FirstOrDefault()?.Url;
+        if (string.IsNullOrWhiteSpace(cdn))
+        {
+            return null;
+        }
+
+        var packs = new List<PredownloadPackPlan>();
+        var targets = new List<string>();
+        long bytes = 0;
+        var fileCount = 0;
+        foreach (var packName in ResourceLevelPlanner.ResolvePackNames(index, bundleName))
+        {
+            if (!index.ResourcePacks.TryGetValue(packName, out var pack))
+            {
+                continue;
+            }
+
+            var match = (pack.PatchConfig ?? []).FirstOrDefault(p =>
+                !string.IsNullOrWhiteSpace(p.Version)
+                && string.Equals(p.Version, installedVersion, StringComparison.OrdinalIgnoreCase));
+            if (match is null || string.IsNullOrWhiteSpace(match.IndexFile))
+            {
+                continue;
+            }
+
+            var patchUrl = cdn.TrimEnd('/') + "/" + match.IndexFile.TrimStart('/');
+            var patch = await LoadPatchIndexOnlyAsync(patchUrl, match.IndexFileMd5, ct).ConfigureAwait(false);
+            if (patch is null)
+            {
+                continue;
+            }
+
+            var prefixes = PredownloadPlanner.ExcludePrefixes(patch);
+            var dropped = PredownloadPlanner.DroppedGroupDests(patch, prefixes);
+            if (dropped.Count == 0)
+            {
+                continue;
+            }
+
+            // 只挑被精简丢弃的差分包作为下载项。
+            var entries = (patch.Resource ?? [])
+                .Where(r => r.Dest is not null
+                    && dropped.Contains(r.Dest.Replace('\\', '/')))
+                .Select(r => new GameFileEntry
+                {
+                    Path = NormalizePath(r.Dest!),
+                    Size = r.Size ?? 0,
+                    Md5 = r.Md5 ?? "",
+                    Url = cdn.TrimEnd('/') + "/" +
+                        (string.IsNullOrWhiteSpace(r.FromFolder)
+                            ? (match.BaseUrl ?? "").TrimStart('/') + "/" + r.Dest!.TrimStart('/')
+                            : r.FromFolder.TrimStart('/') + r.Dest!.TrimStart('/')),
+                })
+                .ToList();
+
+            if (entries.Count == 0)
+            {
+                continue;
+            }
+
+            packs.Add(new PredownloadPackPlan
+            {
+                PackName = packName,
+                PatchIndexUrl = patchUrl,
+                BaseUrl = cdn.TrimEnd('/') + "/" + (match.BaseUrl ?? "").TrimStart('/'),
+                IndexFileMd5 = match.IndexFileMd5,
+            });
+            bytes += entries.Sum(e => e.Size);
+            fileCount += entries.Count;
+
+            // 记录「差分应用后应落地的目标文件」—— 检测缺不缺要看它们,不是看差分包。
+            foreach (var group in patch.GroupInfos ?? [])
+            {
+                if (group?.Dest is null || !dropped.Contains(group.Dest.Replace('\\', '/')))
+                {
+                    continue;
+                }
+                foreach (var dst in group.DstFiles ?? [])
+                {
+                    if (!string.IsNullOrWhiteSpace(dst.Dest))
+                    {
+                        targets.Add(NormalizePath(dst.Dest!));
+                    }
+                }
+            }
+        }
+
+        if (packs.Count == 0)
+        {
+            return null;
+        }
+
+        _logger.LogInformation(
+            "可选资源补全计划:包={Packs} 文件={Files} 下载≈{Bytes}",
+            string.Join("+", packs.Select(p => p.PackName)), fileCount, bytes);
+        return new ResourceTopUpPlan
+        {
+            Packs = packs,
+            FileCount = fileCount,
+            DownloadBytes = bytes,
+            TargetPaths = targets,
+        };
+    }
+
+    /// <summary>只取补丁清单(不做 URL 拼装),供体积预估用。</summary>
+    private async Task<KuroPatchIndex?> LoadPatchIndexOnlyAsync(
+        string patchIndexUrl,
+        string? indexFileMd5,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var response = await _http.GetAsync(patchIndexUrl, ct).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var payload = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(indexFileMd5) && !HashMatches(payload, indexFileMd5))
+            {
+                return null;
+            }
+            return JsonSerializer.Deserialize(payload, GameJsonContext.Default.KuroPatchIndex);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "读取补丁清单失败(仅用于体积预估)");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 从新版协议端点加载「当前正式版本」的完整清单(common + 当前资源等级包)。
+    /// <para>
+    /// <b>为什么主更新也必须读这条通道:</b>官方自 3.8 起把新版本发布到新版协议端点
+    /// (<c>.../{appKey}/G152/official/index.json</c>)的 <c>resourcePacks</c> 上,
+    /// 而旧协议端点(<c>.../10003_Y8xXrXk.../index.json</c>)<b>仍停留在 3.7.1</b>。
+    /// 实测(2026-11-12,3.8.0 正式发布当天):旧端点 <c>default.config.version</c> 还是 3.7.1,
+    /// 新端点四个包全部是 3.8.0 —— 只读旧端点就会永远报「已是最新」,用户看到官方启动器提示更新、
+    /// 我们却没有。
+    /// </para>
+    /// <para>
+    /// 合并口径:当前等级组合(<see cref="ResourceLevelPlanner.ResolvePackNames"/>)的所有包并集。
+    /// 实测 <c>common</c> 524 条 + <c>hd</c> 104 条,覆盖主清单的全部文件;不含其它等级
+    /// (<c>uhd</c>/<c>sd</c>)的文件,这与官方「切换等级才下该等级包」的行为一致。
+    /// </para>
+    /// </summary>
+    /// <param name="packIndexUrl">新版协议 index.json 地址。</param>
+    /// <param name="bundleName">资源等级组合名(HD/SD/UHD)。</param>
+    /// <param name="ct">取消令牌。</param>
+    /// <returns>没有 resourcePacks 时返回 null,调用方回退旧协议端点。</returns>
+    public async Task<ManifestLoadResult?> LoadResourcePackManifestAsync(
+        string packIndexUrl,
+        string bundleName,
+        CancellationToken ct = default)
+    {
+        if (!IsHttpsUrl(packIndexUrl))
+        {
+            return null;
+        }
+
+        KuroResourcePackIndex? index;
+        try
+        {
+            index = await LoadResourcePackIndexAsync(packIndexUrl, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "读取新版协议 index.json 失败");
+            return null;
+        }
+
+        if (index?.ResourcePacks is not { Count: > 0 } || index.Bundles is null)
+        {
+            return null;
+        }
+
+        var cdn = index.CdnList?
+            .Where(c => IsHttpsUrl(c.Url))
+            .OrderBy(c => c.P == 0 ? int.MaxValue : c.P)
+            .FirstOrDefault()?.Url;
+        if (string.IsNullOrWhiteSpace(cdn))
+        {
+            return null;
+        }
+
+        var manifest = new GameManifest();
+        var version = "";
+        foreach (var packName in ResourceLevelPlanner.ResolvePackNames(index, bundleName))
+        {
+            if (!index.ResourcePacks.TryGetValue(packName, out var pack))
+            {
+                continue;
+            }
+
+            var load = await LoadResourcePackAsync(pack, cdn, ct: ct).ConfigureAwait(false);
+            if (!load.Success || load.Manifest is null || load.Manifest.Files.Count == 0)
+            {
+                _logger.LogWarning("加载资源包 {Pack} 清单失败: {Message}", packName, load.Message);
+                return null;
+            }
+
+            foreach (var file in load.Manifest.Files)
+            {
+                manifest.Files.Add(file);
+            }
+
+            if (!string.IsNullOrWhiteSpace(pack.Version)
+                && (version.Length == 0 || CompareVersion(pack.Version, version) > 0))
+            {
+                version = pack.Version;
+            }
+        }
+
+        if (manifest.Files.Count == 0 || string.IsNullOrWhiteSpace(version))
+        {
+            return null;
+        }
+
+        manifest.Version = version;
+        // 关键校验文件取自根节点 config(新版协议把 keyFileCheckList 放在 config 里)。
+        manifest.KeyFiles = index.Config?.KeyFileCheckList ?? [];
+        _logger.LogInformation(
+            "新版协议清单:v{Version} 包={Packs} 文件={Count}",
+            version,
+            string.Join("+", ResourceLevelPlanner.ResolvePackNames(index, bundleName)),
+            manifest.Files.Count);
+        return new ManifestLoadResult
+        {
+            Success = true,
+            Manifest = manifest,
+            ServerVersion = version,
+            // 新版协议没有 default/predownload 那种 KuroUpdateData 节点:差分信息在各包 patchConfig 里,
+            // 由 GameUpdater 的分级预载通道处理,这里保持 null。
+            DefaultData = null,
+        };
+    }
+
+    /// <summary>
     /// 读取「分级预下载」信息:目标版本、该等级由哪些包组成、全量与精简各自的体积/所需空间。
     /// <para>
     /// <b>必须读新版协议端点</b>(<c>.../{appKey}/G152/official/index.json</c>):旧协议端点自 3.8 起

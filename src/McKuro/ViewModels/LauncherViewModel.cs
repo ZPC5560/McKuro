@@ -252,6 +252,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanStartOperation));
         OnPropertyChanged(nameof(CanStartInstalledOperation));
         OnPropertyChanged(nameof(ResourceLevelEnabled));
+        // 补全入口同样受长操作门控(下载/安装期间不能点)。
+        OnPropertyChanged(nameof(ShowTopUpButton));
         UpdateLaunchButtonEnabled();
     }
 
@@ -277,6 +279,104 @@ public sealed partial class LauncherViewModel : ViewModelBase
     /// </para>
     /// </summary>
     public bool ShowStatusBar => !string.IsNullOrEmpty(StatusText) && !IsDownloading;
+
+    // ---------- 补全可选资源(精简版 → 完整) ----------
+
+    /// <summary>
+    /// 当前是否为「精简」安装且可以补全(可选资源分组缺失)。
+    /// <para>
+    /// 只以「服务端差分清单里的可选分组目标文件是否缺失」为准,而不是记住当初选了哪个规格 ——
+    /// 规格记录会随换目录/重装/旧版本覆盖而失真,文件在不在才是真的。
+    /// </para>
+    /// </summary>
+    [ObservableProperty]
+    private bool _canTopUpResources;
+
+    /// <summary>补全入口的体积文案(如「补全资源 4.79 GB」);无入口时为空。</summary>
+    [ObservableProperty]
+    private string _topUpSizeText = "";
+
+    /// <summary>补全按钮是否可见:可补全 + 已装游戏 + 无长操作在进行。</summary>
+    public bool ShowTopUpButton => CanTopUpResources && IsInstalled && !IsOperationRunning;
+
+    partial void OnCanTopUpResourcesChanged(bool value) => OnPropertyChanged(nameof(ShowTopUpButton));
+
+    private void NotifyTopUpStateChanged() => OnPropertyChanged(nameof(ShowTopUpButton));
+
+    /// <summary>补全可选资源(把精简版缺的 Option_Pack_* 一次性下回来)。</summary>
+    [RelayCommand]
+    private async Task TopUpResourcesAsync()
+    {
+        if (IsOperationRunning)
+        {
+            return;
+        }
+
+        IsDownloading = true;
+        CanPauseCurrentPhase = false;
+        ProgressPercent = 0;
+        ProgressText = LanguageService.Format("Launcher.TopUpRunning");
+        StatusText = LanguageService.Format("Launcher.TopUpRunningStatus");
+        IsPreparing = true;
+        ResetSpeedStatistics();
+
+        var progress = new Progress<DownloadProgress>(p => HandleProgress(p));
+        try
+        {
+            var (success, message) = await AppServices.GameUpdater
+                .TopUpOptionalResourcesAsync(ServerType, progress);
+            StatusText = success
+                ? (message ?? LanguageService.Format("Launcher.TopUpDone", ""))
+                : (message ?? LanguageService.Format("Launcher.TopUpFailed"));
+            if (success)
+            {
+                // 补完后重新检测:齐全了就把入口收起来。
+                await RefreshTopUpStateAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText = LanguageService.Format("Launcher.TopUpFailedWith", ex.Message);
+        }
+        finally
+        {
+            IsPreparing = false;
+            IsDownloading = false;
+            ProgressText = "";
+            ProgressPercent = 0;
+        }
+    }
+
+    /// <summary>
+    /// 刷新「补全资源」入口状态(进页 / 装完 / 切目录后调用)。
+    /// <para>
+    /// 失败或无法判断时保持隐藏:这是一个增强入口,判不出来就不显示,
+    /// 不要给一个点了可能什么都不做的按钮。
+    /// </para>
+    /// </summary>
+    public async Task RefreshTopUpStateAsync()
+    {
+        if (!NativeGameManagementSupported || !IsInstalled)
+        {
+            CanTopUpResources = false;
+            TopUpSizeText = "";
+            return;
+        }
+
+        try
+        {
+            var plan = await AppServices.GameUpdater.DetectOptionalResourcesMissingAsync(ServerType);
+            CanTopUpResources = plan is not null;
+            TopUpSizeText = plan is not null && plan.DownloadBytes > 0
+                ? FormatSize(plan.DownloadBytes)
+                : "";
+        }
+        catch (Exception)
+        {
+            CanTopUpResources = false;
+            TopUpSizeText = "";
+        }
+    }
 
     /// <summary>是否显示下载/安装进度卡片:有下载/安装活动或有预下载可领取时才显示。</summary>
     public bool ShowDownloadCard => IsDownloading || HasPredownload;
@@ -691,6 +791,10 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
         // 资源等级面板随渠道/安装状态刷新(渠道决定端点是否可用)
         _ = RefreshResourceLevelsAsync();
+
+        // 「补全资源」入口:若当前是精简安装(可选分组缺失),进页就把入口点亮。
+        // 与检查更新并行发起,不阻塞进页。
+        _ = RefreshTopUpStateAsync();
     }
 
     /// <summary>
@@ -1291,12 +1395,22 @@ public sealed partial class LauncherViewModel : ViewModelBase
             return;
         }
 
+        // 预载窗口里没下过预载包时,正式更新要现下内容 —— 这时全量与精简要差十几 GB,
+        // 必须在开始下载前让用户选(与预下载同一个选择窗,数据源也同一份差分清单)。
+        // 有可复用预载包时不需要问:那份内容已按当初选的规格下好了。
+        var chosenSpec = await ResolveInstallSpecAsync();
+        if (chosenSpec is null)
+        {
+            // 用户取消:什么都不做。
+            return;
+        }
+
         IsDownloading = true;
         try
         {
             // 安装/更新是新任务:上一轮的峰值与波形不该延续到新曲线(否则"看起来一直在满速")
             ResetSpeedStatistics();
-            await InstallCoreAsync();
+            await InstallCoreAsync(chosenSpec.Value);
         }
         finally
         {
@@ -1305,8 +1419,65 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// 决定本次安装用哪个规格。
+    /// <para>
+    /// <b>什么时候需要问用户:</b>没有可复用预载包、且服务端确实提供了「精简」区分时 ——
+    /// 也就是"预载窗口期间没下"或"预载已过期"的情形。此时内容要现下,全量与精简差十几 GB,
+    /// 不能替用户默认一个。
+    /// </para>
+    /// <para>
+    /// <b>什么时候不问:</b>有预载(内容已按当初选的规格下好)、或服务端没有精简区分(两档同值)、
+    /// 或界面没注入弹窗(测试/无 UI)。这些都直接返回全量,避免无意义的打扰。
+    /// </para>
+    /// </summary>
+    /// <returns>选定的规格;用户取消时返回 null。</returns>
+    private async Task<PredownloadSpec?> ResolveInstallSpecAsync()
+    {
+        // 有可复用的预载包:规格已在预载时定好,不再打扰。
+        if (FindUsablePredownload())
+        {
+            return PredownloadSpec.Full;
+        }
+
+        if (ConfirmPredownloadSpecAsync is null)
+        {
+            return PredownloadSpec.Full;
+        }
+
+        // 用正式更新的差分计划做体积对比(不是预载信息:预载窗口可能已经关了)。
+        UpdatePatchPlan? plan;
+        try
+        {
+            plan = await AppServices.GameUpdater.GetUpdateSpecOptionsAsync(ServerType);
+        }
+        catch (Exception)
+        {
+            return PredownloadSpec.Full;
+        }
+
+        // 服务端没有精简区分 / 拿不到计划:不必问。
+        if (plan is null || !plan.SupportsMinimal)
+        {
+            return PredownloadSpec.Full;
+        }
+
+        var info = new PredownloadInfo
+        {
+            TargetVersion = plan.TargetVersion,
+            FullBytes = plan.FullBytes,
+            MinimalBytes = plan.MinimalBytes,
+            FullDiskBytes = plan.FullBytes,
+            MinimalDiskBytes = plan.MinimalBytes,
+        };
+        return await ConfirmPredownloadSpecAsync(info);
+    }
+
+    /// <summary>本地是否有可复用的已完成预载包(判据同 Core 的 FindStaging:标记完整且版本匹配)。</summary>
+    private bool FindUsablePredownload() => PredownloadCompleted && !HasPredownload;
+
     /// <summary>执行安装/更新并刷新状态。由「安装更新」和预下载完成后的自动安装共用。</summary>
-    private async Task InstallCoreAsync()
+    private async Task InstallCoreAsync(PredownloadSpec spec = PredownloadSpec.Full)
     {
         ProgressPercent = 0;
         StatusText = LanguageService.Format("Launcher.Installing");
@@ -1319,11 +1490,13 @@ public sealed partial class LauncherViewModel : ViewModelBase
 
         try
         {
-            var (success, message) = await AppServices.GameUpdater.InstallAsync(ServerType, progress);
+            var (success, message) = await AppServices.GameUpdater.InstallAsync(ServerType, progress, ct: default, spec: spec);
             StatusText = success ? (message ?? LanguageService.Format("Launcher.InstallDone")) : (message ?? LanguageService.Format("Launcher.InstallFailed"));
             if (success)
             {
                 RefreshState();
+                // 装完重新评估「补全资源」入口:本次若选了精简,入口应当出现。
+                await RefreshTopUpStateAsync();
                 // 此刻 IsDownloading 仍为 true(外层 finally 未执行):走绕过操作门的收尾复查
                 await CheckUpdateAfterOperationAsync();
                 // 安装成功后做一次体积自检(后台,不阻塞状态栏):多次断连留下的备份/半成品
@@ -1359,9 +1532,11 @@ public sealed partial class LauncherViewModel : ViewModelBase
         // 可暂停性以 Core 的显式契约为准:非下载阶段暂停是空操作,必须隐藏按钮。
         CanPauseCurrentPhase = p.CanPause;
 
-        // 非下载安装阶段(差分合成/解压/资源安装/迁移):只切文案,不动进度条
+        // 非下载安装阶段(差分合成/解压/资源安装/迁移):切文案,并按阶段完成度推进进度条。
+        // 阶段进度由 Core 给出(p.StagePercent);没有可量化进度的阶段(null)才保持不动。
         if (p.Phase == DownloadPhase.Stage)
         {
+            ProgressPercent = p.DisplayPercent;
             ProgressText = p.StageText!;
             CurrentFileText = p.CurrentFile;
             ClearSpeedDisplay();

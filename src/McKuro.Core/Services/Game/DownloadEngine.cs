@@ -43,6 +43,28 @@ public sealed class DownloadProgress
     public bool CanPause { get; init; }
 
     /// <summary>
+    /// 阶段内完成度(0~100;null = 该阶段无法量化)。
+    /// <para>
+    /// 只对 <see cref="DownloadPhase.Stage"/> 有意义:<b>早先阶段不动进度条</b>,于是差分合成
+    /// 39 个分组(整段在 80 GB 目录上跑 hpatchz,可持续数十分钟)期间进度条一直是 0%,
+    /// 用户看到的就是「点了安装更新,进度条不动」。有了它,阶段内也能显示真实推进。
+    /// </para>
+    /// </summary>
+    public double? StagePercent { get; init; }
+
+    /// <summary>
+    /// 进度条应该显示的百分比(0~100),三个阶段统一从这里取。
+    /// <para>
+    /// 优先级:阶段百分比 &gt; 字节进度。<b>为什么不让 UI 自己判断:</b>
+    /// 早先 UI 在 Stage 分支里直接"不动进度条",于是任何新增的可量化阶段都得改 UI;
+    /// 收敛到模型里,新增阶段只要填 StagePercent 就自动生效。
+    /// </para>
+    /// </summary>
+    public double DisplayPercent => StagePercent is { } stage
+        ? Math.Clamp(stage, 0, 100)
+        : Percent * 100;
+
+    /// <summary>
     /// 阶段分类(纯函数,UI 与测试共用同一套判定):
     /// 有阶段文案 → <see cref="DownloadPhase.Stage"/>;
     /// 无字节总量但有文件总数 → <see cref="DownloadPhase.Verify"/>(校验);

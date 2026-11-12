@@ -131,6 +131,76 @@ public sealed class PredownloadPackPlan
 }
 
 /// <summary>
+/// 「补齐精简版缺失的可选资源」的计划。
+/// <para>
+/// 精简预下载/精简更新会跳过 <c>tagGroups.min.exclude_prefixes</c> 命中的分组
+/// (官方命名为 <c>Option_Pack_*</c> 的场景/剧情资源)。这些内容官方设计是进游戏后按
+/// 账号进度自动补,但如果用户想一次性备齐(避免游玩中卡加载),可以定向下载。
+/// </para>
+/// <para>
+/// 实测 3.8.0 国服 HD:26 个可选包,common 2.91 GiB + hd 1.88 GiB。
+/// </para>
+/// </summary>
+public sealed class ResourceTopUpPlan
+{
+    /// <summary>需要补的包(通常 common + 等级包)。</summary>
+    public required IReadOnlyList<PredownloadPackPlan> Packs { get; init; }
+
+    /// <summary>要下载的差分包数量。</summary>
+    public int FileCount { get; init; }
+
+    /// <summary>下载总字节。</summary>
+    public long DownloadBytes { get; init; }
+
+    /// <summary>
+    /// 补齐后应落在游戏目录的目标文件(相对路径)。
+    /// <para>
+    /// <b>检测"缺不缺"必须用这份清单,而不是差分包路径</b>:差分包(<c>.krpdiff</c>)本来就不在
+    /// 游戏目录里,拿它判断会永远得出"缺失";真正的判据是应用差分后应存在的文件。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> TargetPaths { get; init; } = [];
+}
+
+/// <summary>
+/// 正式版本的「差分安装计划」:各包从本地版本升到目标版本的补丁清单定位。
+/// <para>
+/// <b>与预下载共用同一套定位结构</b>(<see cref="PredownloadPackPlan"/>),因为两者的数据源相同:
+/// 新版协议 <c>resourcePacks[].patchConfig[]</c> 里每一档就是「从某个版本升到本包版本」的差分清单。
+/// 差别只在触发时机 —— 预下载是把差分包提前下到暂存区,正式更新是当场下载并应用。
+/// </para>
+/// </summary>
+public sealed class UpdatePatchPlan
+{
+    /// <summary>目标版本。</summary>
+    public required string TargetVersion { get; init; }
+
+    /// <summary>来源版本(本地已装版本)。</summary>
+    public required string SourceVersion { get; init; }
+
+    /// <summary>各包的差分清单。</summary>
+    public required IReadOnlyList<PredownloadPackPlan> Packs { get; init; }
+
+    /// <summary>差分包下载总字节(估算值,来自各包 patchConfig.size)。</summary>
+    public long DownloadBytes { get; init; }
+
+    /// <summary>
+    /// 下载规格。<b>下载与安装必须共用它</b>:体积预估、实际下载、分组过滤三处各算一遍
+    /// 就会漂移成「按精简算、按全量下」。
+    /// </summary>
+    public PredownloadSpec Spec { get; init; } = PredownloadSpec.Full;
+
+    /// <summary>全量规格的下载字节(供界面展示两档对比)。</summary>
+    public long FullBytes { get; init; }
+
+    /// <summary>精简规格的下载字节;服务端没给排除规则时等于全量。</summary>
+    public long MinimalBytes { get; init; }
+
+    /// <summary>服务端是否真的提供了「精简」区分。</summary>
+    public bool SupportsMinimal => MinimalBytes < FullBytes;
+}
+
+/// <summary>
 /// 一次分级预下载的完整计划:要下哪些包、各自用哪份补丁清单、多少字节。
 /// <para>
 /// <b>预估与实际必须共用同一份计划</b>:UI 显示的「全量 12.08 GB / 精简 7.30 GB」与实际

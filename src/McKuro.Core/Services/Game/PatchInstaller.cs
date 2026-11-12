@@ -74,7 +74,8 @@ public sealed class PatchInstaller
             {
                 var package = plan.DiffPackages[i];
                 ct.ThrowIfCancellationRequested();
-                ReportStage(progress, $"正在合成差分包 ({i + 1}/{plan.DiffPackages.Count})…", package.Package.Path);
+                ReportStage(progress, $"正在合成差分包 ({i + 1}/{plan.DiffPackages.Count})…", package.Package.Path,
+                    plan.DiffPackages.Count > 0 ? (i + 1) * 100.0 / plan.DiffPackages.Count : null);
                 var diffPath = GetStagedPath(stagingDir, package.Package.Path);
                 if (!File.Exists(diffPath))
                 {
@@ -108,7 +109,8 @@ public sealed class PatchInstaller
         {
             var zip = plan.ZipPackages[i];
             ct.ThrowIfCancellationRequested();
-            ReportStage(progress, $"正在解压压缩包 ({i + 1}/{plan.ZipPackages.Count})…", zip.Package.Path);
+            ReportStage(progress, $"正在解压压缩包 ({i + 1}/{plan.ZipPackages.Count})…", zip.Package.Path,
+                plan.ZipPackages.Count > 0 ? (i + 1) * 100.0 / plan.ZipPackages.Count : null);
             var zipPath = GetStagedPath(stagingDir, zip.Package.Path);
             if (!File.Exists(zipPath))
             {
@@ -171,7 +173,8 @@ public sealed class PatchInstaller
             {
                 var group = groups[gi];
                 ct.ThrowIfCancellationRequested();
-                ReportStage(progress, $"正在合成分组差分 ({gi + 1}/{groups.Count})…", group.Package.Path);
+                ReportStage(progress, $"正在合成分组差分 ({gi + 1}/{groups.Count})…", group.Package.Path,
+                    groups.Count > 0 ? (gi + 1) * 100.0 / groups.Count : null);
                 var diffPath = GetStagedPath(stagingDir, group.Package.Path);
                 if (!File.Exists(diffPath))
                 {
@@ -339,8 +342,21 @@ public sealed class PatchInstaller
         }
     }
 
-    /// <summary>上报非下载安装阶段(差分合成/解压/资源安装),UI 据此切换文案而不动进度条。</summary>
-    private static void ReportStage(IProgress<DownloadProgress>? progress, string stageText, string? currentFile = null)
+    /// <summary>
+    /// 上报「非下载阶段」的进度(差分合成 / 解压 / 资源安装)。
+    /// <para>
+    /// <b>为什么会带百分比:</b>早先阶段只切文案、不动进度条,于是差分合成 39 个分组
+    /// (整段在 80 GB 目录上跑 hpatchz,可持续数十分钟)期间进度条一直显示 0%,
+    /// 用户看到的就是「点了安装更新,进度条不动」—— 实际上它正在干活。
+    /// 现在阶段内给出「已完成/总数」的真实百分比,让「卡住」与「在跑」可区分。
+    /// </para>
+    /// </summary>
+    /// <param name="stagePercent">阶段内完成度(0~100);null 表示该阶段无法量化(仍只切文案)。</param>
+    private static void ReportStage(
+        IProgress<DownloadProgress>? progress,
+        string stageText,
+        string? currentFile = null,
+        double? stagePercent = null)
     {
         progress?.Report(new DownloadProgress
         {
@@ -351,6 +367,7 @@ public sealed class PatchInstaller
             BytesTotal = 0,
             SpeedBps = 0,
             StageText = stageText,
+            StagePercent = stagePercent,
         });
     }
 

@@ -20,10 +20,22 @@ public interface IGameUpdater
         CancellationToken ct = default,
         PredownloadSpec spec = PredownloadSpec.Full);
 
+    /// <summary>
+    /// 安装/更新到服务端版本。
+    /// </summary>
+    /// <param name="spec">
+    /// 下载规格(全量 / 精简)。
+    /// <para>
+    /// <b>只在"没有可复用预载包"时才有意义</b>:有预载就直接消费预载内容(它已按用户当初选的规格下好)。
+    /// 没有任何预载(含预载窗口期间没下)时,正式更新要现下内容 —— 这时全量与精简要差十几 GB,
+    /// 必须让调用方把用户的选择传进来,而不是默认一个。
+    /// </para>
+    /// </param>
     Task<(bool Success, string? Message)> InstallAsync(
         GameServerType serverType,
         IProgress<DownloadProgress>? progress = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        PredownloadSpec spec = PredownloadSpec.Full);
 
     /// <summary>
     /// 修复游戏:对比清单重新下载并安装缺失/损坏的文件。
@@ -33,6 +45,25 @@ public interface IGameUpdater
         GameServerType serverType,
         IReadOnlySet<string>? skipPaths = null,
         bool deleteSkipped = false,
+        IProgress<DownloadProgress>? progress = null,
+        CancellationToken ct = default);
+
+    /// <summary>取正式更新的两档体积(供下载前选择全量/精简);无法差分为 null。</summary>
+    Task<UpdatePatchPlan?> GetUpdateSpecOptionsAsync(
+        GameServerType serverType,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// 检测当前安装是否为「精简」状态(可选资源分组缺失时返回补全计划,否则 null)。
+    /// 供启动页决定是否显示「补全资源」入口。
+    /// </summary>
+    Task<ResourceTopUpPlan?> DetectOptionalResourcesMissingAsync(
+        GameServerType serverType,
+        CancellationToken ct = default);
+
+    /// <summary>补齐精简版缺失的可选资源(不改变已装版本号)。</summary>
+    Task<(bool Success, string? Message)> TopUpOptionalResourcesAsync(
+        GameServerType serverType,
         IProgress<DownloadProgress>? progress = null,
         CancellationToken ct = default);
 
