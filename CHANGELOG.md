@@ -41,6 +41,22 @@
 
 单语命令仍可单独取：`extract <版本>` 出中文（历史行为不变），`extract <版本> --lang en` 出英文（缺失时回退中文并向 stderr 告警），`has-lang <版本> en` 用退出码回答该版有没有英文（CI 用它决定是否拼双语）。
 
+## [1.3.8.2] - 2026-11-12
+
+### Fixed
+
+- **用官方启动器更新后，McKuro 仍提示「有更新」，手动指定版本里又选不到新版**：两个问题同时存在。一是**检查更新**读到了 3.8.0、界面照常提示升级，但**「指定本地游戏版本」下拉**只从旧协议端点取候选，而旧端点自 3.8 起就停在 3.7.1 —— 于是列表里根本没有 3.8，用户被提示升级却没法把版本记录改成实际值。现在下拉改为新旧协议并集（旧端点版本仍保留，过渡期与只有旧协议的渠道不受影响），两个端点各自独立降级，任何一个 404 或超时都不会把列表清空。二是**已装版本记录**只在 McKuro 自己的安装/修复收尾处写，官方启动器更新根本不会碰它，记录会一直滞后 —— 现在会用官方启动器自己写的分包标记（`launcherDownloadConfig/{pack}.json`）做一次权威校正。校正的门槛刻意收紧：各包标记必须齐全、版本必须一致、必须能解析、且必须比本地记录新，另外还不能比线上版本新（预载/灰度场景），任一条件不满足就保持原判断，绝不凭空把版本改新 —— 否则会把「其实没装好」误判成「已是最新」而把更新入口藏起来
+- **历史版本候选在新协议下发不出来**：3.8 起官方把补丁表从旧协议顶层 `patchConfig` 挪到了各资源包自己的 `patchConfig[]`，旧路径已经全空。下拉的历史版本现在同时从各包的补丁项里取源版本，停在旧版本上的用户仍然选得中自己实际装的版本
+
+<!--en-->
+
+### Fixed
+
+- **After updating through the official launcher, McKuro still reported an update while the manual version picker had no way to select the new one**: two problems at once. First, **update checking** did read 3.8.0 and told the user to upgrade, but the **"specify local game version"** dropdown built its candidates only from the old protocol endpoint, which has been stuck at 3.7.1 since 3.8 — so 3.8 was not in the list at all, and a user told to upgrade could not record the version actually on disk. The dropdown now takes the union of both endpoints (old-endpoint versions are kept, so transitional periods and old-protocol-only channels are unaffected), and the two endpoints degrade independently: a 404 or timeout on either one no longer empties the list. Second, the **installed-version record** was only written at McKuro's own install/repair completion points, so an official-launcher update never touched it and the record stayed stale forever. It is now reconciled against the pack markers the official launcher writes itself (`launcherDownloadConfig/{pack}.json`). The bar for reconciling is deliberately high: every pack must have a marker, all marker versions must agree, they must parse, and they must be newer than the local record; on top of that they may not be newer than the server version (pre-download/grey-release cases). If any condition fails, the previous judgement stands and the version is never invented upward — otherwise an unfinished install could be mistaken for "up to date" and the update entry would disappear
+- **Historical versions were unavailable under the new protocol**: since 3.8 the vendor moved the patch table from the old protocol's top-level `patchConfig` onto each resource pack's own `patchConfig[]`, leaving the old path empty. The dropdown now also collects source versions from each pack's patch entries, so users who stayed on an older build can still select the version they actually have
+
+<!--/en-->
+
 ## [1.3.8.1] - 2026-11-12
 
 ### Added
