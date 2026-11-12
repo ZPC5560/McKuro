@@ -411,6 +411,11 @@ public sealed class GameUpdater : IGameUpdater
         }
         else if (!notInstalled)
         {
+            // 外部渠道(官方启动器)更新后本地记录会滞后:界面于是报「有更新」而游戏其实已是新版,
+            // 用户点「更新」等于无谓重下几十 GB。这里用官方自己写的分包标记
+            // (<c>launcherDownloadConfig/{pack}.json</c>)做一次权威校正。
+            installedVersion = TryReconcileInstalledVersionFromOfficialMarkers(root, installedVersion, manifest.Version)
+                ?? installedVersion;
             hasUpdate = IsVersionOlder(installedVersion, manifest.Version);
         }
 
@@ -441,6 +446,93 @@ public sealed class GameUpdater : IGameUpdater
             FilesToDownload = [],
             NotInstalled = notInstalled,
         };
+    }
+
+    /// <summary>
+    /// 用官方启动器的分包标记校正「本地已装版本」记录,返回校正后的版本(无需校正时返回 null)。
+    /// <para>
+    /// <b>要解决的误报:</b>用户用官方启动器把游戏更到新版后,McKuro 的
+    /// <c>installed_versions</c> 记录仍停在旧值 → 检查更新判 <c>IsVersionOlder</c> 为真,
+    /// 界面报「有更新」并提示下载几十 GB,而磁盘上其实已经是新版
+    /// (2026-11-12 用户反馈:官方启动器更到 3.8,McKuro 仍报本地 3.7.1)。
+    /// </para>
+    /// <para>
+    /// <b>为什么只认官方标记:</b><c>launcherDownloadConfig/{pack}.json</c> 是官方启动器自己写的
+    /// "磁盘上实际装了什么版本的哪个包",是这台机器上关于"已装版本"最可信的记录。
+    /// 代价是它可能滞后 —— 所以只在<b>四个条件同时成立</b>时才校正,任一不满足就返回 null
+    /// (保持原有版本比较,绝不凭空把版本改新):
+    /// </para>
+    /// <list type="number">
+    /// <item>当前组合的每个包都有标记(缺项 = 装到一半,不可信);</item>
+    /// <item>所有标记版本完全一致(混合版本 = 更新中断,不可信);</item>
+    /// <item>该版本能按清单语法解析;</item>
+    /// <item>它<b>比本地记录新</b>(旧标记无意义,不能把记录改旧)。</item>
+    /// </list>
+    /// <para>
+    /// 取值还会与服务端版本求小(<c>min</c>):标记比线上还新说明是预载/灰度,不能据此宣布"已最新"。
+    /// </para>
+    /// </summary>
+    private string? TryReconcileInstalledVersionFromOfficialMarkers(
+        string root,
+        string? installedVersion,
+        string? serverVersion)
+    {
+        // 资源等级:设置优先,否则按目录里的标记探测(与启动参数走同一判据)
+        var level = ResolveResourceLevel(_settings?.Current);
+        var bundle = ResourceLevelPlanner.LevelToBundleName(level);
+        var packNames = new[] { "common", bundle.ToLowerInvariant() };
+
+        string? common = null;
+        foreach (var packName in packNames)
+        {
+            var marked = ResourceLevelService.ReadInstalledMarkerVersion(root, packName);
+            if (string.IsNullOrWhiteSpace(marked) || !TryParseVersion(marked.Trim(), out _))
+            {
+                // 缺项或脏值:按"装到一半/不可信"处理,不做任何校正
+                return null;
+            }
+
+            var trimmed = marked.Trim();
+            if (common is null)
+            {
+                common = trimmed;
+            }
+            else if (!common.Equals(trimmed, StringComparison.OrdinalIgnoreCase))
+            {
+                // 各包版本不一致 = 更新中断,交给正常的版本比较/修复流程
+                return null;
+            }
+        }
+
+        if (common is null)
+        {
+            return null;
+        }
+
+        // 只有"比本地记录新"才校正:旧标记不能把记录改旧
+        if (!IsVersionOlder(installedVersion, common))
+        {
+            return null;
+        }
+
+        // 不能比服务端还新(预载/灰度场景),否则会把"有更新"误判成"已最新"
+        if (!string.IsNullOrWhiteSpace(serverVersion)
+            && TryParseVersion(serverVersion.Trim(), out _)
+            && IsVersionOlder(serverVersion, common))
+        {
+            _logger.LogDebug(
+                "官方标记版本 {Marked} 比线上 {Server} 还新,不做校正",
+                common, serverVersion);
+            return null;
+        }
+
+        _logger.LogInformation(
+            "按官方启动器标记校正本地已装版本:{From} → {To}(包={Packs})",
+            installedVersion ?? "未记录",
+            common,
+            string.Join("+", packNames));
+        WriteInstalledVersion(root, common);
+        return common;
     }
 
     /// <summary>校验清单关键文件是否存在(廉价存在性检查,不做全量 MD5)。</summary>
@@ -3094,6 +3186,61 @@ public sealed class GameUpdater : IGameUpdater
         return true;
     }
 
+    /// <summary>
+    /// 从新版协议(<c>resourcePacks</c>)取版本候选:当前组合各包的 <c>version</c>,
+    /// 外加各包 <c>patchConfig[]</c> 里列出的源版本(即可从哪些版本差升上来)。
+    /// <para>
+    /// <b>为什么源版本也要收:</b>官方启动器把游戏更新到新版本后,玩家想「指定本地实际版本」时
+    /// 真正需要的是<b>新版</b>(见类注释);但反过来的场景同样存在 —— 用户停留在旧版本、
+    /// 下拉里要有那个旧值才选得中。旧的 <see cref="ExtractHistoricalVersions"/> 只读旧协议
+    /// <c>default.config.patchConfig</c>,3.8 起官方把补丁表搬进各包,那条路已经全空。
+    /// </para>
+    /// <para>
+    /// 任何异常都由调用方统一兜住(只记日志,不中止候选装配)。
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<string>> GetResourcePackVersionsAsync(
+        string packIndexUrl,
+        string bundleName,
+        CancellationToken ct)
+    {
+        var index = await _loader.LoadResourcePackIndexAsync(packIndexUrl, ct).ConfigureAwait(false);
+        if (index?.ResourcePacks is not { Count: > 0 } || index.Bundles is null)
+        {
+            return [];
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var versions = new List<string>();
+        void Add(string? v)
+        {
+            var t = v?.Trim() ?? "";
+            if (t.Length > 0 && TryParseVersion(t, out _) && seen.Add(t))
+            {
+                versions.Add(t);
+            }
+        }
+
+        foreach (var packName in ResourceLevelPlanner.ResolvePackNames(index, bundleName))
+        {
+            if (!index.ResourcePacks.TryGetValue(packName, out var pack))
+            {
+                continue;
+            }
+
+            // 包当前版本 = 正式版本(实测 3.8.0 四个包全等)
+            Add(pack.Version);
+            // 补丁项的 version 是「源版本」:本地可能就停在这些版本上
+            foreach (var patch in pack.PatchConfig ?? [])
+            {
+                Add(patch.Version);
+            }
+        }
+
+        versions.Sort(static (x, y) => CompareVersionStrings(y, x));
+        return versions;
+    }
+
     /// <inheritdoc/>
     public async Task<IReadOnlyList<string>> GetKnownVersionsAsync(GameServerType serverType, CancellationToken ct = default)
     {
@@ -3118,17 +3265,60 @@ public sealed class GameUpdater : IGameUpdater
         // 若把它当已装版本写下去,CheckUpdate 的 IsVersionOlder(installed, manifest.Version)
         // 会得到 false → 界面报「已是最新」并隐藏更新入口,而磁盘上其实还是旧版本
         // (且服务端正式发布该版本后依然判 false,要等用户重新选一次版本才能恢复)。
+        //
+        // <b>必须同时读新版协议</b>(与 <see cref="LoadCurrentManifestAsync"/> 同一优先级):
+        // 官方自 3.8 起把正式版本发布到新版协议端点,旧协议端点的 default 节点滞后。
+        // 只读旧协议时下拉最新只到旧端点版本 —— 用户被官方启动器更新到 3.8 后,
+        // 想在这里手动指定 3.8 却发现列表里根本没有(2026-11-12 用户反馈的正是这一条)。
         try
         {
-            var load = await _loader.LoadKuroAsync(_indexUrlProvider(serverType), preDownload: false, ct).ConfigureAwait(false);
-            if (load.Success && load.Manifest is not null)
+            var added = false;
+            var packIndexUrl = _packIndexUrlProvider?.Invoke(serverType);
+            if (!string.IsNullOrWhiteSpace(packIndexUrl))
             {
-                Add(load.Manifest.Version);
-                // 历史版本:下拉要能直接选到「游戏实际装的是哪个老版本」(对齐 Haiyu 版本列表)
-                foreach (var historical in ExtractHistoricalVersions(load.DefaultData))
+                var bundle = ResourceLevelPlanner.LevelToBundleName(_settings?.Current.ResourceLevel);
+                // <b>单独兜异常</b>:新版端点 404/超时不能连累旧协议的候选 ——
+                // 两个端点各自独立降级,否则一次网络抖动就把下拉清空。
+                try
                 {
-                    Add(historical);
+                    foreach (var v in await GetResourcePackVersionsAsync(packIndexUrl, bundle, ct).ConfigureAwait(false))
+                    {
+                        Add(v);
+                        added = true;
+                    }
                 }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "新版协议版本候选不可用,回退旧协议");
+                }
+            }
+
+            try
+            {
+                var load = await _loader.LoadKuroAsync(_indexUrlProvider(serverType), preDownload: false, ct).ConfigureAwait(false);
+                if (load.Success && load.Manifest is not null)
+                {
+                    // 旧协议已落后时它的版本号仍可能是有效候选(过渡期/纯老版本渠道),照收;
+                    // 新版协议那边已经加过同值时 Add 会去重。
+                    Add(load.Manifest.Version);
+                    added = true;
+                    // 历史版本:下拉要能直接选到「游戏实际装的是哪个老版本」(对齐 Haiyu 版本列表)
+                    foreach (var historical in ExtractHistoricalVersions(load.DefaultData))
+                    {
+                        Add(historical);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "旧协议版本候选不可用");
+            }
+
+            if (!added)
+            {
+                _logger.LogDebug("新旧协议都没给出可用的版本候选,仅返回本地记录");
             }
         }
         catch (OperationCanceledException) { throw; }
