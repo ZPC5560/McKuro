@@ -186,22 +186,61 @@ def download_section():
 
 
 def changelog_nav():
-    """Render the version nav bar for the 更新日志 section.
+    """Render the multi-level version nav for the 更新日志 section.
 
-    One chip per release, linking to the `id="rel-<ver>"` anchor that
-    tools/changelog.py to_html() now emits. Clicking it with JS open the entry too
-    (site.js); without JS it is a plain in-page jump to the entry's summary.
+    Tree: major.minor group (collapsible <details>) -> minor subheading -> patch
+    version links, each linking to the `id="rel-<ver>"` anchor that
+    tools/changelog.py to_html() emits. Every minor version gets its own level:
+    a minor that is itself a release (1.3.7) is a clickable subheading with its
+    4-part patches beneath; one that is not (1.3.8) is a plain label. The newest
+    group is expanded by default. Without JS a link is a plain in-page jump;
+    site.js opens the target entry and the group under the reading position.
     """
+    from collections import OrderedDict
+
     sections = cl.parse(read(os.path.join(REPO, "CHANGELOG.md")))
-    chips = []
+    releases = {v for v, _d, _body in sections}
+    groups = OrderedDict()          # "1.3" -> OrderedDict "1.3.8" -> [versions]
     for v, _d, _body in sections:
+        parts = v.split(".")
+        key = ".".join(parts[:2])
+        sub = ".".join(parts[:3])
+        groups.setdefault(key, OrderedDict()).setdefault(sub, []).append(v)
+
+    def link(v):
         anchor = "rel-" + re.sub(r"[^A-Za-z0-9._-]", "-", v)
-        chips.append(f'<a class="clnav__link" href="#{anchor}">'
-                     f'<span class="mono">{_html.escape(v)}</span></a>')
-    # The sticky bar lives on the outer element; the horizontal chip scroll goes on an
-    # inner one. A sticky element that is itself a scroll container never sticks.
+        return (f'<a class="clnav__link" href="#{anchor}">'
+                f'<span class="mono">{_html.escape(v)}</span></a>')
+
+    def sublink(v):
+        anchor = "rel-" + re.sub(r"[^A-Za-z0-9._-]", "-", v)
+        return (f'<a class="clnav__sublink" href="#{anchor}">'
+                f'<span class="mono">{_html.escape(v)}</span></a>')
+
+    def subblock(sub, vers):
+        """One minor level: subheading (link when it is a release) + patches."""
+        if sub in releases:
+            head = sublink(sub)
+            rest = [v for v in vers if v != sub]
+        else:
+            head = f'<h4 class="clnav__sub">{_html.escape(sub)}</h4>'
+            rest = vers
+        return (f'<div class="clnav__subgrp">{head}'
+                + "".join(link(v) for v in rest) + "</div>")
+
+    out = []
+    for gi, (gkey, subs) in enumerate(groups.items()):
+        inner = "".join(subblock(s, vs) for s, vs in subs.items())
+        count = sum(len(vs) for vs in subs.values())
+        open_attr = " open" if gi == 0 else ""
+        out.append(
+            f'<details class="clnav__grp"{open_attr} data-grp="{gkey}">'
+            f'<summary class="clnav__grphead">'
+            f'<span class="clnav__gkey mono">{_html.escape(gkey)}</span>'
+            f'<span class="clnav__gcount">{count} 个版本</span></summary>'
+            f'<div class="clnav__grpbody">{inner}</div></details>')
     return ('<nav class="clnav" aria-label="更新日志版本目录">'
-            '<div class="clnav__scroll">' + "".join(chips) + "</div></nav>")
+            '<div class="clnav__scroll">' + "".join(out) + "</div></nav>")
 
 
 def subset(py, src, dst, chars):

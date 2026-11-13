@@ -472,14 +472,16 @@
     });
   }
 
-  /* ---------- 8b. CHANGELOG version nav: jumping opens the entry ----------
-     The bar itself is static markup (build.py -> changelog_nav()); without JS a
-     link is a plain in-page jump to the entry's summary. With JS, clicking also
-     opens the <details> so the release's body is visible on arrival, and the chip
-     under the reading position stays highlighted. */
+  /* ---------- 8b. CHANGELOG version nav (multi-level tree) ----------
+     The tree itself is static markup (build.py -> changelog_nav()): major.minor
+     groups, optional patch subheadings, version links. Without JS a link is a
+     plain in-page jump to the entry's summary. With JS, clicking also opens the
+     <details> so the release's body is visible on arrival, and the chip under
+     the reading position stays highlighted — opening its group if it was
+     collapsed, so the highlight never points at a hidden entry. */
   var clNav = $(".clnav");
   if (clNav) {
-    var clChips = $$(".clnav__link", clNav);
+    var clChips = $$(".clnav__link, .clnav__sublink", clNav);
     clNav.addEventListener("click", function (e) {
       var a = e.target.closest ? e.target.closest("a") : null;
       if (!a || !a.getAttribute("href")) { return; }
@@ -497,6 +499,8 @@
           if (en.isIntersecting) {
             clChips.forEach(function (c) { c.classList.remove("is-here"); });
             chip.classList.add("is-here");
+            var grp = chip.closest ? chip.closest(".clnav__grp") : null;
+            if (grp && !grp.open) { grp.open = true; }
           }
         });
       }, { rootMargin: "-20% 0px -55% 0px", threshold: 0 });
