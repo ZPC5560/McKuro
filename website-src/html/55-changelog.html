@@ -1,29 +1,33 @@
 
   <!-- ============ CHANGELOG (release entries injected at build time from ../CHANGELOG.md) ============ -->
   <section class="sec" id="changelog">
-    <div class="wrap wrap--narrow">
+    <div class="wrap">
       <header class="sec__head">
         <h2 class="sec__h2">更新日志</h2>
         <p class="sec__sub">这里与每个版本的 GitHub Release 说明同源：改仓库里的一份 CHANGELOG.md，两边一起更新。</p>
       </header>
-      <!-- Language switch, release notes only.
-           The build ships both languages in the same markup (build.py -> to_html(with_en=True)),
-           so switching is a class toggle: no request, no flicker. The whole bar stays
-           `hidden` until site.js has (a) found at least one translated release and (b)
-           wired the buttons, so a visitor with JS off — or a page whose releases all
-           predate the bilingual policy — never sees a switch that does nothing. -->
-      <div class="cl__bar" id="cl-lang" role="group" aria-label="更新日志语言" hidden>
-        <button class="lang__btn is-on" type="button" data-lang="zh" aria-pressed="true" lang="zh-Hans">中文</button>
-        <button class="lang__btn" type="button" data-lang="en" aria-pressed="false" lang="en">English</button>
-      </div>
-      <!-- Version jump bar, generated at build time from CHANGELOG.md
-           (build.py -> changelog_nav()): a collapsible multi-level tree —
-           major.minor groups, optional patch subheadings, version links to the
-           per-release anchors that tools/changelog.py to_html() emits. -->
-<!--CLNAV-->
-      <div class="changelog" id="changelog-list" data-cl-lang="zh">
+      <!-- Left: version tree nav (sticky). Right: the entries. Two columns so an
+           expanded nav never covers the log it navigates to. -->
+      <div class="clwrap">
+        <aside class="clwrap__nav" aria-label="版本目录">
+          <!--CLNAV-->
+        </aside>
+        <div class="clwrap__main">
+          <!-- Language switch, release notes only.
+               The build ships both languages in the same markup (build.py -> to_html(with_en=True)),
+               so switching is a class toggle: no request, no flicker. The whole bar stays
+               `hidden` until site.js has (a) found at least one translated release and (b)
+               wired the buttons, so a visitor with JS off — or a page whose releases all
+               predate the bilingual policy — never sees a switch that does nothing. -->
+          <div class="cl__bar" id="cl-lang" role="group" aria-label="更新日志语言" hidden>
+            <button class="lang__btn is-on" type="button" data-lang="zh" aria-pressed="true" lang="zh-Hans">中文</button>
+            <button class="lang__btn" type="button" data-lang="en" aria-pressed="false" lang="en">English</button>
+          </div>
+          <div class="changelog" id="changelog-list" data-cl-lang="zh">
 <!--CHANGELOG-->
+          </div>
+          <p class="cl__foot">更早的记录与全部下载资产见 <a class="cl__link" href="https://github.com/ZPC5560/McKuro/releases" target="_blank" rel="noopener">GitHub&nbsp;Releases</a>。</p>
+        </div>
       </div>
-      <p class="cl__foot">更早的记录与全部下载资产见 <a class="cl__link" href="https://github.com/ZPC5560/McKuro/releases" target="_blank" rel="noopener">GitHub&nbsp;Releases</a>。</p>
     </div>
   </section>

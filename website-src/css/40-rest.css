@@ -76,8 +76,10 @@
 }
 .dlplat.is-match { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow-lg); }
 .dlplat__head { display: grid; gap: 3px; }
-.dlplat__h { display: flex; align-items: center; gap: 8px; font-size: 16.5px; font-weight: 600; color: var(--ink); }
-.dlplat__h .ico { width: 18px; height: 18px; color: var(--accent-ink); }
+.dlplat__h { display: flex; align-items: center; gap: 10px; font-size: 16.5px; font-weight: 600; color: var(--ink); }
+/* platform brand marks (Windows flag / Apple / Tux), embedded by build.py */
+.dlplat__logo { flex: 0 0 auto; width: 26px; height: 26px; }
+.dlplat__logo svg { display: block; width: 100%; height: 100%; }
 .dlplat__sub { font-size: 12.5px; color: var(--ink-3); }
 .dlplat__body { display: grid; gap: 12px; margin-top: auto; }
 .dlplat__body .btn { justify-content: space-between; padding: 0 6px 0 18px; }

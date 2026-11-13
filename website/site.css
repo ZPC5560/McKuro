@@ -1178,8 +1178,10 @@ html:not(.js) .tab span { max-width: 120px; opacity: 1; margin-right: 6px; }
 }
 .dlplat.is-match { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow-lg); }
 .dlplat__head { display: grid; gap: 3px; }
-.dlplat__h { display: flex; align-items: center; gap: 8px; font-size: 16.5px; font-weight: 600; color: var(--ink); }
-.dlplat__h .ico { width: 18px; height: 18px; color: var(--accent-ink); }
+.dlplat__h { display: flex; align-items: center; gap: 10px; font-size: 16.5px; font-weight: 600; color: var(--ink); }
+/* platform brand marks (Windows flag / Apple / Tux), embedded by build.py */
+.dlplat__logo { flex: 0 0 auto; width: 26px; height: 26px; }
+.dlplat__logo svg { display: block; width: 100%; height: 100%; }
 .dlplat__sub { font-size: 12.5px; color: var(--ink-3); }
 .dlplat__body { display: grid; gap: 12px; margin-top: auto; }
 .dlplat__body .btn { justify-content: space-between; padding: 0 6px 0 18px; }
@@ -1350,18 +1352,27 @@ html:not(.js) .tab span { max-width: 120px; opacity: 1; margin-right: 6px; }
 /* ---------- CHANGELOG: one timeline entry per release ---------- */
 .changelog { display: grid; gap: 14px; }
 
-/* ---------- version jump bar (multi-level) ----------
-   Tree from build.py -> changelog_nav(): collapsible major.minor groups, optional
-   patch subheadings (a minor release with 4-part patches beneath, e.g. 1.3.7),
-   then version links to the per-release anchors. The sticky bar lives on the
-   outer element; the scrollable accordion goes on an inner one — a sticky
-   element that is itself a scroll container would never stick. */
-.clnav {
-  position: sticky; top: 84px; z-index: 4;
-  margin: 0 0 18px;
+/* ---------- two-column layout: version tree left, entries right ----------
+   An expanded tree never covers the log it navigates to: the nav is a sticky
+   sidebar beside the entries, and only the entries column scrolls with the page. */
+.clwrap {
+  display: grid; grid-template-columns: minmax(0, 250px) minmax(0, 1fr);
+  gap: 28px; align-items: start;
 }
+.clwrap__nav { position: sticky; top: 84px; }
+.clwrap__main { min-width: 0; }
+/* the language switch sits at the top of the entries column, not above the nav */
+.clwrap__main .cl__bar { margin-top: 0; }
+
+/* ---------- version jump tree (multi-level) ----------
+   Tree from build.py -> changelog_nav(): collapsible major.minor groups, minor
+   subheadings (a minor release is a clickable sublink, e.g. 1.3.7; one that is
+   not a release is a plain label), then patch version links. The sticky bar
+   lives on the outer .clwrap__nav; the scrollable accordion goes on an inner
+   one — a sticky element that is itself a scroll container would never stick. */
+.clnav { position: static; margin: 0; }
 .clnav__scroll {
-  overflow: auto; max-height: min(46vh, 420px);
+  overflow: auto; max-height: min(calc(100vh - 132px), 640px);
   padding: 8px;
   border-radius: var(--r); background: var(--glass);
   border: 1px solid var(--line); box-shadow: var(--shadow);
@@ -1426,7 +1437,9 @@ html:not(.js) .tab span { max-width: 120px; opacity: 1; margin-right: 6px; }
 /* let the jump bar land each entry below the sticky nav + bar */
 .cl { scroll-margin-top: 132px; }
 @media (max-width: 900px) {
-  .clnav { top: 74px; }
+  .clwrap { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .clwrap__nav { position: static; }
+  .clnav__scroll { max-height: min(46vh, 420px); }
   .cl { scroll-margin-top: 122px; }
 }
 
