@@ -1,6 +1,40 @@
 /* ---------- CHANGELOG: one timeline entry per release ---------- */
 .changelog { display: grid; gap: 14px; }
 
+/* ---------- version jump bar ----------
+   One chip per release (build.py -> changelog_nav()); each link jumps to the
+   entry's per-release anchor. The sticky bar lives on the outer element; the
+   horizontal chip scroll goes on an inner one — a sticky element that is itself
+   a scroll container would never stick. */
+.clnav {
+  position: sticky; top: 84px; z-index: 4;
+  margin: 0 0 18px;
+}
+.clnav__scroll {
+  display: flex; gap: 6px; overflow-x: auto;
+  padding: 8px;
+  border-radius: var(--r); background: var(--glass);
+  border: 1px solid var(--line); box-shadow: var(--shadow);
+  scrollbar-width: thin;
+}
+.clnav__link {
+  flex: 0 0 auto; padding: 5px 13px; border-radius: 999px;
+  font-size: 12.5px; color: var(--ink-2); background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line); text-decoration: none;
+  transition: color var(--t-hover) var(--ease), box-shadow var(--t-hover) var(--ease);
+}
+.clnav__link .mono { font-size: 12.5px; }
+@media (hover: hover) and (pointer: fine) {
+  .clnav__link:hover { color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent); }
+}
+.clnav__link.is-here { color: #fff; background: var(--accent-ink); box-shadow: none; }
+/* let the jump bar land each entry below the sticky nav + bar */
+.cl { scroll-margin-top: 132px; }
+@media (max-width: 900px) {
+  .clnav { top: 74px; }
+  .cl { scroll-margin-top: 122px; }
+}
+
 .cl {
   background: var(--glass);
   border: 1px solid var(--line);

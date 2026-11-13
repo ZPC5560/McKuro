@@ -55,6 +55,52 @@
 .dl__copy p { margin-top: 14px; color: var(--ink-2); }
 .dl__acts { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
 .dl__hint { flex-basis: 100%; text-align: right; font-size: 13px; color: var(--ink-3); }
+.dl__hint a { color: var(--accent-ink); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+.dl__os { margin-top: 10px; font-size: 13.5px; color: var(--ink-3); }
+.dl__os b { color: var(--accent-ink); font-weight: 600; }
+
+/* ---------- per-platform download cards (build.py -> download_section) ----------
+   Every link is a direct GitHub release asset URL, stamped with the CHANGELOG
+   version at build time. JS never builds URLs: it only marks the detected platform
+   (badge + top CTA). No-JS visitors see all four cards. */
+.dlplat__grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;
+  margin-top: 16px;
+}
+.dlplat {
+  position: relative; display: flex; flex-direction: column; gap: 14px;
+  padding: 20px; border-radius: var(--r-lg);
+  background: var(--surface); border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  transition: box-shadow var(--t-hover) var(--ease), border-color var(--t-hover) var(--ease);
+}
+.dlplat.is-match { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow-lg); }
+.dlplat__head { display: grid; gap: 3px; }
+.dlplat__h { display: flex; align-items: center; gap: 8px; font-size: 16.5px; font-weight: 600; color: var(--ink); }
+.dlplat__h .ico { width: 18px; height: 18px; color: var(--accent-ink); }
+.dlplat__sub { font-size: 12.5px; color: var(--ink-3); }
+.dlplat__body { display: grid; gap: 12px; margin-top: auto; }
+.dlplat__body .btn { justify-content: space-between; padding: 0 6px 0 18px; }
+.dlplat__body .btn--primary { width: 100%; height: 46px; }
+.dlplat__alts { display: flex; flex-wrap: wrap; gap: 6px 16px; list-style: none; }
+.dlplat__altlink { font-size: 12.5px; color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-2); }
+@media (hover: hover) and (pointer: fine) {
+  .dlplat__altlink:hover { color: var(--accent-ink); }
+}
+/* recommendation badge, added by JS when the visitor's OS matches */
+.dlplat__reco {
+  position: absolute; top: -11px; right: 16px; margin: 0;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .03em; color: #fff;
+  background: var(--accent-ink); box-shadow: var(--shadow);
+}
+@media (max-width: 900px) {
+  .dlplat__grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .dlplat { padding: 18px 16px; }
+  .dlplat__h { font-size: 15.5px; }
+}
 .btn { display: inline-flex; align-items: center; gap: 10px; border-radius: 999px; font: 600 15px/1 var(--sans); transition: background .2s, transform .2s var(--ease), box-shadow .2s; }
 .btn--lg { height: 52px; padding: 0 8px 0 22px; }
 .btn--primary { background: var(--accent-ink); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 10px 24px -10px rgba(42, 91, 192, .8); }

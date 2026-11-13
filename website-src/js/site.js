@@ -310,7 +310,14 @@
     window.addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(turn); } }, { passive: true });
     turn();
   }
-  /* ---------- 6. version rail types itself in, then stays live from the GitHub API ---------- */
+  /* ---------- 6. version rail + OS-aware download selection ----------
+     The version/date and every download link are baked at build time from
+     CHANGELOG.md (build.py), so this script never builds URLs. It only:
+       - types the rail in (the one entrance animation left on this page), and
+       - detects the visitor's OS, marks the matching platform card and points
+         the top CTA (hero + download section) at that card's primary asset.
+     No-JS visitors see all four cards with direct links, so nothing depends on
+     this block running. */
   var state = { version: "", date: "", typed: false };
   var railV = $('[data-rail="version"]'), railD = $('[data-rail="date"]');
   if (railV) { state.version = railV.textContent.trim(); }
@@ -339,33 +346,60 @@
     typeInto(railV, state.version, function () { typeInto(railD, state.date, null); });
   }
 
-  var REPO = "ZPC5560/McKuro";
-  var PICK = { win: /^McKuro-setup-.*\.exe$/i, mac: /^McKuro-osx-arm64-.*\.dmg$/i, linux: /^mckuro_.*_amd64\.deb$/i };
-  function platformOf() {
-    var ua = navigator.userAgent;
-    if (/Mac|iPhone|iPad|iPod/i.test(ua)) { return "mac"; }
-    if (/Linux|X11|CrOS|Android/i.test(ua)) { return "linux"; }
-    return "win";
+  /* --- OS detection ---
+     Windows/Linux ship x64 builds only. macOS: arm64 by default (Apple Silicon
+     is the common case and the UA keeps "Intel Mac OS X" there for Safari and
+     Firefox), corrected to x64 via the high-entropy hint when the browser offers
+     it. Both macOS cards stay visible anyway, so a wrong guess never hides the
+     other build. */
+  var PLATFORM_NAME = { windows: "Windows", macos: "macOS", linux: "Linux", ios: "iOS", android: "Android" };
+  function detectOS() {
+    var ua = navigator.userAgent || "";
+    if (/iPhone|iPad|iPod/i.test(ua)) { return { os: "ios", arch: "" }; }
+    if (/Android/i.test(ua)) { return { os: "android", arch: "" }; }
+    if (/Mac/i.test(ua)) { return { os: "macos", arch: "arm64" }; }
+    if (/Windows|Win32|Win64/i.test(ua)) { return { os: "windows", arch: "x64" }; }
+    if (/CrOS|Linux|X11/i.test(ua)) { return { os: "linux", arch: "x64" }; }
+    return { os: "unknown", arch: "" };
   }
-  function applyRelease(rel) {
-    if (!rel || !rel.tag_name) { return; }
-    var tag = rel.tag_name;
-    setVersionText(tag, (rel.published_at || "").slice(0, 10));
-    var want = PICK[platformOf()], asset = null;
-    (rel.assets || []).some(function (a) { if (want.test(a.name)) { asset = a; return true; } return false; });
-    var href = asset ? asset.browser_download_url : "https://github.com/" + REPO + "/releases/latest";
+  function platformCard(os, arch) {
+    if (os === "macos") { return $('[data-os="macos"][data-arch="' + arch + '"]'); }
+    if (os === "windows" || os === "linux") { return $('[data-os="' + os + '"]'); }
+    return null;
+  }
+  function archLabel(arch) { return arch === "arm64" ? "Apple 芯片" : "Intel"; }
+  function applyOS(os, arch) {
+    var card = platformCard(os, arch);
+    var primary = card ? $(".btn--primary", card) : null;
+    var name = PLATFORM_NAME[os] || "";
+    var label = os === "macos" ? name + "（" + archLabel(arch) + "）" : name + " x64";
+
+    if (card) {
+      card.classList.add("is-match");
+      var reco = $("[data-reco]", card);
+      if (reco) { reco.removeAttribute("hidden"); }
+    }
     $$("[data-dl-primary]").forEach(function (a) {
-      a.href = href;
-      if (asset) { a.setAttribute("aria-label", "下载 " + tag + " " + asset.name); }
+      if (primary) {
+        a.href = primary.href;
+        a.setAttribute("aria-label", "下载 McKuro · " + label);
+      }
     });
-    var hint = $("[data-dl-hint]");
-    if (hint && asset) { hint.textContent = "已为你的系统选中 " + asset.name + "，其他平台的安装包在 Releases 页面。"; }
+    var osLine = $("[data-dl-os]");
+    if (osLine) {
+      osLine.innerHTML = (os === "unknown" || !name)
+        ? "未识别到你的系统；下方列出了全部平台的安装包，按需选择即可。"
+        : "已为你选择 <b>" + label + "</b> 的安装包。";
+    }
   }
-  if (window.fetch) {
-    fetch("https://api.github.com/repos/" + REPO + "/releases/latest", { headers: { Accept: "application/vnd.github+json" } })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(applyRelease)
-      .catch(function () { /* offline or rate limited: keep baked-in values */ });
+
+  var detected = detectOS();
+  applyOS(detected.os, detected.arch);
+  if (detected.os === "macos" && navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+    navigator.userAgentData.getHighEntropyValues(["architecture"]).then(function (h) {
+      var arch = (h && h.architecture === "x86") ? "x64" : "arm64";
+      if (arch !== detected.arch) { applyOS("macos", arch); }
+    }).catch(function () { /* no hint: keep the tentative arm64 pick */ });
   }
 
   /* ---------- 7. count-up numbers (real values only) ---------- */
@@ -436,5 +470,37 @@
         try { window.localStorage.setItem(LANG_KEY, lang); } catch (e) { /* quota / private */ }
       });
     });
+  }
+
+  /* ---------- 8b. CHANGELOG version nav: jumping opens the entry ----------
+     The bar itself is static markup (build.py -> changelog_nav()); without JS a
+     link is a plain in-page jump to the entry's summary. With JS, clicking also
+     opens the <details> so the release's body is visible on arrival, and the chip
+     under the reading position stays highlighted. */
+  var clNav = $(".clnav");
+  if (clNav) {
+    var clChips = $$(".clnav__link", clNav);
+    clNav.addEventListener("click", function (e) {
+      var a = e.target.closest ? e.target.closest("a") : null;
+      if (!a || !a.getAttribute("href")) { return; }
+      var el = document.getElementById(a.getAttribute("href").slice(1));
+      if (el) { el.open = true; }
+    });
+    var clEntries = $("#changelog-list") ? $$(".cl", $("#changelog-list")) : [];
+    if (clChips.length > 1 && clEntries.length && "IntersectionObserver" in window) {
+      var chipById = {};
+      clChips.forEach(function (c) { chipById[c.getAttribute("href").slice(1)] = c; });
+      var clIO = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          var chip = chipById[en.target.id];
+          if (!chip) { return; }
+          if (en.isIntersecting) {
+            clChips.forEach(function (c) { c.classList.remove("is-here"); });
+            chip.classList.add("is-here");
+          }
+        });
+      }, { rootMargin: "-20% 0px -55% 0px", threshold: 0 });
+      clEntries.forEach(function (el) { clIO.observe(el); });
+    }
   }
 })();

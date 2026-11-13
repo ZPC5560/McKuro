@@ -6,9 +6,12 @@
         <div class="dl__copy">
           <h2 class="dl__h2">装好就能用</h2>
           <p>最新版 <b class="mono" data-rail="version"><!--VER--></b>，发布于 <b class="mono" data-rail="date"><!--DATE--></b>。启动器内置更新检查，之后每个新版本都能在应用里直接升级。</p>
+          <p class="dl__os" data-dl-os>页面会按你的系统自动推荐对应安装包；也可以在下面手动选。</p>
         </div>
         <div class="dl__acts">
-          <a class="btn btn--primary btn--lg" data-dl-primary href="https://github.com/ZPC5560/McKuro/releases/latest" target="_blank" rel="noopener">
+          <!-- The href is stamped at build time to the latest Windows installer;
+               site.js rewrites it to the detected platform's primary asset. -->
+          <a class="btn btn--primary btn--lg" data-dl-primary href="https://github.com/ZPC5560/McKuro/releases/download/<!--VER-->/McKuro-setup-<!--VER-RAW-->.exe" target="_blank" rel="noopener">
             <span>下载 McKuro</span>
             <span class="btn__end"><svg class="ico" aria-hidden="true"><use href="#i-download-simple"></use></svg></span>
           </a>
@@ -16,9 +19,12 @@
             <svg class="ico" aria-hidden="true"><use href="#i-github-logo"></use></svg>
             <span>查看源码</span>
           </a>
-          <p class="dl__hint" data-dl-hint>在 Releases 页面按你的系统选对应文件；macOS 未签名，首次需右键打开。</p>
+          <p class="dl__hint" data-dl-hint>也可以到 <a class="cl__link" href="https://github.com/ZPC5560/McKuro/releases" target="_blank" rel="noopener">GitHub Releases</a> 下载全部历史版本与源码包。</p>
         </div>
       </div>
+      <!-- Per-platform direct download cards, generated at build time
+           (build.py -> download_section()); every link is a direct asset URL. -->
+<!--DOWNLOADS-->
     </div>
   </section>
 

@@ -283,9 +283,13 @@ def to_html(text, open_recent=2, lang="zh", with_en=False):
     with_en=True 时额外把英文正文也渲染进同一个 <details>(包在 `.cl__zh` / `.cl__en`
     里)—— 官网用它:有 JS 时右上角切换语言,没 JS 时每个英文块自己是一个可展开的
     `<details>`,所以两种状态下英文都读得到。with_en=False 时输出与历史版本逐字节一致。
+
+    每个小节带 `id="rel-<版本>"` 锚点:官网「更新日志」上方的版本导航栏
+    (build.py 生成)靠它做页内跳转;id 对版本号做最小转义,保证永远是合法锚点。
     """
     parts = []
     for idx, (v, d, zh, en) in enumerate(parse_bilingual(text)):
+        anchor = "rel-" + re.sub(r"[^A-Za-z0-9._-]", "-", v)
         primary_en = lang == "en" and bool(en)
         head = (f'<summary><span class="cl__ver mono">{_html.escape(v)}</span>'
                 f'<span class="cl__date mono">{_html.escape(d)}</span></summary>')
@@ -307,7 +311,7 @@ def to_html(text, open_recent=2, lang="zh", with_en=False):
                     '<div class="cl__en__body">'
                     + "".join(_render_groups(_group_items(en), "en"))
                     + "</div></details>")
-        parts.append(f'<details class="cl"{open_attr} data-ver="{_html.escape(v)}"{has_en}>'
+        parts.append(f'<details class="cl" id="{anchor}"{open_attr} data-ver="{_html.escape(v)}"{has_en}>'
                      + head + f'<div class="cl__body">{"".join(inner)}</div></details>')
     return "\n".join(parts)
 

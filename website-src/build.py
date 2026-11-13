@@ -18,6 +18,7 @@ If a font source is missing the build stops before touching the output, so an
 incomplete checkout can never half-overwrite a working site.
 """
 import argparse
+import html as _html
 import os
 import re
 import shutil
@@ -112,11 +113,95 @@ def stamp_release(html, version, date):
 
     Markers are explicit (`<!--VER-->` / `<!--DATE-->`) rather than a regex over any
     `vX.Y.Z`-looking string, so a version number that appears in prose (a changelog
-    entry, a download filename) can never be rewritten by accident.
+    entry, a download filename) can never be rewritten by accident. `<!--VER-RAW-->`
+    is the same version without the leading `v` (asset file names use it).
     """
-    if "<!--VER-->" not in html or "<!--DATE-->" not in html:
-        raise SystemExit("html partials must keep the <!--VER--> / <!--DATE--> markers")
-    return html.replace("<!--VER-->", "v" + version).replace("<!--DATE-->", date)
+    for marker in ("<!--VER-->", "<!--DATE-->", "<!--VER-RAW-->"):
+        if marker not in html:
+            raise SystemExit(f"html partials must keep the {marker} marker")
+    return (html.replace("<!--VER-->", "v" + version)
+                .replace("<!--VER-RAW-->", version)
+                .replace("<!--DATE-->", date))
+
+
+def _release_url(version, asset):
+    """GitHub release 直链(assets 由 CI 按 .github/workflows/build-and-test.yml 的
+    固定命名上传,这里按同一套约定构造,版本号永远来自 CHANGELOG)。"""
+    return (f"https://github.com/ZPC5560/McKuro/releases/download/"
+            f"v{version}/{asset.format(ver=version)}")
+
+
+def download_section():
+    """Render the per-platform download cards with direct asset links.
+
+    The release asset names follow the CI workflow's fixed naming (setup / zip /
+    dmg / app.zip / tar.gz / deb / rpm), so they can be derived from the CHANGELOG
+    version at build time — no second place to keep in sync. Every link is a direct
+    GitHub release download; site.js only picks which platform is *recommended*
+    (badge + top CTA), it never builds URLs.
+    """
+    version, _date = latest_release()
+    ver = version.lstrip("v")
+
+    def btn(href, label, tag, cls="btn--primary"):
+        return (f'<a class="btn {cls}" href="{href}">'
+                f'<span>{label}</span>'
+                f'<span class="btn__end">{tag}</span></a>')
+
+    def alt(href, label):
+        return f'<a class="dlplat__altlink" href="{href}">{label}</a>'
+
+    def card(os_id, arch, title, sub, primary, alts):
+        altlinks = "".join(f"<li>{a}</li>" for a in alts)
+        return (f'<article class="dlplat" id="dl-{os_id}" data-os="{os_id}"'
+                + (f' data-arch="{arch}"' if arch else "") + ">"
+                + f'<header class="dlplat__head"><h3 class="dlplat__h">{title}</h3>'
+                + f'<p class="dlplat__sub">{sub}</p></header>'
+                + f'<div class="dlplat__body">{primary}'
+                + (f'<ul class="dlplat__alts">{altlinks}</ul>' if altlinks else "")
+                + "</div>"
+                + '<p class="dlplat__reco" data-reco hidden>为你推荐</p>'
+                + "</article>")
+
+    win_ins = btn(_release_url(ver, "McKuro-setup-{ver}.exe"), "安装包", ".exe")
+    win_zip = alt(_release_url(ver, "McKuro-win-x64-{ver}.zip"), "绿色包 · 免安装（zip）")
+    mac_dmg_a = btn(_release_url(ver, "McKuro-osx-arm64-{ver}.dmg"), "安装包（拖拽）", ".dmg")
+    mac_alt_a = [alt(_release_url(ver, "McKuro-osx-arm64-{ver}.app.zip"), "绿色包 · .app.zip"),
+                 alt(_release_url(ver, "McKuro-osx-arm64-{ver}.zip"), "绿色包 · zip")]
+    mac_dmg_x = btn(_release_url(ver, "McKuro-osx-x64-{ver}.dmg"), "安装包（拖拽）", ".dmg")
+    mac_alt_x = [alt(_release_url(ver, "McKuro-osx-x64-{ver}.app.zip"), "绿色包 · .app.zip"),
+                 alt(_release_url(ver, "McKuro-osx-x64-{ver}.zip"), "绿色包 · zip")]
+    lin_tar = btn(_release_url(ver, "McKuro-linux-x64-{ver}.tar.gz"), "通用压缩包", ".tar.gz")
+    lin_alts = [alt(_release_url(ver, "mckuro_{ver}_amd64.deb"), "Debian / Ubuntu · .deb"),
+                alt(_release_url(ver, "mckuro-{ver}-1.x86_64.rpm"), "Fedora / openSUSE · .rpm")]
+
+    cards = [
+        card("windows", "x64", "Windows", "x64 · 安装包与绿色包都内置自动更新", win_ins, [win_zip]),
+        card("macos", "arm64", "macOS · Apple 芯片", "arm64 · 内置视频播放与 Live2D", mac_dmg_a, mac_alt_a),
+        card("macos", "x64", "macOS · Intel", "x64 · 视频回退封面，Live2D 未实机验证", mac_dmg_x, mac_alt_x),
+        card("linux", "x64", "Linux", "x64 · 视频需系统 libmpv，Live2D 未实机验证", lin_tar, lin_alts),
+    ]
+    return ('<div class="dlplat__grid" id="dl-grid">'
+            + "".join(cards) + "</div>")
+
+
+def changelog_nav():
+    """Render the version nav bar for the 更新日志 section.
+
+    One chip per release, linking to the `id="rel-<ver>"` anchor that
+    tools/changelog.py to_html() now emits. Clicking it with JS open the entry too
+    (site.js); without JS it is a plain in-page jump to the entry's summary.
+    """
+    sections = cl.parse(read(os.path.join(REPO, "CHANGELOG.md")))
+    chips = []
+    for v, _d, _body in sections:
+        anchor = "rel-" + re.sub(r"[^A-Za-z0-9._-]", "-", v)
+        chips.append(f'<a class="clnav__link" href="#{anchor}">'
+                     f'<span class="mono">{_html.escape(v)}</span></a>')
+    # The sticky bar lives on the outer element; the horizontal chip scroll goes on an
+    # inner one. A sticky element that is itself a scroll container never sticks.
+    return ('<nav class="clnav" aria-label="更新日志版本目录">'
+            '<div class="clnav__scroll">' + "".join(chips) + "</div></nav>")
 
 
 def subset(py, src, dst, chars):
@@ -150,11 +235,14 @@ def main():
     out = os.path.abspath(args.out)
 
     html = concat("html", ".html").replace("<!--SPRITE-->", sprite())
-    if "<!--CHANGELOG-->" not in html:
-        raise SystemExit("html partials must keep the <!--CHANGELOG--> placeholder")
+    for ph in ("<!--CHANGELOG-->", "<!--DOWNLOADS-->", "<!--CLNAV-->"):
+        if ph not in html:
+            raise SystemExit(f"html partials must keep the {ph} placeholder")
     version, date = latest_release()
     html = stamp_release(html, version, date)
-    html = html.replace("<!--CHANGELOG-->", changelog_section())
+    html = (html.replace("<!--CHANGELOG-->", changelog_section())
+                .replace("<!--DOWNLOADS-->", download_section())
+                .replace("<!--CLNAV-->", changelog_nav()))
     print(f"release stamped: v{version} ({date})")
     css = concat("css", ".css")
     js_names = sorted(n for n in os.listdir(os.path.join(HERE, "js")) if n.endswith(".js"))
