@@ -83,29 +83,61 @@ public partial class MainWindow : Window
     /// 游戏会话期间让位内存:游戏本体在 16 GB 机器上通常要吃掉 8~12 GB,
     /// 启动器若仍常驻完整界面(GPU 纹理、页面视觉树、Skia 图层)就容易撞到内存上限。
     /// <para>
-    /// 做法是「不重建页面,只停渲染 + 交还工作集」:
-    /// <see cref="Control.IsVisible"/> 置 false 会让 Avalonia 跳过本窗口的合成与绘制,
-    /// 页面对象与 ViewModel 全部保留(切回来不需要重新拉数据,也不触发 OnNavigatedTo);
-    /// 真正的解码器/模型/视频已在各自控件里释放。
+    /// 做法是「不重建页面,媒体降级 + 交还工作集」:
+    /// 真正的解码器/模型/视频已在各自控件里释放 —— 背景视频会话释放为静态封面、
+    /// Live2D 卸载、B站/内嵌播放器回收,页面对象与 ViewModel 全部保留
+    /// (切回来不需要重新拉数据,也不触发 OnNavigatedTo)。
     /// </para>
-    /// <para>游戏结束回 Idle 时恢复可见,并再交还一次(此时页面刚重建过纹理)。</para>
+    /// <para>
+    /// 内容区整块隐藏(<see cref="Control.IsVisible"/> = false)只在<b>窗口实际不可见</b>
+    /// (最小化 / 托盘隐藏)时才做 —— 此时整窗本来就不渲染,内容区隐藏只是额外让出合成资源。
+    /// 未设置「启动游戏后最小化主窗口」时窗口保持可见,内容区<b>不能</b>整块隐藏:
+    /// 否则用户会看到一片空白窗口(反馈:启动页视频因释放线程变空白、切到其他页面也是空白),
+    /// 正确表现是各控件自行降级到静态内容(静态封面 / 无模型 / 无播放器)。
+    /// </para>
+    /// <para>游戏结束回 Idle 时恢复:媒体控件各自重建,并再交还一次工作集。</para>
     /// </summary>
     private void HookGameSessionMemoryRelease()
     {
         AppServices.GameMonitor.StateChanged += OnGameSessionStateChangedForMemory;
-        Closed += (_, _) => AppServices.GameMonitor.StateChanged -= OnGameSessionStateChangedForMemory;
+        // 内容区隐藏与否取决于「游戏会话 + 窗口可见性」两个事实:
+        // 用户可能在游戏运行中手动最小化/还原窗口,须按窗口状态重算。
+        PropertyChanged += OnWindowStateChangedForMemory;
+        Closed += (_, _) =>
+        {
+            AppServices.GameMonitor.StateChanged -= OnGameSessionStateChangedForMemory;
+            PropertyChanged -= OnWindowStateChangedForMemory;
+        };
+    }
+
+    private void OnWindowStateChangedForMemory(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == WindowStateProperty || e.Property == IsVisibleProperty)
+        {
+            UpdateContentVisibilityForGameSession();
+        }
     }
 
     private void OnGameSessionStateChangedForMemory(GameSessionState state)
     {
-        var active = state != GameSessionState.Idle;
-        // 不碰 WindowState:用户可能正在看启动器;这里只停内容区渲染。
-        ContentHost.IsVisible = !active;
-        if (active)
+        UpdateContentVisibilityForGameSession();
+        if (state != GameSessionState.Idle)
         {
-            // 停渲染后把已空闲的原生页还给系统(纹理/图层/字体缓存的驻留部分)
+            // 媒体让位后把已空闲的原生页还给系统(纹理/图层/字体缓存的驻留部分)
             Dispatcher.UIThread.Post(() => WorkingSetTrimmer.Trim(), DispatcherPriority.Background);
         }
+    }
+
+    /// <summary>
+    /// 游戏会话期间的界面让位:仅当窗口实际最小化/隐藏时才整块隐藏内容区;
+    /// 窗口保持可见时不隐藏,由各媒体控件自行降级(视频→静态图、Live2D 卸载、
+    /// 内嵌播放器回收),用户看到的是静态内容而不是空白窗口。
+    /// </summary>
+    private void UpdateContentVisibilityForGameSession()
+    {
+        var active = AppServices.GameMonitor.State != GameSessionState.Idle;
+        var windowHidden = WindowState == WindowState.Minimized || !IsVisible;
+        ContentHost.IsVisible = !(active && windowHidden);
     }
 
     /// <summary>

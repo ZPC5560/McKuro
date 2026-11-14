@@ -121,9 +121,31 @@ public sealed class GameResourceReleaseTests
 
         var window = Source("src/McKuro/MainWindow.axaml.cs");
         var hook = MethodBody(window, "private void OnGameSessionStateChangedForMemory(GameSessionState state)");
-        Assert.Contains("ContentHost.IsVisible = !active;", hook);
+        Assert.Contains("UpdateContentVisibilityForGameSession();", hook);
         var closed = window.IndexOf("StateChanged -= OnGameSessionStateChangedForMemory", StringComparison.Ordinal);
         Assert.True(closed >= 0, "窗口关闭时必须解绑游戏状态订阅，否则 MainWindow 被静态事件钉住。");
+        Assert.Contains("PropertyChanged -= OnWindowStateChangedForMemory", window);
+    }
+
+    [Fact]
+    public void 窗口可见时游戏会话不整块隐藏内容区()
+    {
+        var window = Source("src/McKuro/MainWindow.axaml.cs");
+        var update = MethodBody(window, "private void UpdateContentVisibilityForGameSession()");
+
+        // 未设置「启动后最小化」时窗口保持可见:内容区不能整块隐藏(否则用户看到一片空白窗口,
+        // 视频/Live2D 的正确让位方式是各自降级到静态内容)。只有「游戏会话 + 窗口实际
+        // 最小化/隐藏(托盘)」同时成立才整块隐藏内容区。
+        Assert.Contains("windowHidden", update);
+        var hide = update.IndexOf("active && windowHidden", StringComparison.Ordinal);
+        Assert.True(hide >= 0, "内容区隐藏必须同时要求游戏会话进行中且窗口不可见。");
+        Assert.Contains("WindowState == WindowState.Minimized", update);
+        Assert.Contains("!IsVisible", update);
+        // 用户在游戏运行中手动最小化/还原窗口时也要重算可见性
+        var prop = MethodBody(window, "private void OnWindowStateChangedForMemory(object? sender, AvaloniaPropertyChangedEventArgs e)");
+        Assert.Contains("WindowStateProperty", prop);
+        Assert.Contains("IsVisibleProperty", prop);
+        Assert.Contains("UpdateContentVisibilityForGameSession();", prop);
     }
 
     [Fact]
