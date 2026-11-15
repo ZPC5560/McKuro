@@ -982,11 +982,16 @@ public sealed partial class TowerViewModel : ViewModelBase
         _ = LoadAsync();
     }
 
-    /// <summary>上次成功/尝试拉取的时间(进入页面时的"新鲜度"判断,避免反复切页狂刷接口)。</summary>
+    /// <summary>上次成功/尝试拉取的时间(进入页面时的"新鲜度"判断)。</summary>
     private DateTime _lastLoadAt = DateTime.MinValue;
 
-    /// <summary>进入页面的最小重新拉取间隔(秒):越快于它反复切页就不重复请求,规避风控。</summary>
-    private const int ReloadMinIntervalSeconds = 60;
+    /// <summary>
+    /// 进入页面的最小重新拉取间隔(秒):用户要求"每次进入页面都重新拉取新数据",
+    /// 故只保留 3 秒防抖动(双击/极速切页),不再做 60 秒级节流 —— 否则打完深塔切走再回来
+    /// 会因节流跳过重拉,战绩永远停留在旧状态(用户实测:退出账号再登录才刷新)。
+    /// 风控面由接口层串行/间隔控制承担,见 KujiequApiClient 的请求间隔。
+    /// </summary>
+    private const int ReloadMinIntervalSeconds = 3;
 
     /// <summary>
     /// 应用「页内定位」:把页签切到指定玩法(提醒卡片「前往」用)。
@@ -1032,8 +1037,8 @@ public sealed partial class TowerViewModel : ViewModelBase
             }
             return;
         }
-        // 刚拉过就不重复拉(切页很频繁;接口还有风控风险)。
-        // 但账号变了必须重拉:否则切号后一分钟内看到的是上一个账号的塔、矩阵、全息和探索数据
+        // 每次进入页面都重新拉取(仅 3 秒防抖动,见 ReloadMinIntervalSeconds 说明)。
+        // 账号变了必须重拉:否则切号后看到的是上一个账号的塔、矩阵、全息和探索数据
         if (CurrentLoadKey() == _lastLoadedKey
             && DateTime.Now - _lastLoadAt < TimeSpan.FromSeconds(ReloadMinIntervalSeconds))
         {
