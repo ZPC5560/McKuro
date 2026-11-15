@@ -41,17 +41,33 @@
 
 单语命令仍可单独取：`extract <版本>` 出中文（历史行为不变），`extract <版本> --lang en` 出英文（缺失时回退中文并向 stderr 告警），`has-lang <版本> en` 用退出码回答该版有没有英文（CI 用它决定是否拼双语）。
 
-## [1.3.8.3] - 2026-11-14
+## [1.3.8.3] - 2026-11-15
 
 ### Fixed
 
 - **未设置「启动游戏后最小化主窗口」时，游戏期间主窗口一片空白、游戏退出后视频也恢复不了**：游戏会话一开始，主窗口就把整块内容区隐藏了（`ContentHost.IsVisible = false`）——设置了启动后最小化的用户整窗本来就不可见，无感；没设置的用户却要对着空白窗口玩几个小时。内容区整块隐藏还把所有页面的「让位后恢复」压到同一条还原路径上，任何一个页面没跟上，表现就是视频回不来、切到其他页面也是空白。现在内容区隐藏只在**窗口确实最小化/隐藏（托盘）**时才做；窗口保持可见时由各媒体控件自行让位——启动页视频自动降级为静态封面（释放解码器、帧池与渲染线程）、Live2D 卸载、B站/内嵌播放器回收，用户看到的是静态内容而不是空白窗口。游戏进程关闭被检测到后（监控回到空闲），视频会话按原 URL 重建、Live2D 与内嵌播放器按原设置恢复；游戏期间手动最小化/还原窗口也会即时重算界面状态
+
+### Removed
+
+- **签到页移除「库街区每日任务」**：库街区每日任务（库洛币签到 + 浏览 3 帖 + 点赞 5 帖 + 分享 1 帖）不再提供，签到页现在只做游戏签到与对应的资源显示——一键游戏签到、自动签到设置、各角色当日签到状态、签到奖励格子与签到统计。相关按钮与命令已移除，服务端调用保留在代码层（未来如需恢复可另行接回）
+
+### Changed
+
+- **各页面不再显示「加载完成 / 解析完成 / 正在加载」类副标题汇报**：活动、抽卡分析、游玩统计、兑换码、深塔·海墟、资讯·图鉴、角色数据、签到、启动器与设置页的状态副标题统一改为只在出错或需要用户处理时显示（加载失败、解析失败、登录失效、极验拦截、缓存不可用、同步失败、云同步降级等）；正常加载/解析/同步/切换完成后副标题保持空白，页面不再常驻「加载完成(版本活动 N · 换取活动 M)」「共 N 个角色」「正在解析游戏日志…」「同步完成:新增 N 条」这类只汇报结果、不传达新信息的文案
 
 <!--en-->
 
 ### Fixed
 
 - **With "minimize main window after launch" off, the main window went fully blank during the session and the video would not come back after the game exited**: the moment a game session started, the whole content area was hidden (`ContentHost.IsVisible = false`). Users who enabled minimize never noticed (the whole window was already hidden), but users who did not stared at a blank window for the whole play session, and because every page's "release-then-restore" hinged on that single restore path, one lagging page left the video dead and other pages blank. Content-area hiding is now done only when the window is actually minimized/hidden to tray; when the window stays visible, each media control releases on its own — the launcher video degrades to its static cover (decoder, frame pool and render threads are released), the Live2D model unloads, and embedded/Bilibili players are torn down, so the user sees static content instead of a blank window. Once the game process close is detected (monitor back to idle), the video session is rebuilt from the same URL and the Live2D model and embedded players restore per their settings; manually minimizing/restoring the window mid-session also re-evaluates the UI state immediately
+
+### Removed
+
+- **"Kurobbs daily tasks" removed from the sign-in page**: the Kurobbs daily-task flow (Kuro coin check-in + browse 3 posts + like 5 posts + share 1 post) is no longer offered. The sign-in page now does exactly two things — game check-in and its resource display: one-click check-in for all roles, the auto check-in setting, each role's today's status, the reward grid and the check-in history. The button and command were removed; the server-side calls stay in the code layer in case the feature is ever brought back
+
+### Changed
+
+- **Pages no longer show "loaded / parsed / loading…" subtitle reports**: the status subtitle on the Activity, Gacha, Playtime, Redeem, Tower, Wiki, Roles, Sign-in, Launcher and Settings pages now appears only when something went wrong or needs attention (load/parse failure, expired session, GeeTest block, unavailable cache, sync failure, cloud fallback…). After a successful load/parse/sync/switch the subtitle stays blank, so pages no longer sit on one-line reports such as "Loaded (version events N · exchange events M)", "N roles total", "Parsing game logs…", "Synced: N new records" — statements that report the outcome without adding information
 
 <!--/en-->
 
