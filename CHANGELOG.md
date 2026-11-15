@@ -46,6 +46,8 @@
 ### Fixed
 
 - **未设置「启动游戏后最小化主窗口」时，游戏期间主窗口一片空白、游戏退出后视频也恢复不了**：游戏会话一开始，主窗口就把整块内容区隐藏了（`ContentHost.IsVisible = false`）——设置了启动后最小化的用户整窗本来就不可见，无感；没设置的用户却要对着空白窗口玩几个小时。内容区整块隐藏还把所有页面的「让位后恢复」压到同一条还原路径上，任何一个页面没跟上，表现就是视频回不来、切到其他页面也是空白。现在内容区隐藏只在**窗口确实最小化/隐藏（托盘）**时才做；窗口保持可见时由各媒体控件自行让位——启动页视频自动降级为静态封面（释放解码器、帧池与渲染线程）、Live2D 卸载、B站/内嵌播放器回收，用户看到的是静态内容而不是空白窗口。游戏进程关闭被检测到后（监控回到空闲），视频会话按原 URL 重建、Live2D 与内嵌播放器按原设置恢复；游戏期间手动最小化/还原窗口也会即时重算界面状态
+- **游玩统计页副标题不再常驻「尚未分析」、深塔页不再常驻「未加载」**：状态副标题的初始值此前就是这两个占位文案，页面加载/解析完成后不再覆盖，于是副标题永远停在占位词上——看起来像从没分析过、从没加载过。现在初始值为空，副标题只在出错或需要用户处理时显示
+- **每次进入深塔/海墟页都会重新拉取最新数据**：此前进入页面有 60 秒节流（防快速切页刷接口），打完深塔切走再回来会因节流跳过重拉，战绩停留在旧状态——实测要退出账号再登录才刷新。节流降为 3 秒防抖动，每次进入都重新拉取；游戏正常结束后也会立即重拉最新战绩（即使页面正停留、没有切换）
 
 ### Removed
 
@@ -60,6 +62,8 @@
 ### Fixed
 
 - **With "minimize main window after launch" off, the main window went fully blank during the session and the video would not come back after the game exited**: the moment a game session started, the whole content area was hidden (`ContentHost.IsVisible = false`). Users who enabled minimize never noticed (the whole window was already hidden), but users who did not stared at a blank window for the whole play session, and because every page's "release-then-restore" hinged on that single restore path, one lagging page left the video dead and other pages blank. Content-area hiding is now done only when the window is actually minimized/hidden to tray; when the window stays visible, each media control releases on its own — the launcher video degrades to its static cover (decoder, frame pool and render threads are released), the Live2D model unloads, and embedded/Bilibili players are torn down, so the user sees static content instead of a blank window. Once the game process close is detected (monitor back to idle), the video session is rebuilt from the same URL and the Live2D model and embedded players restore per their settings; manually minimizing/restoring the window mid-session also re-evaluates the UI state immediately
+- **The playtime page no longer sits on "Not analyzed yet" and the tower page no longer sits on "Not loaded"**: the subtitle's initial value used to be exactly these placeholder strings and was never overwritten once the page finished loading/parsing, so the page looked like it had never run. The initial value is now empty; the subtitle only appears when something failed or needs attention
+- **Entering the Tower/Slash page always re-fetches the latest data**: entering the page used to be throttled to one fetch per 60 seconds (to avoid hammering the API while switching pages), so coming back after finishing the tower skipped the reload and the scoreboard stayed stale — in practice it only refreshed after signing out and back in. The throttle is now a 3-second debounce: every entry re-fetches, and a finished game session immediately triggers a fresh pull even while the page stays open without switching
 
 ### Removed
 
