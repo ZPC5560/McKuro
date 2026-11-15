@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using McKuro.Core.Models.Tower;
 using McKuro.Services;
 
@@ -292,7 +293,7 @@ public sealed partial class TowerViewModel : ViewModelBase
     private int _selectedTabIndex;
 
     [ObservableProperty]
-    private string _statusText = LanguageService.Format("Tower.NotLoaded");
+    private string _statusText = "";
 
     [ObservableProperty]
     private bool _isBusy;
@@ -966,6 +967,18 @@ public sealed partial class TowerViewModel : ViewModelBase
     public TowerViewModel()
     {
         NewTowerHistory.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNewTowerHistory));
+        // 游戏正常结束后立即重拉最新战绩:玩家打完深塔/海墟回来看战绩是核心场景,
+        // 此时页面可能正停留(OnNavigatedTo 不会被触发),不能只重置节流等下次进入。
+        // ReloadMinIntervalSeconds 仍只防"反复切页狂刷接口",游戏结束刷新一次不在其列。
+        WeakReferenceMessenger.Default.Register<TowerViewModel, GameSessionEndedMessage>(this,
+            static (recipient, message) =>
+            {
+                if (message.Value == GameSessionEndReason.Finished)
+                {
+                    recipient._lastLoadAt = DateTime.MinValue;
+                    _ = recipient.LoadAsync();
+                }
+            });
         _ = LoadAsync();
     }
 

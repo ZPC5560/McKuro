@@ -38,7 +38,7 @@ public sealed class PlayHourCell
 public sealed partial class PlayTimeViewModel : ViewModelBase
 {
     [ObservableProperty]
-    private string _statusText = LanguageService.Format("PT.NotAnalyzed");
+    private string _statusText = "";
 
     [ObservableProperty]
     private bool _isBusy;

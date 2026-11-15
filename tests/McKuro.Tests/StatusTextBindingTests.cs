@@ -117,15 +117,19 @@ public class StatusTextBindingTests
     }
 
     /// <summary>
-    /// 状态文案的初始值不能是静态占位词(「就绪」)。
+    /// 状态文案的初始值不能是静态占位词(「就绪」/「未加载」/「尚未分析」等本地化键)。
     /// <para>
     /// 回归背景(用户反馈 2026-10):"一直显示就绪,这种没必要显示"。启动页 / 角色页 / 抽卡页
     /// 的 <c>StatusText</c> 初始值都是 <c>LanguageService.Format("Roles.Ready")</c>,
     /// 于是没有任何操作发生时页面也挂着一个"就绪" —— 它不传达信息,还让人以为有事没做完。
+    /// 2026-11 再次回归:游玩统计初始 <c>PT.NotAnalyzed</c>(「尚未分析」)、深塔初始
+    /// <c>Tower.NotLoaded</c>(「未加载」)—— 页面加载/解析成功后不再覆盖,副标题永远停在占位词。
     /// 这些页面的 StatusText 只在"操作开始/结束"时被赋值,初始值应当为空。
     /// </para>
     /// <para>
-    /// 判据只盯<b>字段声明处的初始值</b>,不限制运行时赋任何值 —— 运行时要显示什么由各页面自己决定。
+    /// 判据只盯<b>字段声明处的初始值</b>:不得调用 <c>LanguageService.Format(...)</c>
+    /// (即不允许本地化占位词常驻);纯字面量/空串允许。不限制运行时赋任何值 ——
+    /// 运行时要显示什么由各页面自己决定。
     /// </para>
     /// </summary>
     [Fact]
@@ -141,10 +145,10 @@ public class StatusTextBindingTests
             var source = File.ReadAllText(vm);
             foreach (Match m in Regex.Matches(source, @"private\s+string\s+_statusText\s*=\s*([^;]+);"))
             {
-                if (m.Groups[1].Value.Contains("Roles.Ready", StringComparison.Ordinal))
+                if (m.Groups[1].Value.Contains("LanguageService.Format", StringComparison.Ordinal))
                 {
                     violations.Add(
-                        $"{Path.GetFileName(vm)}: _statusText 初始值是 Roles.Ready(「就绪」) —— 静态占位词不该常驻,初始应为空串");
+                        $"{Path.GetFileName(vm)}: _statusText 初始值是 LanguageService.Format(...) 静态占位词(「就绪/未加载/尚未分析」类) —— 不传达信息还常驻,初始应为空串");
                 }
             }
         }
