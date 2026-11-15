@@ -253,7 +253,6 @@ public sealed partial class GachaViewModel : ViewModelBase
                 return;
             }
             ApplyAnalysis(analysis);
-            StatusText = LanguageService.Format("Gacha.LocalLoaded");
         }
         catch (Exception ex)
         {
@@ -327,7 +326,6 @@ public sealed partial class GachaViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = LanguageService.Format("Gacha.Syncing");
         try
         {
             // 先刷新 UP/歪 判定配置:避免整段会话沿用构造时的旧缓存(如新卡池开启后旧数据把当期 UP 误判为歪)
@@ -339,12 +337,10 @@ public sealed partial class GachaViewModel : ViewModelBase
             GachaSyncResult? result = null;
             if (AppServices.CloudGacha.HasSavedLogin)
             {
-                StatusText = LanguageService.Format("Gacha.SyncingCloud");
                 var cloud = await AppServices.CloudGacha.SyncFromCloudAsync();
                 if (cloud.IsSuccess)
                 {
                     result = cloud.Sync;
-                    StatusText = LanguageService.Format("Gacha.CloudSynced");
                 }
                 else
                 {
@@ -427,8 +423,6 @@ public sealed partial class GachaViewModel : ViewModelBase
             {
                 SelectedPlayerId = select;
             }
-
-            StatusText = LanguageService.Format("Gacha.Synced", result.NewRecords, result.TotalRecords);
         }
         catch (Exception ex)
         {

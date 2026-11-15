@@ -32,8 +32,8 @@ public sealed partial class RoleSignItem : ObservableObject
 }
 
 /// <summary>
-/// 签到页:游戏签到 + 库街区每日任务(登录已统一迁移到「账号」页)。
-/// 参考 Haiyu 的 GamerSignPage / AutoKuroClientSignService。
+/// 签到页:游戏签到 + 自动签到设置 + 签到奖励与统计(登录已统一迁移到「账号」页)。
+/// 参考 Haiyu 的 GamerSignPage。
 /// </summary>
 public sealed partial class SignViewModel : ViewModelBase
 {
@@ -313,9 +313,8 @@ public sealed partial class SignViewModel : ViewModelBase
                 AppServices.Settings.Save();
             }
 
-            StatusText = issues.Count > 0
-                ? LanguageService.Format("Sign.RolesSummaryIssues", Roles.Count, string.Join("; ", issues))
-                : LanguageService.Format("Sign.RolesSummary", Roles.Count);
+            // 状态副标题只在有账号问题(登录失效/网络异常)时显示,正常加载无需口头汇报
+            StatusText = issues.Count > 0 ? string.Join("; ", issues) : "";
         }
         finally
         {
@@ -516,45 +515,14 @@ public sealed partial class SignViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = LanguageService.Format("Sign.SigningInProgress");
         try
         {
-            var summary = await AppServices.KuroSign.SignAllGamesAsync(account);
-            StatusText = summary.Message;
+            await AppServices.KuroSign.SignAllGamesAsync(account);
             await RefreshRolesAsync();
-            StatusText = summary.Message;
         }
         catch (Exception ex)
         {
             StatusText = LanguageService.Format("Sign.SignFailed", ex.Message);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    /// <summary>执行库街区每日任务(签到+浏览+点赞+分享)。</summary>
-    [RelayCommand]
-    private async Task ExecuteDailyAsync()
-    {
-        var account = AppServices.KuroAccounts.Current;
-        if (account is null)
-        {
-            StatusText = LanguageService.Format("Sign.LoginFirst");
-            return;
-        }
-
-        IsBusy = true;
-        StatusText = LanguageService.Format("Sign.KuroDailyInProgress");
-        try
-        {
-            var ok = await AppServices.KuroSign.ExecuteDailyTasksAsync(account);
-            StatusText = ok ? LanguageService.Format("Sign.KuroDailyDone") : LanguageService.Format("Sign.KuroDailyFailed");
-        }
-        catch (Exception ex)
-        {
-            StatusText = LanguageService.Format("Sign.KuroDailyFailedWith", ex.Message);
         }
         finally
         {

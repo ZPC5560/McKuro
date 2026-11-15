@@ -1805,7 +1805,6 @@ public sealed partial class LauncherViewModel : ViewModelBase
             }
             else
             {
-                StatusText = LanguageService.Format("Launcher.VersionSetOk", version);
                 await CheckUpdateAsync();
             }
         }
@@ -1837,8 +1836,8 @@ public sealed partial class LauncherViewModel : ViewModelBase
         }
 
         // 进程监控:点击启动 → 「启动中」;进程持续存活满 20 秒 → 「游戏中」;进程消失回「启动游戏」
+        // (状态栏文案由 OnGameSessionStateChanged 按会话状态机驱动,无需在此写汇报)
         AppServices.GameMonitor.BeginLaunch(BuildGameProcessNames());
-        StatusText = LanguageService.Format("Launcher.Launched");
 
         // 对齐 Haiyu 的"启动后可关闭主界面":可选最小化主窗口(任务栏 / 系统托盘)
         if (AppServices.Settings.Current.MinimizeOnLaunch

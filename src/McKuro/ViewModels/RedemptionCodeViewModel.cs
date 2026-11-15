@@ -50,7 +50,6 @@ public sealed partial class RedemptionCodeViewModel : ViewModelBase
             return;
         }
         IsLoading = true;
-        StatusText = LanguageService.Format("Redeem.Loading");
         try
         {
             var data = await AppServices.RedeemCodes.FetchAsync();
@@ -61,7 +60,6 @@ public sealed partial class RedemptionCodeViewModel : ViewModelBase
                 AddSorted(MainlandCodes, data.Mainland);
                 AddSorted(GlobalCodes, data.Global);
                 HasData = MainlandCodes.Count > 0 || GlobalCodes.Count > 0;
-                StatusText = LanguageService.Format("Redeem.StatusSummary", MainlandCodes.Count + GlobalCodes.Count, MainlandCodes.Count, GlobalCodes.Count);
             }
             else
             {

@@ -261,7 +261,6 @@ public sealed partial class ActivityViewModel : ViewModelBase
             return;
         }
         IsBusy = true;
-        StatusText = LanguageService.Format("Activity.StatusLoading");
         System.Console.Error.WriteLine("MCKURO-GANTT load begin");
         try
         {
@@ -444,7 +443,6 @@ public sealed partial class ActivityViewModel : ViewModelBase
             }
 
             HasData = VersionActivities.Count > 0 || PoolActivities.Count > 0;
-            StatusText = LanguageService.Format("Activity.StatusLoaded", VersionActivities.Count, PoolActivities.Count);
             PruneExpiredIgnoreList(now);
         }
         catch (Exception ex)

@@ -225,7 +225,7 @@ public sealed class AppSettings
 
     /// <summary>最近一次自动游戏签到执行日期("yyyy-MM-dd";防止同一天反复重启重复执行)。</summary>
     /// <remarks>
-    /// 该字段历史上同时为「自动库街区每日任务」去重;后者已移出自动调度(只能在签到页手动执行),
+    /// 该字段历史上同时为「自动库街区每日任务」去重;后者已移出自动调度并整体下线,
     /// 保留字段名是为了不破坏已有用户 settings.json 的去重状态,升级当天不会被重复签到。
     /// </remarks>
     public string LastDailyAutoRunDate { get; set; } = "";

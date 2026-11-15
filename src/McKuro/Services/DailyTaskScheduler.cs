@@ -7,7 +7,6 @@ namespace McKuro.Services;
 /// <summary>
 /// 每日自动签到调度器:应用启动 15 秒后(待网络与账号初始化)检查一次,之后每 <see cref="CheckInterval"/>
 /// 再检查一次(托盘常驻跨天后也能签到);按天去重 —— 当天已执行过则跳过(反复重启不重复)。
-/// 库街区每日任务(浏览/点赞/分享)不参与自动调度,只能在签到页手动执行。
 /// </summary>
 public sealed class DailyTaskScheduler : IDisposable
 {

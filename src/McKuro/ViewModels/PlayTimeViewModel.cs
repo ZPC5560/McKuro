@@ -89,12 +89,10 @@ public sealed partial class PlayTimeViewModel : ViewModelBase
             return;
         }
         IsBusy = true;
-        StatusText = LanguageService.Format("PT.Parsing");
         try
         {
-            var count = await AppServices.PlayTime.AnalyzeLogAsync();
+            await AppServices.PlayTime.AnalyzeLogAsync();
             RefreshFromDb();
-            StatusText = count > 0 ? LanguageService.Format("PT.Parsed", count) : LanguageService.Format("PT.ParsedNone");
         }
         catch (Exception ex)
         {

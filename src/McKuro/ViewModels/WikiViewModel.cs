@@ -286,7 +286,6 @@ public sealed partial class WikiViewModel : ViewModelBase
         // 本轮使用的渠道:各段加载统一用它,并记为"已加载"(构造时的首次加载也记,首次进入页面不再重复下载)
         var server = ServerType;
         _lastLoadedServer = server;
-        StatusText = LanguageService.Format("Wiki.StatusLoading");
         try
         {
             Banners.Clear();
@@ -299,14 +298,13 @@ public sealed partial class WikiViewModel : ViewModelBase
             _coverByPostId.Clear();
             _coverByTitle.Clear();
 
-            int banners = await LoadBannersAsync(server);
+            await LoadBannersAsync(server);
             // 重置轮播到首项并刷新视频覆盖层状态(Banners 重建后索引不变也要通知)
             SelectedBannerIndex = 0;
             RaiseCurrentBannerChanged();
-            var (news, anns, acts) = await LoadKurobbsEventsAsync();
-            int notices = await LoadLauncherGuidanceAsync(server);
+            await LoadKurobbsEventsAsync();
+            await LoadLauncherGuidanceAsync(server);
 
-            StatusText = LanguageService.Format("Wiki.StatusLoaded", banners, news, anns, acts, notices);
         }
         catch (Exception ex)
         {

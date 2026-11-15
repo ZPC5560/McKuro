@@ -264,7 +264,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
 
         CustomLauncherPath = files[0].Path.LocalPath;
-        StatusText = LanguageService.Format("Status.CustomLauncherSet", CustomLauncherPath);
     }
 
     /// <summary>启动游戏后最小化主窗口。</summary>
@@ -1554,7 +1553,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         SkipVerifyFiles.Add(path);
         SkipVerifyInput = "";
         SaveSkipVerifyFiles(); // 即时写回配置
-        StatusText = LanguageService.Format("Status.SkipAdded", path);
     }
 
     [RelayCommand]
@@ -1562,7 +1560,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         SkipVerifyFiles.Remove(path);
         SaveSkipVerifyFiles();
-        StatusText = LanguageService.Format("Status.SkipRemoved", path);
     }
 
     /// <summary>

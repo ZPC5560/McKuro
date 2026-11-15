@@ -1660,8 +1660,6 @@ public sealed partial class RolesViewModel : ViewModelBase
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _detailFetchTask = done.Task;
 
-        var fetchingText = LanguageService.Format("Roles.FetchingDetail", role.RoleName);
-        StatusText = fetchingText;
         try
         {
             await previous;
@@ -1696,7 +1694,8 @@ public sealed partial class RolesViewModel : ViewModelBase
                 BuildSkillPriority();
                 OnPropertyChanged(nameof(HasSkillPriority));
                 OnPropertyChanged(nameof(HasMoreAttributes));
-                StatusText = LanguageService.Format("Roles.DetailLoaded", role.RoleName);
+                // 详情加载成功:清掉可能残留的旧错误提示(成功本身不需要口头汇报)
+                StatusText = "";
             }
             else if (result.GeeTest)
             {
@@ -1723,14 +1722,6 @@ public sealed partial class RolesViewModel : ViewModelBase
         }
         finally
         {
-            // 过期请求退场时,状态栏若还挂着它的"正在获取 X 的详情"就清掉:
-            // 新选中的角色可能根本不发请求(详情已完整),否则这句会一直停在那里(L24)。
-            // 有更新的请求在跑(_detailFetchCts 非空)时不动:它会自己写结果;
-            // 漂泊者各形态同名,文案相同不代表是本次请求写的。
-            if (!ReferenceEquals(role, SelectedRole) && _detailFetchCts is null && StatusText == fetchingText)
-            {
-                StatusText = "";
-            }
             if (ReferenceEquals(_detailFetchCts, cts))
             {
                 _detailFetchCts = null;
@@ -1902,7 +1893,6 @@ public sealed partial class RolesViewModel : ViewModelBase
             ApplyCachedRoleIcons(role);
             _guideFilledRole = role;
             SourceText = LanguageService.Format("Roles.SourceGuide");
-            StatusText = LanguageService.Format("Roles.GuideFilled", role.RoleName);
         }
         catch (Exception)
         {
@@ -2030,7 +2020,6 @@ public sealed partial class RolesViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = LanguageService.Format("Roles.Syncing");
         // 发起时快照代次与账号:多步网络同步期间用户可能切号/退出(M31)
         var generation = _roleSyncGeneration;
         var accountId = CurrentAccountId;
@@ -2072,11 +2061,6 @@ public sealed partial class RolesViewModel : ViewModelBase
                 {
                     _forceGuideRefreshPending = false;
                     _ = LoadGuideAchievementAsync(forceRefresh: true);
-                }
-                StatusText = result.Message ?? LanguageService.Format("Roles.Synced", result.Roles.Count);
-                if (result.Roles is { Count: > 0 } && SelectedRole is { } first && first.IsDetailComplete)
-                {
-                    StatusText += LanguageService.Format("Roles.MergedFromCache");
                 }
 
                 // 只为"新增角色"预取攻略(老角色的攻略已在 SQLite 缓存里):
@@ -2197,7 +2181,6 @@ public sealed partial class RolesViewModel : ViewModelBase
         if (cached.IsSuccess && cached.Roles.Count > 0)
         {
             ApplyRoles(cached);
-            StatusText = LanguageService.Format("Roles.CachedLoaded", reason, cached.Roles.Count);
         }
         else
         {
@@ -2214,7 +2197,6 @@ public sealed partial class RolesViewModel : ViewModelBase
         if (result.IsSuccess)
         {
             ApplyRoles(result);
-            StatusText = LanguageService.Format("Roles.ReadCacheLoaded", result.Roles.Count);
         }
         else
         {

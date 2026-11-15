@@ -46,9 +46,6 @@
                         Command="{Binding SignAllCommand}"
                         IsEnabled="{Binding !IsBusy}"
                         IsVisible="{Binding IsLoggedIn}" />
-                <Button Content="{loc:Localize Key=Sign.KuroDaily}" Command="{Binding ExecuteDailyCommand}"
-                        IsEnabled="{Binding !IsBusy}"
-                        IsVisible="{Binding IsLoggedIn}" />
                 <!-- 未登录:引导去账号页 -->
                 <Button Content="{loc:Localize Key=Sign.GoLogin}" Classes="primary"
                         Command="{Binding GoAccountCommand}"
@@ -57,8 +54,7 @@
         </Grid>
 
         <!-- 签到设置(自设置页迁移到功能页;常显,执行时自行校验登录)。
-             自动游戏签到在应用启动后自动执行一次(当天去重,见 DailyTaskScheduler),无需配置时间。
-             库街区每日任务不参与自动调度,只能由标题栏「库街区每日任务」按钮手动执行 -->
+             自动游戏签到在应用启动后自动执行一次(当天去重,见 DailyTaskScheduler)。 -->
         <Border Grid.Row="1" Margin="20,0,20,10" Padding="16" CornerRadius="12"
                 Background="{DynamicResource SemiColorBg2}">
             <StackPanel Orientation="Horizontal" Spacing="16">

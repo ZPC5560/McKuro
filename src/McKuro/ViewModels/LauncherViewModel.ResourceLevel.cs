@@ -263,7 +263,6 @@ public sealed partial class LauncherViewModel
             AppServices.Settings.Save();
             SyncCurrentLevelText();
             IsResourceLevelPickerOpen = false;
-            StatusText = LanguageService.Format("Launcher.LevelSwitched", item.DisplayName);
             return;
         }
 

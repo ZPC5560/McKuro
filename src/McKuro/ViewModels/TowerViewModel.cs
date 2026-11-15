@@ -1055,7 +1055,6 @@ public sealed partial class TowerViewModel : ViewModelBase
         IsBusy = true;
         _lastLoadAt = DateTime.Now;
         _reloadPending = false;
-        StatusText = LanguageService.Format("Common.Loading");
         try
         {
             // 记录本轮数据归属的账号键(放在 try 内:取账号失败也要走 finally 复位 IsBusy)
@@ -1289,9 +1288,6 @@ public sealed partial class TowerViewModel : ViewModelBase
             // 探索度是账号级数据,与深塔战绩无关:一个还没打深塔的账号也应该能看探索度,
             // 故它同样参与"整页有没有内容"的判定。
             HasData = HasData || ExploreHasData;
-            StatusText = LanguageService.Format(
-                "Tower.StatusLoaded", TowerDifficulties.Count, TowerModes.Count,
-                SlashChallenges.Count, HologramRegions.Sum(r => r.BossCount), ExploreCountries.Count);
         }
         catch (Exception ex)
         {
