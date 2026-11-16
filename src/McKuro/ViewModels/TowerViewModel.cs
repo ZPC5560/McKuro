@@ -995,54 +995,34 @@ public sealed partial class TowerViewModel : ViewModelBase
     // ---------------- 页面可见时的自动刷新 ----------------
 
     /// <summary>
-    /// 页面可见时的后台重拉间隔(秒)。
+    /// 页面可见时的自动刷新间隔(秒):每 20 秒调一次 <c>refreshData</c> 再重取战绩。
     /// <para>
-    /// 用户口径是"实时刷新":打完一局深塔/海墟,不管有没有切页、有没有切回窗口,页面都该自己跟上。
-    /// 20 秒是在"够快"与"别把账号打进风控"之间取的折中 —— 后台轮询只拉三个赛季接口
-    /// (见 <c>TowerService.GetTowerDataAsync</c> 的 seasonOnly),不再是进页那样的 6 个请求。
+    /// 用户口径就是"20 秒一次"。这个周期同时决定了两件事:一是打完一局最多 20 秒页面就自己跟上,
+    /// 二是接口压力可控 —— 后台轮询只拉三个赛季接口(见 <c>TowerService.GetTowerDataAsync</c> 的
+    /// seasonOnly),不再是进页那样的 6 个请求。
     /// </para>
     /// </summary>
     public const int AutoRefreshIntervalSeconds = 20;
 
-    /// <summary>自动刷新的判定节拍(秒):比刷新间隔短,保证最长延迟约 25 秒。</summary>
+    /// <summary>自动刷新的判定节拍(秒):比刷新间隔短,保证最长延迟约 <see cref="AutoRefreshIntervalSeconds"/>+5 秒。</summary>
     private const int AutoRefreshTickSeconds = 5;
 
-    /// <summary>
-    /// 窗口不在前台(用户切到游戏/别的程序)时的后台重拉间隔(秒)。
-    /// <para>
-    /// 双屏边玩边看是真实场景,所以失焦不停刷;但也不必保持 20 秒一刷 ——
-    /// 一晚上每 20 秒打 3 个数据中心接口,是纯粹的浪费与风控风险。
-    /// 回到本程序(Ctrl+Tab 切回/点窗口)会走 <see cref="OnShellActivated"/> 立刻刷一次。
-    /// </para>
-    /// </summary>
-    public const int BackgroundRefreshIntervalSeconds = 60;
-
-    /// <summary>窗口重新激活后至少隔这么久才重拉(秒):防用户快速 Alt+Tab 时连打接口。</summary>
-    private const int ShellActivationMinGapSeconds = 3;
+    /// <summary>主窗口是否可见(最小化/托盘隐藏时完全停表:看不见的页面没必要打接口)。</summary>
+    private bool _shellVisible = true;
 
     /// <summary>本页是否是导航当前选中的页面(由 <c>MainWindowViewModel</c> 维护)。</summary>
     public bool IsPageActive { get; private set; }
 
-    /// <summary>主窗口是否有焦点(失焦时把轮询间隔放缓到 <see cref="BackgroundRefreshIntervalSeconds"/>)。</summary>
-    private bool _shellActive = true;
-
-    /// <summary>主窗口是否可见(最小化/托盘隐藏时完全停表:最小化过夜不该继续每 20 秒打接口)。</summary>
-    private bool _shellVisible = true;
-
-    /// <summary>当前生效的重拉间隔:前台 20 秒,后台 60 秒。</summary>
-    private TimeSpan RefreshInterval
-        => TimeSpan.FromSeconds(_shellActive ? AutoRefreshIntervalSeconds : BackgroundRefreshIntervalSeconds);
-
-    /// <summary>自动刷新计时器(仅在页面可见时运行;切走即停,不空转)。</summary>
+    /// <summary>自动刷新计时器(仅在页面可见且窗口可见时运行;切走即停,不空转)。</summary>
     private Avalonia.Threading.DispatcherTimer? _autoRefreshTimer;
 
     /// <summary>计时器事件只挂一次(反复 Start/Stop 不能重复挂 Tick)。</summary>
     private bool _autoRefreshHooked;
 
     /// <summary>
-    /// 页面是否当前可见:可见时启动后台轮询,切走时停止。
+    /// 页面是否当前可见:可见时启动自动刷新,切走时停止。
     /// <para>
-    /// 之所以要"只在可见时轮询":页面 VM 全部在启动时建好并常驻(见 <c>MainWindowViewModel</c>),
+    /// 之所以要"只在可见时刷新":页面 VM 全部在启动时建好并常驻(见 <c>MainWindowViewModel</c>),
     /// 若不加可见性判断,12 个页面都会各自轮询接口 —— 那是纯浪费与风控自杀。
     /// </para>
     /// </summary>
@@ -1088,7 +1068,7 @@ public sealed partial class TowerViewModel : ViewModelBase
         {
             return;
         }
-        if (DateTime.Now - _lastLoadAt < RefreshInterval)
+        if (DateTime.Now - _lastLoadAt < TimeSpan.FromSeconds(AutoRefreshIntervalSeconds))
         {
             return;
         }
@@ -1105,26 +1085,23 @@ public sealed partial class TowerViewModel : ViewModelBase
     /// </summary>
     public void OnShellActivated()
     {
-        _shellActive = true;
         _shellVisible = true;
         if (!IsPageActive || IsBusy)
         {
             return;
         }
-        if (DateTime.Now - _lastLoadAt < TimeSpan.FromSeconds(ShellActivationMinGapSeconds))
+        if (DateTime.Now - _lastLoadAt < TimeSpan.FromSeconds(AutoRefreshTickSeconds))
         {
             return;
         }
         _ = RefreshInPlaceAsync();
     }
 
-    /// <summary>主窗口失焦:不停刷,但把轮询间隔放缓到后台档(见 <see cref="BackgroundRefreshIntervalSeconds"/>)。</summary>
-    public void OnShellDeactivated() => _shellActive = false;
-
     /// <summary>
     /// 主窗口可见性变化:最小化/托盘隐藏时彻底停表,恢复时继续。
     /// <para>
-    /// 冷却期只为省掉"最小化过夜仍在每 20 秒打 3 个数据中心接口"这种纯浪费。
+    /// 只为省掉"最小化过夜仍在每 20 秒打 3 个数据中心接口"这种纯浪费。
+    /// 失焦(切去玩游戏)不停表 —— 副屏边玩边看是真实场景,刷新节奏保持 20 秒不变。
     /// </para>
     /// </summary>
     public void SetShellVisible(bool visible)
@@ -1150,11 +1127,7 @@ public sealed partial class TowerViewModel : ViewModelBase
     /// 与手动刷新的区别:失败不覆盖已显示的数据、成功但内容相同不重建列表。
     /// </para>
     /// </summary>
-    private Task RefreshInPlaceAsync() => LoadCoreAsync(seasonOnly: true, skipWhenUnchanged: true, refreshSnapshot: false);
-
-    /// <summary>页眉「刷新」按钮:强制整页重拉,不受节流与"无变化不重建"影响。</summary>
-    [RelayCommand]
-    private Task RefreshAsync() => LoadCoreAsync(seasonOnly: false, skipWhenUnchanged: false, refreshSnapshot: true);
+    private Task RefreshInPlaceAsync() => LoadCoreAsync(seasonOnly: true, skipWhenUnchanged: true, refreshSnapshot: true);
 
     /// <summary>上次成功/尝试拉取的时间(进入页面时的"新鲜度"判断)。</summary>
     private DateTime _lastLoadAt = DateTime.MinValue;

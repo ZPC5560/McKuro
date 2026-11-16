@@ -394,9 +394,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// </summary>
     public void OnShellActivated() => _tower?.OnShellActivated();
 
-    /// <summary>主窗口失焦(切到游戏/其他程序)。页面轮询不停,但会放缓到后台间隔。</summary>
-    public void OnShellDeactivated() => _tower?.OnShellDeactivated();
-
     /// <summary>主窗口最小化/托盘隐藏或恢复(见 MainWindow 的 WindowState/IsVisible 变化)。</summary>
     public void OnShellVisibilityChanged(bool visible) => _tower?.SetShellVisible(visible);
 

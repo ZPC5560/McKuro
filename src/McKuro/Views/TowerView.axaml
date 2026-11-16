@@ -213,21 +213,12 @@
                 </StackPanel>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <!-- 「更新于 HH:mm:ss」:分数没变时也能确认页面确实在刷新
-                     (页面自身会进页刷新 / 可见时每 20 秒静默刷新 / 切回窗口刷新) -->
+                <!-- 「更新于 HH:mm:ss」:分数没变时也能确认页面确实在刷新。
+                     页面自身会进页刷新 / 可见时每 20 秒拉一次 refreshData 再取数 / 切回窗口刷新,
+                     不提供手动刷新按钮(刷新是自动的,用户不需要按)。 -->
                 <TextBlock Text="{Binding LastRefreshText}" FontSize="12"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource SemiColorText3}" />
-                <Button Command="{Binding RefreshCommand}"
-                        IsEnabled="{Binding !IsBusy}"
-                        ToolTip.Tip="{loc:Localize Key=Tower.RefreshTip}">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <ic:FluentIcon Icon="ArrowSync" IconVariant="Regular" IconSize="Size16"
-                                       VerticalAlignment="Center" />
-                        <TextBlock Text="{loc:Localize Key=Tower.Refresh}" FontSize="13"
-                                   VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
             </StackPanel>
         </Grid>
 

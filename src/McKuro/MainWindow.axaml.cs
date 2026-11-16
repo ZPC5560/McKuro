@@ -1033,9 +1033,6 @@ public partial class MainWindow : Window
     /// <summary>窗口失焦:立即收起两栏(切走时界面更干净)。</summary>
     private void OnShellDeactivated()
     {
-        // 失焦多半意味着用户切去玩游戏了:通知页面层把后台轮询放缓(见 TowerViewModel.OnShellDeactivated)。
-        // 必须放在下面那个提前 return 之前 —— 没开自动隐藏的用户同样需要这条信号。
-        (DataContext as ViewModels.MainWindowViewModel)?.OnShellDeactivated();
         if (!_immersive && !AppServices.Settings.Current.AutoHideNavRail)
         {
             return;

@@ -134,11 +134,12 @@ public sealed class TowerService
     /// </para>
     /// </param>
     /// <param name="refreshSnapshot">
-    /// 是否强制请求服务端重新抓取游戏数据(refreshData),绕过内部的 60 秒节流。
-    /// 手动"刷新"按钮与进页刷新传 true(用户明确要求最新);后台轮询传 false(走节流)。
+    /// 是否请求服务端重新抓取游戏数据(refreshData)。默认 true:所有取数路径都要,
+    /// 该参数只为极端场景(如未来批量拉历史)留出"只读现有快照"的口子。
+    /// 真实频率由内部节流决定,见 <see cref="TryRefreshDataCenterAsync"/>。
     /// </param>
     public async Task<TowerDataResult> GetTowerDataAsync(
-        CancellationToken ct = default, bool seasonOnly = false, bool refreshSnapshot = false)
+        CancellationToken ct = default, bool seasonOnly = false, bool refreshSnapshot = true)
     {
         // 诊断"深塔/海墟数据不刷新"这类问题:每次真正发起拉取都留一行(含调用时刻),
         // 若进入页面后日志没有新行,说明是该页面根本没重新拉(reload 触发问题),不是接口/缓存问题。
@@ -181,10 +182,13 @@ public sealed class TowerService
         // 手动打一次 refreshData 后同一接口立刻返回新配队)。
         //
         // 因此**所有**取数路径都要先刷新快照,包括后台轮询 —— 轮询若只读缓存,「实时刷新」就是假的。
-        // 频率由 TryRefreshDataCenterAsync 的节流兜住(force=true 时也保留一个硬下限),
-        // 避免每 20 秒打一次 refreshData 触发极验。
-        await TryRefreshDataCenterAsync(
-            accessToken, deviceId, roleId, role.ServerId, refreshSnapshot, ct).ConfigureAwait(false);
+        // 频率由 TryRefreshDataCenterAsync 的节流兜住(15 秒 < 20 秒轮询周期),
+        // 保证每轮轮询都真正刷新,又不会把接口打到风控上。
+        if (refreshSnapshot)
+        {
+            await TryRefreshDataCenterAsync(
+                accessToken, deviceId, roleId, role.ServerId, ct).ConfigureAwait(false);
+        }
 
         TowerSeasonData? tower = null;
         NewTowerData? newTower = null;
@@ -338,14 +342,11 @@ public sealed class TowerService
 
     /// <summary>服务端快照刷新(refreshData)的最小间隔(秒)。</summary>
     /// <remarks>
-    /// refreshData 会让库街区去重新抓一次游戏数据,代价是可能触发极验(见 RefreshDataAsync 的告警分支)。
-    /// 这个值必须**小于**页面的后台轮询间隔(20 秒),否则轮询会周期性撞在节流上、
-    /// 「打完一局 20 秒内看到」就永远不成立 —— 那正是前几版"看着没刷新"的根源。
+    /// 页面可见时每 20 秒自动刷新一次,这里必须**小于** 20 秒,否则轮询会周期性撞在节流上、
+    /// "打完一局 20 秒内看到"就永远不成立 —— 那正是前几版"看着没刷新"的根源。
+    /// 15 秒既保证每轮都真正刷新快照,又挡住用户进出页面造成的连打。
     /// </remarks>
     private const int DataCenterRefreshMinIntervalSeconds = 15;
-
-    /// <summary>用户主动刷新(进页 / 点刷新按钮)时的最小间隔(秒):只防连点,不拖慢首帧。</summary>
-    private const int DataCenterRefreshForcedMinIntervalSeconds = 5;
 
     /// <summary>上次请求 refreshData 的时刻(服务是单例,进程内共享)。</summary>
     private DateTime _lastDataCenterRefreshAt = DateTime.MinValue;
@@ -360,17 +361,14 @@ public sealed class TowerService
     /// </para>
     /// <para>失败(含风控拦截)只告警不阻断:旧快照也好过整页没数据。</para>
     /// </summary>
-    /// <param name="force">true = 用户主动刷新,按更短的 <see cref="DataCenterRefreshForcedMinIntervalSeconds"/> 节流。</param>
     private async Task TryRefreshDataCenterAsync(
-        string accessToken, string deviceId, string roleId, string? serverId, bool force, CancellationToken ct)
+        string accessToken, string deviceId, string roleId, string? serverId, CancellationToken ct)
     {
-        var floor = TimeSpan.FromSeconds(
-            force ? DataCenterRefreshForcedMinIntervalSeconds : DataCenterRefreshMinIntervalSeconds);
         var elapsed = DateTime.Now - _lastDataCenterRefreshAt;
-        if (elapsed < floor)
+        if (elapsed < TimeSpan.FromSeconds(DataCenterRefreshMinIntervalSeconds))
         {
-            _logger.LogInformation("Tower: 跳过 refreshData({Elapsed:F0} 秒前刚刷新过,本次最小间隔 {Min} 秒)",
-                elapsed.TotalSeconds, floor.TotalSeconds);
+            _logger.LogInformation("Tower: 跳过 refreshData({Elapsed:F0} 秒前刚刷新过,最小间隔 {Min} 秒)",
+                elapsed.TotalSeconds, DataCenterRefreshMinIntervalSeconds);
             return;
         }
         _lastDataCenterRefreshAt = DateTime.Now;
