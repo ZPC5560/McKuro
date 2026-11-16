@@ -195,6 +195,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly Dictionary<string, NavigationItem> _navByKey;
     private readonly IMessenger _messenger;
 
+    /// <summary>深塔/海墟页实例:页面可见性(自动刷新开关)与窗口激活刷新都要按它分发。</summary>
+    private readonly TowerViewModel _tower;
+
     public MainWindowViewModel() : this(WeakReferenceMessenger.Default)
     {
     }
@@ -241,6 +244,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var redeem = new RedemptionCodeViewModel();
         var playTime = new PlayTimeViewModel();
         var tower = new TowerViewModel();
+        _tower = tower;
         var account = new AccountViewModel();
         var settings = _settings = new SettingsViewModel();
 
@@ -374,7 +378,27 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     /// <summary>页面切换后重估悬浮提醒可见性(设置页不显示提醒卡片)。</summary>
     partial void OnCurrentPageChanged(ViewModelBase? value)
-        => OnPropertyChanged(nameof(IsReminderOverlayVisible));
+    {
+        OnPropertyChanged(nameof(IsReminderOverlayVisible));
+        // 深塔页的"可见时每 20 秒静默重拉"只在它是当前页时运行:切走即停,别让 12 个常驻页面一起轮询接口
+        _tower?.SetPageActive(value is TowerViewModel);
+    }
+
+    /// <summary>
+    /// 主窗口重新激活(含从最小化/托盘恢复)时调用。
+    /// <para>
+    /// 用户打完一局切回 McKuro 是最典型的"数据该更新了"时刻;而游戏会话监控只认从本程序启动的游戏
+    /// (见 <c>GameProcessMonitor.BeginLaunch</c>),从 Steam / 官方启动器开游戏时不会触发,
+    /// 所以这条按窗口激活触发的刷新是必要的补充。
+    /// </para>
+    /// </summary>
+    public void OnShellActivated() => _tower?.OnShellActivated();
+
+    /// <summary>主窗口失焦(切到游戏/其他程序)。页面轮询不停,但会放缓到后台间隔。</summary>
+    public void OnShellDeactivated() => _tower?.OnShellDeactivated();
+
+    /// <summary>主窗口最小化/托盘隐藏或恢复(见 MainWindow 的 WindowState/IsVisible 变化)。</summary>
+    public void OnShellVisibilityChanged(bool visible) => _tower?.SetShellVisible(visible);
 
     public void NavigateTo(NavigationItem item)
     {

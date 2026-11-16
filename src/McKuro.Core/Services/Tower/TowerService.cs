@@ -120,11 +120,21 @@ public sealed class TowerService
     /// (未登录/无 accessToken/接口异常)。
     /// RoleId 为本次解析的库街区角色条目 ID(矩阵历史按它落库)。
     /// </summary>
-    public async Task<TowerDataResult> GetTowerDataAsync(CancellationToken ct = default)
+    /// <param name="ct">取消令牌。</param>
+    /// <param name="seasonOnly">
+    /// true = 只拉三个**赛季制**玩法(逆境深塔/终焉矩阵/再生海域),跳过全息战略与地图探索。
+    /// <para>
+    /// 供"页面可见时的后台静默刷新"使用(见 <c>TowerViewModel</c> 的自动刷新):
+    /// 这两块是"打过就长期不变"的记录类数据,却要额外 2 个数据中心请求 + 1.2 秒间隔;
+    /// 每 20 秒轮询一次时,省掉它们能明显降低同一账号的请求密度(风控面)。
+    /// </para>
+    /// </param>
+    public async Task<TowerDataResult> GetTowerDataAsync(CancellationToken ct = default, bool seasonOnly = false)
     {
         // 诊断"深塔/海墟数据不刷新"这类问题:每次真正发起拉取都留一行(含调用时刻),
         // 若进入页面后日志没有新行,说明是该页面根本没重新拉(reload 触发问题),不是接口/缓存问题。
-        _logger.LogInformation("Tower: 开始拉取深塔/海墟数据 {Time:HH:mm:ss.fff}", DateTime.Now);
+        _logger.LogInformation("Tower: 开始拉取{Scope}数据 {Time:HH:mm:ss.fff}",
+            seasonOnly ? "赛季(深塔/矩阵/海墟)" : "深塔/海墟/全息/探索", DateTime.Now);
         var account = _accounts.Current;
         if (account is null)
         {
@@ -203,49 +213,54 @@ public sealed class TowerService
         {
             _logger.LogWarning(ex, "拉取海墟数据失败");
         }
-        try
+        // 全息战略与地图探索只在"整页重拉"时请求:后台轮询(seasonOnly)跳过这两块,
+        // 每次刷新就少 2 个数据中心请求 + 1.2 秒间隔等待。
+        if (!seasonOnly)
         {
-            hologramIndex = await _api.GetChallengeIndexAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            // 取消语义必须保留:吞掉 OCE 会把"用户已离开/取消"变成一条误导性的"拉取失败"警告,
-            // 并让已取消的加载继续往下跑。(相邻的 details 块同理,两块保持同一写法。)
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "拉取全息战略总览失败");
-        }
-        // 两个接口之间留间隔:数据中心接口有风控,连续密集请求易触发极验(官方 H5 自己也是分次请求)
-        try
-        {
-            await Task.Delay(TimeSpan.FromMilliseconds(600), ct).ConfigureAwait(false);
-            hologramDetails = await _api.GetChallengeDetailsAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "拉取全息战略挑战记录失败");
-        }
-        // 地图探索(exploreIndex):与上面四个接口同一个 accessToken。
-        // 中间再留一次间隔——同一账号在短时间内串行请求 6 个数据中心接口,密集时容易触发极验;
-        // 探索度只是本页的附加页签,宁可慢半秒,也不要因为它把整页拖进风控。
-        try
-        {
-            await Task.Delay(TimeSpan.FromMilliseconds(600), ct).ConfigureAwait(false);
-            explore = await _api.GetExploreIndexAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "拉取地图探索数据失败");
+            try
+            {
+                hologramIndex = await _api.GetChallengeIndexAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // 取消语义必须保留:吞掉 OCE 会把"用户已离开/取消"变成一条误导性的"拉取失败"警告,
+                // 并让已取消的加载继续往下跑。(相邻的 details 块同理,两块保持同一写法。)
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "拉取全息战略总览失败");
+            }
+            // 两个接口之间留间隔:数据中心接口有风控,连续密集请求易触发极验(官方 H5 自己也是分次请求)
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(600), ct).ConfigureAwait(false);
+                hologramDetails = await _api.GetChallengeDetailsAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "拉取全息战略挑战记录失败");
+            }
+            // 地图探索(exploreIndex):与上面四个接口同一个 accessToken。
+            // 中间再留一次间隔——同一账号在短时间内串行请求 6 个数据中心接口,密集时容易触发极验;
+            // 探索度只是本页的附加页签,宁可慢半秒,也不要因为它把整页拖进风控。
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(600), ct).ConfigureAwait(false);
+                explore = await _api.GetExploreIndexAsync(accessToken, deviceId, roleId, "android", ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "拉取地图探索数据失败");
+            }
         }
 
         if (tower is null && newTower is null && slash is null && hologramIndex is null && hologramDetails is null
@@ -268,13 +283,16 @@ public sealed class TowerService
             "Tower: 海墟难度明细(难度:总积分/满积分) {Detail}",
             string.Join(" | ", slash?.DifficultyList?.Select(d => $"{d.Difficulty}:{d.AllScore}/{d.MaxScore}") ?? []));
         // 全息战略:地区数/boss 数/满档数 + 有记录的难度条数(便于核对"卡片角标与详情是否一致")
-        _logger.LogInformation(
-            "Tower: 全息战略 地区{HC}个 boss{HB}个 满档{HF}个 | 详情 boss{HDB}个 有记录难度{HDR}档",
-            hologramIndex?.ChallengeList?.Count ?? -1,
-            hologramIndex?.ChallengeList?.Sum(c => c.IndexList?.Count ?? 0) ?? -1,
-            hologramIndex?.ChallengeList?.Sum(c => HologramParser.CountFullyCleared(c.IndexList)) ?? -1,
-            hologramDetails?.ChallengeInfo?.Count ?? -1,
-            hologramDetails?.ChallengeInfo?.Values.Sum(v => v.Count(HologramParser.IsCleared)) ?? -1);
+        if (!seasonOnly)
+        {
+            _logger.LogInformation(
+                "Tower: 全息战略 地区{HC}个 boss{HB}个 满档{HF}个 | 详情 boss{HDB}个 有记录难度{HDR}档",
+                hologramIndex?.ChallengeList?.Count ?? -1,
+                hologramIndex?.ChallengeList?.Sum(c => c.IndexList?.Count ?? 0) ?? -1,
+                hologramIndex?.ChallengeList?.Sum(c => HologramParser.CountFullyCleared(c.IndexList)) ?? -1,
+                hologramDetails?.ChallengeInfo?.Count ?? -1,
+                hologramDetails?.ChallengeInfo?.Values.Sum(v => v.Count(HologramParser.IsCleared)) ?? -1);
+        }
         // 原始值:用于判定 seasonEndTime/endTime 究竟是"剩余毫秒"还是绝对时间戳
         // (剩余毫秒按 now+值 折算成结束时刻;若原值本身就是 epoch 毫秒,这里的绝对值会接近 1.7e12)
         static string RawMs(long? ms) => ms is { } v
@@ -283,10 +301,13 @@ public sealed class TowerService
         _logger.LogInformation(
             "Tower: 原始时间字段 | 深塔.seasonEndTime={TSE} | 矩阵.endTime={NTE} | 海墟.seasonEndTime={SSE}",
             RawMs(tower?.SeasonEndTime), RawMs(newTower?.EndTime), RawMs(slash?.SeasonEndTime));
-        _logger.LogInformation(
-            "Tower: 地图探索 国家{EC}个 区域{EA}个(接口无数据时该页签显示「暂无探索数据」)",
-            explore?.ExploreList?.Count ?? -1,
-            explore?.ExploreList?.Sum(c => c.AreaInfoList?.Count ?? 0) ?? -1);
+        if (!seasonOnly)
+        {
+            _logger.LogInformation(
+                "Tower: 地图探索 国家{EC}个 区域{EA}个(接口无数据时该页签显示「暂无探索数据」)",
+                explore?.ExploreList?.Count ?? -1,
+                explore?.ExploreList?.Sum(c => c.AreaInfoList?.Count ?? 0) ?? -1);
+        }
         return new TowerDataResult(tower, newTower, slash, hologramIndex, hologramDetails, explore, "", roleId);
     }
 

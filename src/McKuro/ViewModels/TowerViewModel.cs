@@ -295,6 +295,16 @@ public sealed partial class TowerViewModel : ViewModelBase
     [ObservableProperty]
     private string _statusText = "";
 
+    /// <summary>
+    /// 页眉右侧的「上次更新 HH:mm:ss」文案:让"页面到底有没有在刷新"变成用户看得见的事实。
+    /// <para>
+    /// 深塔战绩是页面自己静默重拉的(进页 / 后台轮询 / 窗口激活 / 游戏结束),没有这个时间戳时,
+    /// 用户只能凭分数判断有没有刷新 —— 而分数本来就可能没变(没打新一局),于是看起来像"没刷新"。
+    /// </para>
+    /// </summary>
+    [ObservableProperty]
+    private string _lastRefreshText = "";
+
     [ObservableProperty]
     private bool _isBusy;
 
@@ -982,8 +992,178 @@ public sealed partial class TowerViewModel : ViewModelBase
         _ = LoadAsync();
     }
 
+    // ---------------- 页面可见时的自动刷新 ----------------
+
+    /// <summary>
+    /// 页面可见时的后台重拉间隔(秒)。
+    /// <para>
+    /// 用户口径是"实时刷新":打完一局深塔/海墟,不管有没有切页、有没有切回窗口,页面都该自己跟上。
+    /// 20 秒是在"够快"与"别把账号打进风控"之间取的折中 —— 后台轮询只拉三个赛季接口
+    /// (见 <c>TowerService.GetTowerDataAsync</c> 的 seasonOnly),不再是进页那样的 6 个请求。
+    /// </para>
+    /// </summary>
+    public const int AutoRefreshIntervalSeconds = 20;
+
+    /// <summary>自动刷新的判定节拍(秒):比刷新间隔短,保证最长延迟约 25 秒。</summary>
+    private const int AutoRefreshTickSeconds = 5;
+
+    /// <summary>
+    /// 窗口不在前台(用户切到游戏/别的程序)时的后台重拉间隔(秒)。
+    /// <para>
+    /// 双屏边玩边看是真实场景,所以失焦不停刷;但也不必保持 20 秒一刷 ——
+    /// 一晚上每 20 秒打 3 个数据中心接口,是纯粹的浪费与风控风险。
+    /// 回到本程序(Ctrl+Tab 切回/点窗口)会走 <see cref="OnShellActivated"/> 立刻刷一次。
+    /// </para>
+    /// </summary>
+    public const int BackgroundRefreshIntervalSeconds = 60;
+
+    /// <summary>窗口重新激活后至少隔这么久才重拉(秒):防用户快速 Alt+Tab 时连打接口。</summary>
+    private const int ShellActivationMinGapSeconds = 3;
+
+    /// <summary>本页是否是导航当前选中的页面(由 <c>MainWindowViewModel</c> 维护)。</summary>
+    public bool IsPageActive { get; private set; }
+
+    /// <summary>主窗口是否有焦点(失焦时把轮询间隔放缓到 <see cref="BackgroundRefreshIntervalSeconds"/>)。</summary>
+    private bool _shellActive = true;
+
+    /// <summary>主窗口是否可见(最小化/托盘隐藏时完全停表:最小化过夜不该继续每 20 秒打接口)。</summary>
+    private bool _shellVisible = true;
+
+    /// <summary>当前生效的重拉间隔:前台 20 秒,后台 60 秒。</summary>
+    private TimeSpan RefreshInterval
+        => TimeSpan.FromSeconds(_shellActive ? AutoRefreshIntervalSeconds : BackgroundRefreshIntervalSeconds);
+
+    /// <summary>自动刷新计时器(仅在页面可见时运行;切走即停,不空转)。</summary>
+    private Avalonia.Threading.DispatcherTimer? _autoRefreshTimer;
+
+    /// <summary>计时器事件只挂一次(反复 Start/Stop 不能重复挂 Tick)。</summary>
+    private bool _autoRefreshHooked;
+
+    /// <summary>
+    /// 页面是否当前可见:可见时启动后台轮询,切走时停止。
+    /// <para>
+    /// 之所以要"只在可见时轮询":页面 VM 全部在启动时建好并常驻(见 <c>MainWindowViewModel</c>),
+    /// 若不加可见性判断,12 个页面都会各自轮询接口 —— 那是纯浪费与风控自杀。
+    /// </para>
+    /// </summary>
+    public void SetPageActive(bool active)
+    {
+        if (IsPageActive == active)
+        {
+            return;
+        }
+        IsPageActive = active;
+        if (active)
+        {
+            StartAutoRefresh();
+        }
+        else
+        {
+            _autoRefreshTimer?.Stop();
+        }
+    }
+
+    private void StartAutoRefresh()
+    {
+        // 窗口不可见(最小化/托盘)时即使页面是"当前页"也不空转
+        if (!_shellVisible)
+        {
+            return;
+        }
+        _autoRefreshTimer ??= new Avalonia.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(AutoRefreshTickSeconds),
+        };
+        if (!_autoRefreshHooked)
+        {
+            _autoRefreshTimer.Tick += OnAutoRefreshTick;
+            _autoRefreshHooked = true;
+        }
+        _autoRefreshTimer.Start();
+    }
+
+    private void OnAutoRefreshTick(object? sender, EventArgs e)
+    {
+        if (!IsPageActive || !_shellVisible || IsBusy)
+        {
+            return;
+        }
+        if (DateTime.Now - _lastLoadAt < RefreshInterval)
+        {
+            return;
+        }
+        _ = RefreshInPlaceAsync();
+    }
+
+    /// <summary>
+    /// 主窗口重新激活(含从最小化/托盘恢复)时调用:用户刚打完游戏切回来,数据应当是新的。
+    /// <para>
+    /// 这条链路与"游戏会话结束"互补:会话监控只认**从 McKuro 启动**的游戏
+    /// (见 <c>GameProcessMonitor.BeginLaunch</c>),从 Steam/官方启动器直接开游戏时它不会触发;
+    /// 而"窗口重新获得焦点"对任何启动方式都成立。
+    /// </para>
+    /// </summary>
+    public void OnShellActivated()
+    {
+        _shellActive = true;
+        _shellVisible = true;
+        if (!IsPageActive || IsBusy)
+        {
+            return;
+        }
+        if (DateTime.Now - _lastLoadAt < TimeSpan.FromSeconds(ShellActivationMinGapSeconds))
+        {
+            return;
+        }
+        _ = RefreshInPlaceAsync();
+    }
+
+    /// <summary>主窗口失焦:不停刷,但把轮询间隔放缓到后台档(见 <see cref="BackgroundRefreshIntervalSeconds"/>)。</summary>
+    public void OnShellDeactivated() => _shellActive = false;
+
+    /// <summary>
+    /// 主窗口可见性变化:最小化/托盘隐藏时彻底停表,恢复时继续。
+    /// <para>
+    /// 冷却期只为省掉"最小化过夜仍在每 20 秒打 3 个数据中心接口"这种纯浪费。
+    /// </para>
+    /// </summary>
+    public void SetShellVisible(bool visible)
+    {
+        if (_shellVisible == visible)
+        {
+            return;
+        }
+        _shellVisible = visible;
+        if (!visible)
+        {
+            _autoRefreshTimer?.Stop();
+        }
+        else if (IsPageActive)
+        {
+            StartAutoRefresh();
+        }
+    }
+
+    /// <summary>
+    /// 后台静默刷新:只重拉三个赛季接口,数据没有实际变化时不动界面。
+    /// <para>
+    /// 与手动刷新的区别:失败不覆盖已显示的数据、成功但内容相同不重建列表。
+    /// </para>
+    /// </summary>
+    private Task RefreshInPlaceAsync() => LoadCoreAsync(seasonOnly: true, skipWhenUnchanged: true);
+
+    /// <summary>页眉「刷新」按钮:强制整页重拉,不受节流与"无变化不重建"影响。</summary>
+    [RelayCommand]
+    private Task RefreshAsync() => LoadCoreAsync(seasonOnly: false, skipWhenUnchanged: false);
+
     /// <summary>上次成功/尝试拉取的时间(进入页面时的"新鲜度"判断)。</summary>
     private DateTime _lastLoadAt = DateTime.MinValue;
+
+    /// <summary>
+    /// 上次拉到的「赛季数据」指纹(见 <see cref="TowerSeasonSignature"/>)。
+    /// 后台轮询重拉后用它与新指纹比对:一致就完全不动界面(不重建列表、不重置滚动与难度选中)。
+    /// </summary>
+    private string? _seasonSignature;
 
     /// <summary>
     /// 进入页面的最小重新拉取间隔(秒):用户要求"每次进入页面都重新拉取新数据",
@@ -1064,7 +1244,20 @@ public sealed partial class TowerViewModel : ViewModelBase
     private bool _reloadPending;
 
     [RelayCommand]
-    private async Task LoadAsync()
+    private Task LoadAsync() => LoadCoreAsync(seasonOnly: false, skipWhenUnchanged: false);
+
+    /// <summary>
+    /// 拉取并应用本页数据。
+    /// </summary>
+    /// <param name="seasonOnly">
+    /// true = 只拉/只重建三个赛季玩法(深塔/矩阵/海墟),不碰全息战略与地图探索。
+    /// 后台轮询用这条路径:请求更少、也不会把用户正在看的其它页签清空重建。
+    /// </param>
+    /// <param name="skipWhenUnchanged">
+    /// true = 静默刷新语义:失败时保留界面现有数据(不写错误副标题、不清空),成功但数据没变时不重建列表
+    /// (避免滚动位置回到顶部、难度下拉被弹回第一项)。手动刷新与进页刷新一律传 false。
+    /// </param>
+    private async Task LoadCoreAsync(bool seasonOnly, bool skipWhenUnchanged)
     {
         if (IsBusy)
         {
@@ -1077,9 +1270,30 @@ public sealed partial class TowerViewModel : ViewModelBase
         {
             // 记录本轮数据归属的账号键(放在 try 内:取账号失败也要走 finally 复位 IsBusy)
             _lastLoadedKey = _loadingKey = CurrentLoadKey();
-            var data = await AppServices.Tower.GetTowerDataAsync();
+            var data = await AppServices.Tower.GetTowerDataAsync(default, seasonOnly);
             var (tower, newTower, slash, error, roleId) =
                 (data.Tower, data.NewTower, data.Slash, data.Error, data.RoleId);
+
+            // 后台静默刷新失败(限流/断网/令牌抖动):保留界面上已有的数据,什么都不写。
+            // 用户此刻并没有发起任何操作,把页面清成"加载失败"只会让人以为页面自己坏了。
+            if (skipWhenUnchanged && !string.IsNullOrEmpty(error))
+            {
+                TraceRefresh("skipped(error)");
+                return;
+            }
+
+            // 数据指纹:静默刷新时用它判断"数值到底有没有变",没变就到此为止
+            var signature = TowerSeasonSignature.Compute(tower, newTower, slash);
+            if (skipWhenUnchanged && signature == _seasonSignature)
+            {
+                MarkRefreshed();
+                TraceRefresh("unchanged");
+                return;
+            }
+
+            // 记住用户正在看的难度档:整轮重建后按难度号还原(否则自动刷新会把下拉弹回第一项)
+            var keepDifficulty = SelectedTowerDifficulty?.Difficulty;
+
             TowerDifficulties.Clear();
             TowerAreas.Clear();
             TowerModes.Clear();
@@ -1090,27 +1304,32 @@ public sealed partial class TowerViewModel : ViewModelBase
             SlashHasTurbidScore = false;
             SlashHasRecord = false;
             SelectedTowerMode = null;
-            SelectedNewTowerHistory = null;
-            NewTowerHistoryDetail = null;
-            NewTowerDetailTitle = "";
-            NewTowerHistory.Clear();
-            HologramRegions.Clear();
-            HologramBosses.Clear();
-            HologramTiers.Clear();
-            HologramRoles.Clear();
-            SelectedHologramRegion = null;
-            SelectedHologramBoss = null;
-            SelectedHologramDifficulty = 1;
-            HologramUnlocked = false;
-            HologramHasData = false;
-            HologramLoaded = false;
-            HologramSummaryText = "";
-            HologramPassTimeText = "";
-            HologramTierCleared = false;
-            HologramBossLevelText = "";
-            HologramBossName = "";
-            HologramHeroIcon = null;
-            ResetExplore();
+            // 难度选中项先清空:重建后按难度号还原(见下),否则 ComboBox 会短暂指向已不在列表里的旧实例
+            SelectedTowerDifficulty = null;
+            if (!seasonOnly)
+            {
+                SelectedNewTowerHistory = null;
+                NewTowerHistoryDetail = null;
+                NewTowerDetailTitle = "";
+                NewTowerHistory.Clear();
+                HologramRegions.Clear();
+                HologramBosses.Clear();
+                HologramTiers.Clear();
+                HologramRoles.Clear();
+                SelectedHologramRegion = null;
+                SelectedHologramBoss = null;
+                SelectedHologramDifficulty = 1;
+                HologramUnlocked = false;
+                HologramHasData = false;
+                HologramLoaded = false;
+                HologramSummaryText = "";
+                HologramPassTimeText = "";
+                HologramTierCleared = false;
+                HologramBossLevelText = "";
+                HologramBossName = "";
+                HologramHeroIcon = null;
+                ResetExplore();
+            }
             if (!string.IsNullOrEmpty(error))
             {
                 StatusText = error;
@@ -1153,7 +1372,10 @@ public sealed partial class TowerViewModel : ViewModelBase
                     {
                         TowerDifficulties.Add(d);
                     }
-                    SelectedTowerDifficulty = TowerDifficulties.FirstOrDefault();
+                    // 按难度号还原用户选中的档位(自动刷新重建列表时不要把下拉弹回第一项);
+                    // 原档位已不存在(赛季换难度结构)才回退第一项。
+                    SelectedTowerDifficulty = TowerDifficulties.FirstOrDefault(d => d.Difficulty == keepDifficulty)
+                        ?? TowerDifficulties.FirstOrDefault();
                 }
             }
 
@@ -1176,7 +1398,8 @@ public sealed partial class TowerViewModel : ViewModelBase
             }
 
             // 往期历史(本地库,按赛季结束时间降序;对齐 WutheringWavesTool initHistory)
-            if (!string.IsNullOrEmpty(roleId))
+            // 读库 + 重建历史列表只在整页刷新时做:后台轮询会把它连同"用户选中的那一期"一起重置。
+            if (!seasonOnly && !string.IsNullOrEmpty(roleId))
             {
                 // 必须记录本次 roleId:LoadNewTowerHistoryDetailAsync 用它读历史详情。
                 // 此前该字段从未赋值(恒为空串)→ 读库必然查不到行 → 点「往期历史」右栏
@@ -1270,8 +1493,8 @@ public sealed partial class TowerViewModel : ViewModelBase
                 SlashHasRecord = SlashChallenges.Count > 0;
             }
 
-            // ---- 全息战略(challengeIndex + challengeDetails) ----
-            if (data.HologramIndex is not null || data.HologramDetails is not null)
+            // ---- 全息战略(challengeIndex + challengeDetails;仅整页刷新,轮询不请求) ----
+            if (!seasonOnly && (data.HologramIndex is not null || data.HologramDetails is not null))
             {
                 // 两个接口的 isUnlock 任一为 true 即视为解锁(空数据时该键整体缺失 → 保持 false,
                 // 页面显示「尚未解锁」;实测无 roleId 时接口返回 200 + 空 challengeList)
@@ -1294,7 +1517,10 @@ public sealed partial class TowerViewModel : ViewModelBase
             }
 
             // ---- 地图探索(exploreIndex;附加页签,失败时只会让 ExploreShowUnavailable 亮起) ----
-            ApplyExplore(data.Explore);
+            if (!seasonOnly)
+            {
+                ApplyExplore(data.Explore);
+            }
 
             HasData = TowerDifficulties.Count > 0 || TowerModes.Count > 0
                 || SlashChallenges.Count > 0 || HologramHasData;
@@ -1306,10 +1532,21 @@ public sealed partial class TowerViewModel : ViewModelBase
             // 探索度是账号级数据,与深塔战绩无关:一个还没打深塔的账号也应该能看探索度,
             // 故它同样参与"整页有没有内容"的判定。
             HasData = HasData || ExploreHasData;
+
+            // 本轮成功应用:记住指纹与刷新时刻。
+            // 指纹是"下次后台轮询要不要重建界面"的判据;时间戳是给用户看的"确实刷新过"的证据。
+            _seasonSignature = signature;
+            StatusText = "";
+            MarkRefreshed();
+            TraceRefresh($"rebuilt(seasonOnly={seasonOnly})");
         }
         catch (Exception ex)
         {
-            StatusText = LanguageService.Format("Status.LoadFailedWith", ex.Message);
+            // 后台静默刷新失败同样不覆盖已有界面:异常文案只在用户主动拉取时显示
+            if (!skipWhenUnchanged)
+            {
+                StatusText = LanguageService.Format("Status.LoadFailedWith", ex.Message);
+            }
         }
         finally
         {
@@ -1322,6 +1559,27 @@ public sealed partial class TowerViewModel : ViewModelBase
             }
         }
     }
+
+    /// <summary>
+    /// 打一次"上次更新"时间戳(页眉可见)。
+    /// <para>
+    /// 刻意与 <see cref="StatusText"/> 分开:<see cref="StatusText"/> 只在出错/需要用户处理时非空
+    /// (见 1.3.8.3 的副标题清理),而"更新于 12:30:15"是要常驻给用户看的客观事实 ——
+    /// 分数没变时用户仍然能确认页面确实在刷新。
+    /// </para>
+    /// </summary>
+    private void MarkRefreshed()
+        => LastRefreshText = LanguageService.Format("Tower.LastRefresh", DateTime.Now.ToString("HH:mm:ss"));
+
+    /// <summary>
+    /// 诊断留痕(与 <c>MCKURO-NAV</c> 同一套约定,落 stderr):这轮刷新到底"重建了界面"还是"数据没变"。
+    /// <para>
+    /// 排查"页面看着没刷新"时,这条能直接区分三种情况:没去拉(没有这行)、
+    /// 拉了但接口返回的就是旧值(unchanged)、拉了且确实变了(rebuilt)。
+    /// </para>
+    /// </summary>
+    private static void TraceRefresh(string outcome)
+        => System.Console.Error.WriteLine($"MCKURO-TOWER refresh -> {outcome} t={DateTime.Now:HH:mm:ss}");
 
     /// <summary>
     /// 赛季剩余时间文案:正常 → "X天Y小时后刷新";≤0(接口返回的这一期已结束)→ "本期已结束"。

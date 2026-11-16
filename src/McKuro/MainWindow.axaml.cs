@@ -849,6 +849,17 @@ public partial class MainWindow : Window
             {
                 StartAutoHideTimer();
             }
+            // 用户打完游戏切回窗口 = 数据该刷新了(会话监控只认从本程序启动的游戏,见 TowerViewModel.OnShellActivated)
+            (DataContext as ViewModels.MainWindowViewModel)?.OnShellActivated();
+        };
+        // 最小化 / 托盘隐藏时暂停页面的后台轮询(最小化过夜不该继续每 20 秒打接口)
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == WindowStateProperty || e.Property == IsVisibleProperty)
+            {
+                (DataContext as ViewModels.MainWindowViewModel)?.OnShellVisibilityChanged(
+                    IsVisible && WindowState != WindowState.Minimized);
+            }
         };
 
         if (settings.AutoHideNavRail || settings.AutoHideTitleBar)
@@ -1022,6 +1033,9 @@ public partial class MainWindow : Window
     /// <summary>窗口失焦:立即收起两栏(切走时界面更干净)。</summary>
     private void OnShellDeactivated()
     {
+        // 失焦多半意味着用户切去玩游戏了:通知页面层把后台轮询放缓(见 TowerViewModel.OnShellDeactivated)。
+        // 必须放在下面那个提前 return 之前 —— 没开自动隐藏的用户同样需要这条信号。
+        (DataContext as ViewModels.MainWindowViewModel)?.OnShellDeactivated();
         if (!_immersive && !AppServices.Settings.Current.AutoHideNavRail)
         {
             return;

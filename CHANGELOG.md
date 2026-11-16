@@ -41,6 +41,30 @@
 
 单语命令仍可单独取：`extract <版本>` 出中文（历史行为不变），`extract <版本> --lang en` 出英文（缺失时回退中文并向 stderr 告警），`has-lang <版本> en` 用退出码回答该版有没有英文（CI 用它决定是否拼双语）。
 
+## [1.3.8.4] - 2026-11-16
+
+### Fixed
+
+- **停在深塔页不动时页面不会自己刷新最新战绩**：此前只有"切进本页"和"游戏会话结束"两个刷新时机，而会话监控只认**从 McKuro 启动**的游戏。于是最常见的两个场景都拿不到新数据——把 McKuro 放在副屏、游戏在主屏打完一局再瞄一眼（页面根本没被切过），或者从 Steam / 官方启动器直接开游戏（会话结束事件根本不会触发）。现在深塔页在**它是当前页面**时会自己重拉：前台每 20 秒、失焦（切去游戏或别的程序）每 60 秒，切回窗口 / 从最小化或托盘恢复时立刻刷一次，最小化期间完全停表（不再"最小化过夜还在每 20 秒打接口"）。轮询只打三个赛季接口（逆境深塔 / 终焉矩阵 / 再生海域），全息战略与地图探索仍只在进页与手动刷新时拉取，避免同一账号短时间连打 6 个数据中心接口
+- **自动刷新不再打断阅读**：静默重拉会用一份数据指纹（深塔/矩阵/海墟的星数、分数、评级、配队）比对上一轮结果，数值没变就完全不动界面——不重建列表、不把滚动位置弹回顶部、不把「难度」下拉重置回第一项；只有真的变了才重建。后台刷新失败（限流、断网、令牌抖动）也不会把已经显示的战绩清空或弹出错误副标题
+
+### Added
+
+- **深塔页页眉新增「刷新」按钮与「更新于 HH:mm:ss」**：分数没变时用户无法凭肉眼判断页面到底有没有在刷新，现在时间戳常驻显示上一次成功同步的时刻；旁边的「刷新」按钮强制整页重拉（含全息战略与地图探索），不需要等轮询
+
+<!--en-->
+
+### Fixed
+
+- **The Tower page did not refresh on its own while you stayed on it**: there were only two refresh moments — entering the page, and a finished game session — and session monitoring only recognises games **launched from McKuro**. The two most common situations therefore got nothing: keeping McKuro on a second monitor while the game runs on the main one (the page is never re-entered), or launching the game straight from Steam / the official launcher (the session-end event never fires). The Tower page now re-fetches on its own **while it is the current page**: every 20 seconds when McKuro is in the foreground, every 60 seconds while it is unfocused (you switched to the game or another app), immediately when the window is re-activated or restored from minimized/tray, and it stops entirely while minimized (no more "minimized overnight and still hitting the API every 20 seconds"). Polling only touches the three season endpoints (Tower / Matrix / Wastes); Hologram Strategy and Map Exploration are still fetched only on page entry and manual refresh, so one account never fires six data-center requests in quick succession
+- **Background refresh no longer interrupts reading**: the silent re-fetch compares a data fingerprint (stars, scores, ranks, teams of Tower / Matrix / Wastes) with the previous result and, when nothing changed, leaves the UI completely untouched — no list rebuild, no scroll jumping back to the top, no difficulty dropdown reset to the first entry; it only rebuilds when the numbers really changed. A failed background refresh (rate limit, network drop, token hiccup) also no longer clears the scoreboard already on screen or writes an error subtitle
+
+### Added
+
+- **New "Refresh" button and "Updated HH:mm:ss" stamp in the Tower page header**: when the score does not change there is no way to tell whether the page is refreshing at all, so the header now always shows when the last successful sync happened; the button next to it forces a full re-fetch (including Hologram Strategy and Map Exploration) without waiting for the next poll
+
+<!--/en-->
+
 ## [1.3.8.3] - 2026-11-15
 
 ### Fixed
