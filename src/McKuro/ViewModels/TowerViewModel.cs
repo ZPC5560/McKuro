@@ -1150,11 +1150,11 @@ public sealed partial class TowerViewModel : ViewModelBase
     /// 与手动刷新的区别:失败不覆盖已显示的数据、成功但内容相同不重建列表。
     /// </para>
     /// </summary>
-    private Task RefreshInPlaceAsync() => LoadCoreAsync(seasonOnly: true, skipWhenUnchanged: true);
+    private Task RefreshInPlaceAsync() => LoadCoreAsync(seasonOnly: true, skipWhenUnchanged: true, refreshSnapshot: false);
 
     /// <summary>页眉「刷新」按钮:强制整页重拉,不受节流与"无变化不重建"影响。</summary>
     [RelayCommand]
-    private Task RefreshAsync() => LoadCoreAsync(seasonOnly: false, skipWhenUnchanged: false);
+    private Task RefreshAsync() => LoadCoreAsync(seasonOnly: false, skipWhenUnchanged: false, refreshSnapshot: true);
 
     /// <summary>上次成功/尝试拉取的时间(进入页面时的"新鲜度"判断)。</summary>
     private DateTime _lastLoadAt = DateTime.MinValue;
@@ -1244,7 +1244,7 @@ public sealed partial class TowerViewModel : ViewModelBase
     private bool _reloadPending;
 
     [RelayCommand]
-    private Task LoadAsync() => LoadCoreAsync(seasonOnly: false, skipWhenUnchanged: false);
+    private Task LoadAsync() => LoadCoreAsync(seasonOnly: false, skipWhenUnchanged: false, refreshSnapshot: true);
 
     /// <summary>
     /// 拉取并应用本页数据。
@@ -1257,7 +1257,11 @@ public sealed partial class TowerViewModel : ViewModelBase
     /// true = 静默刷新语义:失败时保留界面现有数据(不写错误副标题、不清空),成功但数据没变时不重建列表
     /// (避免滚动位置回到顶部、难度下拉被弹回第一项)。手动刷新与进页刷新一律传 false。
     /// </param>
-    private async Task LoadCoreAsync(bool seasonOnly, bool skipWhenUnchanged)
+    /// <param name="refreshSnapshot">
+    /// true = 强制让服务端重新抓取游戏数据(refreshData)。用户主动刷新/进页传 true:
+    /// 数据中心接口读的是服务端快照,不先刷一次就会把旧战绩当成最新的。
+    /// </param>
+    private async Task LoadCoreAsync(bool seasonOnly, bool skipWhenUnchanged, bool refreshSnapshot)
     {
         if (IsBusy)
         {
@@ -1270,7 +1274,7 @@ public sealed partial class TowerViewModel : ViewModelBase
         {
             // 记录本轮数据归属的账号键(放在 try 内:取账号失败也要走 finally 复位 IsBusy)
             _lastLoadedKey = _loadingKey = CurrentLoadKey();
-            var data = await AppServices.Tower.GetTowerDataAsync(default, seasonOnly);
+            var data = await AppServices.Tower.GetTowerDataAsync(default, seasonOnly, refreshSnapshot);
             var (tower, newTower, slash, error, roleId) =
                 (data.Tower, data.NewTower, data.Slash, data.Error, data.RoleId);
 

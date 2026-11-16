@@ -128,8 +128,17 @@ public sealed class TowerService
     /// 这两块是"打过就长期不变"的记录类数据,却要额外 2 个数据中心请求 + 1.2 秒间隔;
     /// 每 20 秒轮询一次时,省掉它们能明显降低同一账号的请求密度(风控面)。
     /// </para>
+    /// <para>
+    /// 注意它<b>不影响</b> refreshData:后台轮询同样要先让服务端重新抓取游戏数据,
+    /// 否则拿到的永远只是快照(节流在 <see cref="TryRefreshDataCenterAsync"/> 内)。
+    /// </para>
     /// </param>
-    public async Task<TowerDataResult> GetTowerDataAsync(CancellationToken ct = default, bool seasonOnly = false)
+    /// <param name="refreshSnapshot">
+    /// 是否强制请求服务端重新抓取游戏数据(refreshData),绕过内部的 60 秒节流。
+    /// 手动"刷新"按钮与进页刷新传 true(用户明确要求最新);后台轮询传 false(走节流)。
+    /// </param>
+    public async Task<TowerDataResult> GetTowerDataAsync(
+        CancellationToken ct = default, bool seasonOnly = false, bool refreshSnapshot = false)
     {
         // 诊断"深塔/海墟数据不刷新"这类问题:每次真正发起拉取都留一行(含调用时刻),
         // 若进入页面后日志没有新行,说明是该页面根本没重新拉(reload 触发问题),不是接口/缓存问题。
@@ -164,6 +173,18 @@ public sealed class TowerService
         {
             return Failed(CoreStrings.T("Core.Tower.TokenFailed", "获取访问令牌失败(Token 可能已失效)"), roleId);
         }
+
+        // 数据中心接口(towerDataDetail/newTowerDetail/slashDetail)返回的是**库街区服务端自己的缓存快照**,
+        // 不先请求一次 refreshData 就会拿到上次快照 —— 这与角色页"同步"必须走 refreshData 是同一个坑
+        // (见 RoleDataService.LoadRolesAsync 的注释)。塔这里此前从没调过它,于是游戏内重打某一层的配队
+        // 在数据中心迟迟不变(实测:游戏里第4层已换成与第三层同队,接口仍返回旧的第4层配队;
+        // 手动打一次 refreshData 后同一接口立刻返回新配队)。
+        //
+        // 因此**所有**取数路径都要先刷新快照,包括后台轮询 —— 轮询若只读缓存,「实时刷新」就是假的。
+        // 频率由 TryRefreshDataCenterAsync 的节流兜住(force=true 时也保留一个硬下限),
+        // 避免每 20 秒打一次 refreshData 触发极验。
+        await TryRefreshDataCenterAsync(
+            accessToken, deviceId, roleId, role.ServerId, refreshSnapshot, ct).ConfigureAwait(false);
 
         TowerSeasonData? tower = null;
         NewTowerData? newTower = null;
@@ -314,6 +335,58 @@ public sealed class TowerService
     /// <summary>整体失败结果(各数据成员为 null,只带原因)。</summary>
     private static TowerDataResult Failed(string error, string roleId = "")
         => new(null, null, null, null, null, null, error, roleId);
+
+    /// <summary>服务端快照刷新(refreshData)的最小间隔(秒)。</summary>
+    /// <remarks>
+    /// refreshData 会让库街区去重新抓一次游戏数据,代价是可能触发极验(见 RefreshDataAsync 的告警分支)。
+    /// 这个值必须**小于**页面的后台轮询间隔(20 秒),否则轮询会周期性撞在节流上、
+    /// 「打完一局 20 秒内看到」就永远不成立 —— 那正是前几版"看着没刷新"的根源。
+    /// </remarks>
+    private const int DataCenterRefreshMinIntervalSeconds = 15;
+
+    /// <summary>用户主动刷新(进页 / 点刷新按钮)时的最小间隔(秒):只防连点,不拖慢首帧。</summary>
+    private const int DataCenterRefreshForcedMinIntervalSeconds = 5;
+
+    /// <summary>上次请求 refreshData 的时刻(服务是单例,进程内共享)。</summary>
+    private DateTime _lastDataCenterRefreshAt = DateTime.MinValue;
+
+    /// <summary>
+    /// 请求服务端重新抓取该角色的游戏数据(<c>refreshData</c>)。
+    /// <para>
+    /// 数据中心那几个接口返回的都是服务端**缓存快照**:不先刷新,塔的战绩与每层配队就停在上一份快照上
+    /// (实测:游戏内第 4 层已换成与第三层同队,接口仍返回旧配队,且 14 分钟后重拉依旧;
+    /// 而调一次 refreshData 后同一接口立刻返回新配队)。角色页的"同步"早就走这条路
+    /// (见 <c>RoleDataService.LoadRolesAsync</c>),塔页此前从没调过 —— 这是漏掉的一环。
+    /// </para>
+    /// <para>失败(含风控拦截)只告警不阻断:旧快照也好过整页没数据。</para>
+    /// </summary>
+    /// <param name="force">true = 用户主动刷新,按更短的 <see cref="DataCenterRefreshForcedMinIntervalSeconds"/> 节流。</param>
+    private async Task TryRefreshDataCenterAsync(
+        string accessToken, string deviceId, string roleId, string? serverId, bool force, CancellationToken ct)
+    {
+        var floor = TimeSpan.FromSeconds(
+            force ? DataCenterRefreshForcedMinIntervalSeconds : DataCenterRefreshMinIntervalSeconds);
+        var elapsed = DateTime.Now - _lastDataCenterRefreshAt;
+        if (elapsed < floor)
+        {
+            _logger.LogInformation("Tower: 跳过 refreshData({Elapsed:F0} 秒前刚刷新过,本次最小间隔 {Min} 秒)",
+                elapsed.TotalSeconds, floor.TotalSeconds);
+            return;
+        }
+        _lastDataCenterRefreshAt = DateTime.Now;
+        try
+        {
+            var ok = await _api.RefreshDataAsync(accessToken, deviceId, roleId, serverId ?? "", ct: ct).ConfigureAwait(false);
+            _logger.LogInformation("Tower: refreshData {Result}",
+                ok ? "成功(服务端已重新抓取游戏数据)" : "未生效(沿用服务端现有快照)");
+        }
+        catch (Exception ex)
+        {
+            // 包括取消在内一律不阻断本页加载:刷新只是"尽量新",拿不到就按现有快照走
+            _logger.LogWarning(ex, "Tower: refreshData 请求异常(不阻断本页加载)");
+        }
+    }
+
 
     /// <summary>
     /// 赛季临期提醒专用:只拉三个赛季制玩法(深塔/海墟/矩阵)的结束时间与完成度。

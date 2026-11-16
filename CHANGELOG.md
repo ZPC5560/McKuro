@@ -41,6 +41,28 @@
 
 单语命令仍可单独取：`extract <版本>` 出中文（历史行为不变），`extract <版本> --lang en` 出英文（缺失时回退中文并向 stderr 告警），`has-lang <版本> en` 用退出码回答该版有没有英文（CI 用它决定是否拼双语）。
 
+## [1.3.8.5] - 2026-11-16
+
+### Fixed
+
+- **深塔战绩永远停在旧快照：配队换了、层数打了，页面还是原来那些角色**：库街区的数据中心接口（`towerDataDetail` / `newTowerDetail` / `slashDetail`）返回的是**服务端自己的缓存快照**，必须先请求一次 `refreshData` 让它重新抓取游戏数据，否则拿到的就是上一份快照。角色页的「同步」一直是这么做的，塔页从来没调过这个接口——于是游戏内把第 4 层换成与第三层同队后，无论重进页面、重启程序还是等十几分钟，接口仍然返回旧配队（实测：刷新前第 4 层是 `1311/1312/1505`，调一次 `refreshData` 后同一接口立刻变成 `1311/1312/1512`，与游戏内一致）。现在每次取数都会先刷新服务端快照：后台轮询最小间隔 15 秒、进页与手动刷新 5 秒，避免连点把接口打到风控上；刷新失败（含极验拦截）只告警、不阻断，仍按现有快照展示
+
+### Changed
+
+- **后台轮询也走服务端刷新**：上一版把轮询做成"只读缓存"，等于把「实时刷新」做成了假的——打完一局 20 秒后页面只是又读了一遍同一份旧快照。现在轮询同样先刷新快照再取数，且间隔（15 秒）刻意小于轮询周期（20 秒），保证每一轮都拿到真正新抓取的数据
+
+<!--en-->
+
+### Fixed
+
+- **Tower records stuck on an old snapshot: teams changed, floors cleared, the page still showed the previous roles**: the Kurobbs data-center endpoints (`towerDataDetail` / `newTowerDetail` / `slashDetail`) return **the server's own cached snapshot**. You must call `refreshData` first to make the server re-scrape the game data, otherwise you get the previous snapshot. The Roles page's "Sync" has always done this; the Tower page never called it — so after swapping floor 4 to the same team as floor 3 in-game, re-entering the page, restarting the app, or waiting a dozen minutes all kept returning the old team (measured: floor 4 was `1311/1312/1505` before the refresh and became `1311/1312/1512` — matching the game — right after a single `refreshData` call). Every fetch now refreshes the server snapshot first: 15-second minimum for background polling, 5 seconds for page entry and manual refresh, so rapid clicking cannot push the account into the rate limiter. A failed refresh (including a GeeTest block) only logs a warning and never blocks, falling back to the current snapshot
+
+### Changed
+
+- **Background polling now refreshes the server snapshot too**: the previous build made polling read only the cache, which turned "live refresh" into a fake — 20 seconds after a match the page simply re-read the same stale snapshot. Polling now refreshes the snapshot before fetching, and its interval (15 seconds) is deliberately shorter than the poll period (20 seconds), so every round sees genuinely re-scraped data
+
+<!--/en-->
+
 ## [1.3.8.4] - 2026-11-16
 
 ### Fixed
