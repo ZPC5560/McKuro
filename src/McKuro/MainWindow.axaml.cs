@@ -44,6 +44,9 @@ public partial class MainWindow : Window
     /// <summary>系统托盘图标(隐藏到托盘时显示;从托盘恢复后隐藏)。</summary>
     private TrayIcon? _trayIcon;
 
+    /// <summary>空闲交还工作集(失焦 + 无输入时触发一次;见 <see cref="HookIdleWorkingSetTrim"/>)。</summary>
+    private IdleWorkingSetTrimmer? _idleTrimmer;
+
     /// <summary>导航滑动胶囊动画进行中(布局回归时暂停吸附,避免与动画互相争抢)。</summary>
 
     public MainWindow()
@@ -77,6 +80,37 @@ public partial class MainWindow : Window
         ShellGrid.LayoutUpdated += OnShellLayoutProbe;
         InitImmersiveUi();
         HookGameSessionMemoryRelease();
+        HookIdleWorkingSetTrim();
+    }
+
+    /// <summary>
+    /// 空闲交还工作集:失焦且一段时间无输入时,把可回收的驻留页还给系统。
+    /// <para>
+    /// 实测依据:可见时专用工作集约 610 MB,最小化 15 秒后 25 MB —— 中间 380 MB 都是可回收页
+    /// (Skia 字形/图层缓存、ANGLE 临时面、GC 已释放未交回的堆页),不是被引用的泄漏。
+    /// 这些页在「用户已经切到别的程序」时才真的不会再被碰,所以只在这个时机裁;
+    /// 游戏会话进行中不裁(那会把刚让给游戏的页又读回来,见 <see cref="IdleWorkingSetTrimmer"/> 的冷却设计)。
+    /// </para>
+    /// </summary>
+    private void HookIdleWorkingSetTrim()
+    {
+        // 游戏运行中不裁:此时刚把解码器/纹理交还过(见 HookGameSessionMemoryRelease),
+        // 再来一次 EmptyWorkingSet 只会让切回游戏时多一轮换页。
+        _idleTrimmer = new IdleWorkingSetTrimmer(
+            canTrim: () => AppServices.GameMonitor.State == GameSessionState.Idle);
+
+        // 高水位一路:与焦点无关。实测最典型的内存高峰是「用户盯着启动页看视频」——
+        // 窗口一直有焦点,失焦回收永不触发,而进程里约 380 MB 是可回收页
+        // (583 MB 裁完 203 MB)。超过水位并持续 1 分钟就裁一次。
+        _idleTrimmer.HighWatermarkBytes = IdleWorkingSetTrimmer.ResolveHighWatermark();
+        _idleTrimmer.StartHighWatermarkWatch();
+
+        Deactivated += (_, _) => _idleTrimmer.OnDeactivated();
+        Activated += (_, _) => _idleTrimmer.OnActivated();
+        // 用户真实回来过(移入窗口/按键)= 放弃待触发的裁剪
+        PointerMoved += (_, _) => _idleTrimmer.OnUserInput();
+        KeyDown += (_, _) => _idleTrimmer.OnUserInput();
+        Closed += (_, _) => _idleTrimmer?.Dispose();
     }
 
     /// <summary>

@@ -50,3 +50,6 @@ website-src/font-src/*.tmp
 # Python 字节码缓存(构建/运行副产物,不入库)
 __pycache__/
 *.pyc
+
+# 本地验证产物(安装包等),不入库
+.verify/

@@ -10,12 +10,25 @@ namespace McKuro.Controls;
 /// 异步加载网络图片的 <see cref="Avalonia.Controls.Image"/>(AOT 安全,带进程内 LRU 字节上限缓存)。
 /// 设置 <see cref="ImageUrl"/> 后自动下载并在解码完成后显示;失败或空 URL 时保持空白。
 /// <para>
-/// 缓存上限 <b>200 张图 / 128 MB</b>(可在启动期通过 <see cref="ConfigureCache"/> 调整),
+/// 缓存上限 <b>128 张图 / 64 MB</b>(可在启动期通过 <see cref="ConfigureCache"/> 调整),
 /// 超出时按 LRU 淘汰。
+/// </para>
+/// <para>
+/// <b>为什么是 64 MB 而不是 128 MB</b>:这份缓存的每一项都是<b>解码后的 BGRA 位图</b>,
+/// 常驻进程私有内存,不会因为切页而回落 —— 实测它是「专用工作集」里除了视频之外最大的一块。
+/// 12 个页面 VM 全常驻,用户来回切几轮就能把 128 MB 填满;而真正省下的重解码成本很小
+/// (图片走磁盘/HTTP 缓存,重解码一张 1080p 立绘约 10~20 ms,且本就发生在后台线程)。
+/// 用一半预算换一半常驻内存是明确划算的。
 /// </para>
 /// </summary>
 public sealed class AsyncImage : Avalonia.Controls.Image
 {
+    /// <summary>默认缓存条数上限。</summary>
+    public const int DefaultMaxEntries = 128;
+
+    /// <summary>默认缓存字节上限(64 MB,按 BGRA8888 像素估算)。</summary>
+    public const long DefaultMaxBytes = 64L * 1024 * 1024;
+
     /// <summary>
     /// 惰性创建:首次下载图片时才探测系统代理(避免静态初始化早于 App 启动、也不在类型加载时跑 scutil)。
     /// </summary>
@@ -30,10 +43,10 @@ public sealed class AsyncImage : Avalonia.Controls.Image
     private static readonly SemaphoreSlim DownloadGate = new(initialCount: 6, maxCount: 6);
 
     /// <summary>
-    /// 全局 LRU 缓存(默认 200 项 / 128 MB)。可通过 <see cref="ConfigureCache"/> 替换上限。
+    /// 全局 LRU 缓存(默认 128 项 / 64 MB)。可通过 <see cref="ConfigureCache"/> 替换上限。
     /// 内部使用 <see cref="ImageBitmapLruCache"/>,线程安全。
     /// </summary>
-    public static ImageBitmapLruCache Cache { get; private set; } = new(maxEntries: 200, maxBytes: 128L * 1024 * 1024);
+    public static ImageBitmapLruCache Cache { get; private set; } = new(DefaultMaxEntries, DefaultMaxBytes);
 
     /// <summary>在启动期调整全局缓存上限;运行时改不影响已加载的位图。</summary>
     public static void ConfigureCache(int maxEntries, long maxBytes)
@@ -73,7 +86,7 @@ public sealed class AsyncImage : Avalonia.Controls.Image
     /// <summary>
     /// 解码宽度上限(像素;0 = 按原始尺寸解码)。大幅图只作小图显示时应设置它:
     /// 原尺寸解码的位图同时占用进程内存与 GPU 纹理,一张 4K RGBA 约 31.6 MB,
-    /// 还会挤占 128 MB LRU 预算(见 <see cref="Cache"/>)。取色/分享等需要全像素的场景保持 0。
+    /// 还会挤占 64 MB LRU 预算(见 <see cref="Cache"/>)。取色/分享等需要全像素的场景保持 0。
     /// </summary>
     public static readonly StyledProperty<int> DecodeWidthProperty =
         AvaloniaProperty.Register<AsyncImage, int>(nameof(DecodeWidth));

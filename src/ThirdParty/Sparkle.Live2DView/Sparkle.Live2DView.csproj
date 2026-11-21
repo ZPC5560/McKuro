@@ -13,7 +13,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <!-- 与本仓库主工程 Avalonia 版本保持一致:混合版本会在运行时因程序集绑定冲突炸掉 -->
+    <PackageReference Include="Avalonia" Version="12.1.6" />
     <PackageReference Include="Live2DCSharpSDK.Framework" Version="1.0.0" />
     <PackageReference Include="Live2DCSharpSDK.App" Version="1.0.0" />
     <PackageReference Include="Live2DCSharpSDK.OpenGL" Version="1.0.0" />

@@ -4,14 +4,14 @@ namespace McKuro.Controls;
 
 /// <summary>
 /// 进程内图像缓存(基于 <see cref="LruCache{TKey,TValue}"/>)。
-/// 默认上限 <b>200 张 / 128 MB</b>(按 BGRA8888 像素估算),超出按 LRU 淘汰。
+/// 默认上限 <b>128 张 / 64 MB</b>(按 BGRA8888 像素估算),超出按 LRU 淘汰。
 /// 线程安全。
 /// </summary>
 public sealed class ImageBitmapLruCache
 {
     private readonly LruCache<string, Bitmap> _cache;
 
-    public ImageBitmapLruCache(int maxEntries = 200, long maxBytes = 128L * 1024 * 1024)
+    public ImageBitmapLruCache(int maxEntries = AsyncImage.DefaultMaxEntries, long maxBytes = AsyncImage.DefaultMaxBytes)
     {
         _cache = new LruCache<string, Bitmap>(maxEntries, maxBytes);
     }
