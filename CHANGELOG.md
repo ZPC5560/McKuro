@@ -41,6 +41,40 @@
 
 单语命令仍可单独取：`extract <版本>` 出中文（历史行为不变），`extract <版本> --lang en` 出英文（缺失时回退中文并向 stderr 告警），`has-lang <版本> en` 用退出码回答该版有没有英文（CI 用它决定是否拼双语）。
 
+## [1.3.8.5] - 2026-11-21
+
+### Changed
+
+- **常驻内存明显下降：启动页从约 700 MB 降到约 400 MB**：实测确认这不是 Avalonia 框架泄漏——用同一套渲染后端（ANGLE-EGL）、同尺寸窗口写了一个裸 Avalonia 程序做对照，5 分钟里专用工作集始终在 83–106 MB 之间平躺，而 McKuro 在空转 10 分钟、以及深塔页每 20 秒重建整个列表的压力下也都稳定在 ±5 MB 的带状波动里，没有单调上涨。真正偏高的是「常驻构成」：`582 MB 里有 380 MB 是可回收页`（裁一次立刻掉到 203 MB，25 秒后回到 272 MB），这些页对画面没有任何作用，只是 Skia / ANGLE / mpv 分配后没还给系统的驻留。现在进程超过 450 MB 并持续一分钟后会主动交还一次（与「窗口失焦」那条路径共用冷却，不会反复裁），实测 700 MB → 400 MB，之后稳定在 407–446 MB 不再弹回高位
+- **图片缓存预算从 128 MB 收到 64 MB**：这份缓存存的都是**解码后的位图**，常驻私有内存、切页不回落，而 12 个页面全部常驻，来回切几轮就能把 128 MB 填满。真正省下的重解码成本很小（图片本来就走磁盘/HTTP 缓存，重解码一张 1080p 立绘约 10–20 ms），用一半预算换一半常驻内存是划算的。稳态实测下降约 40 MB
+- **Avalonia 升级到 12.1.6**：该版本含四条与本应用结构直接相关的原生内存修复——通用原生内存/资源管理修复、`TextBlock` 从视觉树分离时释放文本布局、渲染器停止时释放游离的 visual、以及样式设置 `Command` 导致的按钮/菜单项泄漏。本应用 12 个页面的 ViewModel 全部常驻，这几条都对口
+
+### Added
+
+- 新增两个排查用的环境变量：`McKuro_TRIM_WATERMARK_MB`（交还工作集的水位，默认 450，设 0 关闭）与 `McKuro_IDLE_TRIM_SECONDS`（失焦后多久交还，默认 180 秒）；`McKuro_DISABLE_IDLE_TRIM=1` 可整体关闭。交还发生时 stderr 会留一条 `MCKURO-TRIM ... done` 便于确认
+
+### Fixed
+
+- **视频播放的显存/内存波动没有得到改善，也不再假装改善了**：本轮试过 `vd-lavc-threads` 4→2、`hwdec-extra-frames` 2→0、`video-sync=desync`、`video-sync-max-video-change`、关后处理等一组 mpv 调参，配对复测证明**全部无效**（旧 543 MB vs 新 544 MB），其中 `desync` 反而因为脱离时钟自由预解码多占 7 MB。这些改动没有进入本版本。视频会话本身约 125 MB（含 libmpv 的 126 MB 映射与 65 个额外线程），属于「要播放就必须付」的成本；想再省只能降低清晰度档位——实测 2160 档比 1080 档多约 134 MB，而启动页实际只显示到约 1770 物理像素宽
+
+<!--en-->
+
+### Changed
+
+- **Much lower resident memory: the launcher page went from ~700 MB to ~400 MB**: measurements confirmed this is not an Avalonia framework leak — a bare Avalonia app using the same rendering backend (ANGLE-EGL) and the same window size stayed flat between 83–106 MB for five minutes, and McKuro itself held a ±5 MB band both while idling for ten minutes and while the Tower page rebuilt its whole list every 20 seconds, with no monotonic growth. What was actually high is the *composition*: `380 MB of the 582 MB were reclaimable pages` (one trim dropped it to 203 MB, and it settled back to 272 MB 25 seconds later). Those pages contribute nothing to the picture — they are simply what Skia / ANGLE / mpv allocated and never handed back. The process now returns them once it has stayed above 450 MB for a minute (sharing the cooldown with the window-unfocused path, so it never thrashes); measured 700 MB → 400 MB, then stable at 407–446 MB without climbing back
+- **Image cache budget cut from 128 MB to 64 MB**: the cache holds **decoded bitmaps** — resident private memory that never falls back when you switch pages — and all twelve pages stay alive, so a few round trips fill the 128 MB. The re-decoding it saves is cheap (images already come from the disk/HTTP cache, and re-decoding a 1080p portrait costs ~10–20 ms), so trading half the budget for half the resident memory is a clear win. Measured ~40 MB lower at steady state
+- **Avalonia upgraded to 12.1.6**: this release carries four native-memory fixes that match this app's structure — general native memory/resource management, `TextBlock` releasing its text layout when detached from the visual tree, a stopped renderer releasing detached visuals, and a control leak when a style sets `Command`. All twelve page ViewModels here stay alive, so all four apply
+
+### Added
+
+- Two environment variables for diagnostics: `McKuro_TRIM_WATERMARK_MB` (the level at which the working set is handed back, default 450, set 0 to disable) and `McKuro_IDLE_TRIM_SECONDS` (how long after losing focus to hand it back, default 180 s); `McKuro_DISABLE_IDLE_TRIM=1` turns the whole thing off. Each trim leaves a `MCKURO-TRIM ... done` line on stderr so you can confirm it happened
+
+### Fixed
+
+- **Video playback memory swings were not improved, and this release no longer pretends otherwise**: we tried a batch of mpv tunables — `vd-lavc-threads` 4→2, `hwdec-extra-frames` 2→0, `video-sync=desync`, `video-sync-max-video-change`, disabling post-processing — and paired re-tests showed **none of them help** (543 MB before vs 544 MB after); `desync` actually cost 7 MB extra by letting the decoder run ahead of the clock. None of these changes shipped. The video session itself costs about 125 MB (including libmpv's 126 MB mapping and 65 extra threads), which is the unavoidable price of playing a video; the only way to go lower is a lower quality tier — measured, the 2160 tier costs ~134 MB more than 1080, while the launcher page only ever displays about 1770 physical pixels wide
+
+<!--/en-->
+
 ## [1.3.8.4] - 2026-11-16
 
 ### Fixed
