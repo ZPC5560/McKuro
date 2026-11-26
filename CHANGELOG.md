@@ -41,6 +41,56 @@
 
 单语命令仍可单独取：`extract <版本>` 出中文（历史行为不变），`extract <版本> --lang en` 出英文（缺失时回退中文并向 stderr 告警），`has-lang <版本> en` 用退出码回答该版有没有英文（CI 用它决定是否拼双语）。
 
+## [1.3.8.6] - 2026-11-26
+
+### Changed
+
+- **全站字号归一到一套阶梯**：此前同一个页面里并存 9.5 / 10 / 10.5 / 11 / 11.5 / 12 / 12.5 / 13 / 13.5 / 14 十档字号，同一层级的辅助文字在不同页面大小不一样（深塔的进度是 12.5、抽卡的状态行是 11、角色页的套装名是 10.5）。现在收敛成 10 / 11 / 12 / 13 / 14 五档：小徽标与角标 10、次要说明 11、正文与名单 12、小节标题 13、卡片标题与大数值 14。视觉上几乎看不出跳动，但跨页面扫读时同一类信息的重量一致了
+- **首页内容区不再挤**：左栏外边距从 96 收到 36、右栏从 40 收到 24，两列由「左 Auto / 右自适应」改成 `0.85* : 1.15*` 并去掉外层 ScrollViewer。结果是右侧「今日数据」卡片里的 `200/480`、`650/1000` 不再被截成 `200/4…`、`650/10…`；窗口拉窄时也是右栏先让位，而不是文字先被吃掉
+- **抽卡分析的统计条从 8 列挤一行改成 4 列 × 2 行**：八个指标（总抽数 / 称号 / 双金次数 / 歪的次数 / 综合评分 / 平均出货 / 出货率 / 记录天数）在 1440 宽下每个只有约 60 像素，中文指标名被压成竖条。改成 `UniformGrid` 四列两行后每个指标有约 120 像素，指标名一行放得下；卡池列表列宽同步从 380 收到 340，把空间还给右侧
+- **账号页内容宽度 820 → 960 并取消左对齐**：两张账号卡不再只占屏幕左半边、右边留一大片空白
+- **桌面端硬编码颜色换成语义令牌**：`#f8c94c`（全息金）、`#22C55E`（推荐绿）、`#E57373`（警示红）、`#FF8000`（UP 橙）、`#64B5F6`（信息蓝）、`#9BA0AE`（图标底板灰）等散落在各 XAML 里的字面色值，全部改指 `McKuroHoloGold` / `McKuroSuccess` / `McKuroDanger` / `McKuroWarning` / `McKuroInfo` / `McKuroIconPlate`。浅色与深色两套主题各自的取值本来就定义在 `App.axaml`，这次让页面真正用上它们——**深色主题下这些强调色不再是一套不跟随主题的字面色**
+- **弹窗按钮的语义色理顺**：「取消 / 校验」不再用主色（主色应当只出现在主操作上），确认按钮统一走 `McKuroSuccess`，删除类操作统一走 `McKuroDanger`（原先日志清理用的是 Warning 橙，和真正的危险操作不是同一档）
+- **浅色主题的玻璃卡片描边从 `#64627D` 换成 `#2E3B4E6B`**：原来那条描边在浅色壁纸上接近中灰，卡片边缘像一圈脏线；现在是一道带透明度的淡蓝灰，卡片仍是「浮在壁纸上」而不是「被框住」
+- **新增 `Button.mcLink` 共享样式**：链接型文字按钮（启动页「画质怎么选」那一类）此前每处都手写一遍透明底 + 无边框 + 手型光标，现在收敛成一条样式，悬停时保持透明底、仅前景提亮
+- **官网模块区的排布改成 6 轨道网格**：1440 宽下「启动与更新」与「主页总览」两张宽卡并排各占一半，其余九张按三列铺开——此前两张宽卡各占整行，第一屏只能看到它们，往下要滚很久才是真正的功能列表
+- **官网首屏的「数据归位」动画此前一直是死的**：JS 把 `data-filled` 写在 `.intake__sticky` 上，而 CSS 选择器找的是外层的 `.intake`，两者永远对不上，于是标题栏和三行格子停在 `opacity: 0`（实测）。现在选择器对齐到 `__sticky`，滚动到位后标题栏与格子会正常淡入
+- **官网同步按钮的状态脉冲此前缺样式**：`site.js` 一直在切换 `.app__pulse` 的 `hidden` 并给容器加 `.is-syncing`，但样式表里没有对应规则，那个圆点永远不可见。现在补上 8px 圆点 + `pulseDot` 呼吸动画，并尊重 `prefers-reduced-motion`
+- **官网新增一批设计变量**：4px 间距阶梯 `--space-1..6`、圆角桶 `--r-xs/--r-md`、语义软色 `--ok-soft/--ok-ink/--warn-soft/--warn-ink`、悬停主色 `--accent-ink-hover`；`site.css` 里一批散落的 11.5 / 12.5 / 13.5 也归一到 12 / 14。同时把 `:focus-visible` 的焦点环补到了更新日志折叠头与版本目录上
+- **官网下载卡右侧的扩展名不再是固定 38px 圆形**：Linux 那张卡的 `.tar.gz` 比圆还宽，一直被裁掉后半截；改成按内容自适应的胶囊后完整显示
+
+### Fixed
+
+- **官网模块区在窄屏塌成一条**（本次样式归一引入、发版前修掉）：`.mod:not(.mod--wide) { grid-column: span 2 }` 写在基础规则里，而 `≤720px` 的 `grid-template-columns: 1fr` 只复原了宽卡、没复原普通卡，单列网格被 `span 2` 撑出一个隐式第二列——实测 390 宽下网格变成 `82px 266px`，第一张卡被压成一条窄柱、文字逐字换行。现在 `≤720px` 所有卡统一 `grid-column: auto`；`≤1100px` 的普通卡也一并复原（否则九张卡在 2 轨道网格里各占整行），并去掉会留下半宽落单卡的 `.mod--wide:nth-child(2) { span 1 }`
+- **覆盖安装与应用内自更新前会先清掉安装目录里的旧载荷**：Inno 只覆盖同名文件、从不删旧文件，于是旧版替换掉的原生库（早期用过的 `libvlc.dll` / `libvlc\`，以及混合安装残留的 `hostfxr.dll`）会一直留在安装目录，被 `NativeLibrary.TryLoad` 按程序目录优先命中，表现为升级后启动崩溃或行为异常。安装器现在在 `PrepareToInstall` 阶段清掉 `{app}` 下除 `logs\`、`unins000.*`、`*.log` 之外的全部条目——只在目录里已有 `McKuro.exe`（即覆盖安装/自更新）时执行，全新安装不会动用户预置的文件；被占用的文件静默跳过、不阻断安装
+- **卸载后不再残留空的 `{app}\logs` 目录**：运行期日志写在安装目录，Inno 只删自己装过的文件，`1.3.8.4` 实测卸载后会留下这个空壳目录。现在 `[UninstallDelete]` 显式声明清理它，并在卸载收尾兜底——目录已空则整个删掉（目录里还有用户自己的文件时不动）
+
+<!--en-->
+
+### Changed
+
+- **One shared type scale across the whole app**: a single screen used to mix ten different sizes (9.5 / 10 / 10.5 / 11 / 11.5 / 12 / 12.5 / 13 / 13.5 / 14), so the same class of supporting text was a different size on every page (Tower progress 12.5, Gacha status 11, relic set names 10.5). It is now five steps — 10 for badges and superscripts, 11 for secondary notes, 12 for body and list rows, 13 for section headings, 14 for card titles and large figures. Barely visible one screen at a time, but the same kind of information now carries the same weight everywhere
+- **The home content area is no longer squeezed**: the left margin went from 96 to 36 and the right from 40 to 24, the two columns changed from "Auto / flexible" to `0.85* : 1.15*`, and the outer ScrollViewer is gone. The daily cards no longer truncate `200/480` and `650/1000` into `200/4…` and `650/10…`, and narrowing the window now yields space from the right column instead of eating the text first
+- **Gacha stats moved from eight columns on one row to four columns by two rows**: at 1440 px each of the eight metrics had roughly 60 px, which crushed the Chinese labels into vertical strips. A `UniformGrid` with four columns gives each ~120 px, enough for the label on one line; the banner list column also narrowed from 380 to 340 to give the space back
+- **Account page content width 820 → 960, no longer left-aligned**: the two account cards stop hugging the left half of the window with a large empty area to their right
+- **Hard-coded desktop colours replaced by semantic tokens**: literal values scattered through the XAML — `#f8c94c` (hologram gold), `#22C55E` (recommended green), `#E57373` (danger red), `#FF8000` (UP orange), `#64B5F6` (info blue), `#9BA0AE` (icon plate grey) — now point at `McKuroHoloGold` / `McKuroSuccess` / `McKuroDanger` / `McKuroWarning` / `McKuroInfo` / `McKuroIconPlate`. Both the light and dark values were already defined in `App.axaml`; this makes the pages actually use them, so **these accents now follow the dark theme instead of staying fixed literals**
+- **Dialog buttons now use the right semantic colour**: Cancel and Verify no longer use the primary colour (which belongs to the main action only), confirmations use `McKuroSuccess`, and destructive actions use `McKuroDanger` (log cleanup previously used the warning orange, a different tier from the real destructive actions)
+- **The light theme's glass-card stroke moved from `#64627D` to `#2E3B4E6B`**: the old stroke was close to mid-grey against a light wallpaper, so card edges read as a dirty outline. It is now a translucent blue-grey hairline, keeping the card floating over the wallpaper instead of being boxed in
+- **New shared `Button.mcLink` style**: link-style text buttons (the "which quality to pick" entry on the launcher and similar) each spelled out transparent background + no border + hand cursor inline; that is now one style whose hover keeps the background transparent and only brightens the foreground
+- **The site's module section now uses a six-track grid**: at 1440 px the two wide cards ("Startup & updates", "Home overview") sit side by side at half width each, with the other nine laid out three-up. Previously both wide cards took a full row, so the first screen showed only them and the real feature list was far below
+- **The site hero's "data settles" animation had never run**: `site.js` writes `data-filled` on `.intake__sticky` while the stylesheet selected the outer `.intake`, so the two never matched and the title bar plus the three slot rows stayed at `opacity: 0` (measured). The selector now targets `__sticky`, and the bar and slots fade in as intended once you scroll
+- **The site's sync-button pulse had no styles at all**: `site.js` has always toggled `hidden` on `.app__pulse` and added `.is-syncing` to the container, but the stylesheet never had a rule, so the dot was permanently invisible. It now has an 8 px dot and a `pulseDot` breathing animation that respects `prefers-reduced-motion`
+- **The site gained a set of design variables**: a 4 px spacing scale `--space-1..6`, radius buckets `--r-xs/--r-md`, semantic soft colours `--ok-soft/--ok-ink/--warn-soft/--warn-ink`, and `--accent-ink-hover`; scattered 11.5 / 12.5 / 13.5 values in `site.css` were normalised to 12 / 14. The `:focus-visible` ring now also covers the changelog disclosures and the version index
+- **The extension label on the site's download cards is no longer a fixed 38 px circle**: the `.tar.gz` on the Linux card is wider than the circle was, so its tail was always clipped. It is now a pill that sizes to its content
+
+### Fixed
+
+- **The site's module grid collapsed into a sliver on narrow screens** (introduced by this round's style normalisation and fixed before release): `.mod:not(.mod--wide) { grid-column: span 2 }` sits in the base rules, and the `≤720px` `grid-template-columns: 1fr` only reset the wide cards, so a single-track grid was stretched by `span 2` into an implicit second column — measured at 390 px the grid became `82px 266px`, squeezing the first card into a narrow strip with one character per line. All cards now set `grid-column: auto` at `≤720px`; normal cards are also reset at `≤1100px` (otherwise all nine take a full row each in the two-track grid), and the `.mod--wide:nth-child(2) { span 1 }` rule that left one half-width card stranded is gone
+- **Over-installs and in-app self-updates now clear the previous payload first**: Inno overwrites same-named files and never deletes old ones, so native libraries replaced by an earlier version (the `libvlc.dll` / `libvlc\` used years ago, or `hostfxr.dll` left by a mixed install) stay in the install directory and get picked first by `NativeLibrary.TryLoad` — which shows up as a crash or odd behaviour right after upgrading. The installer now wipes everything under `{app}` except `logs\`, `unins000.*` and `*.log` during `PrepareToInstall`, and only when `McKuro.exe` is already there (i.e. an over-install or self-update), so a clean install never touches files the user put there; locked files are skipped silently instead of blocking the install
+- **Uninstalling no longer leaves an empty `{app}\logs` directory**: runtime logs live in the install directory and Inno only removes files it installed, which left that empty shell behind (measured on 1.3.8.4). `[UninstallDelete]` now declares it, with a post-uninstall fallback that removes the directory only when it is empty (anything the user added is left alone)
+
+<!--/en-->
+
 ## [1.3.8.5] - 2026-11-21
 
 ### Changed
