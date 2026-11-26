@@ -10,6 +10,10 @@
 @media (hover: hover) and (pointer: fine) {
   .mod:hover { background: #fff; transform: translateY(-2px); box-shadow: 0 0 0 1px var(--line), var(--shadow); }
 }
+/* 6-track grid: the two wide module cards take half the row each (span 3) so they sit
+   side by side, the remaining nine take a third (span 2) for a 3-up row. Both spans are
+   restored to `auto` at the single-column breakpoint — a span left over from this rule
+   would otherwise create an implicit second track and squeeze the first card. */
 .mod--wide { grid-column: span 3; }
 .mod:not(.mod--wide) { grid-column: span 2; }
 .mod__ico {
@@ -73,16 +77,18 @@
    Only the sections owned by this file live here; the cross-file responsive dump that
    used to sit at the bottom of 40-rest.css is gone (1180/940/600 are retired).
    Column ladders:
-     .mods  3 -> 2 (1100) -> 1 (720, compact) -> 1 (520)
+     .mods  6-track -> 2 (1100) -> 1 (720, compact) -> 1 (520)
      .looks 4 -> 2 (900)   -> 2 (720)          -> 1 (520)
      .steps 4 -> 2 (900)   -> 2 (720)          -> 1 (520)
      .wall  5-card ring -> 3 cards (720) -> 1 card (520)                         */
 
 @media (max-width: 1100px) {
-  /* two-up: a card is ~520px wide here, so the wide module cards only need span 2 */
+  /* two-up: a card is ~520px wide here, so the wide module cards only need span 2.
+     The nine normal cards go back to one track each (`auto`) — keeping their desktop
+     `span 2` would make every one of them a full-width row in a 2-track grid. */
   .mods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mod--wide { grid-column: span 2; }
-  .mod--wide:nth-child(2) { grid-column: span 1; }
+  .mod:not(.mod--wide) { grid-column: auto; }
 
   /* Sized for the 1180px wrap, so below that the outer pair bleeds off the section edge by
      more than it should (at 1000px the leftmost card was a 10px sliver). Shrink the whole
@@ -115,7 +121,9 @@
   /* single column. The card switches to icon-beside-title + full-width copy, otherwise the
      42px icon gutter eats 56px out of a 630px paragraph and the line count doubles. */
   .mods { grid-template-columns: 1fr; }
-  .mod--wide, .mod--wide:nth-child(2) { grid-column: auto; }
+  /* every card, wide or not, must drop its span here: a leftover `span 2` on a 1-track
+     grid creates an implicit second column and squeezes the card into a sliver. */
+  .mod, .mod--wide, .mod:not(.mod--wide) { grid-column: auto; }
   .mod {
     display: grid; grid-template-columns: 36px minmax(0, 1fr);
     align-items: center; gap: 0 12px; padding: 16px 18px;
