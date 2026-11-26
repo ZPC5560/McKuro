@@ -35,6 +35,18 @@
             <Setter Property="Opacity" Value="0.95" />
         </Style>
 
+        <!-- 链接型文字按键:透明底、无边框、手型光标;悬停保持透明底,仅前景提亮。
+             供启动页「画质怎么选」等文字链接入口复用,避免各处重复内联背景/边框属性。 -->
+        <Style Selector="Button.mcLink">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+        </Style>
+        <Style Selector="Button.mcLink:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
         <!-- 全站统一的「浮层面板」材质:启动页功能菜单、资源等级展开面板、账号切换弹窗、
              版本选择弹窗共用同一份面色 + 描边 + 圆角。
              之前每个面板各自重述一遍背景(两层不透明叠加 / 单层 DialogSurface / SemiColorBg2…),
@@ -173,7 +185,7 @@
                     <SolidColorBrush x:Key="McKuroContentTintMaterial" Color="#8CF6F9FD" />
                     <SolidColorBrush x:Key="McKuroGlassFill" Color="#ACFFFFFF" />
                     <SolidColorBrush x:Key="McKuroGlassFillStrong" Color="#DAFFFFFF" />
-                    <SolidColorBrush x:Key="McKuroGlassStroke" Color="#64627D" />
+                    <SolidColorBrush x:Key="McKuroGlassStroke" Color="#2E3B4E6B" />
                     <SolidColorBrush x:Key="McKuroNavDivider" Color="#29000000" />
                     <SolidColorBrush x:Key="McKuroTextOnWallpaper" Color="#19202E" />
                     <SolidColorBrush x:Key="McKuroTextMuted" Color="#4E5B70" />

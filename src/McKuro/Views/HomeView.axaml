@@ -63,14 +63,13 @@
         </Grid>
 
         <!-- ═══ 主内容 ═══ -->
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-            <Grid Margin="96,0,40,0" Opacity="{Binding RevealOpacity}">
+        <Grid Margin="36,0,24,0" Opacity="{Binding RevealOpacity}">
                 <Grid.Transitions>
                     <Transitions>
                         <DoubleTransition Property="Opacity" Duration="0:0:0.9" />
                     </Transitions>
                 </Grid.Transitions>
-                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="48">
+                <Grid ColumnDefinitions="0.85*,1.15*" ColumnSpacing="24">
                     <!-- ─── 左:欢迎标题区(splash-left) ─── -->
                     <StackPanel Grid.Column="0" MaxWidth="420" VerticalAlignment="Center" Spacing="0">
                         <!-- 签名行 -->
@@ -160,12 +159,12 @@
                                     </StackPanel>
                                     <!-- 角色 ID + 游玩天数 + 注册时间 -->
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="3" HorizontalAlignment="Right">
-                                        <TextBlock Text="{Binding RoleIdText}" FontSize="11.5" FontWeight="Light"
+                                        <TextBlock Text="{Binding RoleIdText}" FontSize="12" FontWeight="Light"
                                                    Foreground="{DynamicResource McKuroTextMuted}" HorizontalAlignment="Right"
                                                    IsVisible="{Binding RoleIdText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                         <TextBlock Text="{Binding PlayDaysText}" FontSize="14" FontWeight="Bold"
                                                    Foreground="{DynamicResource McKuroTextOnWallpaper}" HorizontalAlignment="Right" />
-                                        <TextBlock Text="{Binding RegisterText}" FontSize="11.5" FontWeight="Light"
+                                        <TextBlock Text="{Binding RegisterText}" FontSize="12" FontWeight="Light"
                                                    Foreground="{DynamicResource McKuroTextMuted}" HorizontalAlignment="Right"
                                                    IsVisible="{Binding RegisterText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                     </StackPanel>
@@ -225,6 +224,5 @@
                     </ScrollViewer>
                 </Grid>
             </Grid>
-        </ScrollViewer>
     </Grid>
 </UserControl>

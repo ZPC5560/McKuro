@@ -17,12 +17,12 @@
        (其它画质资源包/存档/日志本来就不在清单里,删了会坏档)。 -->
   <Window.Styles>
     <Style Selector="Button.dlgCancel">
-      <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Padding" Value="18,8" />
     </Style>
     <Style Selector="Button.dlgConfirm">
-      <Setter Property="Foreground" Value="{DynamicResource McKuroWarning}" />
+      <Setter Property="Foreground" Value="{DynamicResource McKuroDanger}" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Padding" Value="18,8" />
     </Style>

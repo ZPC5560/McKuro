@@ -202,7 +202,7 @@
 /* `display: none` is not enough anymore: hero-figure.js measures `clientWidth` to
    decide whether it is worth downloading her. Keep the switch on the same
    `display` value it has always used so that contract cannot drift. */
-@media (max-width: 1099px) { .hero__figure, .hero__forms { display: none; } }
+@media (max-width: 1100px) { .hero__figure, .hero__forms { display: none; } }
 
 /* ---------- hero copy ----------
    The copy is centred and the character lives in the right margin, so the only thing
@@ -213,7 +213,7 @@
 .hero__h1 {
   margin-top: 26px;
   font-family: var(--serif);
-  font-size: clamp(40px, 6.6vw, 80px);
+  font-size: clamp(34px, 6vw, 76px);
   line-height: 1.08; letter-spacing: -.045em;
   text-wrap: balance;
 }
@@ -226,7 +226,7 @@
 .hero__meta {
   display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center;
   gap: 0 7px;
-  margin-top: 22px; font-size: 12.5px; color: var(--ink-3);
+  margin-top: 22px; font-size: 12px; color: var(--ink-3);
 }
 .hero__meta b { color: var(--ink-2); font-weight: 500; }
 .hero__meta .meta__pair { display: inline-flex; align-items: baseline; gap: 7px; }
@@ -235,8 +235,8 @@
 
 @media (max-width: 900px) {
   .hero { min-height: max(660px, 92svh); padding: 118px 0 64px; }
-  .hero__h1 { margin-top: 20px; font-size: clamp(34px, 8.4vw, 48px); line-height: 1.14; }
-  .hero__sub { margin-top: 18px; font-size: 16.5px; max-width: 34em; }
+  .hero__h1 { margin-top: 20px; line-height: 1.14; }
+  .hero__sub { margin-top: 18px; font-size: 16px; max-width: 34em; }
   .hero__cta { margin-top: 28px; }
   .hero__meta { margin-top: 18px; }
 }

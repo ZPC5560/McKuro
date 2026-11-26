@@ -20,17 +20,17 @@
        注意:不要用 ExperimentalAcrylicBorder(Avalonia 12.1.2 会抛未处理 NRE 致进程终止)。 -->
   <Window.Styles>
     <Style Selector="Button.dlgCancel">
-      <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Padding" Value="18,8" />
     </Style>
     <Style Selector="Button.dlgVerify">
-      <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Padding" Value="18,8" />
     </Style>
     <Style Selector="Button.dlgConfirm">
-      <Setter Property="Foreground" Value="#52C41A" />
+      <Setter Property="Foreground" Value="{DynamicResource McKuroSuccess}" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Padding" Value="18,8" />
     </Style>
@@ -83,11 +83,11 @@
       </StackPanel>
 
       <!-- 精简为一行提示条(对齐 Haiyu 的「可选择本地版本跳过校验」绿条),不再堆说明文案 -->
-      <Border CornerRadius="8" Padding="12,9" Background="#331E7A2E">
+      <Border CornerRadius="8" Padding="12,9" Background="{DynamicResource McKuroSuccessTint}">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <ic:FluentIcon Icon="CheckmarkCircle" IconVariant="Filled" IconSize="Size16"
-                         VerticalAlignment="Center" Foreground="#52C41A" />
-          <TextBlock Text="{loc:Localize Key=Launcher.VersionSelect.Hint}" FontSize="12.5"
+                         VerticalAlignment="Center" Foreground="{DynamicResource McKuroSuccess}" />
+          <TextBlock Text="{loc:Localize Key=Launcher.VersionSelect.Hint}" FontSize="12"
                      VerticalAlignment="Center" TextWrapping="Wrap"
                      Foreground="{DynamicResource SemiColorText1}" />
         </StackPanel>

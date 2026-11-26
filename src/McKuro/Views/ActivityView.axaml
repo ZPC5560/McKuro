@@ -148,7 +148,7 @@
                                                         <Panel>
                                                             <!-- 临期(≤3天)且未忽略:标题标红并附带剩余时间 -->
                                                             <TextBlock Text="{Binding AlertTitle}" FontSize="13" FontWeight="Bold"
-                                                                       Foreground="#e33737"
+                                                                       Foreground="{DynamicResource McKuroDanger}"
                                                                        TextTrimming="CharacterEllipsis"
                                                                        IsVisible="{Binding IsAlertVisible}" />
                                                             <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Bold"
@@ -244,13 +244,13 @@
                                          (表头段由今天芯片接续,视觉上仍是连续一条) -->
                                     <Canvas Grid.Row="1" IsHitTestVisible="False">
                                         <Border Canvas.Left="{Binding TodayLineX}" Width="2"
-                                                Height="{Binding RowsHeightPx}" Background="#e33737" />
+                                                Height="{Binding RowsHeightPx}" Background="{DynamicResource McKuroDanger}" />
                                     </Canvas>
                                     <!-- 今天芯片(表头内跨今日线居中;左缘先锚在今日线上,视图在布局提交后
                                          按芯片实际宽度折算成居中位置 —— 芯片宽度随语言/字体变化,不可写死) -->
                                     <Canvas Grid.Row="0" IsHitTestVisible="False">
                                         <Border x:Name="TodayChip" Canvas.Left="{Binding TodayLineX}" Canvas.Top="2"
-                                                Background="#e33737" CornerRadius="3" Padding="4,1">
+                                                Background="{DynamicResource McKuroDanger}" CornerRadius="3" Padding="4,1">
                                             <TextBlock Text="{Binding GanttTodayLabel}" FontSize="9" Foreground="White"
                                                        FontWeight="Bold" />
                                         </Border>

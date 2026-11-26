@@ -202,7 +202,7 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:SectionNavItem">
                             <StackPanel Orientation="Horizontal" Spacing="5" Margin="12,5" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="Bold"
+                                <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Bold"
                                            VerticalAlignment="Center" />
                                 <!-- 达成度标识:完全达标(绿勾)/部分达标(橙勾);无数据不显示 -->
                                 <TextBlock Text="{Binding StatusText}" FontSize="12" FontWeight="Bold"
@@ -352,7 +352,7 @@
                                                 <Border CornerRadius="5" Padding="6,1" VerticalAlignment="Center"
                                                         Background="{Binding CurrentWeaponIsRecommended, Converter={StaticResource RecommendStateBrush}}"
                                                         IsVisible="{Binding CurrentWeaponTierText, Converter={StaticResource StringNotEmpty}}">
-                                                    <TextBlock Text="{Binding CurrentWeaponTierText}" FontSize="10.5"
+                                                    <TextBlock Text="{Binding CurrentWeaponTierText}" FontSize="11"
                                                                FontWeight="Bold" Foreground="White" />
                                                 </Border>
                                             </StackPanel>
@@ -374,7 +374,7 @@
                                                            IsVisible="{Binding RecommendedWeaponIcon,
                                                            Converter={StaticResource StringNotEmpty}}" />
                                             <Border Width="44" Height="44" CornerRadius="7" ClipToBounds="True"
-                                                    BorderThickness="1.5" BorderBrush="#22C55E"
+                                                    BorderThickness="1.5" BorderBrush="{DynamicResource McKuroSuccess}"
                                                     ToolTip.Tip="{Binding RecommendedWeaponName}"
                                                     IsVisible="{Binding RecommendedWeaponIcon,
                                                     Converter={StaticResource StringNotEmpty}}">
@@ -569,7 +569,7 @@
                                                                     Background="{DynamicResource SemiColorBg1}"
                                                                     BorderThickness="1"
                                                                     BorderBrush="{Binding BorderBrush}">
-                                                                <TextBlock Text="{Binding LevelBadgeText}" FontSize="11.5"
+                                                                <TextBlock Text="{Binding LevelBadgeText}" FontSize="12"
                                                                            FontWeight="Bold" />
                                                             </Border>
                                                         </Grid>
@@ -626,7 +626,7 @@
                                 <StackPanel Grid.Column="1" Spacing="6" MinWidth="190" MaxWidth="260"
                                             VerticalAlignment="Top"
                                             IsVisible="{Binding HasSkillAdvice}">
-                                    <TextBlock Text="{loc:Localize Key=Roles.Guide.SkillAdviceTitle}" FontSize="12.5"
+                                    <TextBlock Text="{loc:Localize Key=Roles.Guide.SkillAdviceTitle}" FontSize="13"
                                                FontWeight="Bold" Foreground="{DynamicResource SemiColorText2}" />
                                     <ItemsControl ItemsSource="{Binding SkillAdviceItems}">
                                         <ItemsControl.ItemTemplate>
@@ -661,7 +661,7 @@
                             <!-- 加点顺序:推荐等级降序的图标链(参照攻略站底部"加点顺序"行) -->
                             <StackPanel Spacing="8" IsVisible="{Binding HasSkillPriority}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="{loc:Localize Key=Roles.Guide.SkillPriority}" FontSize="12.5"
+                                    <TextBlock Text="{loc:Localize Key=Roles.Guide.SkillPriority}" FontSize="13"
                                                FontWeight="Bold" Foreground="{DynamicResource SemiColorText2}" />
                                     <TextBlock Text="{loc:Localize Key=Roles.Guide.SkillPriorityHint}" FontSize="11"
                                                Foreground="{DynamicResource SemiColorText3}" VerticalAlignment="Center" />
@@ -686,7 +686,7 @@
                                                                                    Tint="ThemeForeground"
                                                                                    Width="24" Height="24" />
                                                     </Border>
-                                                    <TextBlock Text="{Binding DisplayText}" FontSize="10.5"
+                                                    <TextBlock Text="{Binding DisplayText}" FontSize="11"
                                                                HorizontalAlignment="Center" TextAlignment="Center"
                                                                TextWrapping="Wrap" MaxWidth="60"
                                                                Foreground="{DynamicResource SemiColorText2}" />
@@ -779,11 +779,11 @@
                                                        Foreground="{DynamicResource SemiColorPrimary}"
                                                        IsVisible="{Binding SelectedSkillDemo, Converter={x:Static ObjectConverters.IsNotNull}}" />
                                             <!-- 技能说明 -->
-                                            <TextBlock Text="{Binding SelectedSkillDemo.Description}" FontSize="11.5"
+                                            <TextBlock Text="{Binding SelectedSkillDemo.Description}" FontSize="12"
                                                        TextWrapping="Wrap" MaxHeight="110"
                                                        Foreground="{DynamicResource SemiColorText2}"
                                                        IsVisible="{Binding SelectedSkillDemo.Description, Converter={StaticResource StringNotEmpty}}" />
-                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.ComboLabel}" FontSize="12.5"
+                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.ComboLabel}" FontSize="13"
                                                        FontWeight="Bold" Foreground="{DynamicResource SemiColorText2}"
                                                        Margin="0,4,0,0" />
                                             <TextBlock Text="{Binding ComboText}" FontSize="12" TextWrapping="Wrap"
@@ -868,10 +868,10 @@
                                                 <Border CornerRadius="4" Padding="4,0"
                                                         HorizontalAlignment="Right" VerticalAlignment="Top"
                                                         Margin="0,-2,-4,0"
-                                                        Background="#22C55E"
+                                                        Background="{DynamicResource McKuroSuccess}"
                                                         IsVisible="{Binding IsRecommended}">
                                                     <TextBlock Text="{loc:Localize Key=Roles.Guide.RecommendedBadge}"
-                                                               FontSize="9.5" FontWeight="Bold" Foreground="White" />
+                                                               FontSize="10" FontWeight="Bold" Foreground="White" />
                                                 </Border>
                                             </Grid>
                                             <Border Height="8" CornerRadius="4"
@@ -880,7 +880,7 @@
                                                        HorizontalAlignment="Center"
                                                        Foreground="{DynamicResource SemiColorText3}"
                                                        TextTrimming="CharacterEllipsis" MaxWidth="90" />
-                                            <TextBlock Text="{Binding Description}" FontSize="9.5"
+                                            <TextBlock Text="{Binding Description}" FontSize="10"
                                                        HorizontalAlignment="Center" TextAlignment="Center"
                                                        TextWrapping="Wrap" MaxWidth="110" MaxHeight="48"
                                                        Foreground="{DynamicResource SemiColorText3}"
@@ -923,7 +923,7 @@
                                     <Border CornerRadius="8" Background="{DynamicResource SemiColorBg3}" Padding="10,7" Margin="0,0,0,6"
                                             IsVisible="{Binding Title, Converter={StaticResource TitleEquals}, ConverterParameter={loc:Localize Key=Roles.Guide.PhantomTitle}}">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="Bold"
+                                            <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Bold"
                                                        Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center" />
                                             <TextBlock Text="{Binding Detail}" FontSize="12"
                                                        Foreground="{DynamicResource SemiColorText2}" VerticalAlignment="Center"
@@ -931,7 +931,7 @@
                                             <Border CornerRadius="5" Padding="6,1" VerticalAlignment="Center"
                                                     Background="{Binding StateMet, Converter={StaticResource RecommendStateBrush}}"
                                                     IsVisible="{Binding HasState}">
-                                                <TextBlock Text="{Binding State}" FontSize="10.5" FontWeight="Bold" Foreground="White" />
+                                                <TextBlock Text="{Binding State}" FontSize="11" FontWeight="Bold" Foreground="White" />
                                             </Border>
                                         </StackPanel>
                                     </Border>
@@ -966,9 +966,9 @@
                                                                    TextTrimming="CharacterEllipsis" MaxWidth="150" />
                                                         <!-- 攻略推荐声骸标识(仅 4C 判定) -->
                                                         <Border CornerRadius="5" Padding="6,1" VerticalAlignment="Center"
-                                                                Background="#22C55E"
+                                                                Background="{DynamicResource McKuroSuccess}"
                                                                 IsVisible="{Binding IsRecommendedPhantom}">
-                                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.RecommendedBadge}" FontSize="10.5"
+                                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.RecommendedBadge}" FontSize="11"
                                                                        FontWeight="Bold" Foreground="White" />
                                                         </Border>
                                                     </StackPanel>
@@ -989,9 +989,9 @@
                                                                    Foreground="{DynamicResource SemiColorText2}" />
                                                         <!-- 攻略推荐套装标识 -->
                                                         <Border CornerRadius="5" Padding="6,1" VerticalAlignment="Center"
-                                                                Background="#22C55E"
+                                                                Background="{DynamicResource McKuroSuccess}"
                                                                 IsVisible="{Binding IsRecommendedSet}">
-                                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.RecommendedBadge}" FontSize="10.5"
+                                                            <TextBlock Text="{loc:Localize Key=Roles.Guide.RecommendedBadge}" FontSize="11"
                                                                        FontWeight="Bold" Foreground="White" />
                                                         </Border>
                                                     </StackPanel>
@@ -1142,7 +1142,7 @@
                                                             <!-- 该推荐武器未拥有 -->
                                                             <TextBlock Text="{loc:Localize Key=Roles.Guide.NotOwned}" FontSize="10"
                                                                        HorizontalAlignment="Center"
-                                                                       Foreground="#E8A33D"
+                                                                       Foreground="{DynamicResource McKuroWarning}"
                                                                        IsVisible="{Binding WeaponNotOwned}" />
                                                         </StackPanel>
     
@@ -1162,7 +1162,7 @@
                                                                        HorizontalAlignment="Center" TextAlignment="Center"
                                                                        TextWrapping="Wrap" MaxWidth="92"
                                                                        TextTrimming="CharacterEllipsis" />
-                                                            <TextBlock Text="{Binding SetName}" FontSize="10.5"
+                                                            <TextBlock Text="{Binding SetName}" FontSize="11"
                                                                        HorizontalAlignment="Center" TextAlignment="Center"
                                                                        TextWrapping="Wrap" MaxWidth="92"
                                                                        Foreground="{DynamicResource SemiColorText3}"
@@ -1187,7 +1187,7 @@
                                                                         <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,1">
                                                                             <Border CornerRadius="4" Padding="5,0" MinWidth="20"
                                                                                     Background="{DynamicResource McKuroIconPlate}">
-                                                                                <TextBlock Text="{Binding Cost}" FontSize="10.5"
+                                                                                <TextBlock Text="{Binding Cost}" FontSize="11"
                                                                                            FontWeight="Bold" Foreground="White"
                                                                                            HorizontalAlignment="Center" />
                                                                             </Border>
@@ -1228,7 +1228,7 @@
                                                                                         Background="#B0000000"
                                                                                         IsVisible="{Binding NotOwned}">
                                                                                     <TextBlock Text="{loc:Localize Key=Roles.Guide.NotOwned}"
-                                                                                               FontSize="9.5" FontWeight="Bold" Foreground="White" />
+                                                                                               FontSize="10" FontWeight="Bold" Foreground="White" />
                                                                                 </Border>
                                                                             </Grid>
                                                                             <TextBlock Text="{Binding Name}" FontSize="10"

@@ -50,34 +50,34 @@
 .clnav__gkey { font-size: 14px; font-weight: 600; }
 .clnav__gcount {
   margin-left: auto; padding: 1px 9px; border-radius: 999px;
-  font-size: 11px; color: var(--ink-3); background: var(--accent-soft); white-space: nowrap;
+  font-size: 11px; color: var(--accent-ink); background: var(--accent-soft); white-space: nowrap;
 }
 .clnav__grpbody { display: grid; gap: 2px; padding: 4px 0 6px 14px; }
 .clnav__subgrp { display: grid; gap: 2px; margin-top: 5px; }
 .clnav__subgrp:first-child { margin-top: 0; }
 .clnav__sub {
   display: block; padding: 2px 10px 1px 6px;
-  font-size: 11.5px; font-weight: 600; letter-spacing: .04em; color: var(--ink-3);
+  font-size: 12px; font-weight: 600; letter-spacing: .04em; color: var(--ink-3);
 }
 /* a minor release (e.g. 1.3.7) heads its own level: a real link, distinct from patches */
 .clnav__sublink {
   display: inline-flex; align-items: center;
   padding: 4px 10px; border-radius: 999px;
-  font-size: 12.5px; font-weight: 600; color: var(--accent-ink); text-decoration: none;
+  font-size: 12px; font-weight: 600; color: var(--accent-ink); text-decoration: none;
   transition: color var(--t-hover) var(--ease), background var(--t-hover) var(--ease);
 }
-.clnav__sublink .mono { font-size: 12.5px; }
+.clnav__sublink .mono { font-size: 12px; }
 @media (hover: hover) and (pointer: fine) {
   .clnav__sublink:hover { background: var(--accent-soft); }
 }
 .clnav__link {
   display: block; padding: 4px 10px; border-radius: 999px;
-  font-size: 12.5px; color: var(--ink-2); text-decoration: none;
+  font-size: 12px; color: var(--ink-2); text-decoration: none;
   transition: color var(--t-hover) var(--ease), background var(--t-hover) var(--ease);
 }
 /* patch versions sit one level below their minor subheading */
 .clnav__subgrp .clnav__link { margin-left: 16px; }
-.clnav__link .mono { font-size: 12.5px; }
+.clnav__link .mono { font-size: 12px; }
 @media (hover: hover) and (pointer: fine) {
   .clnav__link:hover { color: var(--accent-ink); background: var(--accent-soft); }
 }
@@ -88,7 +88,7 @@
 @media (max-width: 900px) {
   .clwrap { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .clwrap__nav { position: static; }
-  .clnav__scroll { max-height: min(46vh, 420px); }
+  .clnav__scroll { max-height: min(32vh, 240px); }
   .cl { scroll-margin-top: 122px; }
 }
 
@@ -106,13 +106,15 @@
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   transition: background var(--t-hover) var(--ease);
 }
+.cl > summary:focus-visible,
+.clnav__grphead:focus-visible { outline-offset: -2px; }
 .cl > summary::-webkit-details-marker { display: none; }
 .cl[open] > summary { border-bottom: 1px solid var(--line); }
 .cl__ver {
   font-size: 17px; font-weight: 500; color: var(--accent-ink);
   letter-spacing: -.01em;
 }
-.cl__date { margin-left: auto; font-size: 12.5px; color: var(--ink-3); }
+.cl__date { margin-left: auto; font-size: 12px; color: var(--ink-3); }
 .cl > summary::after {
   content: ""; order: 3; width: 9px; height: 9px; margin-left: 4px; align-self: center;
   border-right: 2px solid var(--ink-3); border-bottom: 2px solid var(--ink-3);
@@ -128,9 +130,9 @@
 @media (max-width: 520px) {
   .cl > summary { padding: 15px 16px; gap: 10px; }
   .cl__ver { font-size: 16px; }
-  .cl__date { font-size: 11.5px; }
+  .cl__date { font-size: 12px; }
   .cl__body { padding: 10px 16px 16px; }
-  .cl__list li { font-size: 14.5px; padding-left: 16px; }
+  .cl__list li { font-size: 15px; padding-left: 16px; }
 }
 
 .cl__body { padding: 10px 20px 18px; }
@@ -148,12 +150,12 @@
 .cl__list li::before { content: ""; position: absolute; left: 4px; top: .62em; width: 5px; height: 5px; border-radius: 50%; background: var(--line-2); }
 .cl__list b { color: var(--ink); }
 .cl__list code {
-  font: 500 13.5px/1.5 var(--mono);
+  font: 500 14px/1.5 var(--mono);
   padding: 1px 6px; border-radius: 6px;
   background: rgba(27, 36, 51, .06); color: var(--ink);
 }
 .cl__list a { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
-.cl__foot { margin-top: 28px; text-align: center; color: var(--ink-2); font-size: 14.5px; }
+.cl__foot { margin-top: 28px; text-align: center; color: var(--ink-2); font-size: 15px; }
 .cl__link { color: var(--accent-ink); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---------- bilingual release notes ----------
@@ -191,13 +193,12 @@
 @media (hover: hover) and (pointer: fine) {
   .lang__btn[aria-pressed="false"]:hover { color: var(--ink); }
 }
-.lang__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* the per-release English block, as rendered for the no-JS / per-entry path */
 .cl__en { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
 .cl__en__sum {
   cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 0; color: var(--ink-2); font: 500 12.5px/1 var(--mono); letter-spacing: .04em;
+  padding: 4px 0; color: var(--ink-2); font: 500 12px/1 var(--mono); letter-spacing: .04em;
   text-transform: uppercase;
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
@@ -234,7 +235,7 @@
 
 @media (max-width: 520px) {
   .cl__bar { margin-bottom: 10px; }
-  .lang__btn { padding: 6px 12px; font-size: 12.5px; }
+  .lang__btn { padding: 6px 12px; font-size: 12px; }
 }
 
 

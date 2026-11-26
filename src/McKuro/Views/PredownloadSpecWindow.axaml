@@ -41,7 +41,7 @@
                  Foreground="{DynamicResource SemiColorText0}"
                  Text="{loc:Localize Key=Launcher.PredownloadSpecTitle}" />
 
-      <TextBlock TextWrapping="Wrap" LineHeight="19" FontSize="12.5"
+      <TextBlock TextWrapping="Wrap" LineHeight="19" FontSize="13"
                  Foreground="{DynamicResource SemiColorText1}"
                  Text="{loc:Localize Key=Launcher.PredownloadSpecNotice}" />
 
@@ -101,7 +101,7 @@
         </StackPanel>
       </Border>
 
-      <TextBlock TextWrapping="Wrap" LineHeight="17" FontSize="11.5"
+      <TextBlock TextWrapping="Wrap" LineHeight="17" FontSize="12"
                  Foreground="{DynamicResource SemiColorText3}"
                  Text="{loc:Localize Key=Launcher.PredownloadSpecMemoryHint}" />
 

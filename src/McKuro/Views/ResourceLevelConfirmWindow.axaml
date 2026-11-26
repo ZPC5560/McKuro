@@ -17,13 +17,13 @@
        取消=强调蓝,#5A8DEE;下载并切换=绿色,与启动页「启动游戏」按钮同款 #52C41A。 -->
   <Window.Styles>
     <Style Selector="Button.dlgCancel">
-      <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Padding" Value="18,8" />
     </Style>
 
     <Style Selector="Button.dlgConfirm">
-      <Setter Property="Foreground" Value="#52C41A" />
+      <Setter Property="Foreground" Value="{DynamicResource McKuroSuccess}" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Padding" Value="18,8" />
     </Style>

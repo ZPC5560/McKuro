@@ -47,6 +47,29 @@
   --t-reveal: 620ms;
 
   --wrap: 1180px;
+
+  /* supplemental semantic + layout tokens (added during UI audit; existing rules keep their
+     local values, new components and the consolidated rules below reference these) */
+  --accent-ink-hover: #2350AB;
+  --surface-2: #F7F9FC;
+  --surface-bar: #F2F5F9;
+  --fill-subtle: rgba(27, 36, 51, .06);
+  --ok-soft: #E3F2DA;
+  --ok-ink: #276E10;
+  --warn-soft: #FBEBD6;
+  --warn-ink: #8F5300;
+
+  /* radius buckets: --r-xs 6px, --r-sm 10px, --r-md 12px, --r 14px, --r-lg 20px, --r-xl 32px */
+  --r-xs: 6px;
+  --r-md: 12px;
+
+  /* 4px spacing grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 32px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -118,8 +141,8 @@ b { font-weight: 600; }
   border-radius: 999px; font: 500 12px/1 var(--sans);
   background: rgba(27, 36, 51, .06); color: var(--ink-2); white-space: nowrap;
 }
-.tag--up { background: #E3F2DA; color: #276E10; }
-.tag--off { background: #FBEBD6; color: #8F5300; }
+.tag--up { background: var(--ok-soft); color: var(--ok-ink); }
+.tag--off { background: var(--warn-soft); color: var(--warn-ink); }
 .tag--keep { background: var(--accent-soft); color: var(--accent-ink); }
 
 /* ---------------------------------------------------------------------------
