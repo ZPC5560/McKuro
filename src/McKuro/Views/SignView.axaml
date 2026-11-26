@@ -169,7 +169,7 @@
 
         <!-- 角色列表(置于签到奖励之上,用户口径:「账号列表应该在签到奖励的上面」) -->
         <Grid Grid.Row="2" Margin="20,0,20,10" IsVisible="{Binding IsLoggedIn}">
-            <ListBox ItemsSource="{Binding Roles}" Background="Transparent" BorderThickness="0">
+            <ListBox ItemsSource="{Binding Roles}" Background="Transparent" BorderThickness="0" MaxHeight="260">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:RoleSignItem">
                         <Border CornerRadius="10" Padding="12,8" Margin="0,0,0,8"

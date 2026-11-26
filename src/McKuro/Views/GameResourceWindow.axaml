@@ -97,7 +97,7 @@
                      FontSize="16" FontWeight="Bold"
                      Foreground="{DynamicResource SemiColorText0}" />
           <!-- 第二行是游戏目录本身:用户最常问的"你看的是哪个目录"在这里一次答清 -->
-          <TextBlock Text="{Binding GameRootDisplay}" FontSize="11.5"
+          <TextBlock Text="{Binding GameRootDisplay}" FontSize="12"
                      Foreground="{DynamicResource SemiColorText3}"
                      TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
         </StackPanel>
@@ -131,7 +131,7 @@
                                  VerticalAlignment="Center"
                                  ForegroundBrush="{DynamicResource SemiColorPrimary}"
                                  TrackBrush="{DynamicResource McKuroChartBaseline}" />
-          <TextBlock Text="{Binding ScanStatusText}" FontSize="11.5"
+          <TextBlock Text="{Binding ScanStatusText}" FontSize="12"
                      VerticalAlignment="Center"
                      Foreground="{DynamicResource SemiColorText2}" />
         </StackPanel>
@@ -222,7 +222,7 @@
               <TextBlock Text="{loc:Localize Key=Launcher.Resource.PredownloadDetailTitle}"
                          FontSize="12" FontWeight="SemiBold"
                          Foreground="{DynamicResource SemiColorText2}" />
-              <TextBlock Text="{Binding PredownloadDetailText}" FontSize="11.5"
+              <TextBlock Text="{Binding PredownloadDetailText}" FontSize="12"
                          TextWrapping="Wrap" LineHeight="17"
                          Foreground="{DynamicResource SemiColorText3}" />
             </StackPanel>
@@ -257,7 +257,7 @@
                                    Foreground="{DynamicResource SemiColorText0}" />
                         <!-- 体积 0 的那类不给"0 B"这种噪声,改成一句弱提示 -->
                         <TextBlock Text="{loc:Localize Key=Launcher.Resource.EmptyTag}"
-                                   FontSize="10.5" VerticalAlignment="Center"
+                                   FontSize="11" VerticalAlignment="Center"
                                    Foreground="{DynamicResource SemiColorText3}"
                                    IsVisible="{Binding IsEmpty}" />
                       </StackPanel>
@@ -267,7 +267,7 @@
                     </StackPanel>
                     <StackPanel Grid.Column="2" Spacing="1" VerticalAlignment="Center"
                                 HorizontalAlignment="Right">
-                      <TextBlock Text="{Binding SizeText}" FontSize="13.5" FontWeight="Bold"
+                      <TextBlock Text="{Binding SizeText}" FontSize="14" FontWeight="Bold"
                                  HorizontalAlignment="Right" FontFeatures="tnum"
                                  Foreground="{DynamicResource SemiColorText1}" />
                       <TextBlock Text="{Binding ShareText}" FontSize="11"

@@ -1,6 +1,6 @@
 
 /* ---------- modules ---------- */
-.mods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.mods { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
 .mod {
   display: flex; gap: 14px; align-items: flex-start; padding: 20px;
   border-radius: var(--r-lg); background: rgba(255, 255, 255, .62);
@@ -11,7 +11,7 @@
   .mod:hover { background: #fff; transform: translateY(-2px); box-shadow: 0 0 0 1px var(--line), var(--shadow); }
 }
 .mod--wide { grid-column: span 3; }
-.mod--wide:nth-child(2) { grid-column: span 3; }
+.mod:not(.mod--wide) { grid-column: span 2; }
 .mod__ico {
   display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 13px;
   background: #fff; color: var(--accent-ink);
@@ -81,7 +81,8 @@
 @media (max-width: 1100px) {
   /* two-up: a card is ~520px wide here, so the wide module cards only need span 2 */
   .mods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .mod--wide, .mod--wide:nth-child(2) { grid-column: span 2; }
+  .mod--wide { grid-column: span 2; }
+  .mod--wide:nth-child(2) { grid-column: span 1; }
 
   /* Sized for the 1180px wrap, so below that the outer pair bleeds off the section edge by
      more than it should (at 1000px the leftmost card was a 10px sliver). Shrink the whole
@@ -141,7 +142,7 @@
      paragraph at 8-10 characters a line. Full width is the only readable option here. */
   .looks, .steps { grid-template-columns: 1fr; }
   .mod { padding: 16px; }
-  .mod p { font-size: 13.5px; line-height: 1.7; }
+  .mod p { font-size: 14px; line-height: 1.7; }
   .look { padding: 64px 0 60px; }
   /* one window, centred and never cropped: --i:0 makes the card transform an identity matrix,
      so a 300px window is the widest thing this 342px wrap can hold with margin to spare. */

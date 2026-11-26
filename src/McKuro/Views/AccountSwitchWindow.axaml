@@ -93,12 +93,12 @@
                  Foreground="{DynamicResource SemiColorText2}" TextWrapping="Wrap"
                  IsVisible="{Binding ShowRefreshOk}" />
       <TextBlock Text="{Binding RefreshStatus}" FontSize="12" Margin="0,-4,0,0"
-                 Foreground="#F59E0B" TextWrapping="Wrap"
+                 Foreground="{DynamicResource McKuroWarning}" TextWrapping="Wrap"
                  IsVisible="{Binding ShowRefreshFailed}" />
 
       <!-- 空态提示(没有可切换的本地账号时) -->
       <TextBlock x:Name="EmptyText" Text="{loc:Localize Key=Home.AccountEmpty}"
-                 FontSize="12.5" TextWrapping="Wrap" LineHeight="19"
+                 FontSize="13" TextWrapping="Wrap" LineHeight="19"
                  IsVisible="False"
                  Foreground="{DynamicResource SemiColorText2}" />
 
@@ -114,7 +114,7 @@
                   <StackPanel Spacing="3">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                       <!-- 主行:China - 库街区UID - 游戏角色昵称(昵称由库街区角色接口异步补全) -->
-                      <TextBlock Text="{Binding Display}" FontSize="13.5" FontWeight="Bold"
+                      <TextBlock Text="{Binding Display}" FontSize="14" FontWeight="Bold"
                                  TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                       <TextBlock Text="{loc:Localize Key=Home.AccountCurrent}" FontSize="11"
                                  Classes="sub" VerticalAlignment="Center"

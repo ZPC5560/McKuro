@@ -17,12 +17,12 @@
        而是"点下去之后才要想"的一次性决策。 -->
   <Window.Styles>
     <Style Selector="Button.dlgCancel">
-      <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+      <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Padding" Value="18,8" />
     </Style>
     <Style Selector="Button.dlgDanger">
-      <Setter Property="Foreground" Value="{DynamicResource McKuroWarning}" />
+      <Setter Property="Foreground" Value="{DynamicResource McKuroDanger}" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Padding" Value="18,8" />
     </Style>

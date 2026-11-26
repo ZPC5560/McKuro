@@ -50,7 +50,7 @@
                         </Grid>
                     </Border>
                     <StackPanel Margin="12,10" Spacing="4">
-                        <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="Bold"
+                        <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Bold"
                                    TextWrapping="Wrap" MaxLines="2" MinHeight="38"
                                    TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="{Binding DateText}" FontSize="11"
@@ -73,7 +73,7 @@
                         </Grid>
                     </Border>
                     <StackPanel Margin="12,10" Spacing="4">
-                        <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="Bold"
+                        <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Bold"
                                    TextWrapping="Wrap" MaxLines="2" MinHeight="38"
                                    TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="{Binding TimeText}" FontSize="11"
@@ -175,9 +175,9 @@
                                         CommandParameter="{Binding Url}">
                                     <Grid>
                                         <StackPanel Spacing="1" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="Bold"
+                                            <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="Bold"
                                                        TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding Description}" FontSize="9.5"
+                                            <TextBlock Text="{Binding Description}" FontSize="10"
                                                        Foreground="{DynamicResource SemiColorText3}"
                                                        TextTrimming="CharacterEllipsis" />
                                         </StackPanel>

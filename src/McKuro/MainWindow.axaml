@@ -87,7 +87,7 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
         <Style Selector="Button.winBtn:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#22FFFFFF" />
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
         </Style>
         <Style Selector="Button.winBtn.winClose:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource McKuroDanger}" />
@@ -104,10 +104,10 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
         <Style Selector="Button.titleLogo:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#22FFFFFF" />
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
         </Style>
         <Style Selector="Button.titleLogo.pinned /template/ ContentPresenter">
-            <Setter Property="Background" Value="#335A8DEE" />
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipSelectedFill}" />
             <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccent}" />
             <Setter Property="BorderThickness" Value="1" />
         </Style>
@@ -122,7 +122,7 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
         <Style Selector="Button.navAvatar:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#22FFFFFF" />
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
         </Style>
         <Style Selector="Border.avatarFrame">
             <Setter Property="Background" Value="#33FFFFFF" />
@@ -313,7 +313,7 @@
                                 <Setter Property="Background" Value="Transparent" />
                             </Style>
                             <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-                                <Setter Property="Background" Value="#1EFFFFFF" />
+                                <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
                                 <Setter Property="CornerRadius" Value="12" />
                             </Style>
                         </ListBox.Styles>

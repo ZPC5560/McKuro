@@ -348,7 +348,7 @@
                                                    VerticalAlignment="Bottom" Margin="0,0,0,4" />
                                     </StackPanel>
                                     <TextBlock Grid.Column="2" Text="{Binding PeakSpeedText}"
-                                               FontSize="10.5"
+                                               FontSize="11"
                                                Foreground="{DynamicResource SemiColorText2}"
                                                VerticalAlignment="Bottom" Margin="0,0,0,5" />
                                 </Grid>
@@ -386,7 +386,7 @@
                                                    Foreground="{DynamicResource SemiColorText2}"
                                                    TextTrimming="CharacterEllipsis"
                                                    TextWrapping="NoWrap" />
-                                        <TextBlock Grid.Row="1" Text="{Binding ProgressSubText}" FontSize="10.5"
+                                        <TextBlock Grid.Row="1" Text="{Binding ProgressSubText}" FontSize="11"
                                                    Foreground="{DynamicResource SemiColorText3}"
                                                    TextTrimming="CharacterEllipsis"
                                                    TextWrapping="NoWrap"
@@ -658,8 +658,7 @@
                             Command="{Binding TopUpResourcesCommand}"
                             IsEnabled="{Binding CanStartOperation}"
                             IsVisible="{Binding ShowTopUpButton}"
-                            HorizontalAlignment="Stretch"
-                            Margin="0,0,8,0">
+                            HorizontalAlignment="Stretch">
                         <Button.Styles>
                             <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
                                 <Setter Property="Background" Value="#353B48" />
@@ -718,6 +717,16 @@
                             IsEnabled="{Binding CanStartOperation}"
                             IsVisible="{Binding ShowInstallUpdate}"
                             HorizontalAlignment="Stretch">
+                        <Button.Styles>
+                            <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                <Setter Property="Background" Value="#D4881F" />
+                                <Setter Property="Opacity" Value="1" />
+                            </Style>
+                            <Style Selector="Button:pointerover">
+                                <Setter Property="Background" Value="#D4881F" />
+                                <Setter Property="Opacity" Value="1" />
+                            </Style>
+                        </Button.Styles>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" VerticalAlignment="Center">
                             <TextBlock Text="{loc:Localize Key=Launcher.InstallUpdate}" FontSize="15" FontWeight="Bold"
                                        VerticalAlignment="Center" />

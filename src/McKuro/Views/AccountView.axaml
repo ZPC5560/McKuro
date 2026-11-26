@@ -41,7 +41,7 @@
         </Style>
     </UserControl.Styles>
     <ScrollViewer>
-        <StackPanel Margin="25" Spacing="12" MaxWidth="820" HorizontalAlignment="Left">
+        <StackPanel Margin="20,16" Spacing="12" MaxWidth="960">
             <!-- 标题(右侧:同一账号判定徽标,自动判定仅提醒不强制登出) -->
             <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -54,17 +54,17 @@
                 <Grid Grid.Column="1" VerticalAlignment="Center"
                       ToolTip.Tip="{Binding SameAccountStatus}">
                     <!-- 同一账号(绿色=正常) -->
-                    <Border CornerRadius="8" Padding="10,4" Background="#22C55E" IsVisible="{Binding SameAccountIsSame}">
+                    <Border CornerRadius="8" Padding="10,4" Background="{DynamicResource McKuroSuccess}" IsVisible="{Binding SameAccountIsSame}">
                         <TextBlock Text="{Binding SameAccountStatus}" FontSize="12" Foreground="White"
                                    MaxWidth="320" TextTrimming="CharacterEllipsis" />
                     </Border>
                     <!-- 不同账号(警示色) -->
-                    <Border CornerRadius="8" Padding="10,4" Background="#B98900" IsVisible="{Binding SameAccountIsDifferent}">
+                    <Border CornerRadius="8" Padding="10,4" Background="{DynamicResource McKuroWarning}" IsVisible="{Binding SameAccountIsDifferent}">
                         <TextBlock Text="{Binding SameAccountStatus}" FontSize="12" Foreground="White"
                                    MaxWidth="320" TextTrimming="CharacterEllipsis" />
                     </Border>
                     <!-- 有接口登录态已失效(橙色:优先于"同一账号",提示需重新登录) -->
-                    <Border CornerRadius="8" Padding="10,4" Background="#E08A00" IsVisible="{Binding SameAccountIsSessionExpired}">
+                    <Border CornerRadius="8" Padding="10,4" Background="{DynamicResource McKuroWarning}" IsVisible="{Binding SameAccountIsSessionExpired}">
                         <TextBlock Text="{Binding SameAccountStatus}" FontSize="12" Foreground="White"
                                    MaxWidth="320" TextTrimming="CharacterEllipsis" />
                     </Border>
@@ -153,7 +153,7 @@
                     <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="20,18"
                             IsVisible="{Binding IsKuroLoginOpen}">
                         <StackPanel Spacing="14">
-                            <TextBlock Text="{loc:Localize Key=Account.KuroLoginPanel}" FontSize="12.5"
+                            <TextBlock Text="{loc:Localize Key=Account.KuroLoginPanel}" FontSize="13"
                                        Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
                             <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
                                 <StackPanel Spacing="7">
@@ -249,7 +249,7 @@
                     <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="20,18"
                             IsVisible="{Binding IsCloudLoginOpen}">
                         <StackPanel Spacing="14">
-                            <TextBlock Text="{loc:Localize Key=Account.CloudLoginPanel}" FontSize="12.5"
+                            <TextBlock Text="{loc:Localize Key=Account.CloudLoginPanel}" FontSize="13"
                                        Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
                             <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
                                 <StackPanel Spacing="7">
@@ -336,7 +336,7 @@
                     <Border CornerRadius="10" Background="{DynamicResource SemiColorBg3}" Padding="20,18"
                             IsVisible="{Binding IsGuideLoginOpen}">
                         <StackPanel Spacing="14">
-                            <TextBlock Text="{loc:Localize Key=Account.GuideLoginPanel}" FontSize="12.5"
+                            <TextBlock Text="{loc:Localize Key=Account.GuideLoginPanel}" FontSize="13"
                                        Foreground="{DynamicResource SemiColorText3}" TextWrapping="Wrap" />
                             <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
                                 <StackPanel Spacing="7">
