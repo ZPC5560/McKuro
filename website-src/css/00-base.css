@@ -90,6 +90,11 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 ul, ol, dl, dd { margin: 0; padding: 0; list-style: none; }
 button { font: inherit; color: inherit; }
 b { font-weight: 600; }
+code {
+  font: 500 14px/1.5 var(--mono);
+  padding: 1px 6px; border-radius: 6px;
+  background: var(--fill-subtle); color: var(--ink);
+}
 .mono { font-family: var(--mono); font-feature-settings: "tnum" 1; letter-spacing: 0; }
 .sr {
   position: absolute !important; width: 1px; height: 1px; overflow: hidden;

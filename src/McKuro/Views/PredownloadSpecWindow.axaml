@@ -37,7 +37,7 @@
 
   <Border Padding="22" Background="{DynamicResource SemiColorBg1}">
     <StackPanel Spacing="14">
-      <TextBlock FontSize="17" FontWeight="Bold"
+      <TextBlock FontSize="16" FontWeight="Bold"
                  Foreground="{DynamicResource SemiColorText0}"
                  Text="{loc:Localize Key=Launcher.PredownloadSpecTitle}" />
 
