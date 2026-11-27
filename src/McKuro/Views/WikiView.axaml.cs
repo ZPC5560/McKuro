@@ -159,6 +159,7 @@ public partial class WikiView : UserControl
             or nameof(WikiViewModel.CurrentBanner))
         {
             UpdateVideoOverlay();
+            UpdateBannerHeight();
         }
     }
 
@@ -179,13 +180,13 @@ public partial class WikiView : UserControl
 
     private void OnBannerHostSizeChanged(object? sender, SizeChangedEventArgs e) => UpdateBannerHeight();
 
-    /// <summary>视频区高度:直接视频按显示比例、B站嵌入按 16:9、图片保持默认 220;
+    /// <summary>视频区高度:直接视频按显示比例、B站/YouTube 网页嵌入按 16:9、图片保持默认 220;
     /// 右列总高跟随左列(整体高度绑定),官方资讯区填满视频以下剩余空间。</summary>
     private void UpdateBannerHeight()
     {
         var vm = DataContext as WikiViewModel;
         double? aspect = vm?.CurrentBannerIsDirectVideo == true ? _videoAspect
-            : vm?.CurrentBannerIsBili == true ? 16.0 / 9.0
+            : vm?.CurrentBannerIsWebVideo == true ? 16.0 / 9.0
             : null;
         if (aspect is null or <= 0 || BannerHost.Bounds.Width <= 0)
         {

@@ -18,7 +18,8 @@
              直接压在视频上的用不随主题翻转的 McKuroTextOnVideo + VideoTextChrome 反向投影阴影。 -->
         <Style Selector="Button.mcChrome">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource McKuroTextOnWallpaper}" />
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="RenderTransform" Value="scale(1)" />
@@ -37,7 +38,6 @@
         </Style>
         <Style Selector="Button.mcChrome:focus-visible">
             <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccent}" />
-            <Setter Property="BorderThickness" Value="1.5" />
         </Style>
         <Style Selector="Button.mcChrome ic|FluentIcon">
             <Setter Property="Opacity" Value="0.72" />
@@ -55,7 +55,9 @@
              供启动页「画质怎么选」等文字链接入口复用,避免各处重复内联背景/边框属性。 -->
         <Style Selector="Button.mcLink">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="4" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
             <Setter Property="Transitions">
@@ -76,6 +78,13 @@
         </Style>
         <Style Selector="Button.mcLink:pressed">
             <Setter Property="Opacity" Value="0.75" />
+        </Style>
+        <Style Selector="Button.mcLink:focus-visible">
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccent}" />
+            <Setter Property="Foreground" Value="{DynamicResource McKuroAccentHover}" />
+        </Style>
+        <Style Selector="Button.mcLink:focus-visible TextBlock">
+            <Setter Property="TextDecorations" Value="Underline" />
         </Style>
 
         <!-- 全站统一的「浮层面板」材质:启动页功能菜单、资源等级展开面板、账号切换弹窗、
@@ -308,10 +317,7 @@
             <!-- 动效令牌（与官网 00-base.css 节奏对齐） -->
             <sys:TimeSpan x:Key="McKuroMotionPressDuration">0:0:0.12</sys:TimeSpan>
             <sys:TimeSpan x:Key="McKuroMotionHoverDuration">0:0:0.18</sys:TimeSpan>
-            <sys:TimeSpan x:Key="McKuroMotionUiDuration">0:0:0.24</sys:TimeSpan>
             <sys:TimeSpan x:Key="McKuroMotionRevealDuration">0:0:0.60</sys:TimeSpan>
-            <x:Double x:Key="McKuroMotionPressScale">0.97</x:Double>
-            <x:Double x:Key="McKuroMotionPageOffsetY">10</x:Double>
             <CubicEaseOut x:Key="McKuroEaseEnter" />
         </ResourceDictionary>
     </Application.Resources>

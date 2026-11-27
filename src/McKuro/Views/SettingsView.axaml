@@ -67,11 +67,12 @@
         </Style>
         <!-- 横向分类菜单项:未选中为弱化文字,选中为强调色胶囊 -->
         <Style Selector="Button.categoryTab">
-            <Setter Property="Padding" Value="12,7" />
+            <Setter Property="Padding" Value="10.5,5.5" />
             <Setter Property="CornerRadius" Value="9" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
-            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="RenderTransform" Value="scale(1)" />
@@ -91,7 +92,6 @@
         </Style>
         <Style Selector="Button.categoryTab:focus-visible">
             <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccent}" />
-            <Setter Property="BorderThickness" Value="1.5" />
         </Style>
         <Style Selector="Button.categoryTab.selected">
             <Setter Property="Background" Value="{DynamicResource McKuroAccent}" />
@@ -109,11 +109,12 @@
         </Style>
         <!-- 左侧二级子标签 -->
         <Style Selector="Button.subTab">
-            <Setter Property="Padding" Value="11,8" />
+            <Setter Property="Padding" Value="9.5,6.5" />
             <Setter Property="CornerRadius" Value="8" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
-            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
@@ -134,7 +135,6 @@
         </Style>
         <Style Selector="Button.subTab:focus-visible">
             <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccent}" />
-            <Setter Property="BorderThickness" Value="1.5" />
         </Style>
         <Style Selector="Button.subTab.selected">
             <Setter Property="Background" Value="{DynamicResource SemiColorBg3}" />

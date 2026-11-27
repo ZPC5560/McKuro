@@ -298,14 +298,24 @@ public sealed class VideoBackgroundControl : Grid
     public void TogglePause()
     {
         bool shouldRebuild = false;
+        bool shouldPause = false;
         lock (_sync)
         {
             if (_mpv is null)
             {
-                shouldRebuild = (_reachedEnd || _userPaused)
-                    && _attached
-                    && IsVideoEnabled
-                    && !string.IsNullOrWhiteSpace(VideoUrl);
+                if (_reachedEnd || _userPaused)
+                {
+                    if (_suspended)
+                    {
+                        // 挂起态下只复位暂停/结束标志,不新建会话(交由解除挂起后按正常流程恢复)
+                        _reachedEnd = false;
+                        _userPaused = false;
+                        return;
+                    }
+                    shouldRebuild = _attached
+                        && IsVideoEnabled
+                        && !string.IsNullOrWhiteSpace(VideoUrl);
+                }
             }
             else
             {
@@ -330,6 +340,12 @@ public sealed class VideoBackgroundControl : Grid
                         IsPlaying = !_suspended;
                         return;
                     }
+                    if (!_firstFrameShown)
+                    {
+                        // 首帧尚未到达的加载会话(正在下载/初始化):不得误触暂停销毁
+                        return;
+                    }
+                    shouldPause = true;
                 }
                 catch (Exception)
                 {
@@ -344,7 +360,7 @@ public sealed class VideoBackgroundControl : Grid
             ScheduleStartRetry();
             return;
         }
-        if (_mpv is not null)
+        if (shouldPause)
         {
             Pause();
         }
@@ -353,14 +369,18 @@ public sealed class VideoBackgroundControl : Grid
     /// <summary>显式暂停并释放当前 mpv 会话(无视频/未初始化时为空操作)。</summary>
     public void Pause()
     {
-        if (_mpv is null || _userPaused)
+        lock (_sync)
         {
-            return;
+            if (_mpv is null || _userPaused)
+            {
+                return;
+            }
+            _userPaused = true;
+            IsPlaying = false;
+            CancelSuspendRelease();
+            Interlocked.Increment(ref _imageGeneration);
+            DisposePlayer();
         }
-        _userPaused = true;
-        IsPlaying = false;
-        _imageGeneration = Interlocked.Increment(ref _imageGeneration);
-        DisposePlayer();
     }
 
     /// <summary>显式继续播放(挂起中不真正恢复;已播完或已释放则重建会话)。</summary>
@@ -371,10 +391,18 @@ public sealed class VideoBackgroundControl : Grid
         {
             if (_mpv is null)
             {
-                shouldRebuild = (_reachedEnd || _userPaused)
-                    && _attached
-                    && IsVideoEnabled
-                    && !string.IsNullOrWhiteSpace(VideoUrl);
+                if (_reachedEnd || _userPaused)
+                {
+                    if (_suspended)
+                    {
+                        _reachedEnd = false;
+                        _userPaused = false;
+                        return;
+                    }
+                    shouldRebuild = _attached
+                        && IsVideoEnabled
+                        && !string.IsNullOrWhiteSpace(VideoUrl);
+                }
             }
             else
             {
@@ -414,6 +442,12 @@ public sealed class VideoBackgroundControl : Grid
         {
             if (_mpv is null)
             {
+                if (_suspended)
+                {
+                    _reachedEnd = false;
+                    _userPaused = false;
+                    return;
+                }
                 shouldRebuild = _attached
                     && IsVideoEnabled
                     && !string.IsNullOrWhiteSpace(VideoUrl);
@@ -856,7 +890,7 @@ public sealed class VideoBackgroundControl : Grid
         // 等游戏结束(状态回 Idle → UpdateSuspendState)再按视频开关正常重建。
         if (AppServices.GameMonitor.State != GameSessionState.Idle)
         {
-            _imageGeneration = Interlocked.Increment(ref _imageGeneration);
+            Interlocked.Increment(ref _imageGeneration);
             DisposePlayer();
             _disposed = false;
             RefreshRenderWidthCap();
@@ -868,7 +902,7 @@ public sealed class VideoBackgroundControl : Grid
         // 先自增 generation 再销毁旧会话:旧 mpv 在 Dispose 中(同步或异步)触发的
         // EndFile/Stop 回调进来时 Stale(旧 gen) 必然成立,不会污染新会话状态。
         // (此前顺序相反:DisposePlayer 与自增之间回调可穿过 _disposed=false + 旧 gen 的窗口)
-        _imageGeneration = Interlocked.Increment(ref _imageGeneration);
+        Interlocked.Increment(ref _imageGeneration);
         DisposePlayer();
         _disposed = false;
         var gen = Generation; // 本会话代号:所有异步回调以此判断是否已过期(见 Stale)
@@ -955,7 +989,7 @@ public sealed class VideoBackgroundControl : Grid
                         _reachedEnd = true;
                         _userPaused = false;
                         IsPlaying = false;
-                        _imageGeneration = Interlocked.Increment(ref _imageGeneration);
+                        Interlocked.Increment(ref _imageGeneration);
                         DisposePlayer();
                         PlaybackEnded?.Invoke(this, EventArgs.Empty);
                     }, DispatcherPriority.Background);

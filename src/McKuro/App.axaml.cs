@@ -32,7 +32,10 @@ public partial class App : Application
     /// <see cref="AccountLoginStateLogic.ProbeKuroSession"/> 三态判定,不另造一套逻辑。
     /// </para>
     /// </summary>
-    private static async Task PrewarmWhenKuroSessionExpiredAsync()
+    /// <summary>启动期预热校验等待出口 IP 探测完成的上限(避免缺 IP 头触发风控误判)。</summary>
+    private static readonly TimeSpan PrewarmNetworkInitTimeout = TimeSpan.FromSeconds(5);
+
+    private static async Task PrewarmWhenKuroSessionExpiredAsync(Task? networkInit)
     {
         try
         {
@@ -41,6 +44,11 @@ public partial class App : Application
             {
                 // 无当前账号:不在启动阶段预热,首次打开极验窗口时按需冷创建
                 return;
+            }
+
+            if (networkInit is not null)
+            {
+                await Task.WhenAny(networkInit, Task.Delay(PrewarmNetworkInitTimeout)).ConfigureAwait(false);
             }
 
             var gamer = await AppServices.Kuro
@@ -97,16 +105,16 @@ public partial class App : Application
             McKuro.Core.Services.Update.UpdateCacheMaintenance.DefaultDirectory(AppServices.AppDataDir),
             DateTime.UtcNow));
 
+        // 异步探测出口 IP(数据中心 Devcode 头需要;避免库街区风控)
+        // 预热校验与提醒首轮会等它完成(带上限),确保库街区接口的 ip 头不为空
+        var networkInit = AppServices.Kuro.InitAsync();
+
         // WebView2 环境预热:启动阶段不做无条件预热,仅在库街区会话校验被服务端明确拒绝(Rejected)后
         // 才在 UI 线程预热;无账号或网络异常/超时(无法判定)均不预热,首次打开极验窗口时按需冷创建。
         if (AppServices.KuroAccounts.Current is not null)
         {
-            _ = PrewarmWhenKuroSessionExpiredAsync();
+            _ = PrewarmWhenKuroSessionExpiredAsync(networkInit);
         }
-
-        // 异步探测出口 IP(数据中心 Devcode 头需要;避免库街区风控)
-        // 提醒首轮会等它完成(带上限),确保库街区接口的 ip 头不为空
-        var networkInit = AppServices.Kuro.InitAsync();
 
         // 界面语言(重启后生效;首次启动默认 zh-Hans)
         LanguageService.Load(AppServices.Settings.Current.Language);
