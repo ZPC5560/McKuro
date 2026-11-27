@@ -8,27 +8,28 @@
         Title="{loc:Localize Key=Geetest.Title}"
         Width="500" Height="520"
         CanResize="False"
-        WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource McKuroDialogSurface}">
+        WindowStartupLocation="CenterOwner">
   <!-- 应用内极验验证窗口:WebView 控件由代码后置按平台选择
        (macOS=WkWebViewControl,Windows=WebView2Control),验证结果仍走本地 HTTP 回调,
        页面自身负责状态提示。 -->
-  <Panel>
-    <ContentPresenter x:Name="WebViewHost" />
-    <!-- 加载遮罩:WebView2 冷启动(环境 + 浏览器子进程 + 页面)期间盖住黑屏,渲染子窗口出现后淡出 -->
-    <Panel x:Name="LoadingOverlay" Background="{DynamicResource McKuroDialogSurface}" ZIndex="10">
-      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
-        <!-- 自绘旋转加载环:不依赖主题样式,旋转动画在代码后置驱动 -->
-        <TextBlock x:Name="SpinnerGlyph" Text="◐" FontSize="34" Foreground="{DynamicResource McKuroAccent}" HorizontalAlignment="Center">
-          <TextBlock.RenderTransform>
-            <RotateTransform />
-          </TextBlock.RenderTransform>
-        </TextBlock>
-        <TextBlock x:Name="LoadingText" Text="{loc:Localize Key=Geetest.Loading}" FontSize="14" Foreground="{DynamicResource SemiColorText1}"
-                   HorizontalAlignment="Center" />
-        <TextBlock x:Name="LoadingSub" Text="{loc:Localize Key=Geetest.LoadingSub}" FontSize="12" Foreground="{DynamicResource SemiColorText2}"
-                   HorizontalAlignment="Center" />
-      </StackPanel>
+  <Border Classes="mcPanel">
+    <Panel>
+      <ContentPresenter x:Name="WebViewHost" />
+      <!-- 加载遮罩:WebView2 冷启动(环境 + 浏览器子进程 + 页面)期间盖住黑屏,渲染子窗口出现后淡出 -->
+      <Panel x:Name="LoadingOverlay" ZIndex="10">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
+          <!-- 自绘旋转加载环:不依赖主题样式,旋转动画在代码后置驱动 -->
+          <TextBlock x:Name="SpinnerGlyph" Text="◐" FontSize="34" Foreground="{DynamicResource McKuroAccent}" HorizontalAlignment="Center">
+            <TextBlock.RenderTransform>
+              <RotateTransform />
+            </TextBlock.RenderTransform>
+          </TextBlock>
+          <TextBlock x:Name="LoadingText" Text="{loc:Localize Key=Geetest.Loading}" FontSize="14" Foreground="{DynamicResource SemiColorText1}"
+                     HorizontalAlignment="Center" />
+          <TextBlock x:Name="LoadingSub" Text="{loc:Localize Key=Geetest.LoadingSub}" FontSize="12" Foreground="{DynamicResource SemiColorText2}"
+                     HorizontalAlignment="Center" />
+        </StackPanel>
+      </Panel>
     </Panel>
-  </Panel>
+  </Border>
 </Window>

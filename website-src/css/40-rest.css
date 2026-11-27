@@ -17,10 +17,10 @@
    the claim it is qualifying. */
 .ptable .muted { color: var(--ink-3); font-size: 12px; }
 .chain { padding: 24px; border-radius: var(--r-lg); background: rgba(255, 255, 255, .7); border: 1px solid #fff; box-shadow: 0 0 0 1px var(--line); }
-.chain h3 { font: 600 17px/1.4 var(--sans); }
+.chain h3 { font: 600 16px/1.4 var(--sans); }
 .chain > p { margin-top: 6px; font-size: 14px; color: var(--ink-2); }
 .chain__list { margin: 16px 0; display: grid; gap: 6px; }
-.chain__list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r-sm); background: #fff; box-shadow: 0 0 0 1px var(--line); font-size: 14px; font-weight: 500; }
+.chain__list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--surface); box-shadow: 0 0 0 1px var(--line); font-size: 14px; font-weight: 500; }
 .chain__k { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink); font-size: 12px; }
 .chain__note { font-size: 13px; color: var(--ink-3); }
 .facts { margin-top: 16px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-radius: var(--r-lg); background: rgba(255, 255, 255, .7); border: 1px solid #fff; box-shadow: 0 0 0 1px var(--line); }
@@ -32,7 +32,7 @@
 /* ---------- faq ---------- */
 .faq { display: grid; gap: 10px; }
 .faq details { border-radius: var(--r); background: rgba(255, 255, 255, .7); border: 1px solid #fff; box-shadow: 0 0 0 1px var(--line); transition: background .2s; }
-.faq details[open] { background: #fff; }
+.faq details[open] { background: var(--surface); }
 .faq summary {
   position: relative; display: flex; align-items: center; min-height: 56px;
   padding: 18px 52px 18px 20px; cursor: pointer; list-style: none; font-weight: 500;
@@ -51,7 +51,7 @@
   background: linear-gradient(150deg, #F6F9FD 0%, #DCE6F7 100%);
   border: 1px solid #fff; box-shadow: 0 0 0 1px var(--line), var(--shadow-lg);
 }
-.dl__h2 { font-family: var(--serif); font-size: clamp(32px, 4vw, 48px); line-height: 1.12; letter-spacing: -.035em; }
+.dl__h2 { font-family: var(--serif); font-size: clamp(32px, 4.4vw, 52px); line-height: 1.12; letter-spacing: -.035em; }
 .dl__copy p { margin-top: 14px; color: var(--ink-2); }
 .dl__acts { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
 .dl__hint { flex-basis: 100%; text-align: right; font-size: 13px; color: var(--ink-3); }
@@ -110,9 +110,9 @@
 /* release asset names (.exe / .dmg / .tar.gz) ride in the end slot: the icon-only circle
    would clip the text, so the end slot in download cards grows into a pill. */
 .dlplat__body .btn__end { width: auto; min-width: 38px; height: 32px; padding: 0 12px; border-radius: 999px; font: 500 12px/1 var(--mono); }
-.btn--ghost { padding: 0 22px 0 18px; background: #fff; color: var(--ink); box-shadow: 0 0 0 1px var(--line-2); }
+.btn--ghost { padding: 0 22px 0 18px; background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line-2); }
 @media (hover: hover) and (pointer: fine) {
-  .btn--primary:hover { background: #2350AB; transform: translateY(-1px); }
+  .btn--primary:hover { background: var(--accent-ink-hover); transform: translateY(-1px); }
   .btn--ghost:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px var(--line-2), var(--shadow); }
 }
 

@@ -103,7 +103,7 @@ code {
 .ico { width: 20px; height: 20px; flex: none; }
 .ico--xs { width: 14px; height: 14px; }
 
-:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 3px; border-radius: 6px; }
+:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 3px; }
 /* The skip link slides in with `top`, which is a layout property — a deliberate
    exception: it is one element, it moves exactly once, and it only exists while
    focused, so the layout cost never lands during normal scrolling or interaction. */
@@ -144,7 +144,7 @@ code {
 .tag {
   display: inline-flex; align-items: center; height: 22px; padding: 0 8px;
   border-radius: 999px; font: 500 12px/1 var(--sans);
-  background: rgba(27, 36, 51, .06); color: var(--ink-2); white-space: nowrap;
+  background: var(--fill-subtle); color: var(--ink-2); white-space: nowrap;
 }
 .tag--up { background: var(--ok-soft); color: var(--ok-ink); }
 .tag--off { background: var(--warn-soft); color: var(--warn-ink); }

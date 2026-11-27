@@ -8,13 +8,13 @@
   transition: background .25s, transform .25s var(--ease), box-shadow .25s;
 }
 @media (hover: hover) and (pointer: fine) {
-  .mod:hover { background: #fff; transform: translateY(-2px); box-shadow: 0 0 0 1px var(--line), var(--shadow); }
+  .mod:hover { background: var(--surface); transform: translateY(-2px); box-shadow: 0 0 0 1px var(--line), var(--shadow); }
 }
 .mod--wide { grid-column: span 3; }
 .mod:not(.mod--wide) { grid-column: span 2; }
 .mod__ico {
   display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 13px;
-  background: #fff; color: var(--accent-ink);
+  background: var(--surface); color: var(--accent-ink);
   box-shadow: 0 0 0 1px var(--line), inset 0 0 0 3px rgba(232, 237, 244, .9);
 }
 .mod h3 { font: 600 16px/1.4 var(--sans); }

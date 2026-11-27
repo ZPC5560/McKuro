@@ -73,9 +73,25 @@
             <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="RenderTransform" Value="scale(1)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="{StaticResource McKuroMotionHoverDuration}" Easing="{StaticResource McKuroEaseEnter}" />
+                    <BrushTransition Property="Foreground" Duration="{StaticResource McKuroMotionHoverDuration}" Easing="{StaticResource McKuroEaseEnter}" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{StaticResource McKuroMotionPressDuration}" Easing="{StaticResource McKuroEaseEnter}" />
+                </Transitions>
+            </Setter>
         </Style>
         <Style Selector="Button.categoryTab:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource SemiColorBg3}" />
+        </Style>
+        <Style Selector="Button.categoryTab:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.97)" />
+        </Style>
+        <Style Selector="Button.categoryTab:focus-visible">
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccent}" />
+            <Setter Property="BorderThickness" Value="1.5" />
         </Style>
         <Style Selector="Button.categoryTab.selected">
             <Setter Property="Background" Value="{DynamicResource McKuroAccent}" />
@@ -100,9 +116,25 @@
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="RenderTransform" Value="scale(1)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="{StaticResource McKuroMotionHoverDuration}" Easing="{StaticResource McKuroEaseEnter}" />
+                    <BrushTransition Property="Foreground" Duration="{StaticResource McKuroMotionHoverDuration}" Easing="{StaticResource McKuroEaseEnter}" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{StaticResource McKuroMotionPressDuration}" Easing="{StaticResource McKuroEaseEnter}" />
+                </Transitions>
+            </Setter>
         </Style>
         <Style Selector="Button.subTab:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource SemiColorBg3}" />
+        </Style>
+        <Style Selector="Button.subTab:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.97)" />
+        </Style>
+        <Style Selector="Button.subTab:focus-visible">
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccent}" />
+            <Setter Property="BorderThickness" Value="1.5" />
         </Style>
         <Style Selector="Button.subTab.selected">
             <Setter Property="Background" Value="{DynamicResource SemiColorBg3}" />

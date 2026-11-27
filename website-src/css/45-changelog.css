@@ -167,9 +167,9 @@
 .cl__bar {
   display: none; justify-content: flex-end; gap: 2px;
   /* sits in the gap between the section heading and the first entry */
-  margin: 0 0 16px; padding: 3px;
+  margin: 0 0 var(--space-4) auto; padding: 3px;
   border-radius: 999px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--line);
-  width: fit-content; margin-left: auto;
+  width: fit-content;
 }
 /* Only exists when JS can act on it (build ships it [hidden]); a no-JS visitor must not
    get an empty strip where a control would be. */

@@ -133,11 +133,11 @@
                     <!-- 启动器标题卡 毛玻璃:版本一致(无更新)时整体不显示,与版本信息一致 -->
                     <Border CornerRadius="12" ClipToBounds="True" VerticalAlignment="Top"
                             IsVisible="{Binding HasUpdate}">
-                        <Grid>
-                            <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.75" CornerRadius="12" />
-                            <Border Background="{DynamicResource SemiColorBg2}"
-                                    Opacity="0.6"
-                                    Padding="12">
+                        <Border Background="{DynamicResource McKuroGlassFill}"
+                                BorderBrush="{DynamicResource McKuroGlassStroke}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="12">
                                 <StackPanel Spacing="8">
                                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
                                         <Border Width="40" Height="40" CornerRadius="8"
@@ -169,8 +169,7 @@
                                         </StackPanel>
                                     </Grid>
                                 </StackPanel>
-                            </Border>
-                        </Grid>
+                        </Border>
                     </Border>
                     <!-- 操作区:左侧菜单按钮(点击展开功能项,对齐官方启动器左上角菜单)。
                          原「打开目录/修复游戏」已并入菜单,保持界面简洁。
@@ -327,12 +326,11 @@
                         HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Margin="0,0,0,8"
                         CornerRadius="12" ClipToBounds="True"
                         IsVisible="{Binding ShowDownloadCard}">
-                    <Grid>
-                        <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.7" CornerRadius="12" />
-                        <Border Background="{DynamicResource SemiColorBg2}"
-                                Opacity="0.65"
-                                Padding="14,11"
-                                CornerRadius="12">
+                    <Border Background="{DynamicResource McKuroGlassFill}"
+                            BorderBrush="{DynamicResource McKuroGlassStroke}"
+                            BorderThickness="1"
+                            Padding="14,11"
+                            CornerRadius="12">
                             <Grid RowDefinitions="Auto,*,Auto" RowSpacing="6">
                                 <!-- ① 网速:大字数值 + 小号单位,右侧峰值 -->
                                 <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
@@ -405,7 +403,6 @@
                                 </Grid>
                             </Grid>
                         </Border>
-                    </Grid>
                 </Border>
 
                 <!-- 资源等级卡片列表(对齐官方启动器:默认收起,点「高清 ▾」小按钮后向上弹出)
