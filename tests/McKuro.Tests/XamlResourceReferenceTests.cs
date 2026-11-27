@@ -195,4 +195,63 @@ public class XamlResourceReferenceTests
         var app = File.ReadAllText(Path.Combine(RepositoryRoot(), "src", "McKuro", "App.axaml"));
         Assert.Contains(@"Selector=""Border.mcPanel""", app, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// <c>StaticResource</c> 必须在**声明之后**使用 —— 它是解析期即时求值,不支持前向引用。
+    /// <para>
+    /// 回归背景(2026-11-27,ui/style-polish 合并验收):有人把 <c>McKuroMotion*Duration</c> /
+    /// <c>McKuroEaseEnter</c> 四个动效令牌声明在 App.axaml 末尾的 Application.Resources 里,
+    /// 却在文件开头的 Application.Styles 中先用 <c>{StaticResource ...}</c> 建立 Transitions。
+    /// 结果是 <c>XamlIlPopulate</c> 抛 KeyNotFoundException,**应用启动即崩溃、主窗口从未创建**;
+    /// 而 Release 构建 0 警告 0 错误、2040 条单测全绿都拦不住 —— 构建与单测都不执行 App.axaml
+    /// 的运行时资源解析。上一版守卫只做"引用是否有定义"的静态扫描,因此漏掉了顺序问题。
+    /// </para>
+    /// <para>
+    /// 判定口径:逐行扫描 App.axaml,记录每个 <c>x:Key</c> 的首次声明行与每个
+    /// <c>{StaticResource X}</c> 的首次引用行;X 在本文件内有声明且声明行 &gt; 引用行即报红。
+    /// 只查 App.axaml:视图文件里的 StaticResource 由上面的完整性测试覆盖,且视图是资源使用方
+    /// 而非定义方,不存在"自己声明在自己后面"的场景。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void StaticResource_Must_Not_Be_Forward_Referenced_In_App_Axaml()
+    {
+        var path = Path.Combine(RepositoryRoot(), "src", "McKuro", "App.axaml");
+        Assert.True(File.Exists(path), $"App.axaml 不存在: {path}");
+
+        // 去掉注释:注释里提到 {StaticResource X} 的历史说明不能被当成真引用
+        var xaml = StripComments(File.ReadAllText(path));
+        var lines = xaml.Split('\n');
+
+        var definedAt = new Dictionary<string, int>(StringComparer.Ordinal);
+        var firstUseAt = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var lineNo = i + 1;
+
+            foreach (Match m in Regex.Matches(lines[i], @"x:Key=""([^""]+)"""))
+            {
+                definedAt.TryAdd(m.Groups[1].Value, lineNo);
+            }
+
+            foreach (Match m in Regex.Matches(lines[i], @"\{StaticResource\s+([^}]+)\}"))
+            {
+                firstUseAt.TryAdd(m.Groups[1].Value.Trim(), lineNo);
+            }
+        }
+
+        Assert.True(definedAt.Count > 0, "App.axaml 里没解析到任何 x:Key,解析口径可能已失效");
+
+        var offenders = firstUseAt
+            .Where(kv => definedAt.TryGetValue(kv.Key, out var defLine) && defLine > kv.Value)
+            .Select(kv => $"{kv.Key}(定义@{definedAt[kv.Key]} 引用@{kv.Value})")
+            .OrderBy(s => s, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            "StaticResource 前向引用会在启动时抛 KeyNotFoundException(应用直接崩溃): "
+            + string.Join(", ", offenders)
+            + " —— 把这些令牌的声明移到 Application.Styles 之前(或改用 DynamicResource)。");
+    }
 }
