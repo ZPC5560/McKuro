@@ -293,6 +293,10 @@ html:not(.js) .tab span { max-width: 120px; opacity: 1; margin-right: 6px; }
 
   /* daily: three tiles per row no longer fit */
   .sec--demo .daily { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  /* Value size follows 11-intake.css's .dcard__mid b, which drops to 18px at this
+     same 900 breakpoint. Keeping the demo stat at 20px here made the two "same"
+     data cards differ by 2px across the whole 521-900px band (WT-05). */
+  .sec--demo .stat__mid b { font-size: 18px; }
 
   .sec--demo .ptabs { gap: 14px; }
 }
@@ -355,7 +359,6 @@ html:not(.js) .tab span { max-width: 120px; opacity: 1; margin-right: 6px; }
 
   .sec--demo .daily { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .sec--demo .stat { padding: 11px 12px; }
-  .sec--demo .stat__mid b { font-size: 18px; }
 
   .sec--demo .acct { grid-template-columns: 32px minmax(0, 1fr) auto; gap: 8px; padding: 8px 10px; }
   .sec--demo .acct__n { min-width: 0; }
