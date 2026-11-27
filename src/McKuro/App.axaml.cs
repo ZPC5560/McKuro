@@ -39,8 +39,7 @@ public partial class App : Application
             var account = AppServices.KuroAccounts.Current;
             if (account is null)
             {
-                // 存过账号但没有「当前账号」:等同于未登录,按要求预热以便直接登录
-                await Dispatcher.UIThread.InvokeAsync(Controls.WebView2Control.PrewarmEnvironment);
+                // 无当前账号:不在启动阶段预热,首次打开极验窗口时按需冷创建
                 return;
             }
 
@@ -98,21 +97,9 @@ public partial class App : Application
             McKuro.Core.Services.Update.UpdateCacheMaintenance.DefaultDirectory(AppServices.AppDataDir),
             DateTime.UtcNow));
 
-        // WebView2 环境预热:只在「确实需要重新登录」时才做。
-        //
-        // 旧实现只判断「是否存过账号」,而账号存在 ≠ 登录仍然有效:token 可能已在别处失效、
-        // 或用户主动退出后又没重新登录。于是"有账号但已失效"的用户永远等不到预热,
-        // 真要登录时极验窗口还要冷启动数秒。现在改成:
-        //   ① 无账号 → 必然要登录,直接预热(与原行为一致,不额外发请求);
-        //   ② 有账号 → 先不预热(省掉浏览器进程常驻的内存,实测 6 个 msedgewebview2 子进程
-        //      合计约 320 MB 工作集),后台跑一次轻量登录态校验;只有确认失效才回来预热。
-        // 当前线程即平台线程(STA),环境对象绑定此线程,后续验证窗口的 Controller 创建与之同套间,
-        // 因此后台校验完成后必须经 Dispatcher 回到 UI 线程再预热。
-        if (AppServices.KuroAccounts.GetAccounts().Count == 0)
-        {
-            Controls.WebView2Control.PrewarmEnvironment();
-        }
-        else
+        // WebView2 环境预热:启动阶段不做无条件预热,仅在库街区会话校验被服务端明确拒绝(Rejected)后
+        // 才在 UI 线程预热;无账号或网络异常/超时(无法判定)均不预热,首次打开极验窗口时按需冷创建。
+        if (AppServices.KuroAccounts.Current is not null)
         {
             _ = PrewarmWhenKuroSessionExpiredAsync();
         }

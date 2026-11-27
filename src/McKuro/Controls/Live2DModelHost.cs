@@ -220,6 +220,7 @@ public sealed class Live2DModelHost : Panel
         var shouldShow = Show
                          && !_gameActive
                          && Live2DLocator.IsSupported
+                         && Live2DLocator.IsCoreAvailable
                          && !string.IsNullOrWhiteSpace(ModelDirectory)
                          && !string.IsNullOrWhiteSpace(ModelName);
         // 诊断:首页"没有模型"时,必须能一眼看出是哪个闸门没通过。

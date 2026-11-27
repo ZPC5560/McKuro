@@ -155,6 +155,7 @@ public partial class WikiView : UserControl
     {
         if (e.PropertyName is nameof(WikiViewModel.CurrentBannerIsDirectVideo)
             or nameof(WikiViewModel.CurrentBannerIsBili)
+            or nameof(WikiViewModel.CurrentBannerIsWebVideo)
             or nameof(WikiViewModel.CurrentBanner))
         {
             UpdateVideoOverlay();

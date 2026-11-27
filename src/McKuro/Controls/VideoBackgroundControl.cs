@@ -292,125 +292,154 @@ public sealed class VideoBackgroundControl : Grid
     public event EventHandler? PlaybackEnded;
 
     /// <summary>
-    /// 播放/暂停切换:播放中 → 暂停;暂停中 → 继续;已播完 → 从头重播。
-    /// 无视频/未初始化时为空操作。
+    /// 播放/暂停切换:播放中 → 暂停并释放会话;暂停中/已播完 → 重建会话从头/继续播放。
+    /// 无视频/未启用时为空操作。
     /// </summary>
     public void TogglePause()
     {
+        bool shouldRebuild = false;
         lock (_sync)
         {
             if (_mpv is null)
             {
-                return;
+                shouldRebuild = (_reachedEnd || _userPaused)
+                    && _attached
+                    && IsVideoEnabled
+                    && !string.IsNullOrWhiteSpace(VideoUrl);
             }
-            try
+            else
             {
-                if (_reachedEnd)
+                try
                 {
-                    // 已播完:此时"继续"没有意义(停在末帧),语义降级为从头重播
-                    _reachedEnd = false;
-                    _userPaused = false;
-                    _mpv.SetProperty("time-pos", 0d);
-                    // 挂起优先(与 Resume/恢复分支同策略):挂起中重播也不真正解除暂停
-                    _mpv.SetPropertyFlag("pause", _suspended);
-                    IsPlaying = !_suspended;
+                    if (_reachedEnd)
+                    {
+                        // 已播完:此时"继续"没有意义(停在末帧),语义降级为从头重播
+                        _reachedEnd = false;
+                        _userPaused = false;
+                        _mpv.SetProperty("time-pos", 0d);
+                        // 挂起优先(与 Resume/恢复分支同策略):挂起中重播也不真正解除暂停
+                        _mpv.SetPropertyFlag("pause", _suspended);
+                        IsPlaying = !_suspended;
+                        return;
+                    }
+                    if (_userPaused)
+                    {
+                        _userPaused = false;
+                        // 挂起优先:挂起中不真正恢复解码(避免与省电策略打架)
+                        _mpv.SetPropertyFlag("pause", _suspended);
+                        IsPlaying = !_suspended;
+                        return;
+                    }
+                }
+                catch (Exception)
+                {
+                    // 播放器状态异常时忽略:不影响其余功能
                     return;
                 }
-                if (_userPaused)
-                {
-                    _userPaused = false;
-                    // 挂起优先:挂起中不真正恢复解码(避免与省电策略打架)
-                    _mpv.SetPropertyFlag("pause", _suspended);
-                    IsPlaying = !_suspended;
-                }
-                else
-                {
-                    _userPaused = true;
-                    _mpv.SetPropertyFlag("pause", true);
-                    IsPlaying = false;
-                }
             }
-            catch (Exception)
-            {
-                // 播放器状态异常时忽略:不影响其余功能
-            }
+        }
+        if (shouldRebuild)
+        {
+            TryStartVideo();
+            ScheduleStartRetry();
+            return;
+        }
+        if (_mpv is not null)
+        {
+            Pause();
         }
     }
 
-    /// <summary>显式暂停(无视频/未初始化时为空操作)。</summary>
+    /// <summary>显式暂停并释放当前 mpv 会话(无视频/未初始化时为空操作)。</summary>
     public void Pause()
     {
-        lock (_sync)
+        if (_mpv is null || _userPaused)
         {
-            if (_mpv is null || _userPaused)
-            {
-                return;
-            }
-            try
-            {
-                _userPaused = true;
-                _mpv.SetPropertyFlag("pause", true);
-                IsPlaying = false;
-            }
-            catch (Exception)
-            {
-                // 忽略
-            }
+            return;
         }
+        _userPaused = true;
+        IsPlaying = false;
+        _imageGeneration = Interlocked.Increment(ref _imageGeneration);
+        DisposePlayer();
     }
 
-    /// <summary>显式继续播放(挂起中不真正恢复;已播完则从头重播)。</summary>
+    /// <summary>显式继续播放(挂起中不真正恢复;已播完或已释放则重建会话)。</summary>
     public void Resume()
     {
+        bool shouldRebuild = false;
         lock (_sync)
         {
             if (_mpv is null)
             {
+                shouldRebuild = (_reachedEnd || _userPaused)
+                    && _attached
+                    && IsVideoEnabled
+                    && !string.IsNullOrWhiteSpace(VideoUrl);
+            }
+            else
+            {
+                try
+                {
+                    if (_reachedEnd)
+                    {
+                        _reachedEnd = false;
+                        _mpv.SetProperty("time-pos", 0d);
+                    }
+                    _userPaused = false;
+                    _mpv.SetPropertyFlag("pause", _suspended);
+                    IsPlaying = !_suspended;
+                }
+                catch (Exception)
+                {
+                    // 忽略
+                }
                 return;
             }
-            try
-            {
-                if (_reachedEnd)
-                {
-                    _reachedEnd = false;
-                    _mpv.SetProperty("time-pos", 0d);
-                }
-                _userPaused = false;
-                _mpv.SetPropertyFlag("pause", _suspended);
-                IsPlaying = !_suspended;
-            }
-            catch (Exception)
-            {
-                // 忽略
-            }
+        }
+        if (shouldRebuild)
+        {
+            TryStartVideo();
+            ScheduleStartRetry();
         }
     }
 
     /// <summary>
     /// 从头重播当前视频(技能演示"手动触发再次播放")。
-    /// 无视频/未初始化时为空操作。
+    /// 会话已释放时按需重建;无视频/未启用时为空操作。
     /// </summary>
     public void Replay()
     {
+        bool shouldRebuild = false;
         lock (_sync)
         {
             if (_mpv is null)
             {
+                shouldRebuild = _attached
+                    && IsVideoEnabled
+                    && !string.IsNullOrWhiteSpace(VideoUrl);
+            }
+            else
+            {
+                try
+                {
+                    // 回到起点并解除暂停(播完自动暂停后需要显式恢复);挂起中保持挂起策略
+                    _reachedEnd = false;
+                    _userPaused = false;
+                    _mpv.SetProperty("time-pos", 0d);
+                    _mpv.SetPropertyFlag("pause", _suspended);
+                    IsPlaying = !_suspended;
+                }
+                catch (Exception)
+                {
+                    // 播放器状态异常时忽略:不影响其余功能
+                }
                 return;
             }
-            try
-            {
-                // 回到起点并解除暂停(播完自动暂停后需要显式恢复);挂起中保持挂起策略
-                _reachedEnd = false;
-                _userPaused = false;
-                _mpv.SetProperty("time-pos", 0d);
-                _mpv.SetPropertyFlag("pause", _suspended);
-                IsPlaying = !_suspended;
-            }
-            catch (Exception)
-            {
-                // 播放器状态异常时忽略:不影响其余功能
-            }
+        }
+        if (shouldRebuild)
+        {
+            TryStartVideo();
+            ScheduleStartRetry();
         }
     }
 
@@ -654,7 +683,7 @@ public sealed class VideoBackgroundControl : Grid
             // "会话已建起(_mpv 非空)但首帧未到"多半是网络视频还在整段下载(首帧前需先完成下载):
             // 此时重试会 Dispose 掉健康的下载会话重头再来(双倍带宽、首帧更晚 —— 评审反馈),必须跳过;
             // 真正需要重试的是"刚挂载 GL 未就绪、TryStartVideo 静默失败(_mpv 为 null)"的场景。
-            if (Stale(gen) || _firstFrameShown || _mpv is not null || !_attached || string.IsNullOrWhiteSpace(VideoUrl))
+            if (Stale(gen) || _firstFrameShown || _mpv is not null || !_attached || !IsVideoEnabled || string.IsNullOrWhiteSpace(VideoUrl))
             {
                 return;
             }
@@ -909,7 +938,8 @@ public sealed class VideoBackgroundControl : Grid
                     ShowFallback(gen);
                     return;
                 }
-                // 正常播完(EndOfFile/Stop):ShouldLoop=false 时停在末帧,置结束态并通知 UI。
+                // 正常播完(EndOfFile/Stop):ShouldLoop=false 时销毁当前 mpv 会话(释放解码器/帧池/GL 资源),
+                // 露出静态封面并置结束态,用户点击重播时再重建。
                 // 必须 Stale(gen) 守卫:切换视频时旧会话 Dispose 会触发 Stop 回调,
                 // 不判过期就会把"刚开播的新视频"打成未播放(播放中误显暂停图标/控件层,
                 // 与角色页演示控件层误判同源);循环视频(ShouldLoop=true)的 Stop/EOF
@@ -925,6 +955,8 @@ public sealed class VideoBackgroundControl : Grid
                         _reachedEnd = true;
                         _userPaused = false;
                         IsPlaying = false;
+                        _imageGeneration = Interlocked.Increment(ref _imageGeneration);
+                        DisposePlayer();
                         PlaybackEnded?.Invoke(this, EventArgs.Empty);
                     }, DispatcherPriority.Background);
                 }
@@ -1513,6 +1545,7 @@ public sealed class VideoBackgroundControl : Grid
         _firstFrameShown = false;
         _videoWidth = 0;
         _videoHeight = 0;
+        IsPlaying = false;
 
         if (_videoImage is not null)
         {

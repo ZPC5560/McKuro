@@ -606,7 +606,7 @@
                                 Background="{DynamicResource SemiColorBg3}"
                                 MinWidth="320"
                                 HorizontalAlignment="Stretch">
-                            <controls:Live2DModelHost Show="True"
+                            <controls:Live2DModelHost Show="{Binding IsLive2DPreviewVisible}"
                                                       ModelDirectory="{Binding EffectiveLive2DModelDir}"
                                                       ModelName="{Binding SelectedLive2DModelName}"
                                                       Zoom="{Binding Live2DZoom, Mode=TwoWay}"
