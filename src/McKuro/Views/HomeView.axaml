@@ -66,7 +66,7 @@
         <Grid Margin="36,0,24,0" Opacity="{Binding RevealOpacity}">
                 <Grid.Transitions>
                     <Transitions>
-                        <DoubleTransition Property="Opacity" Duration="0:0:0.9" />
+                        <DoubleTransition Property="Opacity" Duration="{StaticResource McKuroMotionRevealDuration}" Easing="{StaticResource McKuroEaseEnter}" />
                     </Transitions>
                 </Grid.Transitions>
                 <Grid ColumnDefinitions="0.85*,1.15*" ColumnSpacing="24">

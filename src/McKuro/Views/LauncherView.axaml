@@ -131,46 +131,45 @@
             <Grid Grid.Row="0" ColumnDefinitions="*,3*" VerticalAlignment="Top">
                 <StackPanel Spacing="10">
                     <!-- 启动器标题卡 毛玻璃:版本一致(无更新)时整体不显示,与版本信息一致 -->
-                    <Border CornerRadius="12" ClipToBounds="True" VerticalAlignment="Top"
+                    <Border Background="{DynamicResource McKuroGlassFill}"
+                            BorderBrush="{DynamicResource McKuroGlassStroke}"
+                            BorderThickness="1"
+                            CornerRadius="12"
+                            Padding="12"
+                            ClipToBounds="True"
+                            VerticalAlignment="Top"
                             IsVisible="{Binding HasUpdate}">
-                        <Grid>
-                            <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.75" CornerRadius="12" />
-                            <Border Background="{DynamicResource SemiColorBg2}"
-                                    Opacity="0.6"
-                                    Padding="12">
-                                <StackPanel Spacing="8">
-                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-                                        <Border Width="40" Height="40" CornerRadius="8"
-                                                Background="{DynamicResource SemiColorBg3}">
-                                            <ic:FluentIcon Icon="Play" IconVariant="Regular" IconSize="Size20"
-                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                           Foreground="{DynamicResource McKuroTextOnWallpaper}" />
-                                        </Border>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                                            <TextBlock Text="{loc:Localize Key=Launcher.Title}" FontSize="14" FontWeight="Bold"
-                                                       Foreground="{DynamicResource McKuroTextOnWallpaper}" />
-                                            <TextBlock Text="{Binding InstallStateText}" FontSize="11"
-                                                       Foreground="{DynamicResource SemiColorText2}" />
-                                        </StackPanel>
-                                    </Grid>
-                                    <!-- 版本信息(本地/服务端):整卡由 HasUpdate 控制显隐 -->
-                                    <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="12">
-                                        <StackPanel Spacing="1">
-                                            <TextBlock Text="{loc:Localize Key=Launcher.ServerVersion}" FontSize="9"
-                                                       Foreground="{DynamicResource SemiColorText2}" />
-                                            <TextBlock Text="{Binding ServerVersionText}" FontSize="12" FontWeight="Bold"
-                                                       Foreground="{DynamicResource McKuroTextOnWallpaper}" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" Spacing="1">
-                                            <TextBlock Text="{loc:Localize Key=Launcher.LocalVersion}" FontSize="9"
-                                                       Foreground="{DynamicResource SemiColorText2}" />
-                                            <TextBlock Text="{Binding GameVersionText}" FontSize="12" FontWeight="Bold"
-                                                       Foreground="{DynamicResource McKuroTextOnWallpaper}" />
-                                        </StackPanel>
-                                    </Grid>
+                        <StackPanel Spacing="8">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Border Width="40" Height="40" CornerRadius="8"
+                                        Background="{DynamicResource SemiColorBg3}">
+                                    <ic:FluentIcon Icon="Play" IconVariant="Regular" IconSize="Size20"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                    <TextBlock Text="{loc:Localize Key=Launcher.Title}" FontSize="14" FontWeight="Bold"
+                                               Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                    <TextBlock Text="{Binding InstallStateText}" FontSize="11"
+                                               Foreground="{DynamicResource SemiColorText2}" />
                                 </StackPanel>
-                            </Border>
-                        </Grid>
+                            </Grid>
+                            <!-- 版本信息(本地/服务端):整卡由 HasUpdate 控制显隐 -->
+                            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="12">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Text="{loc:Localize Key=Launcher.ServerVersion}" FontSize="9"
+                                               Foreground="{DynamicResource SemiColorText2}" />
+                                    <TextBlock Text="{Binding ServerVersionText}" FontSize="12" FontWeight="Bold"
+                                               Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="1">
+                                    <TextBlock Text="{loc:Localize Key=Launcher.LocalVersion}" FontSize="9"
+                                               Foreground="{DynamicResource SemiColorText2}" />
+                                    <TextBlock Text="{Binding GameVersionText}" FontSize="12" FontWeight="Bold"
+                                               Foreground="{DynamicResource McKuroTextOnWallpaper}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
                     </Border>
                     <!-- 操作区:左侧菜单按钮(点击展开功能项,对齐官方启动器左上角菜单)。
                          原「打开目录/修复游戏」已并入菜单,保持界面简洁。
@@ -325,86 +324,83 @@
                 <Border Grid.Column="1"
                         MaxWidth="430" Height="190"
                         HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Margin="0,0,0,8"
-                        CornerRadius="12" ClipToBounds="True"
+                        Background="{DynamicResource McKuroGlassFill}"
+                        BorderBrush="{DynamicResource McKuroGlassStroke}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Padding="14,11"
+                        ClipToBounds="True"
                         IsVisible="{Binding ShowDownloadCard}">
-                    <Grid>
-                        <Border Background="{DynamicResource SemiColorBg1}" Opacity="0.7" CornerRadius="12" />
-                        <Border Background="{DynamicResource SemiColorBg2}"
-                                Opacity="0.65"
-                                Padding="14,11"
-                                CornerRadius="12">
-                            <Grid RowDefinitions="Auto,*,Auto" RowSpacing="6">
-                                <!-- ① 网速:大字数值 + 小号单位,右侧峰值 -->
-                                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4"
-                                                VerticalAlignment="Bottom">
-                                        <TextBlock Text="{Binding SpeedValueText}"
-                                                   FontSize="26" FontWeight="Bold"
-                                                   Foreground="{DynamicResource McKuroSpeedValue}"
-                                                   VerticalAlignment="Bottom"
-                                                   FontFeatures="tnum" />
-                                        <TextBlock Text="{Binding SpeedUnitText}" FontSize="11"
-                                                   Foreground="{DynamicResource McKuroSpeedUnit}"
-                                                   VerticalAlignment="Bottom" Margin="0,0,0,4" />
-                                    </StackPanel>
-                                    <TextBlock Grid.Column="2" Text="{Binding PeakSpeedText}"
-                                               FontSize="11"
-                                               Foreground="{DynamicResource SemiColorText2}"
-                                               VerticalAlignment="Bottom" Margin="0,0,0,5" />
-                                </Grid>
+                    <Grid RowDefinitions="Auto,*,Auto" RowSpacing="6">
+                        <!-- ① 网速:大字数值 + 小号单位,右侧峰值 -->
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4"
+                                        VerticalAlignment="Bottom">
+                                <TextBlock Text="{Binding SpeedValueText}"
+                                           FontSize="26" FontWeight="Bold"
+                                           Foreground="{DynamicResource McKuroSpeedValue}"
+                                           VerticalAlignment="Bottom"
+                                           FontFeatures="tnum" />
+                                <TextBlock Text="{Binding SpeedUnitText}" FontSize="11"
+                                           Foreground="{DynamicResource McKuroSpeedUnit}"
+                                           VerticalAlignment="Bottom" Margin="0,0,0,4" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="{Binding PeakSpeedText}"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource SemiColorText2}"
+                                       VerticalAlignment="Bottom" Margin="0,0,0,5" />
+                        </Grid>
 
-                                <!-- ② 速度波动曲线(自适应放大;占满中间剩余高度,才能真正看出"在抖") -->
-                                <controls:SpeedTrendChart Grid.Row="1"
-                                                          MinHeight="40"
-                                                          MaxPoints="120"
-                                                          VerticalAlignment="Stretch"
-                                                          Values="{Binding DownloadSpeedHistory}"
-                                                          LineBrush="{DynamicResource McKuroChartLine}"
-                                                          FillBrush="{DynamicResource McKuroChartFill}"
-                                                          BaselineBrush="{DynamicResource McKuroChartBaseline}" />
+                        <!-- ② 速度波动曲线(自适应放大;占满中间剩余高度,才能真正看出"在抖") -->
+                        <controls:SpeedTrendChart Grid.Row="1"
+                                                  MinHeight="40"
+                                                  MaxPoints="120"
+                                                  VerticalAlignment="Stretch"
+                                                  Values="{Binding DownloadSpeedHistory}"
+                                                  LineBrush="{DynamicResource McKuroChartLine}"
+                                                  FillBrush="{DynamicResource McKuroChartFill}"
+                                                  BaselineBrush="{DynamicResource McKuroChartBaseline}" />
 
-                                <!-- ③ 底部行:环形进度(百分比在环内) + 文件/剩余/磁盘 + 暂停按钮。
-                                     进度坚持用环形(用户要求):环内百分比避免"另起一行小字"的拥挤,
-                                     环本身放大到 58 并加粗环宽,一眼能看出下了多少。 -->
-                                <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                                    <controls:RingProgress Grid.Column="0"
-                                                           Width="58" Height="58"
-                                                           VerticalAlignment="Center"
-                                                           Value="{Binding ProgressPercent}"
-                                                           IsIndeterminate="{Binding ShowIndeterminateProgress}"
-                                                           Thickness="6"
-                                                           ShowText="True"
-                                                           FontSize="15"
-                                                           TrackBrush="{DynamicResource McKuroProgressTrack}"
-                                                           ForegroundBrush="{DynamicResource McKuroProgressFill}"
-                                                           TextBrush="{DynamicResource McKuroSpeedValue}" />
-                                    <!-- 中间列<必须>吃满剩余宽度并裁剪:横向 StackPanel 不约束子元素宽度,
-                                         超长文案会直接画到右侧「暂停下载」按钮上(用户反馈的重叠)。 -->
-                                    <Grid Grid.Column="1" VerticalAlignment="Center" RowDefinitions="Auto,Auto"
-                                          RowSpacing="2" ClipToBounds="True">
-                                        <TextBlock Grid.Row="0" Text="{Binding ProgressText}" FontSize="11"
-                                                   Foreground="{DynamicResource SemiColorText2}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   TextWrapping="NoWrap" />
-                                        <TextBlock Grid.Row="1" Text="{Binding ProgressSubText}" FontSize="11"
-                                                   Foreground="{DynamicResource SemiColorText3}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   TextWrapping="NoWrap"
-                                                   IsVisible="{Binding ProgressSubText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                                    </Grid>
-                                    <!-- 仅在真正可暂停的下载阶段显示暂停/继续;
-                                         校验/差分合成/解压/资源安装阶段暂停是空操作,整体隐藏。 -->
-                                    <Button Grid.Column="2"
-                                            Content="{Binding PreDownloadButtonText}"
-                                            Classes="primary"
-                                            Command="{Binding TogglePreDownloadCommand}"
-                                            IsEnabled="{Binding PreDownloadButtonEnabled}"
-                                            IsVisible="{Binding PreDownloadButtonVisible}"
-                                            VerticalAlignment="Center"
-                                            Padding="12,6" />
-                                </Grid>
+                        <!-- ③ 底部行:环形进度(百分比在环内) + 文件/剩余/磁盘 + 暂停按钮。
+                             进度坚持用环形(用户要求):环内百分比避免"另起一行小字"的拥挤,
+                             环本身放大到 58 并加粗环宽,一眼能看出下了多少。 -->
+                        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                            <controls:RingProgress Grid.Column="0"
+                                                   Width="58" Height="58"
+                                                   VerticalAlignment="Center"
+                                                   Value="{Binding ProgressPercent}"
+                                                   IsIndeterminate="{Binding ShowIndeterminateProgress}"
+                                                   Thickness="6"
+                                                   ShowText="True"
+                                                   FontSize="15"
+                                                   TrackBrush="{DynamicResource McKuroProgressTrack}"
+                                                   ForegroundBrush="{DynamicResource McKuroProgressFill}"
+                                                   TextBrush="{DynamicResource McKuroSpeedValue}" />
+                            <!-- 中间列<必须>吃满剩余宽度并裁剪:横向 StackPanel 不约束子元素宽度,
+                                 超长文案会直接画到右侧「暂停下载」按钮上(用户反馈的重叠)。 -->
+                            <Grid Grid.Column="1" VerticalAlignment="Center" RowDefinitions="Auto,Auto"
+                                  RowSpacing="2" ClipToBounds="True">
+                                <TextBlock Grid.Row="0" Text="{Binding ProgressText}" FontSize="11"
+                                           Foreground="{DynamicResource SemiColorText2}"
+                                           TextTrimming="CharacterEllipsis"
+                                           TextWrapping="NoWrap" />
+                                <TextBlock Grid.Row="1" Text="{Binding ProgressSubText}" FontSize="11"
+                                           Foreground="{DynamicResource SemiColorText3}"
+                                           TextTrimming="CharacterEllipsis"
+                                           TextWrapping="NoWrap"
+                                           IsVisible="{Binding ProgressSubText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                             </Grid>
-                        </Border>
+                            <!-- 仅在真正可暂停的下载阶段显示暂停/继续;
+                                 校验/差分合成/解压/资源安装阶段暂停是空操作,整体隐藏。 -->
+                            <Button Grid.Column="2"
+                                    Content="{Binding PreDownloadButtonText}"
+                                    Classes="primary"
+                                    Command="{Binding TogglePreDownloadCommand}"
+                                    IsEnabled="{Binding PreDownloadButtonEnabled}"
+                                    IsVisible="{Binding PreDownloadButtonVisible}"
+                                    VerticalAlignment="Center"
+                                    Padding="12,6" />
+                        </Grid>
                     </Grid>
                 </Border>
 
@@ -430,14 +426,9 @@
                             <Button Classes="mcLink"
                                     HorizontalAlignment="Left"
                                     Padding="0"
-                                    Background="Transparent"
-                                    BorderThickness="0"
-                                    Cursor="Hand"
                                     Command="{Binding OpenResourceLevelHintCommand}"
                                     IsVisible="{Binding HasResourceLevelHint}">
-                                <TextBlock Text="{loc:Localize Key=Launcher.LevelHintLink}" FontSize="10"
-                                           TextDecorations="Underline"
-                                           Foreground="{DynamicResource SemiColorPrimary}" />
+                                <TextBlock Text="{loc:Localize Key=Launcher.LevelHintLink}" FontSize="10" />
                             </Button>
                         </StackPanel>
                         <ItemsControl ItemsSource="{Binding ResourceLevelItems}">

@@ -1412,6 +1412,10 @@ public partial class MainWindow : Window
             {
                 thickness.Duration = duration;
             }
+            else if (transition is DoubleTransition dbl)
+            {
+                dbl.Duration = duration;
+            }
         }
     }
 

@@ -8,7 +8,7 @@
   transition: background .25s, transform .25s var(--ease), box-shadow .25s;
 }
 @media (hover: hover) and (pointer: fine) {
-  .mod:hover { background: #fff; transform: translateY(-2px); box-shadow: 0 0 0 1px var(--line), var(--shadow); }
+  .mod:hover { background: var(--surface); transform: translateY(-2px); box-shadow: 0 0 0 1px var(--line), var(--shadow); }
 }
 /* 6-track grid: the two wide module cards take half the row each (span 3) so they sit
    side by side, the remaining nine take a third (span 2) for a 3-up row. Both spans are
@@ -18,7 +18,7 @@
 .mod:not(.mod--wide) { grid-column: span 2; }
 .mod__ico {
   display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 13px;
-  background: #fff; color: var(--accent-ink);
+  background: var(--surface); color: var(--accent-ink);
   box-shadow: 0 0 0 1px var(--line), inset 0 0 0 3px rgba(232, 237, 244, .9);
 }
 .mod h3 { font: 600 16px/1.4 var(--sans); }
@@ -67,7 +67,7 @@
 .looks p { margin-top: 6px; font-size: 14px; color: var(--night-ink-2); line-height: 1.65; }
 
 /* ---------- steps ---------- */
-.steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; counter-reset: s; }
+.steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .steps li { position: relative; padding: 24px 22px; border-radius: var(--r-lg); background: rgba(255, 255, 255, .62); border: 1px solid rgba(255, 255, 255, .95); box-shadow: 0 0 0 1px var(--line); }
 .steps__n { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: var(--accent-soft); color: var(--accent-ink); font-size: 13px; font-weight: 500; }
 .steps h3 { margin-top: 16px; font: 600 16px/1.4 var(--sans); }

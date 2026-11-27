@@ -13,28 +13,31 @@
        (macOS=WkWebViewControl,Windows=WebView2Control),验证结果仍走本地 HTTP 回调,
        页面自身负责状态提示。
 
-       背景色刻意不写在 XAML 里:本窗口要跟极验页注入的主题严格同色,而主题由
+       底色刻意不写在 XAML 里:本窗口要跟极验页注入的主题严格同色,而主题由
        GeetVerifyService.ResolveTheme() 在运行期决定,构造函数里的 ApplyTheme() 会把
        窗口与加载遮罩的 Background 一起设成同一份纯色。写在 XAML 只会是一份立刻被覆盖
-       的死值,而且内联重述面板底色会违反 Overlay_Panels_Must_Use_Shared_mcPanel_Class
-       断言(本窗口是 Window/Panel 而不是 Border,套不上 Border.mcPanel)。 -->
-  <Panel>
-    <ContentPresenter x:Name="WebViewHost" />
-    <!-- 加载遮罩:WebView2 冷启动(环境 + 浏览器子进程 + 页面)期间盖住黑屏,渲染子窗口出现后淡出。
-         底色同样由 ApplyTheme() 在构造期写入。 -->
-    <Panel x:Name="LoadingOverlay" ZIndex="10">
-      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
-        <!-- 自绘旋转加载环:不依赖主题样式,旋转动画在代码后置驱动 -->
-        <TextBlock x:Name="SpinnerGlyph" Text="◐" FontSize="34" Foreground="{DynamicResource McKuroAccent}" HorizontalAlignment="Center">
-          <TextBlock.RenderTransform>
-            <RotateTransform />
-          </TextBlock.RenderTransform>
-        </TextBlock>
-        <TextBlock x:Name="LoadingText" Text="{loc:Localize Key=Geetest.Loading}" FontSize="14" Foreground="{DynamicResource SemiColorText1}"
-                   HorizontalAlignment="Center" />
-        <TextBlock x:Name="LoadingSub" Text="{loc:Localize Key=Geetest.LoadingSub}" FontSize="12" Foreground="{DynamicResource SemiColorText2}"
-                   HorizontalAlignment="Center" />
-      </StackPanel>
+       的死值,且内联重述面板底色会违反 Overlay_Panels_Must_Use_Shared_mcPanel_Class
+       断言。根容器改用共享的 Border.mcPanel 拿到圆角 + 描边 + ClipToBounds,
+       原生 WebView2 子窗口因此被裁在圆角内(而不是压在窗口直角上)。 -->
+  <Border Classes="mcPanel">
+    <Panel>
+      <ContentPresenter x:Name="WebViewHost" />
+      <!-- 加载遮罩:WebView2 冷启动(环境 + 浏览器子进程 + 页面)期间盖住黑屏,渲染子窗口出现后淡出。
+           底色同样由 ApplyTheme() 在构造期写入,并被外层 mcPanel 的圆角裁切。 -->
+      <Panel x:Name="LoadingOverlay" ZIndex="10">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
+          <!-- 自绘旋转加载环:不依赖主题样式,旋转动画在代码后置驱动 -->
+          <TextBlock x:Name="SpinnerGlyph" Text="◐" FontSize="34" Foreground="{DynamicResource McKuroAccent}" HorizontalAlignment="Center">
+            <TextBlock.RenderTransform>
+              <RotateTransform />
+            </TextBlock.RenderTransform>
+          </TextBlock>
+          <TextBlock x:Name="LoadingText" Text="{loc:Localize Key=Geetest.Loading}" FontSize="14" Foreground="{DynamicResource SemiColorText1}"
+                     HorizontalAlignment="Center" />
+          <TextBlock x:Name="LoadingSub" Text="{loc:Localize Key=Geetest.LoadingSub}" FontSize="12" Foreground="{DynamicResource SemiColorText2}"
+                     HorizontalAlignment="Center" />
+        </StackPanel>
+      </Panel>
     </Panel>
-  </Panel>
+  </Border>
 </Window>

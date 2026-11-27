@@ -220,6 +220,7 @@ public sealed class Live2DModelHost : Panel
         var shouldShow = Show
                          && !_gameActive
                          && Live2DLocator.IsSupported
+                         && Live2DLocator.IsCoreAvailable
                          && !string.IsNullOrWhiteSpace(ModelDirectory)
                          && !string.IsNullOrWhiteSpace(ModelName);
         // 诊断:首页"没有模型"时,必须能一眼看出是哪个闸门没通过。
@@ -297,14 +298,23 @@ public sealed class Live2DModelHost : Panel
     /// </summary>
     private async Task LoadAndReportAsync()
     {
+        var view = _view;
+        if (view is null)
+        {
+            return;
+        }
         var dir = _loadedDir;
         var name = _loadedName;
         try
         {
-            await _view!.LoadModelAsync(dir, name).ConfigureAwait(true);
+            await view.LoadModelAsync(dir, name).ConfigureAwait(true);
+            if (!ReferenceEquals(_view, view))
+            {
+                return;
+            }
             System.Console.Error.WriteLine(
-                $"[L2D-OK] 加载完成 name={name} loaded={_view.IsModelLoaded} " +
-                $"bounds={_view.Bounds.Width:0}x{_view.Bounds.Height:0} visible={_view.IsVisible}");
+                $"[L2D-OK] 加载完成 name={name} loaded={view.IsModelLoaded} " +
+                $"bounds={view.Bounds.Width:0}x{view.Bounds.Height:0} visible={view.IsVisible}");
         }
         catch (Exception ex)
         {

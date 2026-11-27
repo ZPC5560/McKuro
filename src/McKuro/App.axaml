@@ -1,67 +1,19 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
              xmlns:semi="https://irihi.tech/semi"
              xmlns:ic="using:FluentIcons.Avalonia"
              x:Class="McKuro.App"
              RequestedThemeVariant="Default">
     <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
 
-    <Application.Styles>
-        <semi:SemiTheme Locale="zh-CN" />
-
-        <!-- 全站统一的「透明底图标按键」(主页昵称旁的账号切换 / 启动页右下角的资源分级切换 /
-             启动页左上角的游戏功能菜单):按键底完全透明,只有按键上的图标呈半透明;
-             悬停才浮出一点玻璃底作为可点反馈。
-             尺寸/圆角/内边距由使用处自己设(局部属性优先于本样式),外观一处改全站生效。
-             前景色<b>也</b>由使用处自己设:压在自有玻璃底上的用主题令牌(McKuroTextOnWallpaper),
-             直接压在视频上的用不随主题翻转的 McKuroTextOnVideo + VideoTextChrome 反向投影阴影。 -->
-        <Style Selector="Button.mcChrome">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="{DynamicResource McKuroTextOnWallpaper}" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.15" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Button.mcChrome:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
-        </Style>
-        <Style Selector="Button.mcChrome ic|FluentIcon">
-            <Setter Property="Opacity" Value="0.72" />
-        </Style>
-        <Style Selector="Button.mcChrome:pointerover ic|FluentIcon">
-            <Setter Property="Opacity" Value="0.95" />
-        </Style>
-
-        <!-- 链接型文字按键:透明底、无边框、手型光标;悬停保持透明底,仅前景提亮。
-             供启动页「画质怎么选」等文字链接入口复用,避免各处重复内联背景/边框属性。 -->
-        <Style Selector="Button.mcLink">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
-        </Style>
-        <Style Selector="Button.mcLink:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="Transparent" />
-        </Style>
-
-        <!-- 全站统一的「浮层面板」材质:启动页功能菜单、资源等级展开面板、账号切换弹窗、
-             版本选择弹窗共用同一份面色 + 描边 + 圆角。
-             之前每个面板各自重述一遍背景(两层不透明叠加 / 单层 DialogSurface / SemiColorBg2…),
-             于是"展开后的材质"彼此不一致(2026-10 用户反馈) —— 收敛成一处,以后改一处全站同步。
-             个别面板要更大的圆角或外边距,用局部属性覆盖即可(局部优先于样式)。 -->
-        <Style Selector="Border.mcPanel">
-            <Setter Property="Background" Value="{DynamicResource McKuroDialogSurface}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource McKuroSwitchChipStroke}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="12" />
-            <Setter Property="ClipToBounds" Value="True" />
-        </Style>
-    </Application.Styles>
-
     <!--
+      ⚠ 资源必须排在 Application.Styles **之前**：样式里用 {StaticResource ...} 引用
+      动效令牌(McKuroMotion*Duration / McKuroEaseEnter)，而 StaticResource 是解析期即时
+      求值、不支持前向引用。曾经把令牌声明放在文件末尾的 Resources 里，导致 App.axaml:28
+      抛 KeyNotFoundException —— 表现为**应用启动即崩溃**，而 build 0 警告、2040 单测全绿都
+      拦不住（构建与单测都不跑 App.axaml 的运行时资源解析）。挪回来时别只看 diff 是否干净。
+
       McKuro 语义材质：壁纸动态色板功能已移除，改为按明暗主题(跟随系统/浅色/深色)静态切换。
       Dark/Light 两套资源通过 ThemeDictionaries 自动跟随 RequestedThemeVariant，
       与 Semi 主题一致，设置页切换主题后即时生效，无需代码刷新。
@@ -273,6 +225,106 @@
               配合 chrome:VideoTextChrome.Shadow 的反向投影阴影,浅色字在亮背景上同样可读。
             -->
             <SolidColorBrush x:Key="McKuroTextOnVideo" Color="#F5F8FF" />
+
+            <!-- 动效令牌（与官网 00-base.css 节奏对齐） -->
+            <sys:TimeSpan x:Key="McKuroMotionPressDuration">0:0:0.12</sys:TimeSpan>
+            <sys:TimeSpan x:Key="McKuroMotionHoverDuration">0:0:0.18</sys:TimeSpan>
+            <sys:TimeSpan x:Key="McKuroMotionRevealDuration">0:0:0.60</sys:TimeSpan>
+            <CubicEaseOut x:Key="McKuroEaseEnter" />
         </ResourceDictionary>
     </Application.Resources>
+    <Application.Styles>
+        <semi:SemiTheme Locale="zh-CN" />
+
+        <!-- 全站统一的「透明底图标按键」(主页昵称旁的账号切换 / 启动页右下角的资源分级切换 /
+             启动页左上角的游戏功能菜单):按键底完全透明,只有按键上的图标呈半透明;
+             悬停才浮出一点玻璃底作为可点反馈。
+             尺寸/圆角/内边距由使用处自己设(局部属性优先于本样式),外观一处改全站生效。
+             前景色<b>也</b>由使用处自己设:压在自有玻璃底上的用主题令牌(McKuroTextOnWallpaper),
+             直接压在视频上的用不随主题翻转的 McKuroTextOnVideo + VideoTextChrome 反向投影阴影。 -->
+        <Style Selector="Button.mcChrome">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource McKuroTextOnWallpaper}" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="RenderTransform" Value="scale(1)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="{StaticResource McKuroMotionHoverDuration}" Easing="{StaticResource McKuroEaseEnter}" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{StaticResource McKuroMotionPressDuration}" Easing="{StaticResource McKuroEaseEnter}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.mcChrome:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource McKuroSwitchChipFillHover}" />
+        </Style>
+        <Style Selector="Button.mcChrome:pressed">
+            <Setter Property="RenderTransform" Value="scale(0.95)" />
+        </Style>
+        <Style Selector="Button.mcChrome:focus-visible">
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccent}" />
+        </Style>
+        <Style Selector="Button.mcChrome ic|FluentIcon">
+            <Setter Property="Opacity" Value="0.72" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="{StaticResource McKuroMotionHoverDuration}" Easing="{StaticResource McKuroEaseEnter}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.mcChrome:pointerover ic|FluentIcon">
+            <Setter Property="Opacity" Value="0.95" />
+        </Style>
+
+        <!-- 链接型文字按键:透明底、无边框、手型光标;悬停保持透明底,仅前景提亮。
+             供启动页「画质怎么选」等文字链接入口复用,避免各处重复内联背景/边框属性。 -->
+        <Style Selector="Button.mcLink">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Foreground" Duration="{StaticResource McKuroMotionHoverDuration}" Easing="{StaticResource McKuroEaseEnter}" />
+                    <DoubleTransition Property="Opacity" Duration="{StaticResource McKuroMotionPressDuration}" Easing="{StaticResource McKuroEaseEnter}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.mcLink:pointerover">
+            <Setter Property="Foreground" Value="{DynamicResource McKuroAccentHover}" />
+        </Style>
+        <Style Selector="Button.mcLink:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.mcLink:pointerover TextBlock">
+            <Setter Property="TextDecorations" Value="Underline" />
+        </Style>
+        <Style Selector="Button.mcLink:pressed">
+            <Setter Property="Opacity" Value="0.75" />
+        </Style>
+        <Style Selector="Button.mcLink:focus-visible">
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroAccent}" />
+            <Setter Property="Foreground" Value="{DynamicResource McKuroAccentHover}" />
+        </Style>
+        <Style Selector="Button.mcLink:focus-visible TextBlock">
+            <Setter Property="TextDecorations" Value="Underline" />
+        </Style>
+
+        <!-- 全站统一的「浮层面板」材质:启动页功能菜单、资源等级展开面板、账号切换弹窗、
+             版本选择弹窗共用同一份面色 + 描边 + 圆角。
+             之前每个面板各自重述一遍背景(两层不透明叠加 / 单层 DialogSurface / SemiColorBg2…),
+             于是"展开后的材质"彼此不一致(2026-10 用户反馈) —— 收敛成一处,以后改一处全站同步。
+             个别面板要更大的圆角或外边距,用局部属性覆盖即可(局部优先于样式)。 -->
+        <Style Selector="Border.mcPanel">
+            <Setter Property="Background" Value="{DynamicResource McKuroDialogSurface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource McKuroSwitchChipStroke}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+    </Application.Styles>
+
 </Application>

@@ -595,9 +595,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
     }
 
-    /// <summary>设置页实时预览是否显示(平台支持 + 已启用 + Core 就绪 + 已选模型;目录走生效目录)。</summary>
+    /// <summary>设置页实时预览是否显示(当前处于 Live2D 分类 + 平台支持 + 已启用 + Core 就绪 + 已选模型;目录走生效目录)。</summary>
     public bool IsLive2DPreviewVisible =>
-        IsLive2DSupported && Live2DEnabled && IsLive2DCoreAvailable
+        IsLive2DActive && IsLive2DSupported && Live2DEnabled && IsLive2DCoreAvailable
         && SelectedLive2DModelIndex >= 0;
 
     /// <summary>是否有可选模型(供下拉框 IsEnabled 绑定;int→bool 无隐式转换)。</summary>
@@ -1238,6 +1238,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         nameof(IsAboutUpdateActive),
         // 派生自 IsAppearanceVideoActive:离开视频子页即停掉自定义视频预览
         nameof(IsCustomVideoPreviewActive),
+        // 派生自 IsLive2DActive:切出 Live2D 分类即卸载设置页预览实例
+        nameof(IsLive2DPreviewVisible),
     ];
 
     /// <summary>把当前分类的子标签同步到左列,并保证有选中项(切回时保留上次的子标签)。</summary>

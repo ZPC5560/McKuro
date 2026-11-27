@@ -261,7 +261,7 @@
                                     <!-- 第一行:角色名 + 星级 + 属性图标 -->
                                     <StackPanel Orientation="Horizontal" Spacing="10">
                                         <TextBlock Text="{Binding SelectedRole.RoleName}" FontSize="26"
-                                                   FontWeight="Bold" Foreground="{DynamicResource SemiColorText2}">
+                                                   FontWeight="Bold" Foreground="{DynamicResource McKuroTextOnWallpaper}">
                                             <TextBlock.Effect>
                                                 <DropShadowEffect BlurRadius="4" OffsetY="1" Opacity="0.6"
                                                                   Color="#000000" />
