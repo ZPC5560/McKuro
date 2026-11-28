@@ -723,9 +723,11 @@
                                             <Border x:Name="SkillDemoHost" CornerRadius="8" Height="200" ClipToBounds="True"
                                                     Background="{DynamicResource McKuroIconPlate}">
                                                 <Grid>
+                                                    <!-- 接口无独立封面字段:复用技能图标作为 mpv 会话释放后的静态兜底;播放器会话不因此常驻。 -->
                                                     <controls:VideoBackgroundControl
                                                         x:Name="SkillDemoVideo"
                                                         VideoUrl="{Binding CurrentSkillDemoVideo}"
+                                                        FallbackImageUrl="{Binding SelectedSkillDemo.IconUrl}"
                                                         IsVideoEnabled="{Binding SkillDemoVideoEnabled}"
                                                         Quality="Hd720"
                                                         IsMuted="True"
