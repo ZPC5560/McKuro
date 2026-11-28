@@ -150,12 +150,12 @@ McKuro/
 
 ### Live2D 模型(Windows / macOS / Linux)
 
-Cubism Core 运行环境与「心」的双形态模型已随安装包内置,装好即可在首页看到,无需手动放置运行时或导入模型。
+Cubism Core 运行时已内置,角色模型不随包分发。请将模型文件放入 `live2d/` 目录或通过设置页导入外部 Cubism 模型。
 
 设置页「Live2D 模型」区块:
 
 1. **运行时已内置**:Windows(`Live2DCubismCore.dll`)、macOS(`libLive2DCubismCore.dylib`,universal)、Linux(`libLive2DCubismCore.so`)三份 Core 随包分发在程序目录的 `live2d/` 下,状态徽标显示"已就绪"
-2. **导入模型**:想换成自己的模型时,点「导入模型文件夹」选择包含 Cubism 3+ `.model3.json` 的文件夹(递归扫描),下拉选择模型
+2. **导入模型**:请将 Cubism 3+ 模型文件夹放入 `live2d/` 目录(应用启动自动扫描),或在设置页点击「导入模型文件夹」选择包含 `.model3.json` 的文件夹,然后在下拉菜单中选择模型
 3. **配置**:缩放(0.5~3x)/水平/垂直位置/不透明度滑条,设置页预览可拖动与滚轮缩放并实时写回,首页即时应用
 4. 开启「首页显示 Live2D 模型」开关;模型叠加在首页壁纸上方、内容卡片下层(纯展示,不挡交互)
 

@@ -380,8 +380,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     partial void OnCurrentPageChanged(ViewModelBase? value)
     {
         OnPropertyChanged(nameof(IsReminderOverlayVisible));
-        // 深塔页的"可见时每 20 秒静默重拉"只在它是当前页时运行:切走即停,别让 12 个常驻页面一起轮询接口
-        _tower?.SetPageActive(value is TowerViewModel);
     }
 
     /// <summary>
@@ -399,6 +397,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public void NavigateTo(NavigationItem item)
     {
+        CurrentPage?.SetPageActive(false);
         foreach (var nav in NavigationItems)
         {
             nav.IsSelected = ReferenceEquals(nav, item);
@@ -413,6 +412,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             _navigating = false;
         }
+        CurrentPage?.SetPageActive(true);
         // 页面切换留痕(诊断"某页数据不刷新/没触发重载"这类问题;stderr 非用户可见通道)
         System.Console.Error.WriteLine($"MCKURO-NAV -> {item.Key}");
         // 导航到启动页时自动检查更新(移除手动检查按钮后)

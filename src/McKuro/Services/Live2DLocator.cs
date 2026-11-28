@@ -14,6 +14,7 @@ namespace McKuro.Services;
 ///   用户自备的副本同样可用,按以下顺序探测:① 程序目录根 → ② 程序目录 live2d/ →
 ///   ③ 用户数据目录 live2d/。命中非程序目录时通过 AddDllDirectory 加入 DLL 搜索路径
 ///   (仅 Windows 需要);首选「可写」放置目录见 <see cref="EnsurePreferredDir"/>。
+///   不再内置角色模型资源。
 /// </summary>
 public static class Live2DLocator
 {
@@ -146,7 +147,7 @@ public static class Live2DLocator
     /// <summary>
     /// 定位指定模型名所在目录:先看根目录,再递归查找 &lt;name&gt;.model3.json。
     /// 首页与设置页共用这一套解析 —— 多模型分放不同子目录时,选中的模型必须与加载的一致,
-    /// 否则首页会退回 FindDefaultModel 的「字典序第一个」:用户切到白金形态,首页却仍加载红黑。
+    /// 否则首页会退回 FindDefaultModel 的「字典序第一个」,导致用户切换模型后首页仍加载默认模型。
     /// name 为空或未找到返回 null。
     /// </summary>
     public static string? ResolveModelDir(string? root, string? name)
@@ -265,13 +266,10 @@ public static class Live2DLocator
     }
 
     /// <summary>
-    /// 在所有发现根目录中找默认模型。偏好顺序:Hiyori(官方示例)→ 内置主形态(红黑)
-    /// → 其余取字典序第一个。找不到返回 null。
+    /// 在所有发现根目录中找默认模型。偏好顺序:Hiyori(官方示例)→ 其余取字典序第一个。找不到返回 null。
     ///
     /// <para><b>必须跨根统一排序,不能"每个根只挑一个"</b>:<see cref="FindDefaultModel"/> 在单个根内
-    /// 只会返回一个结果(字典序第一),而随包目录里同时有「心-红黑」与「心-白金」 ——
-    /// 按 Ordinal 比较「白」(U+767D) &lt; 「红」(U+7EA2),字典序第一是<b>白金</b>,
-    /// 于是逐根挑选会把白金当成默认,内置主形态永远选不中(实测踩到)。</para>
+    /// 只会返回一个结果(字典序第一)。</para>
     ///
     /// <paramref name="roots"/> 仅供单测注入(默认 = <see cref="DiscoveryRoots"/>)。
     /// </summary>
@@ -334,16 +332,12 @@ public static class Live2DLocator
         return found;
     }
 
-    /// <summary>默认模型偏好:0 = Hiyori(官方示例);1 = 内置主形态;2 = 其它。</summary>
+    /// <summary>默认模型偏好:0 = Hiyori(官方示例);1 = 其它。</summary>
     private static int PreferenceRank(string name) => name switch
     {
         "Hiyori" => 0,
-        _ when BundledDefaultName.Equals(name, StringComparison.OrdinalIgnoreCase) => 1,
-        _ => 2,
+        _ => 1,
     };
-
-    /// <summary>随包内置模型的默认形态(红黑)。随包时用作未指定模型时的首选。</summary>
-    public const string BundledDefaultName = "心-红黑";
 
     /// <summary>探测 Cubism Core 路径;未找到返回 null。文件名按平台区分(见 <see cref="CoreFileName"/>)。</summary>
     public static string? FindCore()

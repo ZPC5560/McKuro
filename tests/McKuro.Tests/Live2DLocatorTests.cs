@@ -234,13 +234,6 @@ public class Live2DLocatorTests : IDisposable
     }
 
     [Fact]
-    public void BundledDefaultName_IsTheRedBlackForm()
-    {
-        // 随包主形态;FindDefaultModelAnywhere 用它做第二优先级
-        Assert.Equal("心-红黑", Live2DLocator.BundledDefaultName);
-    }
-
-    [Fact]
     public void FindDefaultModel_StillPrefersHiyori_OverEverythingElse()
     {
         // Hiyori(官方示例)优先级最高:用户自行放置时不应被随包模型抢走
@@ -273,21 +266,6 @@ public class Live2DLocatorTests : IDisposable
 
         Assert.NotNull(hit);
         Assert.Equal("心-红黑", Path.GetFileName(hit!));
-    }
-
-    [Fact]
-    public void FindDefaultModelAnywhere_PrefersBundledRedBlack_OverWhiteGold()
-    {
-        // 回归(实测踩到):随包目录同时有「心-红黑」与「心-白金」。
-        // 按 Ordinal 比较「白」(U+767D) < 「红」(U+7EA2),所以字典序第一是白金。
-        // 若逐根只挑"字典序第一个",默认模型会变成白金,内置主形态(红黑)永远选不中。
-        MakeModel("心-白金", "心-白金");
-        MakeModel("心-红黑", "心-红黑");
-
-        var pick = Live2DLocator.FindDefaultModelAnywhere([_root]);
-
-        Assert.NotNull(pick);
-        Assert.Equal("心-红黑", pick!.Value.Name);
     }
 
     [Fact]
@@ -327,14 +305,5 @@ public class Live2DLocatorTests : IDisposable
         Directory.CreateDirectory(empty);
 
         Assert.Null(Live2DLocator.FindDefaultModelAnywhere([empty]));
-    }
-
-    [Fact]
-    public void PreferenceOrder_RedBlackBeatsWhiteGold_UnderOrdinalSort()
-    {
-        // 锁住"为什么需要显式偏好":Ordinal 顺序确实把白金排在前面
-        Assert.True(string.CompareOrdinal("心-白金", "心-红黑") < 0,
-            "前提变化:字典序不再把白金排在前面,本回归的前提需重新审视");
-        Assert.Equal("心-红黑", Live2DLocator.BundledDefaultName);
     }
 }

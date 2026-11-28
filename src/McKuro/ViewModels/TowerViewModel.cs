@@ -1026,7 +1026,7 @@ public sealed partial class TowerViewModel : ViewModelBase
     /// 若不加可见性判断,12 个页面都会各自轮询接口 —— 那是纯浪费与风控自杀。
     /// </para>
     /// </summary>
-    public void SetPageActive(bool active)
+    public override void SetPageActive(bool active)
     {
         if (IsPageActive == active)
         {

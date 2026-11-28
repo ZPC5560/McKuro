@@ -773,9 +773,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 .Select(f => Live2DLocator.NormalizeModelName(Path.GetFileName(f)))
                 .Where(n => !string.IsNullOrEmpty(n))
                 .Distinct(StringComparer.Ordinal)
-                // 内置主形态排在前面,方便用户一眼看到随包模型
-                .OrderBy(n => n == Live2DLocator.BundledDefaultName ? 0 : 1)
-                .ThenBy(n => n, StringComparer.OrdinalIgnoreCase)
+                // 外部模型按名称正常参与排序
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             foreach (var name in models)
             {
@@ -789,7 +788,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var idx = Live2DModelOptions.IndexOf(saved);
         if (idx < 0 && string.IsNullOrWhiteSpace(AppServices.Settings.Current.Live2DModelName))
         {
-            // 从未选择过模型:选中与首页一致的默认模型(Hiyori 优先 → 内置形态 → 字典序)
+            // 从未选择过模型:选中与首页一致的默认模型(Hiyori 优先 → 外部模型 → 字典序)
             var defaultName = importedRoot is null
                 ? Live2DLocator.FindDefaultModelAnywhere()?.Name
                 : Live2DLocator.FindDefaultModel(importedRoot)?.Name;

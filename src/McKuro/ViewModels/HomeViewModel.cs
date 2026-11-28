@@ -394,7 +394,6 @@ public sealed partial class HomeViewModel : ViewModelBase
     public HomeViewModel()
     {
         _countdownTimer.Tick += (_, _) => TickCountdowns();
-        _countdownTimer.Start();
         // 游戏进程正常退出后重拉今日数据(体力/活跃度等在游玩期间会变化)
         WeakReferenceMessenger.Default.Register<HomeViewModel, GameSessionEndedMessage>(this,
             static (recipient, message) =>
@@ -411,6 +410,18 @@ public sealed partial class HomeViewModel : ViewModelBase
         RefreshLive2D();
         _ = RefreshDailyAsync();
         _ = RevealAsync();
+    }
+
+    public override void SetPageActive(bool active)
+    {
+        if (active)
+        {
+            _countdownTimer.Start();
+        }
+        else
+        {
+            _countdownTimer.Stop();
+        }
     }
 
     private void TickCountdowns()
